@@ -464,7 +464,7 @@ decode_string(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, i
     uint32_t len = tvb_get_int32(tvb, offset, ENC_BIG_ENDIAN);
     proto_item *ti;
 
-    const char *text = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset+4, len, ENC_UTF_8);
+    const char *text = tvb_get_string_enc(pinfo->pool, tvb, offset+4, len, ENC_UTF_8);
 
     if(len) {
         ti = proto_tree_add_string_format_value(tree, hf, tvb, offset, len + 4, text, "%s, Len: %u", text, len);
@@ -734,7 +734,7 @@ decode_identifier_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, in
     len += 4;
 
     proto_tree_add_item(do_irp_record_tree, hf_do_irp_identrecord_ts, tvb, offset + len, 4, ENC_BIG_ENDIAN);
-    proto_item *ts = proto_tree_add_item(do_irp_record_tree, hf_do_irp_identrecord_ts_utc, tvb, offset + len, 4, ENC_TIME_SECS|ENC_BIG_ENDIAN);
+    proto_item *ts = proto_tree_add_item(do_irp_record_tree, hf_do_irp_identrecord_ts_utc, tvb, offset + len, 4, ENC_TIME_SECS);
     proto_item_set_generated(ts);
     len += 4;
 
@@ -744,7 +744,7 @@ decode_identifier_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, in
 
     proto_tree_add_item(do_irp_record_tree, hf_do_irp_identrecord_ttl, tvb, offset + len, 4, ENC_BIG_ENDIAN);
     if(ttl_type == DO_IRP_TTL_ABSOLUTE) {
-        proto_item *ttl = proto_tree_add_item(do_irp_record_tree, hf_do_irp_identrecord_ttl_absolute, tvb, offset + len, 4, ENC_TIME_SECS|ENC_BIG_ENDIAN);
+        proto_item *ttl = proto_tree_add_item(do_irp_record_tree, hf_do_irp_identrecord_ttl_absolute, tvb, offset + len, 4, ENC_TIME_SECS);
         proto_item_set_generated(ttl);
     }
     len += 4;
@@ -835,7 +835,7 @@ decode_envelope(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint32_t *r
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "DO-IRP");
     col_clear(pinfo->cinfo,COL_INFO);
 
-    unsigned offset = 0;
+    int offset = 0;
 
     /* Message Envelope */
     proto_item *ti_envelope = proto_tree_add_item(tree, hf_do_irp_envelope, tvb, offset, 20, ENC_NA);
@@ -896,7 +896,7 @@ decode_header_body_credential(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
     proto_item *ti_header = proto_tree_add_item(tree, hf_do_irp_header, tvb, 0, 24, ENC_NA);
     proto_tree *do_irp_header_tree = proto_item_add_subtree(ti_header, ett_do_irp_header);
 
-    unsigned offset = 0;
+    int offset = 0;
 
     uint32_t opcode = tvb_get_uint32(tvb, offset, ENC_BIG_ENDIAN);
     proto_tree_add_item(do_irp_header_tree, hf_do_irp_opcode, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -936,7 +936,7 @@ decode_header_body_credential(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
     proto_tree_add_item(do_irp_header_tree, hf_do_irp_rcount, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 2; /* One byte empty */
 
-    proto_tree_add_item(do_irp_header_tree, hf_do_irp_expiration, tvb, offset, 4, ENC_TIME_SECS|ENC_BIG_ENDIAN);
+    proto_tree_add_item(do_irp_header_tree, hf_do_irp_expiration, tvb, offset, 4, ENC_TIME_SECS);
     offset += 4;
 
     proto_tree_add_item(do_irp_header_tree, hf_do_irp_bodylen, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -944,7 +944,6 @@ decode_header_body_credential(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
     offset += 4;
 
     /* Message Body */
-    /* XXX - Should create a subset tvb with body_len */
     if(tvb_captured_length_remaining(tvb, offset) > 0 && body_len > 0) {
 
         proto_item *ti_body = proto_tree_add_item(tree, hf_do_irp_body, tvb, offset, body_len, ENC_NA);
@@ -979,7 +978,7 @@ decode_header_body_credential(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
                     expert_add_info(pinfo, do_irp_body_tree, &ei_do_irp_digest_unknown);
                     /* We are now unable to dissect further because the fields now have variable length */
                     call_data_dissector(
-                        tvb_new_subset_remaining(tvb, offset), pinfo, do_irp_body_tree);
+                        tvb_new_subset_length(tvb, offset, -1), pinfo, do_irp_body_tree);
                     return tvb_captured_length(tvb);
 
             }
@@ -1172,7 +1171,7 @@ decode_header_body_credential(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
             offset += decode_pk_data(tvb, pinfo, do_irp_body_tree, offset);
 
         }
-        /* All error responses */
+        /* All error resposes */
         else if(
             (respcode >= DO_IRP_RC_ERROR && respcode <= DO_IRP_RC_SERVER_NOT_RESP) ||
             (respcode >= DO_IRP_RC_INVALID_ADMIN && respcode <= DO_IRP_RC_ACCESS_DENIED) ||
@@ -1203,8 +1202,6 @@ decode_header_body_credential(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
                 tvb_new_subset_length(tvb, offset, unhandled_bytes),
                 pinfo, do_irp_body_tree
             );
-            /* call_data_dissector doesn't throw an exception */
-            tvb_ensure_bytes_exist(tvb, offset, unhandled_bytes);
             offset += unhandled_bytes;
         }
     }
@@ -1329,7 +1326,7 @@ dissect_do_irp_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
     uint32_t reqid;
     bool encrypted;
     tvbuff_t *new_tvb = NULL;
-    unsigned offset = 0;
+    int offset = 0;
 
     /*
      * RFC 3652 defines `<MessageFlag>` in 2.2.1.2 as two octets containing three flags.
@@ -1436,7 +1433,7 @@ dissect_do_irp_tcp_full_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
 
     uint32_t reqid;
     bool enc;
-    unsigned offset = 0;
+    int offset = 0;
 
     offset += decode_envelope(tvb, pinfo, do_irp_tree, &reqid, &enc);
     offset += decode_header_body_credential(tvb_new_subset_remaining(tvb, offset), pinfo, do_irp_tree, reqid);
@@ -2091,11 +2088,11 @@ proto_register_do_irp(void)
         /* Conversation */
         { &hf_do_irp_response_in,
             { "Response in", "do-irp.response_in",
-            FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_RESPONSE), 0x0, NULL, HFILL }
+            FT_FRAMENUM, BASE_NONE, NULL, 0x0, NULL, HFILL }
         },
         { &hf_do_irp_response_to,
             { "Request in", "do-irp.response_to",
-            FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_REQUEST), 0x0, NULL, HFILL }
+            FT_FRAMENUM, BASE_NONE, NULL, 0x0, NULL, HFILL }
         }
     };
 

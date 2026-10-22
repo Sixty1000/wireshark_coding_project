@@ -438,7 +438,7 @@ static int dissect_auth(tvbuff_t *tvb, int offset,
 
 	offset += 134;
 	if ( tree) {
-		proto_tree_add_item( tree, hf_msproxy_ntlmssp_signature, tvb, offset, 7, ENC_ASCII);
+		proto_tree_add_item( tree, hf_msproxy_ntlmssp_signature, tvb, offset, 7, ENC_NA|ENC_ASCII);
 	}
 	offset += 7;
 
@@ -636,7 +636,7 @@ static void dissect_udp_assoc(tvbuff_t *tvb, int offset,
 static void dissect_msproxy_request(tvbuff_t *tvb, packet_info *pinfo,
 	proto_tree *tree, hash_entry_t *conv_info) {
 
-	unsigned offset = 0;
+	int offset = 0;
 	int cmd;
     proto_item* cmd_item;
 
@@ -655,7 +655,7 @@ static void dissect_msproxy_request(tvbuff_t *tvb, packet_info *pinfo,
 	proto_tree_add_item( tree, hf_msproxy_seq_num, tvb, offset, 1, ENC_LITTLE_ENDIAN);
 	offset += 8;
 
-	proto_tree_add_item( tree, hf_msproxy_rwsp_signature, tvb, offset, 4, ENC_ASCII);
+	proto_tree_add_item( tree, hf_msproxy_rwsp_signature, tvb, offset, 4, ENC_NA|ENC_ASCII);
 	offset += 12;
 
 	cmd = tvb_get_ntohs( tvb, offset);
@@ -775,7 +775,7 @@ static void dissect_auth_1_ack(tvbuff_t *tvb, int offset,
 
 	offset += 134;
 	if ( tree) {
-		proto_tree_add_item( tree, hf_msproxy_ntlmssp_signature, tvb, offset, 7, ENC_ASCII);
+		proto_tree_add_item( tree, hf_msproxy_ntlmssp_signature, tvb, offset, 7, ENC_NA|ENC_ASCII);
 		offset += 48;
 
 		/* XXX - always 255? */
@@ -943,7 +943,7 @@ static void dissect_resolve(tvbuff_t *tvb, int offset, proto_tree *tree) {
 static void dissect_msproxy_response(tvbuff_t *tvb, packet_info *pinfo,
 		proto_tree *tree, hash_entry_t *conv_info) {
 
-	unsigned offset = 0;
+	int offset = 0;
 	int cmd;
 	proto_item* ti;
 
@@ -963,7 +963,7 @@ static void dissect_msproxy_response(tvbuff_t *tvb, packet_info *pinfo,
 		proto_tree_add_item( tree, hf_msproxy_seq_num, tvb, offset, 1, ENC_LITTLE_ENDIAN);
 		offset += 8;
 
-		proto_tree_add_item( tree, hf_msproxy_rwsp_signature, tvb, offset, 4, ENC_ASCII);
+		proto_tree_add_item( tree, hf_msproxy_rwsp_signature, tvb, offset, 4, ENC_NA|ENC_ASCII);
 		offset += 12;
 	}
 	else

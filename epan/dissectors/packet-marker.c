@@ -17,7 +17,7 @@
 #include <epan/packet.h>
 #include <epan/to_str.h>
 #include <epan/expert.h>
-#include "packet-slowprotocols.h"
+#include <epan/slow_protocol_subtypes.h>
 
 /* General declarations */
 void proto_register_marker(void);
@@ -208,7 +208,7 @@ proto_register_marker(void)
 
     /* Register the protocol name and description */
 
-    proto_marker = proto_register_protocol("Link Aggregation Marker Protocol", "Marker", "marker");
+    proto_marker = proto_register_protocol("Marker", "Link Aggregation Marker Protocol", "marker");
 
     /* Required function calls to register the header fields and subtrees used */
 

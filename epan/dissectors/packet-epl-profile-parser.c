@@ -21,6 +21,7 @@
 #include "packet-epl.h"
 #include "ws_attributes.h"
 
+#include <epan/ws_printf.h>
 #include <epan/range.h>
 
 #include <string.h>
@@ -31,6 +32,7 @@
 #include <wsutil/wslog.h>
 #include <epan/wmem_scopes.h>
 
+#if defined HAVE_LIBXML2
 #include <libxml/xmlversion.h>
 
 #if defined LIBXML_XPATH_ENABLED \
@@ -46,7 +48,7 @@
 typedef int xpath_handler(xmlNodeSetPtr, void*);
 static xpath_handler populate_object_list, populate_datatype_list, populate_profile_name;
 
-static const struct xpath_namespace {
+static struct xpath_namespace {
 	const xmlChar *prefix, *href;
 } namespaces[] = {
 	{ BAD_CAST "x",   BAD_CAST "http://www.ethernet-powerlink.org" },
@@ -54,7 +56,7 @@ static const struct xpath_namespace {
 	{ NULL, NULL }
 };
 
-static const struct xpath {
+static struct xpath {
 	const xmlChar *expr;
 	xpath_handler *handler;
 } xpaths[] = {
@@ -75,6 +77,8 @@ static const struct xpath {
 
 
 #endif /* LIBXML_XPATH_ENABLED && LIBXML_SAX1_ENABLED && LIBXML_TREE_ENABLED */
+
+#endif /* HAVE_LIBXML2 */
 
 struct datatype {
 	uint16_t id;
@@ -127,7 +131,7 @@ struct epl_wmem_iarray {
 	uint8_t is_sorted :1;
 };
 
-static epl_wmem_iarray_t *epl_wmem_iarray_new(wmem_allocator_t *allocator, const unsigned elem_size, GEqualFunc cmp);
+static epl_wmem_iarray_t *epl_wmem_iarray_new(wmem_allocator_t *allocator, const unsigned elem_size, GEqualFunc cmp) G_GNUC_MALLOC;
 static void epl_wmem_iarray_insert(epl_wmem_iarray_t *iarr, uint32_t where, range_admin_t *data);
 static void epl_wmem_iarray_sort_and_compact(epl_wmem_iarray_t *iarr);
 
@@ -300,8 +304,8 @@ epl_xdd_load(struct profile *profile, const char *xml_file)
 {
 	xmlXPathContextPtr xpathCtx = NULL;
 	xmlDoc *doc = NULL;
-	const struct xpath_namespace *ns = NULL;
-	const struct xpath *xpath = NULL;
+	struct xpath_namespace *ns = NULL;
+	struct xpath *xpath = NULL;
 	GHashTable *typemap = NULL;
 
 	/* Load XML document */
@@ -564,11 +568,13 @@ populate_object_list(xmlNodeSetPtr nodes, void *_profile)
 
 #else  /* ! PARSE_XDD */
 
+#ifdef HAVE_LIBXML2
 struct profile *
 epl_xdd_load(struct profile *profile _U_, const char *xml_file _U_)
 {
 	return NULL;
 }
+#endif  /* HAVE_LIBXML2 */
 
 #endif  /* ! PARSE_XDD */
 
@@ -735,6 +741,23 @@ epl_wmem_iarray_find(epl_wmem_iarray_t *iarr, uint32_t value) {
 	return (range_admin_t*)bsearch_garray(&needle, iarr->arr, find_in_range);
 }
 
+#if 0
+void
+epl_wmem_print_iarr(epl_wmem_iarray_t *iarr)
+{
+	range_admin_t *elem;
+	unsigned i, len;
+	elem = (range_admin_t*)iarr->arr->data;
+	len = iarr->arr->len;
+	for (i = 0; i < len; i++)
+	{
+
+		ws_debug_printf("Range: low=%" PRIu32 " high=%" PRIu32 "\n", elem->low, elem->high);
+
+		elem = (range_admin_t*)((char*)elem + g_array_get_element_size(iarr->arr));
+	}
+}
+#endif
 
 /*
  * Editor modelines  -	https://www.wireshark.org/tools/modelines.html

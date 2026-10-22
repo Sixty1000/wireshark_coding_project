@@ -15,8 +15,6 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 
 void proto_register_ipmi_session(void);
 void proto_reg_handoff_ipmi_session(void);
@@ -214,7 +212,7 @@ dissect_ipmi_session(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
 	}
 
 	/* If we can parse the embedded message, do so */
-	next_tvb = tvb_new_subset_length(tvb, msg_start, msg_len);
+	next_tvb = tvb_new_subset_length_caplen(tvb, msg_start, msg_len, -1);
 	if (payloadtype_enc) {
 		/* This is RMCP+, and payload is encrypted. In this case,
 		   there is a 'confidentiality header/trailer', whose lengths

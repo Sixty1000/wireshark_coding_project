@@ -133,11 +133,6 @@ char* srt_table_get_tap_string(register_srt_t* srt)
     return g_string_free(cmd_str, FALSE);
 }
 
-srt_param_handler_cb srt_table_get_param_handler_cb(register_srt_t* srt)
-{
-    return srt->param_cb;
-}
-
 void srt_table_get_filter(register_srt_t* srt, const char *opt_arg, const char **filter, char** err)
 {
     char* cmd_str = srt_table_get_tap_string(srt);
@@ -151,10 +146,8 @@ void srt_table_get_filter(register_srt_t* srt, const char *opt_arg, const char *
         if (srt->param_cb != NULL)
         {
             pos = srt->param_cb(srt, opt_arg + len, err);
-            if (*err != NULL) {
-                g_free(cmd_str);
+            if (*err != NULL)
                 return;
-            }
 
             if (pos > 0)
                 pos += len;
@@ -172,11 +165,6 @@ void srt_table_get_filter(register_srt_t* srt, const char *opt_arg, const char *
 void srt_table_dissector_init(register_srt_t* srt, GArray* srt_array)
 {
     srt->srt_init(srt, srt_array);
-}
-
-void srt_table_init(void)
-{
-    registered_srt_tables = wmem_tree_new(wmem_epan_scope());
 }
 
 void
@@ -198,6 +186,9 @@ register_srt_table(const int proto_id, const char* tap_listener, int max_tables,
     table->srt_init      = init_cb;
     table->param_cb      = param_cb;
     table->param_data    = NULL;
+
+    if (registered_srt_tables == NULL)
+        registered_srt_tables = wmem_tree_new(wmem_epan_scope());
 
     wmem_tree_insert_string(registered_srt_tables, proto_get_protocol_filter_name(proto_id), table, 0);
 }

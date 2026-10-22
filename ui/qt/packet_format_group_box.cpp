@@ -9,168 +9,106 @@
 
 #include "packet_format_group_box.h"
 #include <ui_packet_format_group_box.h>
-#include <ui_packet_format_carrays_group_box.h>
-#include <ui_packet_format_csv_group_box.h>
-#include <ui_packet_format_json_group_box.h>
 
 #include <epan/print.h>
 
-#include <QLabel>
 #include <QStyle>
 #include <QStyleOption>
 
 PacketFormatGroupBox::PacketFormatGroupBox(QWidget *parent) :
-    QGroupBox("Packet Format", parent)
-{
-    setFlat(true);
-}
-
-bool PacketFormatGroupBox::isValid() const
-{
-    return true;
-}
-
-PacketFormatBlankGroupBox::PacketFormatBlankGroupBox(QWidget *parent) :
-    PacketFormatGroupBox(parent)
-{
-    QVBoxLayout *vbox = new QVBoxLayout;
-    QLabel *label = new QLabel((tr("The selected format has no options")));
-    label->setWordWrap(true);
-    vbox->addWidget(label);
-    vbox->addStretch(1);
-    setLayout(vbox);
-}
-
-void PacketFormatBlankGroupBox::updatePrintArgs(print_args_t&)
-{
-}
-
-PacketFormatTextGroupBox::PacketFormatTextGroupBox(QWidget *parent) :
-    PacketFormatGroupBox(parent),
-    pf_ui_(new Ui::PacketFormatTextGroupBox)
+    QGroupBox(parent),
+    pf_ui_(new Ui::PacketFormatGroupBox)
 {
     pf_ui_->setupUi(this);
+    setFlat(true);
 
     QStyleOption style_opt;
     int cb_label_offset =  pf_ui_->detailsCheckBox->style()->subElementRect(QStyle::SE_CheckBoxContents, &style_opt).left();
 
     // Indent the checkbox under the "Packet summary" checkbox
-    pf_ui_->includeColumnHeadingsCheckBox->setStyleSheet(QStringLiteral(
+    pf_ui_->includeColumnHeadingsCheckBox->setStyleSheet(QString(
                       "QCheckBox {"
                       "  padding-left: %1px;"
                       "}"
                       ).arg(cb_label_offset));
 
     // Indent the radio buttons under the "Packet details" checkbox
-    pf_ui_->allCollapsedButton->setStyleSheet(QStringLiteral(
+    pf_ui_->allCollapsedButton->setStyleSheet(QString(
                       "QRadioButton {"
                       "  padding-left: %1px;"
                       "}"
                       ).arg(cb_label_offset));
-    pf_ui_->asDisplayedButton->setStyleSheet(QStringLiteral(
+    pf_ui_->asDisplayedButton->setStyleSheet(QString(
                       "QRadioButton {"
                       "  padding-left: %1px;"
                       "}"
                       ).arg(cb_label_offset));
-    pf_ui_->allExpandedButton->setStyleSheet(QStringLiteral(
+    pf_ui_->allExpandedButton->setStyleSheet(QString(
                       "QRadioButton {"
                       "  padding-left: %1px;"
                       "}"
                       ).arg(cb_label_offset));
 
     // Indent the checkbox under the "Bytes" checkbox
-    pf_ui_->includeDataSourcesCheckBox->setStyleSheet(QStringLiteral(
-                      "QCheckBox {"
-                      "  padding-left: %1px;"
-                      "}"
-                      ).arg(cb_label_offset));
-
-    pf_ui_->timestampCheckBox->setStyleSheet(QStringLiteral(
+    pf_ui_->includeDataSourcesCheckBox->setStyleSheet(QString(
                       "QCheckBox {"
                       "  padding-left: %1px;"
                       "}"
                       ).arg(cb_label_offset));
 }
 
-PacketFormatTextGroupBox::~PacketFormatTextGroupBox()
+PacketFormatGroupBox::~PacketFormatGroupBox()
 {
     delete pf_ui_;
 }
 
-bool PacketFormatTextGroupBox::summaryEnabled() const
+bool PacketFormatGroupBox::summaryEnabled()
 {
     return pf_ui_->summaryCheckBox->isChecked();
 }
 
-bool PacketFormatTextGroupBox::detailsEnabled() const
+bool PacketFormatGroupBox::detailsEnabled()
 {
     return pf_ui_->detailsCheckBox->isChecked();
 }
 
-bool PacketFormatTextGroupBox::bytesEnabled() const
+bool PacketFormatGroupBox::bytesEnabled()
 {
     return pf_ui_->bytesCheckBox->isChecked();
 }
 
-bool PacketFormatTextGroupBox::includeColumnHeadingsEnabled() const
+bool PacketFormatGroupBox::includeColumnHeadingsEnabled()
 {
     return pf_ui_->includeColumnHeadingsCheckBox->isChecked();
 }
 
-bool PacketFormatTextGroupBox::allCollapsedEnabled() const
+bool PacketFormatGroupBox::allCollapsedEnabled()
 {
     return pf_ui_->allCollapsedButton->isChecked();
 }
 
-bool PacketFormatTextGroupBox::asDisplayedEnabled() const
+bool PacketFormatGroupBox::asDisplayedEnabled()
 {
     return pf_ui_->asDisplayedButton->isChecked();
 }
 
-bool PacketFormatTextGroupBox::allExpandedEnabled() const
+bool PacketFormatGroupBox::allExpandedEnabled()
 {
     return pf_ui_->allExpandedButton->isChecked();
 }
 
-uint PacketFormatTextGroupBox::getHexdumpOptions() const
+uint PacketFormatGroupBox::getHexdumpOptions()
 {
-    return (pf_ui_->includeDataSourcesCheckBox->isChecked() ? HEXDUMP_SOURCE_MULTI : HEXDUMP_SOURCE_PRIMARY) | (pf_ui_->timestampCheckBox->isChecked() ? HEXDUMP_TIMESTAMP : HEXDUMP_TIMESTAMP_NONE);
+    return pf_ui_->includeDataSourcesCheckBox->isChecked() ? HEXDUMP_SOURCE_MULTI : HEXDUMP_SOURCE_PRIMARY;
 }
 
-bool PacketFormatTextGroupBox::isValid() const
-{
-    if (!summaryEnabled() && !detailsEnabled() && !bytesEnabled()) {
-        return false;
-    }
-    return true;
-}
-
-void PacketFormatTextGroupBox::updatePrintArgs(print_args_t& print_args)
-{
-    print_args.format = PR_FMT_TEXT;
-    print_args.print_summary = summaryEnabled();
-    print_args.print_col_headings = includeColumnHeadingsEnabled();
-    print_args.print_dissections = print_dissections_none;
-
-    if (detailsEnabled()) {
-        if (allCollapsedEnabled())
-            print_args.print_dissections = print_dissections_collapsed;
-        else if (asDisplayedEnabled())
-            print_args.print_dissections = print_dissections_as_displayed;
-        else if (allExpandedEnabled())
-            print_args.print_dissections = print_dissections_expanded;
-    }
-    print_args.print_hex = bytesEnabled();
-    print_args.hexdump_options = getHexdumpOptions();
-}
-
-void PacketFormatTextGroupBox::on_summaryCheckBox_toggled(bool checked)
+void PacketFormatGroupBox::on_summaryCheckBox_toggled(bool checked)
 {
     pf_ui_->includeColumnHeadingsCheckBox->setEnabled(checked);
     emit formatChanged();
 }
 
-void PacketFormatTextGroupBox::on_detailsCheckBox_toggled(bool checked)
+void PacketFormatGroupBox::on_detailsCheckBox_toggled(bool checked)
 {
     pf_ui_->allCollapsedButton->setEnabled(checked);
     pf_ui_->asDisplayedButton->setEnabled(checked);
@@ -178,205 +116,33 @@ void PacketFormatTextGroupBox::on_detailsCheckBox_toggled(bool checked)
     emit formatChanged();
 }
 
-void PacketFormatTextGroupBox::on_bytesCheckBox_toggled(bool checked)
+void PacketFormatGroupBox::on_bytesCheckBox_toggled(bool checked)
 {
     pf_ui_->includeDataSourcesCheckBox->setEnabled(checked);
-    pf_ui_->timestampCheckBox->setEnabled(checked);
     emit formatChanged();
 }
 
-void PacketFormatTextGroupBox::on_includeColumnHeadingsCheckBox_toggled(bool)
+void PacketFormatGroupBox::on_includeColumnHeadingsCheckBox_toggled(bool)
 {
     emit formatChanged();
 }
 
-void PacketFormatTextGroupBox::on_allCollapsedButton_toggled(bool checked)
+void PacketFormatGroupBox::on_allCollapsedButton_toggled(bool checked)
 {
     if (checked) emit formatChanged();
 }
 
-void PacketFormatTextGroupBox::on_asDisplayedButton_toggled(bool checked)
+void PacketFormatGroupBox::on_asDisplayedButton_toggled(bool checked)
 {
     if (checked) emit formatChanged();
 }
 
-void PacketFormatTextGroupBox::on_allExpandedButton_toggled(bool checked)
+void PacketFormatGroupBox::on_allExpandedButton_toggled(bool checked)
 {
     if (checked) emit formatChanged();
 }
 
-void PacketFormatTextGroupBox::on_includeDataSourcesCheckBox_toggled(bool)
+void PacketFormatGroupBox::on_includeDataSourcesCheckBox_toggled(bool)
 {
     emit formatChanged();
-}
-
-void PacketFormatTextGroupBox::on_timestampCheckBox_toggled(bool)
-{
-    emit formatChanged();
-}
-
-PacketFormatJSONGroupBox::PacketFormatJSONGroupBox(QWidget *parent) :
-    PacketFormatGroupBox(parent),
-    pf_ui_(new Ui::PacketFormatJSONGroupBox)
-{
-    pf_ui_->setupUi(this);
-
-    connect(pf_ui_->dupKeysCheckBox, &QCheckBox::toggled, this, &PacketFormatGroupBox::formatChanged);
-    connect(pf_ui_->compactCheckBox, &QCheckBox::toggled, this, &PacketFormatGroupBox::formatChanged);
-    connect(pf_ui_->valuesCheckBox, &QCheckBox::toggled, this, &PacketFormatGroupBox::formatChanged);
-    connect(pf_ui_->bytesCheckBox, &QCheckBox::toggled, this, &PacketFormatGroupBox::formatChanged);
-}
-
-PacketFormatJSONGroupBox::~PacketFormatJSONGroupBox()
-{
-    delete pf_ui_;
-}
-
-bool PacketFormatJSONGroupBox::noDuplicateKeys()
-{
-    return pf_ui_->dupKeysCheckBox->isChecked();
-}
-
-bool PacketFormatJSONGroupBox::jsonCompact()
-{
-    return pf_ui_->compactCheckBox->isChecked();
-}
-
-bool PacketFormatJSONGroupBox::valuesEnabled() const
-{
-    return pf_ui_->valuesCheckBox->isChecked();
-}
-
-bool PacketFormatJSONGroupBox::bytesEnabled() const
-{
-    return pf_ui_->bytesCheckBox->isChecked();
-}
-
-bool PacketFormatJSONGroupBox::isValid() const
-{
-    if (!valuesEnabled() && !bytesEnabled()) {
-        return false;
-    }
-    return true;
-}
-
-void PacketFormatJSONGroupBox::updatePrintArgs(print_args_t& print_args)
-{
-    print_args.no_duplicate_keys = noDuplicateKeys();
-    print_args.json_compact = jsonCompact();
-    print_args.print_dissections = valuesEnabled() ?
-        print_dissections_expanded : print_dissections_none;
-    print_args.print_hex = bytesEnabled();
-}
-
-PacketFormatCSVGroupBox::PacketFormatCSVGroupBox(QWidget *parent) :
-    PacketFormatGroupBox(parent),
-    pf_ui_(new Ui::PacketFormatCSVGroupBox)
-{
-    pf_ui_->setupUi(this);
-
-    QStyleOption style_opt;
-    int cb_label_offset =  pf_ui_->asUTF8Button->style()->subElementRect(QStyle::SE_RadioButtonContents, &style_opt).left();
-
-    // Indent the checkboxes under the "UTF-8" radio button
-    // The stylesheet option, used above, doesn't always play nice
-    // with the platform image
-    QHBoxLayout *indent_layout = new QHBoxLayout();
-    pf_ui_->verticalLayout->insertLayout(2, indent_layout);
-    indent_layout->addSpacing(cb_label_offset);
-    QVBoxLayout *options_layout = new QVBoxLayout();
-    indent_layout->addLayout(options_layout);
-    options_layout->addWidget(pf_ui_->BOMCheckBox);
-    options_layout->addWidget(pf_ui_->FormulaCheckBox);
-    // Whitespace is always escaped in the columns; there's no way to unescape
-    // it. To really solve #14260 we would need to store the unescaped column
-    // string for longer (perhaps escaping it when using it, perhaps storing
-    // yet another version of the column text)
-    // options_layout->addWidget(pf_ui_->WSPCheckBox);
-    pf_ui_->WSPCheckBox->hide();
-
-    connect(pf_ui_->asUTF8Button, &QRadioButton::toggled, this, &PacketFormatCSVGroupBox::utf8Toggled);
-    connect(pf_ui_->WSPCheckBox, &QCheckBox::toggled, this, &PacketFormatGroupBox::formatChanged);
-    connect(pf_ui_->BOMCheckBox, &QCheckBox::toggled, this, &PacketFormatGroupBox::formatChanged);
-    connect(pf_ui_->FormulaCheckBox, &QCheckBox::toggled, this, &PacketFormatGroupBox::formatChanged);
-}
-
-PacketFormatCSVGroupBox::~PacketFormatCSVGroupBox()
-{
-    delete pf_ui_;
-}
-
-void PacketFormatCSVGroupBox::utf8Toggled(bool checked)
-{
-    pf_ui_->WSPCheckBox->setEnabled(checked);
-    pf_ui_->BOMCheckBox->setEnabled(checked);
-}
-
-bool PacketFormatCSVGroupBox::escapeWSP() const
-{
-    return pf_ui_->WSPCheckBox->isChecked();
-}
-
-bool PacketFormatCSVGroupBox::UTF8Enabled() const
-{
-    return pf_ui_->asUTF8Button->isChecked();
-}
-
-bool PacketFormatCSVGroupBox::printBOM() const
-{
-    return pf_ui_->BOMCheckBox->isChecked();
-}
-
-bool PacketFormatCSVGroupBox::escapeFormulas() const
-{
-    return pf_ui_->FormulaCheckBox->isChecked();
-}
-
-bool PacketFormatCSVGroupBox::isValid() const
-{
-    return true;
-}
-
-void PacketFormatCSVGroupBox::updatePrintArgs(print_args_t& print_args)
-{
-    print_args.csv_args.print_utf8 = UTF8Enabled();
-    print_args.csv_args.escape_wsp = escapeWSP();
-    print_args.csv_args.print_bom = printBOM();
-    print_args.csv_args.escape_formulas = escapeFormulas();
-}
-
-PacketFormatCArraysGroupBox::PacketFormatCArraysGroupBox(QWidget *parent) :
-    PacketFormatGroupBox(parent),
-    pf_ui_(new Ui::PacketFormatCArraysGroupBox)
-{
-    pf_ui_->setupUi(this);
-
-    connect(pf_ui_->includeDataSourcesCheckBox, &QCheckBox::toggled, this, &PacketFormatGroupBox::formatChanged);
-    connect(pf_ui_->includeIndexCheckBox, &QCheckBox::toggled, this, &PacketFormatGroupBox::formatChanged);
-}
-
-PacketFormatCArraysGroupBox::~PacketFormatCArraysGroupBox()
-{
-    delete pf_ui_;
-}
-
-bool PacketFormatCArraysGroupBox::printSecondaryDataSources() const
-{
-    return pf_ui_->includeDataSourcesCheckBox->isChecked();
-}
-
-bool PacketFormatCArraysGroupBox::printIndex() const
-{
-    return pf_ui_->includeIndexCheckBox->isChecked();
-}
-
-bool PacketFormatCArraysGroupBox::isValid() const
-{
-    return true;
-}
-
-void PacketFormatCArraysGroupBox::updatePrintArgs(print_args_t& print_args)
-{
-    print_args.carrays_args.print_secondary_data_sources = printSecondaryDataSources();
-    print_args.carrays_args.print_index = printIndex();
 }

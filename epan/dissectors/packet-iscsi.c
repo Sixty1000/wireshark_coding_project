@@ -24,14 +24,11 @@
 #include <epan/prefs.h>
 #include <epan/conversation.h>
 #include <epan/expert.h>
-#include <epan/tfs.h>
 #include "packet-scsi.h"
-#include "packet-ppp.h"
 #include <epan/crc32-tvb.h>
 #include <wsutil/crc32.h>
 #include <wsutil/inet_addr.h>
 #include <wsutil/strtoi.h>
-#include <wsutil/array.h>
 #include <wsutil/ws_roundup.h>
 
 void proto_register_iscsi(void);
@@ -161,35 +158,6 @@ static int hf_iscsi_Login_T;
 static int hf_iscsi_Login_CSG;
 static int hf_iscsi_Login_NSG;
 static int hf_iscsi_Login_Status;
-static int hf_iscsi_Login_SendTargets;
-static int hf_iscsi_Login_Chap_A;
-static int hf_iscsi_Login_Chap_C;
-static int hf_iscsi_Login_Chap_I;
-static int hf_iscsi_Login_Chap_N;
-static int hf_iscsi_Login_Chap_R;
-static int hf_iscsi_Login_SessionType;
-static int hf_iscsi_Login_AuthMethod;
-static int hf_iscsi_Login_InitiatorName;
-static int hf_iscsi_Login_TargetName;
-static int hf_iscsi_Login_TargetAddress;
-static int hf_iscsi_Login_TargetAlias;
-static int hf_iscsi_Login_TargetPortalGroupTag;
-static int hf_iscsi_Login_HeaderDigest;
-static int hf_iscsi_Login_DataDigest;
-static int hf_iscsi_Login_InitialR2T;
-static int hf_iscsi_Login_ImmediateData;
-static int hf_iscsi_Login_IFMarker;
-static int hf_iscsi_Login_OFMarker;
-static int hf_iscsi_Login_DataPDUInOrder;
-static int hf_iscsi_Login_DataSequenceInOrder;
-static int hf_iscsi_Login_MaxBurstLength;
-static int hf_iscsi_Login_FirstBurstLength;
-static int hf_iscsi_Login_DefaultTime2Wait;
-static int hf_iscsi_Login_DefaultTime2Retain;
-static int hf_iscsi_Login_MaxOutstandingR2T;
-static int hf_iscsi_Login_ErrorRecoveryLevel;
-static int hf_iscsi_Login_MaxConnections;
-static int hf_iscsi_Login_MaxRecvDataSegmentLength;
 static int hf_iscsi_KeyValue;
 static int hf_iscsi_Text_C;
 static int hf_iscsi_Text_F;
@@ -216,7 +184,6 @@ static int hf_iscsi_RunLength;
 
 /* Initialize the subtree pointers */
 static int ett_iscsi;
-static int ett_iscsi_KeyValue;
 static int ett_iscsi_KeyValues;
 static int ett_iscsi_CDB;
 static int ett_iscsi_Flags;
@@ -320,13 +287,6 @@ static const value_string iscsi_opcodes[] = {
   { ISCSI_OPCODE_VENDOR_SPECIFIC_T0,                "Vendor Specific T0" },
   { ISCSI_OPCODE_VENDOR_SPECIFIC_T1,                "Vendor Specific T1" },
   { ISCSI_OPCODE_VENDOR_SPECIFIC_T2,                "Vendor Specific T2" },
-  {0, NULL},
-};
-
-static const value_string error_recovery_level_vals[] = {
-  { 0,                           "Session recovery class" },
-  { 1,                           "Digest failure recovery" },
-  { 2,                           "Connection recovery class" },
   {0, NULL},
 };
 
@@ -563,11 +523,12 @@ iscsi_dissect_TargetAddress(packet_info *pinfo, tvbuff_t* tvb, proto_tree *tree,
 {
     address addr = ADDRESS_INIT_NONE;
     uint16_t port;
-    unsigned colon_offset;
-    unsigned end_offset;
+    int colon_offset;
+    int end_offset;
     char *ip_str, *port_str;
 
-    if (!tvb_find_uint8_remaining(tvb, offset, ':', &colon_offset)) {
+    colon_offset = tvb_find_uint8(tvb, offset, -1, ':');
+    if (colon_offset == -1) {
         /* RFC 7143 13.8 TargetAddress "If the TCP port is not specified,
          * it is assumed to be the IANA-assigned default port for iSCSI",
          * so nothing to do here.
@@ -579,17 +540,19 @@ iscsi_dissect_TargetAddress(packet_info *pinfo, tvbuff_t* tvb, proto_tree *tree,
     if (tvb_get_uint8(tvb, offset) == '[') {
         offset++;
         /* could be an ipv6 address */
-        if (!tvb_find_uint8_remaining(tvb, offset, ']', &end_offset)) {
+        end_offset = tvb_find_uint8(tvb, offset, -1, ']');
+        if (end_offset == -1) {
             return;
         }
 
         /* look for the colon before the port, if any */
-        if (!tvb_find_uint8_remaining(tvb, end_offset, ':', &colon_offset)) {
+        colon_offset = tvb_find_uint8(tvb, end_offset, -1, ':');
+        if (colon_offset == -1) {
             return;
         }
 
         ws_in6_addr *ip6_addr = wmem_new(pinfo->pool, ws_in6_addr);
-        ip_str = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, end_offset - offset, ENC_ASCII);
+        ip_str = tvb_get_string_enc(pinfo->pool, tvb, offset, end_offset - offset, ENC_ASCII);
         if (ws_inet_pton6(ip_str, ip6_addr)) {
             /* looks like a ipv6 address */
             set_address(&addr, AT_IPv6, sizeof(ws_in6_addr), ip6_addr);
@@ -597,7 +560,7 @@ iscsi_dissect_TargetAddress(packet_info *pinfo, tvbuff_t* tvb, proto_tree *tree,
 
     } else {
         /* This is either a ipv4 address or a dns name */
-        ip_str = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, colon_offset - offset, ENC_ASCII);
+        ip_str = tvb_get_string_enc(pinfo->pool, tvb, offset, colon_offset - offset, ENC_ASCII);
         ws_in4_addr *ip4_addr = wmem_new(pinfo->pool, ws_in4_addr);
         if (ws_inet_pton4(ip_str, ip4_addr)) {
             /* looks like a ipv4 address */
@@ -609,13 +572,14 @@ iscsi_dissect_TargetAddress(packet_info *pinfo, tvbuff_t* tvb, proto_tree *tree,
     }
 
     /* Extract the port */
-    unsigned port_len;
-    if (!tvb_find_uint8_remaining(tvb, colon_offset, ',', &end_offset)) {
+    end_offset = tvb_find_uint8(tvb, colon_offset, -1, ',');
+    int port_len;
+    if (end_offset == -1) {
         port_len = tvb_reported_length_remaining(tvb, colon_offset + 1);
     } else {
         port_len = end_offset - (colon_offset + 1);
     }
-    port_str = (char*)tvb_get_string_enc(pinfo->pool, tvb, colon_offset + 1, port_len, ENC_ASCII);
+    port_str = tvb_get_string_enc(pinfo->pool, tvb, colon_offset + 1, port_len, ENC_ASCII);
     if (!ws_strtou16(port_str, NULL, &port)) {
         proto_tree_add_expert_format(tree, pinfo, &ei_iscsi_keyvalue_invalid,
             tvb, colon_offset + 1, port_len, "Invalid port: %s", port_str);
@@ -635,99 +599,27 @@ iscsi_dissect_TargetAddress(packet_info *pinfo, tvbuff_t* tvb, proto_tree *tree,
 
 }
 
-static unsigned
-addTextKeys(packet_info *pinfo, proto_tree *tt, tvbuff_t *tvb, unsigned offset, uint32_t text_len) {
-    const unsigned limit = offset + text_len;
+static int
+addTextKeys(packet_info *pinfo, proto_tree *tt, tvbuff_t *tvb, int offset, uint32_t text_len) {
+    const int limit = offset + text_len;
     tvbuff_t *keyvalue_tvb;
-    unsigned len, value_offset;
-    const char *value;
+    int len, value_offset;
 
     while(offset < limit) {
         /* RFC 7143 6.1 Text Format: "Every key=value pair, including the
          * last or only pair in a LTDS, MUST be followed by one null (0x00)
          * delimiter.
          */
-        len = tvb_strnlen(tvb, offset, -1) + 1; /* +1 to include the '\0' */
+        proto_tree_add_item_ret_length(tt, hf_iscsi_KeyValue, tvb, offset, -1, ENC_ASCII, &len);
         keyvalue_tvb = tvb_new_subset_length(tvb, offset, len);
-
-        if (!tvb_find_uint8_length(keyvalue_tvb, 0, len, '=', &value_offset)) {
+        value_offset = tvb_find_uint8(keyvalue_tvb, 0, len, '=');
+        if (value_offset == -1) {
             break;
         }
         value_offset++;
-        value = (char*)tvb_get_string_enc(pinfo->pool, keyvalue_tvb, value_offset, len - value_offset, ENC_ASCII);
 
-        if (tvb_strneql(keyvalue_tvb, 0, "AuthMethod=", strlen("AuthMethod=")) == 0) {
-            proto_tree_add_string(tt, hf_iscsi_Login_AuthMethod, keyvalue_tvb, 0, len, value);
-        } else if (tvb_strneql(keyvalue_tvb, 0, "CHAP_A=", strlen("CHAP_A=")) == 0) {
-            proto_tree_add_uint(tt, hf_iscsi_Login_Chap_A, keyvalue_tvb, 0, len,
-                                (int)strtol(value, NULL, 0));
-        } else if (tvb_strneql(keyvalue_tvb, 0, "CHAP_C=", strlen("CHAP_C=")) == 0) {
-            proto_tree_add_string(tt, hf_iscsi_Login_Chap_C, keyvalue_tvb, 0, len, value);
-        } else if (tvb_strneql(keyvalue_tvb, 0, "CHAP_I=", strlen("CHAP_I=")) == 0) {
-            proto_tree_add_uint(tt, hf_iscsi_Login_Chap_I, keyvalue_tvb, 0, len,
-                                (int)strtol(value, NULL, 0));
-        } else if (tvb_strneql(keyvalue_tvb, 0, "CHAP_N=", strlen("CHAP_N=")) == 0) {
-            proto_tree_add_string(tt, hf_iscsi_Login_Chap_N, keyvalue_tvb, 0, len, value);
-        } else if (tvb_strneql(keyvalue_tvb, 0, "CHAP_R=", strlen("CHAP_R=")) == 0) {
-            proto_tree_add_string(tt, hf_iscsi_Login_Chap_R, keyvalue_tvb, 0, len, value);
-        } else if (tvb_strneql(keyvalue_tvb, 0, "DataDigest=", strlen("DataDigest=")) == 0) {
-            proto_tree_add_string(tt, hf_iscsi_Login_DataDigest, keyvalue_tvb, 0, len, value);
-        } else if (tvb_strneql(keyvalue_tvb, 0, "DataPDUInOrder=", strlen("DataPDUInOrder=")) == 0) {
-            proto_tree_add_string(tt, hf_iscsi_Login_DataPDUInOrder, keyvalue_tvb, 0, len, value);
-        } else if (tvb_strneql(keyvalue_tvb, 0, "DataSequenceInOrder=", strlen("DataSequenceInOrder=")) == 0) {
-            proto_tree_add_string(tt, hf_iscsi_Login_DataSequenceInOrder, keyvalue_tvb, 0, len, value);
-        } else if (tvb_strneql(keyvalue_tvb, 0, "DefaultTime2Retain=", strlen("DefaultTime2Retain=")) == 0) {
-            proto_tree_add_uint(tt, hf_iscsi_Login_DefaultTime2Retain, keyvalue_tvb, 0, len,
-                                (int)strtol(value, NULL, 0));
-        } else if (tvb_strneql(keyvalue_tvb, 0, "DefaultTime2Wait=", strlen("DefaultTime2Wait=")) == 0) {
-            proto_tree_add_uint(tt, hf_iscsi_Login_DefaultTime2Wait, keyvalue_tvb, 0, len,
-                                (int)strtol(value, NULL, 0));
-        } else if (tvb_strneql(keyvalue_tvb, 0, "ErrorRecoveryLevel=", strlen("ErrorRecoveryLevel=")) == 0) {
-            proto_tree_add_uint(tt, hf_iscsi_Login_ErrorRecoveryLevel, keyvalue_tvb, 0, len,
-                                (int)strtol(value, NULL, 0));
-        } else if (tvb_strneql(keyvalue_tvb, 0, "FirstBurstLength=", strlen("FirstBurstLength=")) == 0) {
-            proto_tree_add_uint(tt, hf_iscsi_Login_FirstBurstLength, keyvalue_tvb, 0, len,
-                                (int)strtol(value, NULL, 0));
-        } else if (tvb_strneql(keyvalue_tvb, 0, "HeaderDigest=", strlen("HeaderDigest=")) == 0) {
-            proto_tree_add_string(tt, hf_iscsi_Login_HeaderDigest, keyvalue_tvb, 0, len, value);
-        } else if (tvb_strneql(keyvalue_tvb, 0, "IFMarker=", strlen("IFMarker=")) == 0) {
-            proto_tree_add_string(tt, hf_iscsi_Login_IFMarker, keyvalue_tvb, 0, len, value);
-        } else if (tvb_strneql(keyvalue_tvb, 0, "ImmediateData=", strlen("ImmediateData=")) == 0) {
-            proto_tree_add_string(tt, hf_iscsi_Login_ImmediateData, keyvalue_tvb, 0, len, value);
-        } else if (tvb_strneql(keyvalue_tvb, 0, "InitialR2T=", strlen("InitialR2T=")) == 0) {
-            proto_tree_add_string(tt, hf_iscsi_Login_InitialR2T, keyvalue_tvb, 0, len, value);
-        } else if (tvb_strneql(keyvalue_tvb, 0, "InitiatorName=", strlen("InitiatorName=")) == 0) {
-            proto_tree_add_string(tt, hf_iscsi_Login_InitiatorName, keyvalue_tvb, 0, len, value);
-        } else if (tvb_strneql(keyvalue_tvb, 0, "MaxBurstLength=", strlen("MaxBurstLength=")) == 0) {
-            proto_tree_add_uint(tt, hf_iscsi_Login_MaxBurstLength, keyvalue_tvb, 0, len,
-                                (int)strtol(value, NULL, 0));
-        } else if (tvb_strneql(keyvalue_tvb, 0, "MaxConnections=", strlen("MaxConnections=")) == 0) {
-            proto_tree_add_uint(tt, hf_iscsi_Login_MaxConnections, keyvalue_tvb, 0, len,
-                                (int)strtol(value, NULL, 0));
-        } else if (tvb_strneql(keyvalue_tvb, 0, "MaxOutstandingR2T=", strlen("MaxOutstandingR2T=")) == 0) {
-            proto_tree_add_uint(tt, hf_iscsi_Login_MaxOutstandingR2T, keyvalue_tvb, 0, len,
-                                (int)strtol(value, NULL, 0));
-        } else if (tvb_strneql(keyvalue_tvb, 0, "MaxRecvDataSegmentLength=", strlen("MaxRecvDataSegmentLength=")) == 0) {
-            proto_tree_add_uint(tt, hf_iscsi_Login_MaxRecvDataSegmentLength, keyvalue_tvb, 0, len,
-                                (int)strtol(value, NULL, 0));
-        } else if (tvb_strneql(keyvalue_tvb, 0, "OFMarker=", strlen("IFMarker=")) == 0) {
-            proto_tree_add_string(tt, hf_iscsi_Login_OFMarker, keyvalue_tvb, 0, len, value);
-        } else if (tvb_strneql(keyvalue_tvb, 0, "SendTargets=", strlen("SendTargets=")) == 0) {
-            proto_tree_add_string(tt, hf_iscsi_Login_SendTargets, keyvalue_tvb, 0, len, value);
-        } else if (tvb_strneql(keyvalue_tvb, 0, "SessionType=", strlen("SessionType=")) == 0) {
-            proto_tree_add_string(tt, hf_iscsi_Login_SessionType, keyvalue_tvb, 0, len, value);
-        } else if (tvb_strneql(keyvalue_tvb, 0, "TargetAddress=", strlen("TargetAddress=")) == 0) {
-            proto_tree_add_string(tt, hf_iscsi_Login_TargetAddress, keyvalue_tvb, 0, len, value);
+        if (tvb_strneql(keyvalue_tvb, 0, "TargetAddress=", strlen("TargetAddress=")) == 0) {
             iscsi_dissect_TargetAddress(pinfo, keyvalue_tvb, tt, value_offset);
-        } else if (tvb_strneql(keyvalue_tvb, 0, "TargetAlias=", strlen("TargetAlias=")) == 0) {
-            proto_tree_add_string(tt, hf_iscsi_Login_TargetAlias, keyvalue_tvb, 0, len, value);
-        } else if (tvb_strneql(keyvalue_tvb, 0, "TargetName=", strlen("TargetName=")) == 0) {
-            proto_tree_add_string(tt, hf_iscsi_Login_TargetName, keyvalue_tvb, 0, len, value);
-        } else if (tvb_strneql(keyvalue_tvb, 0, "TargetPortalGroupTag=", strlen("TargetPortalGroupTag=")) == 0) {
-            proto_tree_add_uint(tt, hf_iscsi_Login_TargetPortalGroupTag, keyvalue_tvb, 0, len,
-                                (int)strtol(value, NULL, 0));
-        } else {
-            proto_tree_add_item(tt, hf_iscsi_KeyValue, keyvalue_tvb, 0, len, ENC_ASCII);
         }
 
         offset += len;
@@ -735,9 +627,9 @@ addTextKeys(packet_info *pinfo, proto_tree *tt, tvbuff_t *tvb, unsigned offset, 
     return offset;
 }
 
-static unsigned
-handleHeaderDigest(iscsi_session_t *iscsi_session, proto_item *ti, tvbuff_t *tvb, unsigned offset, unsigned headerLen) {
-    unsigned available_bytes = tvb_captured_length_remaining(tvb, offset);
+static int
+handleHeaderDigest(iscsi_session_t *iscsi_session, proto_item *ti, tvbuff_t *tvb, unsigned offset, int headerLen) {
+    int available_bytes = tvb_captured_length_remaining(tvb, offset);
 
     switch(iscsi_session->header_digest){
     case ISCSI_DIGEST_CRC32:
@@ -757,9 +649,9 @@ handleHeaderDigest(iscsi_session_t *iscsi_session, proto_item *ti, tvbuff_t *tvb
     return offset + headerLen;
 }
 
-static unsigned
-handleDataDigest(iscsi_session_t *iscsi_session, proto_item *ti, tvbuff_t *tvb, unsigned offset, unsigned dataLen) {
-    unsigned available_bytes = tvb_captured_length_remaining(tvb, offset);
+static int
+handleDataDigest(iscsi_session_t *iscsi_session, proto_item *ti, tvbuff_t *tvb, unsigned offset, int dataLen) {
+    int available_bytes = tvb_captured_length_remaining(tvb, offset);
 
     if (dataLen > 0) {
         switch (iscsi_session->data_digest){
@@ -782,17 +674,17 @@ handleDataDigest(iscsi_session_t *iscsi_session, proto_item *ti, tvbuff_t *tvb, 
     return offset + dataLen;
 }
 
-static unsigned
+static int
 handleDataSegment(iscsi_session_t *iscsi_session, proto_item *ti, tvbuff_t *tvb, unsigned offset, unsigned dataSegmentLen, unsigned endOffset, int hf_id) {
     if(endOffset > offset) {
-        unsigned dataOffset = offset;
-        unsigned dataLen = MIN(dataSegmentLen, endOffset - offset);
+        int dataOffset = offset;
+        int dataLen = MIN(dataSegmentLen, endOffset - offset);
         if(dataLen > 0) {
             proto_tree_add_item(ti, hf_id, tvb, offset, dataLen, ENC_NA);
             offset += dataLen;
         }
         if(offset < endOffset && (offset & 3) != 0) {
-            unsigned padding = 4 - (offset & 3);
+            int padding = 4 - (offset & 3);
             proto_tree_add_item(ti, hf_iscsi_Padding, tvb, offset, padding, ENC_NA);
             offset += padding;
         }
@@ -803,11 +695,11 @@ handleDataSegment(iscsi_session_t *iscsi_session, proto_item *ti, tvbuff_t *tvb,
     return offset;
 }
 
-static unsigned
+static int
 handleDataSegmentAsTextKeys(iscsi_session_t *iscsi_session, packet_info *pinfo, proto_item *ti, tvbuff_t *tvb, unsigned offset, unsigned dataSegmentLen, unsigned endOffset, int digestsActive) {
     if(endOffset > offset) {
-        unsigned dataOffset = offset;
-        unsigned textLen = MIN(dataSegmentLen, endOffset - offset);
+        int dataOffset = offset;
+        int textLen = MIN(dataSegmentLen, endOffset - offset);
         if(textLen > 0) {
             proto_tree *tt = proto_tree_add_subtree(ti, tvb, offset, textLen,
                                           ett_iscsi_KeyValues, NULL, "Key/Value Pairs");
@@ -993,12 +885,12 @@ dissect_iscsi_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned 
             (opcode == ISCSI_OPCODE_SCSI_DATA_IN &&
                 (tvb_get_uint8(tvb, offset + 1) & ISCSI_SCSI_DATA_FLAG_S))) {
             col_append_fstr (pinfo->cinfo, COL_INFO, " (%s) ",
-                                val_to_str(pinfo->pool, scsi_status, scsi_status_val, "0x%x"));
+                                val_to_str (scsi_status, scsi_status_val, "0x%x"));
         }
         else if (opcode == ISCSI_OPCODE_LOGIN_RESPONSE) {
             uint16_t login_status = tvb_get_ntohs(tvb, offset+36);
             col_append_fstr (pinfo->cinfo, COL_INFO, " (%s) ",
-                                val_to_str(pinfo->pool, login_status, iscsi_login_status, "0x%x"));
+                                val_to_str (login_status, iscsi_login_status, "0x%x"));
         }
         else if (opcode == ISCSI_OPCODE_LOGOUT_COMMAND) {
             uint8_t logoutReason;
@@ -1011,27 +903,27 @@ dissect_iscsi_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned 
                 logoutReason = tvb_get_uint8(tvb, offset+23);
             }
             col_append_fstr (pinfo->cinfo, COL_INFO, " (%s) ",
-                                val_to_str(pinfo->pool, logoutReason, iscsi_logout_reasons, "0x%x"));
+                                val_to_str (logoutReason, iscsi_logout_reasons, "0x%x"));
         }
         else if (opcode == ISCSI_OPCODE_TASK_MANAGEMENT_FUNCTION) {
             uint8_t tmf = tvb_get_uint8(tvb, offset + 1) & 0x7f;
             col_append_fstr (pinfo->cinfo, COL_INFO, " (%s) ",
-                                val_to_str(pinfo->pool, tmf, iscsi_task_management_functions, "0x%x"));
+                                val_to_str (tmf, iscsi_task_management_functions, "0x%x"));
         }
         else if (opcode == ISCSI_OPCODE_TASK_MANAGEMENT_FUNCTION_RESPONSE) {
             uint8_t resp = tvb_get_uint8(tvb, offset + 2);
             col_append_fstr (pinfo->cinfo, COL_INFO, " (%s) ",
-                                val_to_str(pinfo->pool, resp, iscsi_task_management_responses, "0x%x"));
+                                val_to_str (resp, iscsi_task_management_responses, "0x%x"));
         }
         else if (opcode == ISCSI_OPCODE_REJECT) {
             uint8_t reason = tvb_get_uint8(tvb, offset + 2);
             col_append_fstr (pinfo->cinfo, COL_INFO, " (%s) ",
-                                val_to_str(pinfo->pool, reason, iscsi_reject_reasons, "0x%x"));
+                                val_to_str (reason, iscsi_reject_reasons, "0x%x"));
         }
         else if (opcode == ISCSI_OPCODE_ASYNC_MESSAGE) {
             uint8_t asyncEvent = tvb_get_uint8(tvb, offset + 36);
             col_append_fstr (pinfo->cinfo, COL_INFO, " (%s) ",
-                                val_to_str(pinfo->pool, asyncEvent, iscsi_asyncevents, "0x%x"));
+                                val_to_str (asyncEvent, iscsi_asyncevents, "0x%x"));
         }
     }
 
@@ -1640,14 +1532,18 @@ dissect_iscsi_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned 
             offset+=2;
             if(snsl){
                 tvbuff_t *data_tvb;
-                int tvb_rlen;
+                int tvb_len, tvb_rlen;
 
+                tvb_len=tvb_captured_length_remaining(tvb, offset);
+                if(tvb_len>snsl)
+                    tvb_len=snsl;
                 tvb_rlen=tvb_reported_length_remaining(tvb, offset);
                 if(tvb_rlen>snsl)
                     tvb_rlen=snsl;
-                data_tvb=tvb_new_subset_length(tvb, offset, tvb_rlen);
-                dissect_scsi_snsinfo(data_tvb, pinfo, tree, 0,
-                                     tvb_rlen, &cdata->itlq, itl);
+                data_tvb=tvb_new_subset_length_caplen(tvb, offset, tvb_len, tvb_rlen);
+                dissect_scsi_snsinfo (data_tvb, pinfo, tree, 0,
+                                      tvb_len,
+                                      &cdata->itlq, itl);
 
                 offset+=snsl;
             }
@@ -1838,9 +1734,10 @@ dissect_iscsi_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned 
                   ~(X_BIT | I_BIT) :
                   ~I_BIT)) == ISCSI_OPCODE_SCSI_COMMAND) {
         tvbuff_t *cdb_tvb, *data_tvb;
-        int tvb_rlen;
+        int tvb_len, tvb_rlen;
 
         /* SCSI Command */
+        tvb_len=tvb_captured_length_remaining(tvb, cdb_offset);
         tvb_rlen=tvb_reported_length_remaining(tvb, cdb_offset);
         if(ahs_cdb_length && ahs_cdb_length<1024){
             uint8_t *cdb_buf;
@@ -1860,10 +1757,13 @@ dissect_iscsi_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned 
 
             add_new_data_source(pinfo, cdb_tvb, "CDB+AHS");
         } else {
+            if(tvb_len>16){
+                tvb_len=16;
+            }
             if(tvb_rlen>16){
                 tvb_rlen=16;
             }
-            cdb_tvb=tvb_new_subset_length(tvb, cdb_offset, tvb_rlen);
+            cdb_tvb=tvb_new_subset_length_caplen(tvb, cdb_offset, tvb_len, tvb_rlen);
         }
         dissect_scsi_cdb(cdb_tvb, pinfo, tree, SCSI_DEV_UNKNOWN, &cdata->itlq, itl);
         /* we don't want the immediate below to overwrite our CDB info */
@@ -1872,14 +1772,17 @@ dissect_iscsi_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned 
         /* where there any ImmediateData ? */
         if(immediate_data_length){
             /* Immediate Data TVB */
+            tvb_len=tvb_captured_length_remaining(tvb, immediate_data_offset);
+            if(tvb_len>(int)immediate_data_length)
+                tvb_len=immediate_data_length;
             tvb_rlen=tvb_reported_length_remaining(tvb, immediate_data_offset);
             if(tvb_rlen>(int)immediate_data_length)
                 tvb_rlen=immediate_data_length;
-            data_tvb=tvb_new_subset_length(tvb, immediate_data_offset, tvb_rlen);
-            dissect_scsi_payload(data_tvb, pinfo, tree,
-                                 true,
-                                 &cdata->itlq, itl,
-                                 0);
+            data_tvb=tvb_new_subset_length_caplen(tvb, immediate_data_offset, tvb_len, tvb_rlen);
+            dissect_scsi_payload (data_tvb, pinfo, tree,
+                                  true,
+                                  &cdata->itlq, itl,
+                                  0);
         }
     }
     else if (opcode == ISCSI_OPCODE_SCSI_RESPONSE) {
@@ -1893,15 +1796,18 @@ dissect_iscsi_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned 
                 offset += 2;
                 if(senseLen > 0){
                     tvbuff_t *data_tvb;
-                    int tvb_rlen;
+                    int tvb_len, tvb_rlen;
 
+                    tvb_len=tvb_captured_length_remaining(tvb, offset);
+                    if(tvb_len>senseLen)
+                        tvb_len=senseLen;
                     tvb_rlen=tvb_reported_length_remaining(tvb, offset);
                     if(tvb_rlen>senseLen)
                         tvb_rlen=senseLen;
-                    data_tvb=tvb_new_subset_length(tvb, offset, tvb_rlen);
-                    dissect_scsi_snsinfo(data_tvb, pinfo, tree, 0,
-                                         tvb_rlen,
-                                         &cdata->itlq, itl);
+                    data_tvb=tvb_new_subset_length_caplen(tvb, offset, tvb_len, tvb_rlen);
+                    dissect_scsi_snsinfo (data_tvb, pinfo, tree, 0,
+                                          tvb_len,
+                                          &cdata->itlq, itl);
                 }
             }
         }
@@ -1912,13 +1818,16 @@ dissect_iscsi_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned 
     else if ((opcode == ISCSI_OPCODE_SCSI_DATA_IN) ||
              (opcode == ISCSI_OPCODE_SCSI_DATA_OUT)) {
         tvbuff_t *data_tvb;
-        int tvb_rlen;
+        int tvb_len, tvb_rlen;
 
         /* offset is setup correctly by the iscsi code for response above */
+        tvb_len=tvb_captured_length_remaining(tvb, offset);
+        if(tvb_len>(int)data_segment_len)
+            tvb_len=data_segment_len;
         tvb_rlen=tvb_reported_length_remaining(tvb, offset);
         if(tvb_rlen>(int)data_segment_len)
             tvb_rlen=data_segment_len;
-        data_tvb=tvb_new_subset_length(tvb, offset, tvb_rlen);
+        data_tvb=tvb_new_subset_length_caplen(tvb, offset, tvb_len, tvb_rlen);
         dissect_scsi_payload (data_tvb, pinfo, tree,
                               (opcode==ISCSI_OPCODE_SCSI_DATA_OUT),
                               &cdata->itlq, itl,
@@ -2749,7 +2658,7 @@ proto_register_iscsi(void)
     static hf_register_info hf[] = {
         { &hf_iscsi_request_frame,
           { "Request in", "iscsi.request_frame",
-            FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_REQUEST), 0,
+            FT_FRAMENUM, BASE_NONE, NULL, 0,
             "Frame number of the request", HFILL }},
 
         { &hf_iscsi_time,
@@ -2779,7 +2688,7 @@ proto_register_iscsi(void)
 
         { &hf_iscsi_response_frame,
           { "Response in", "iscsi.response_frame",
-            FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_RESPONSE), 0,
+            FT_FRAMENUM, BASE_NONE, NULL, 0,
             "Frame number of the response", HFILL }},
         { &hf_iscsi_AHS_length,
           { "AHS Length", "iscsi.ahs.length",
@@ -3141,122 +3050,6 @@ proto_register_iscsi(void)
             FT_UINT16, BASE_HEX, VALS(iscsi_login_status), 0,
             "Status class and detail", HFILL }
         },
-        { &hf_iscsi_Login_Chap_A,
-          { "CHAP_A", "iscsi.login.chap_a",
-            FT_UINT8, BASE_DEC|BASE_RANGE_STRING, RVALS(chap_alg_rvals),
-                0x0, "Authentication algorithm", HFILL }},
-        { &hf_iscsi_Login_Chap_C,
-          { "CHAP_C", "iscsi.login.chap_c",
-            FT_STRINGZ, BASE_NONE, NULL,
-                0x0, "Challenge", HFILL }},
-        { &hf_iscsi_Login_Chap_I,
-          { "CHAP_I", "iscsi.login.chap_i",
-            FT_UINT8, BASE_DEC, NULL,
-                0x0, "Identifier", HFILL }},
-        { &hf_iscsi_Login_Chap_N,
-          { "CHAP_N", "iscsi.login.chap_n",
-            FT_STRINGZ, BASE_NONE, NULL,
-                0x0, "Name", HFILL }},
-        { &hf_iscsi_Login_Chap_R,
-          { "CHAP_R", "iscsi.login.chap_r",
-            FT_STRINGZ, BASE_NONE, NULL,
-                0x0, "Response", HFILL }},
-        { &hf_iscsi_Login_SessionType,
-          { "Session Type", "iscsi.login.session_type",
-            FT_STRINGZ, BASE_NONE, NULL,
-                0x0, NULL, HFILL }},
-        { &hf_iscsi_Login_AuthMethod,
-          { "Auth Method", "iscsi.login.auth_method",
-            FT_STRINGZ, BASE_NONE, NULL,
-                0x0, "Authentication methods offered/accepted", HFILL }},
-        { &hf_iscsi_Login_InitiatorName,
-          { "Initiator Name", "iscsi.login.initiator_name",
-            FT_STRINGZ, BASE_NONE, NULL,
-                0x0, NULL, HFILL }},
-        { &hf_iscsi_Login_SendTargets,
-          { "Send Targets", "iscsi.login.send_targets",
-            FT_STRINGZ, BASE_NONE, NULL,
-                0x0, NULL, HFILL }},
-        { &hf_iscsi_Login_TargetAlias,
-          { "Target Alias", "iscsi.login.target_alias",
-            FT_STRINGZ, BASE_NONE, NULL,
-                0x0, NULL, HFILL }},
-        { &hf_iscsi_Login_TargetName,
-          { "Target Name", "iscsi.login.target_name",
-            FT_STRINGZ, BASE_NONE, NULL,
-                0x0, NULL, HFILL }},
-        { &hf_iscsi_Login_TargetAddress,
-          { "Target Address", "iscsi.login.target_address",
-            FT_STRINGZ, BASE_NONE, NULL,
-                0x0, NULL, HFILL }},
-        { &hf_iscsi_Login_HeaderDigest,
-          { "Header Digest", "iscsi.login.header_digest",
-            FT_STRINGZ, BASE_NONE, NULL,
-                0x0, NULL, HFILL }},
-        { &hf_iscsi_Login_DataDigest,
-          { "Data Digest", "iscsi.login.data_digest",
-            FT_STRINGZ, BASE_NONE, NULL,
-                0x0, NULL, HFILL }},
-        { &hf_iscsi_Login_InitialR2T,
-          { "Initial R2T", "iscsi.login.initialr2t",
-            FT_STRINGZ, BASE_NONE, NULL,
-                0x0, NULL, HFILL }},
-        { &hf_iscsi_Login_ImmediateData,
-          { "Immediate Data", "iscsi.login.immediate_data",
-            FT_STRINGZ, BASE_NONE, NULL,
-                0x0, NULL, HFILL }},
-        { &hf_iscsi_Login_IFMarker,
-          { "IF Marker", "iscsi.login.if_marker",
-            FT_STRINGZ, BASE_NONE, NULL,
-                0x0, "Target to Initiator Marker", HFILL }},
-        { &hf_iscsi_Login_OFMarker,
-          { "OF Marker", "iscsi.login.of_marker",
-            FT_STRINGZ, BASE_NONE, NULL,
-                0x0, "Initiator to Target Marker", HFILL }},
-        { &hf_iscsi_Login_DataPDUInOrder,
-          { "Data Pdu In Order", "iscsi.login.data_pdu_in_order",
-            FT_STRINGZ, BASE_NONE, NULL,
-                0x0, NULL, HFILL }},
-        { &hf_iscsi_Login_DataSequenceInOrder,
-          { "Data Sequence In Order", "iscsi.login.data_sequence_in_order",
-            FT_STRINGZ, BASE_NONE, NULL,
-                0x0, NULL, HFILL }},
-        { &hf_iscsi_Login_TargetPortalGroupTag,
-          { "Target Portal Group Tag", "iscsi.login.target_portal_group_tag",
-            FT_UINT8, BASE_DEC, NULL,
-                0x0, NULL, HFILL }},
-        { &hf_iscsi_Login_MaxBurstLength,
-          { "Max Burst Length", "iscsi.login.max_burst_length",
-            FT_UINT8, BASE_DEC, NULL,
-                0x0, NULL, HFILL }},
-        { &hf_iscsi_Login_FirstBurstLength,
-          { "First Burst Length", "iscsi.login.first_burst_length",
-            FT_UINT8, BASE_DEC, NULL,
-                0x0, NULL, HFILL }},
-        { &hf_iscsi_Login_DefaultTime2Wait,
-          { "Default Time To Wait", "iscsi.login.default_time_to_wait",
-            FT_UINT8, BASE_DEC, NULL,
-                0x0, NULL, HFILL }},
-        { &hf_iscsi_Login_DefaultTime2Retain,
-          { "Default Time To Retain", "iscsi.login.default_time_to_retain",
-            FT_UINT8, BASE_DEC, NULL,
-                0x0, NULL, HFILL }},
-        { &hf_iscsi_Login_MaxOutstandingR2T,
-          { "Max Outstanding R2T", "iscsi.login.max_outstanding_r2t",
-            FT_UINT8, BASE_DEC, NULL,
-                0x0, NULL, HFILL }},
-        { &hf_iscsi_Login_ErrorRecoveryLevel,
-          { "Error Recovery Level", "iscsi.error_recovery_level",
-            FT_UINT8, BASE_DEC, VALS(error_recovery_level_vals),
-                0x0, NULL, HFILL }},
-        { &hf_iscsi_Login_MaxConnections,
-          { "Max Connections", "iscsi.login.max_connections",
-            FT_UINT8, BASE_DEC, NULL,
-                0x0, NULL, HFILL }},
-        { &hf_iscsi_Login_MaxRecvDataSegmentLength,
-          { "Max Recv Data Segment Length", "iscsi.login.max_recv_data_segment_length",
-            FT_UINT8, BASE_DEC, NULL,
-                0x0, NULL, HFILL }},
         { &hf_iscsi_KeyValue,
           { "KeyValue", "iscsi.keyvalue",
             FT_STRINGZ, BASE_NONE, NULL, 0,
@@ -3377,7 +3170,6 @@ proto_register_iscsi(void)
     /* Setup protocol subtree array */
     static int *ett[] = {
         &ett_iscsi,
-        &ett_iscsi_KeyValue,
         &ett_iscsi_KeyValues,
         &ett_iscsi_CDB,
         &ett_iscsi_Flags,

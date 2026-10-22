@@ -1,7 +1,6 @@
 .exp
 .ilk
 .lib
-icuuc.dll
 fuzzshark.exe
 idl2wrs.exe
 lemon.exe

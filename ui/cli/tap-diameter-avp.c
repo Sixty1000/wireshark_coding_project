@@ -12,7 +12,7 @@
  * This TAP enables extraction of most important diameter fields in text format.
  * - much more performance than -T text and -T pdml
  * - more powerful than -T field and -z proto,colinfo
- * - exactly one text line per diameter message
+ * - exacltly one text line per diameter message
  * - multiple diameter messages in one frame supported
  *   E.g. one device watchdog answer and two credit control answers
  *        in one TCP packet produces 3 text lines.
@@ -37,7 +37,7 @@
 #include <epan/tap.h>
 #include <epan/epan_dissect.h>
 #include <epan/stat_tap_ui.h>
-#include <wsutil/value_string.h>
+#include <epan/value_string.h>
 #include <epan/to_str.h>
 #include <epan/dissectors/packet-diameter.h>
 
@@ -51,11 +51,11 @@ typedef struct _diameteravp_t {
 	uint32_t req_count;
 	uint32_t ans_count;
 	uint32_t paired_ans_count;
+	char    *filter;
 } diameteravp_t;
 
 /* Copied from proto.c */
 static bool
-// NOLINTNEXTLINE(misc-no-recursion)
 tree_traverse_pre_order(proto_tree *tree, proto_tree_traverse_func func, void *data)
 {
 	proto_node *pnode = tree;
@@ -69,7 +69,6 @@ tree_traverse_pre_order(proto_tree *tree, proto_tree_traverse_func func, void *d
 	while (child != NULL) {
 		current = child;
 		child = current->next;
-		// We recurse here, but we're limited by our tree depth checks in proto.c
 		if (tree_traverse_pre_order((proto_tree *)current, func, data))
 			return true;
 	}
@@ -113,18 +112,6 @@ diam_tree_to_csv(proto_node *node, void * data)
 	return false;
 }
 
-static void
-diameteravp_reset(void *pds)
-{
-	diameteravp_t *ds = (diameteravp_t *)pds;
-	ds->frame	      = 0;
-	ds->diammsg_toprocess = 0;
-	ds->req_count	      = 0;
-	ds->ans_count	      = 0;
-	ds->paired_ans_count  = 0;
-	/* cmd_code is a cmdline parameter and shouldn't be reset here */
-}
-
 static tap_packet_status
 diameteravp_packet(void *pds, packet_info *pinfo, epan_dissect_t *edt _U_, const void *pdi, tap_flags_t flags _U_)
 {
@@ -147,7 +134,7 @@ diameteravp_packet(void *pds, packet_info *pinfo, epan_dissect_t *edt _U_, const
 		return ret;
 
 	/* Several diameter messages within one frame are possible.                    *
-	 * Check if we processing the message in same frame like before or in new frame.*/
+	 * Check if we processing the message in same frame like befor or in new frame.*/
 	ds = (diameteravp_t *)pds;
 	if (pinfo->num > ds->frame) {
 		ds->frame = pinfo->num;
@@ -214,14 +201,8 @@ diameteravp_draw(void *pds)
 	printf("=== Diameter Summary ===\nrequest count:\t%u\nanswer count:\t%u\nreq/ans pairs:\t%u\n", ds->req_count, ds->ans_count, ds->paired_ans_count);
 }
 
-static void
-diameteravp_finish(void *pds)
-{
-	diameteravp_t *ds = (diameteravp_t *)pds;
-	g_free(ds);
-}
 
-static bool
+static void
 diameteravp_init(const char *opt_arg, void *userdata _U_)
 {
 	diameteravp_t  *ds;
@@ -239,6 +220,7 @@ diameteravp_init(const char *opt_arg, void *userdata _U_)
 	ds->req_count	      = 0;
 	ds->ans_count	      = 0;
 	ds->paired_ans_count  = 0;
+	ds->filter	      = NULL;
 
 	filter = g_string_new("diameter");
 
@@ -251,9 +233,9 @@ diameteravp_init(const char *opt_arg, void *userdata _U_)
 		/* if the token is a not-null string and it's not *, the conversion must succeed */
 		if (strlen(tokens[2]) > 0 && tokens[2][0] != '*') {
 			if (!ws_strtou32(tokens[2], NULL, &ds->cmd_code)) {
-				cmdarg_err("Invalid integer token: %s\n", tokens[2]);
+				fprintf(stderr, "Invalid integer token: %s\n", tokens[2]);
 				g_strfreev(tokens);
-				return false;
+				exit(1);
 			}
 		}
 	}
@@ -272,20 +254,18 @@ diameteravp_init(const char *opt_arg, void *userdata _U_)
 		g_string_append(filter, field);
 	}
 	g_strfreev(tokens);
+	ds->filter = g_string_free(filter, FALSE);
 
-	error_string = register_tap_listener("diameter", ds, filter->str, TL_REQUIRES_NOTHING, diameteravp_reset, diameteravp_packet, diameteravp_draw, diameteravp_finish);
-	g_string_free(filter, TRUE);
+	error_string = register_tap_listener("diameter", ds, ds->filter, 0, NULL, diameteravp_packet, diameteravp_draw, NULL);
 	if (error_string) {
 		/* error, we failed to attach to the tap. clean up */
-		diameteravp_finish(ds);
+		g_free(ds);
 
 		cmdarg_err("Couldn't register diam,csv tap: %s",
 				error_string->str);
 		g_string_free(error_string, TRUE);
-		return false;
+		exit(1);
 	}
-
-	return true;
 }
 
 static stat_tap_ui diameteravp_ui = {

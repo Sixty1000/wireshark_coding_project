@@ -11,8 +11,6 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 #include <wiretap/netscaler.h>
 
 #define NSPR_V35_HEADER_LEN_OFFSET  26

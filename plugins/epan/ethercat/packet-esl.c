@@ -14,8 +14,6 @@
 
 #include <epan/packet.h>
 #include <epan/prefs.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 
 void proto_register_esl(void);
 
@@ -86,7 +84,7 @@ static dissector_handle_t eth_withoutfcs_handle;
 void proto_reg_handoff_esl(void);
 
 /* Define the esl proto */
-static int proto_esl;
+int proto_esl;
 
 static int ett_esl;
 

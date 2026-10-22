@@ -17,6 +17,7 @@
 #include "tap-rlc-graph.h"
 
 #include <file.h>
+#include <frame_tvbuff.h>
 
 #include <epan/epan_dissect.h>
 #include <epan/tap.h>
@@ -102,7 +103,6 @@ rlc_3gpp_tap_info* select_rlc_lte_session(capture_file *cf,
                                           char **err_msg)
 {
     frame_data     *fdata;
-    wtap_rec        rec;
     epan_dissect_t  edt;
     dfilter_t      *sfcode;
 
@@ -120,15 +120,13 @@ rlc_3gpp_tap_info* select_rlc_lte_session(capture_file *cf,
         return NULL;
     }
 
-    fdata = cf->current_frame;
-
     /* Dissect the data from the current frame. */
-    wtap_rec_init(&rec, DEFAULT_INIT_BUFFER_SIZE_2048);
     if (!cf_read_current_record(cf)) {
         dfilter_free(sfcode);
-        wtap_rec_cleanup(&rec);
         return NULL;  /* error reading the record */
     }
+
+    fdata = cf->current_frame;
 
     /* Set tap listener that will populate th. */
     error_string = register_tap_listener("rlc-3gpp", &th, NULL, 0, NULL, tap_lte_rlc_packet, NULL, NULL);
@@ -137,12 +135,14 @@ rlc_3gpp_tap_info* select_rlc_lte_session(capture_file *cf,
                 error_string->str);
         g_string_free(error_string, TRUE);
         dfilter_free(sfcode);
-        return NULL;
+        exit(1);   /* XXX: fix this */
     }
 
     epan_dissect_init(&edt, cf->epan, true, false);
     epan_dissect_prime_with_dfilter(&edt, sfcode);
-    epan_dissect_run_with_taps(&edt, cf->cd_t, &cf->rec, fdata, NULL);
+    epan_dissect_run_with_taps(&edt, cf->cd_t, &cf->rec,
+                               frame_tvbuff_new_buffer(&cf->provider, fdata, &cf->buf),
+                               fdata, NULL);
     rel_ts = edt.pi.rel_ts;
     epan_dissect_cleanup(&edt);
     remove_tap_listener(&th);
@@ -151,7 +151,6 @@ rlc_3gpp_tap_info* select_rlc_lte_session(capture_file *cf,
         /* This "shouldn't happen", as the graph menu items won't
          * even be enabled if the selected packet isn't an RLC PDU.
          */
-        wtap_rec_cleanup(&rec);
         *err_msg = g_strdup("Selected packet doesn't have an RLC PDU");
         return NULL;
     }
@@ -159,14 +158,14 @@ rlc_3gpp_tap_info* select_rlc_lte_session(capture_file *cf,
      * to select which session he wants here */
     if (th.num_hdrs>1){
         /* Can only handle a single RLC channel yet */
-        wtap_rec_cleanup(&rec);
-        *err_msg = g_strdup("The selected packet has traffic from more than one RLC bearer.");
+        *err_msg = g_strdup("The selected packet has more than one LTE RLC channel in it.");
         return NULL;
     }
 
     /* For now, still always choose the first/only one */
     hdrs->num = fdata->num;
-    nstime_copy(&hdrs->rel_ts, &rel_ts);
+    hdrs->rel_secs = rel_ts.secs;
+    hdrs->rel_usecs = rel_ts.nsecs/1000;
 
     hdrs->rat = th.rlchdrs[0]->rat;
     hdrs->ueid = th.rlchdrs[0]->ueid;
@@ -176,8 +175,6 @@ rlc_3gpp_tap_info* select_rlc_lte_session(capture_file *cf,
     hdrs->isControlPDU = th.rlchdrs[0]->isControlPDU;
     /* Flip direction if have control PDU */
     hdrs->direction = !hdrs->isControlPDU ? th.rlchdrs[0]->direction : !th.rlchdrs[0]->direction;
-
-    wtap_rec_cleanup(&rec);
 
     return th.rlchdrs[0];
 }
@@ -198,7 +195,8 @@ static tap_packet_status rlc_lte_tap_for_graph_data(void *pct, packet_info *pinf
         struct rlc_segment *segment = g_new(struct rlc_segment, 1);
         segment->next = NULL;
         segment->num = pinfo->num;
-        nstime_copy(&segment->rel_ts, &pinfo->rel_ts);
+        segment->rel_secs = (uint32_t) pinfo->rel_ts.secs;
+        segment->rel_usecs = pinfo->rel_ts.nsecs/1000;
 
         segment->rat = rlchdr->rat;
         segment->ueid = rlchdr->ueid;
@@ -293,7 +291,7 @@ bool rlc_graph_segment_list_get(capture_file *cf, struct rlc_graph *g, bool stre
         fprintf(stderr, "wireshark: Couldn't register rlc_graph tap: %s\n",
                 error_string->str);
         g_string_free(error_string, TRUE);
-        return false;
+        exit(1);   /* XXX: fix this */
     }
     cf_retap_packets(cf);
     remove_tap_listener(g);

@@ -7,7 +7,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-#pragma once
+
+#ifndef __FILTER_EXPRESSIONS_H__
+#define __FILTER_EXPRESSIONS_H__
+
 #include "ws_symbol_export.h"
 
 #include <epan/prefs.h>
@@ -21,26 +24,17 @@ extern "C" {
  * Filter expressions.
  */
 
-/**
- * @brief Represents a saved display filter expression entry with a label, filter string, and enabled state.
- */
 typedef struct filter_expression {
-    char* label;      /**< Short human-readable label used to identify the filter expression in the UI. */
-    char* expression; /**< The display filter string to be applied when this expression is activated. */
-    char* comment;    /**< Optional description providing additional context about the filter expression. */
-    bool  enabled;    /**< Whether this filter expression is active; may be toggled via the Preferences Dialog. */
+	char	*label;
+	char	*expression;
+	char	*comment;
+
+	bool enabled;	/* Can be set to false by Preferences Dialog */
 } filter_expression_t;
 
-/**
- * @brief Iterate over all display filter macros.
- *
- * @param func Function to call for each expression.
- * @param user_data User data to pass to the function.
- */
 WS_DLL_PUBLIC void filter_expression_iterate_expressions(wmem_foreach_func func, void* user_data);
 
-/**
- * @brief Create a filter expression
+/** Create a filter expression
  *
  * @param label Label (button) text for the expression.
  * @param expr The display filter for the expression.
@@ -53,13 +47,10 @@ filter_expression_t *filter_expression_new(const char *label,
     const char *expr, const char *comment, const bool enabled);
 
 /* Keep the UAT structure local to the filter_expressions */
-/**
- * @brief Registers a User-Accessible Table (UAT) for display filter expressions.
- *
- * @param pref_module Pointer to the module structure where preferences are registered.
- */
 void filter_expression_register_uat(module_t* pref_module);
 
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
+
+#endif /* __FILTER_EXPRESSIONS_H__ */

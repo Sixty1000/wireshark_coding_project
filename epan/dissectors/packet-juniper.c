@@ -14,14 +14,12 @@
 #include <epan/packet.h>
 #include <epan/expert.h>
 #include <epan/addr_resolv.h>
+#include <epan/ppptypes.h>
 #include <epan/etypes.h>
-#include <epan/tfs.h>
-#include <epan/iana-info.h>
-#include <wsutil/array.h>
-#include "packet-juniper.h"
-#include "packet-osi.h"
+#include <epan/ipproto.h>
 #include "packet-ppp.h"
-
+#include "packet-juniper.h"
+#include <epan/nlpid.h>
 
 void proto_register_juniper(void);
 void proto_reg_handoff_juniper(void);
@@ -333,7 +331,7 @@ static const value_string juniper_ifle_vals[] = {
   { JUNIPER_IFLE_EXTENDED_VLAN_TCC, "Extended VLAN TCC" },
   { JUNIPER_IFLE_FR_CCC, "FR CCC" },
   { JUNIPER_IFLE_FR_NLPID, "FR NLPID" },
-  { JUNIPER_IFLE_FR_PORT_CCC, "FR Port CCC" },
+  { JUNIPER_IFLE_FR_PORT_CCC, "FR CCC" },
   { JUNIPER_IFLE_FR_PPP, "FR PPP" },
   { JUNIPER_IFLE_FR_SNAP, "FR SNAP" },
   { JUNIPER_IFLE_FR_TCC, "FR TCC" },
@@ -1261,10 +1259,10 @@ static int dissect_juniper_vn(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tre
               proto_tree_add_bitmask(juniper_subtree, tvb, offset, hf_juniper_vn_flags, ett_juniper_vn_flags, vn_flags, ENC_BIG_ENDIAN);
               break;
           case VN_TLV_SRC_VN:
-              proto_tree_add_item(juniper_subtree, hf_juniper_vn_src, tvb, offset, tlv_len, ENC_ASCII);
+              proto_tree_add_item(juniper_subtree, hf_juniper_vn_src, tvb, offset, tlv_len, ENC_NA|ENC_ASCII);
               break;
           case VN_TLV_DST_VN:
-              proto_tree_add_item(juniper_subtree, hf_juniper_vn_dst, tvb, offset, tlv_len, ENC_ASCII);
+              proto_tree_add_item(juniper_subtree, hf_juniper_vn_dst, tvb, offset, tlv_len, ENC_NA|ENC_ASCII);
               break;
           default:
               proto_tree_add_expert(juniper_subtree, pinfo, &ei_juniper_vn_incorrect_format, tvb, 0, 0);
@@ -1327,9 +1325,9 @@ static int dissect_juniper_st(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tre
             return tvb_captured_length(tvb);
         }
         esp_tree = proto_tree_add_subtree(juniper_subtree, tvb, offset, 8, ett_juniper_st_esp, NULL, "Tunnel ESP Header");
-        proto_tree_add_item(esp_tree, hf_juniper_st_esp_spi, tvb, offset, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item(esp_tree, hf_juniper_st_esp_spi, tvb, offset, 4, ENC_NA);
         offset += 4;
-        proto_tree_add_item(esp_tree, hf_juniper_st_esp_seq, tvb, offset, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item(esp_tree, hf_juniper_st_esp_seq, tvb, offset, 4, ENC_NA);
         offset += 4;
         /*  16 bytes unknown data remains in example trace */
         proto_tree_add_subtree(juniper_subtree, tvb, offset, 16, ett_juniper_st_unknown, NULL, "Tunnel Unknown Data");

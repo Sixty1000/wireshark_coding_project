@@ -397,64 +397,38 @@
 #define ERF_META_TAG_ntp_peer_remote        422
 #define ERF_META_TAG_ntp_peer_refid         423
 
-/**
- * @brief ERF 64-bit fixed-point timestamp.
- *
- * Little-endian unsigned 64-bit value: upper 32 bits are whole seconds
- * since the Unix epoch; lower 32 bits are the sub-second fraction
- * (resolution = 1 / 2^32 seconds ≈ 233 ps).
- */
+ /*
+  * The timestamp is 64bit unsigned fixed point little-endian value with
+  * 32 bits for second and 32 bits for fraction.
+  */
 typedef uint64_t erf_timestamp_t;
 
-
-/**
- * @brief Endace Record Format (ERF) record header, common to all ERF record types.
- */
 typedef struct erf_record {
-    erf_timestamp_t ts;    /**< ERF timestamp; upper 32 bits = seconds, lower 32 bits = fractional. */
-    uint8_t         type;  /**< ERF record type (e.g. @c TYPE_ETH, @c TYPE_HDLC_POS, @c TYPE_AAL5). */
-    uint8_t         flags; /**< ERF flags: RX error, DS (duplicate/steer), truncation, and extension-header present bits. */
-    uint16_t        rlen;  /**< Record length in bytes, including this header, any extension headers, and payload. */
-    uint16_t        lctr;  /**< Loss counter or color/flow identifier, depending on record type. */
-    uint16_t        wlen;  /**< Wire length: original packet size on the medium before any truncation. */
+	erf_timestamp_t	ts;
+	uint8_t		type;
+	uint8_t		flags;
+	uint16_t	rlen;
+	uint16_t	lctr;
+	uint16_t	wlen;
 } erf_header_t;
 
-
-/**
- * @brief ERF multi-channel (MC) subheader.
- */
 typedef struct erf_mc_hdr {
-    uint32_t mc; /**< Multi-channel header word encoding channel number, type, and framing flags. */
+	uint32_t	mc;
 } erf_mc_header_t;
 
-
-/**
- * @brief ERF AAL2 subheader.
- */
 typedef struct erf_aal2_hdr {
-    uint32_t aal2; /**< AAL2 header word encoding CID, priority, and cell-loss-priority fields. */
+	uint32_t	aal2;
 } erf_aal2_header_t;
 
-
-/**
- * @brief ERF Ethernet subheader.
- */
 typedef struct erf_eth_hdr {
-    uint8_t offset; /**< Byte offset from the start of the ERF payload to the Ethernet frame. */
-    uint8_t pad;    /**< Padding byte; reserved and set to zero. */
+	uint8_t offset;
+	uint8_t pad;
 } erf_eth_header_t;
 
-
-/**
- * @brief Union of all ERF protocol-specific subheaders.
- *
- * Immediately follows the ERF extension headers (if any). The active member
- * is determined by the record type field in #erf_header_t.
- */
 union erf_subhdr {
-    struct erf_mc_hdr   mc_hdr;   /**< Multi-channel subheader (e.g. @c TYPE_MC_HDLC, @c TYPE_MC_RAW). */
-    struct erf_aal2_hdr aal2_hdr; /**< AAL2 subheader (@c TYPE_AAL2). */
-    struct erf_eth_hdr  eth_hdr;  /**< Ethernet subheader (@c TYPE_ETH). */
+  struct erf_mc_hdr mc_hdr;
+  struct erf_aal2_hdr aal2_hdr;
+  struct erf_eth_hdr eth_hdr;
 };
 
 #endif /* __W_ERF_RECORD_H__ */

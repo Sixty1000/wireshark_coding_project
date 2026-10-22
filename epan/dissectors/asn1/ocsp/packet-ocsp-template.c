@@ -23,6 +23,10 @@
 #include "packet-pkix1implicit.h"
 #include "packet-pkix1explicit.h"
 
+#define PNAME  "Online Certificate Status Protocol"
+#define PSNAME "OCSP"
+#define PFNAME "ocsp"
+
 void proto_register_ocsp(void);
 void proto_reg_handoff_ocsp(void);
 
@@ -103,15 +107,15 @@ void proto_register_ocsp(void) {
   };
 
   /* Register protocol */
-  proto_ocsp = proto_register_protocol("Online Certificate Status Protocol", "OCSP", "ocsp");
+  proto_ocsp = proto_register_protocol(PNAME, PSNAME, PFNAME);
 
   /* Register fields and subtrees */
   proto_register_field_array(proto_ocsp, hf, array_length(hf));
   proto_register_subtree_array(ett, array_length(ett));
 
   /* Register dissectors */
-  ocsp_request_handle = register_dissector_with_description("ocsp_req", "OCSP Request", dissect_ocsp_request, proto_ocsp);
-  ocsp_response_handle = register_dissector_with_description("ocsp_res", "OCSP Response", dissect_ocsp_response, proto_ocsp);
+  ocsp_request_handle = register_dissector(PFNAME "_req", dissect_ocsp_request, proto_ocsp);
+  ocsp_response_handle = register_dissector(PFNAME "_res", dissect_ocsp_response, proto_ocsp);
 }
 
 /*--- proto_reg_handoff_ocsp -------------------------------------------*/

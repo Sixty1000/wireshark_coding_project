@@ -26,8 +26,8 @@
 #include <epan/packet.h>
 #include <epan/expert.h>
 #include <epan/etypes.h>
+#include <epan/afn.h>
 #include <epan/tfs.h>
-#include <epan/iana-info.h>
 #include "packet-mpls.h"
 
 
@@ -766,7 +766,7 @@ static int dissect_mep_maid(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *t
 			case MD_NAME_FMT_DOMAIN:
 			case MD_NAME_FMT_STRING:
 				proto_tree_add_item(cfm_maid_tree, hf_cfm_maid_md_name_string,
-					tvb, maid_offset, maid_md_name_length, ENC_ASCII);
+					tvb, maid_offset, maid_md_name_length, ENC_ASCII|ENC_NA);
 				break;
 			default:
 				proto_tree_add_item(cfm_maid_tree, hf_cfm_maid_md_name_hex,
@@ -792,12 +792,12 @@ static int dissect_mep_maid(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *t
 				tvb, maid_offset, maid_ma_name_length, ENC_NA);
 		} else {
 			proto_tree_add_item(cfm_maid_tree, hf_cfm_maid_ma_name_pvid,
-				tvb, maid_offset, 2, ENC_BIG_ENDIAN);
+				tvb, maid_offset, 2, ENC_NA);
 		}
 		break;
 	case MA_NAME_FMT_STRING:
 		proto_tree_add_item(cfm_maid_tree, hf_cfm_maid_ma_name_string,
-			tvb, maid_offset, maid_ma_name_length, ENC_ASCII);
+			tvb, maid_offset, maid_ma_name_length, ENC_ASCII|ENC_NA);
 		break;
 	case MA_NAME_FMT_ID:
 		if (maid_ma_name_length != 2) {
@@ -805,7 +805,7 @@ static int dissect_mep_maid(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *t
 				tvb, maid_offset, maid_ma_name_length, ENC_NA);
 		} else {
 			proto_tree_add_item(cfm_maid_tree, hf_cfm_maid_ma_name_id,
-				tvb, maid_offset, 2, ENC_BIG_ENDIAN);
+				tvb, maid_offset, 2, ENC_NA);
 		}
 		break;
 	case MA_NAME_FMT_VPN_ID:
@@ -814,9 +814,9 @@ static int dissect_mep_maid(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *t
 				tvb, maid_offset, maid_ma_name_length, ENC_NA);
 		} else {
 			proto_tree_add_item(cfm_maid_tree, hf_cfm_maid_ma_name_vpnid_oui,
-				tvb, maid_offset, 3, ENC_BIG_ENDIAN);
+				tvb, maid_offset, 3, ENC_NA);
 			proto_tree_add_item(cfm_maid_tree, hf_cfm_maid_ma_name_vpnid_index,
-				tvb, maid_offset + 3, 4, ENC_BIG_ENDIAN);
+				tvb, maid_offset + 3, 4, ENC_NA);
 		}
 		break;
 	case MA_NAME_FMT_ICC:
@@ -825,7 +825,7 @@ static int dissect_mep_maid(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *t
 				tvb, maid_offset, maid_ma_name_length, ENC_NA);
 		} else {
 			proto_tree_add_item(cfm_maid_tree, hf_cfm_maid_ma_name_icc_umc,
-				tvb, maid_offset, 13, ENC_ASCII);
+				tvb, maid_offset, 13, ENC_ASCII|ENC_NA);
 		}
 		break;
 	case MA_NAME_FMT_ICC_CC:
@@ -834,9 +834,9 @@ static int dissect_mep_maid(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *t
 				tvb, maid_offset, maid_ma_name_length, ENC_NA);
 		} else {
 			proto_tree_add_item(cfm_maid_tree, hf_cfm_maid_ma_name_cc,
-				tvb, maid_offset, 2, ENC_ASCII);
+				tvb, maid_offset, 2, ENC_ASCII|ENC_NA);
 			proto_tree_add_item(cfm_maid_tree, hf_cfm_maid_ma_name_icc_umc,
-				tvb, maid_offset + 2, 13, ENC_ASCII);
+				tvb, maid_offset + 2, 13, ENC_ASCII|ENC_NA);
 		}
 		break;
 	default:
@@ -893,11 +893,11 @@ static int dissect_cfm_ccm(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tr
 	/* Dissect 16 octets reserved for Y.1731, samples of the wrap-around frame counters */
 	wi = proto_tree_add_item(cfm_pdu_tree, hf_cfm_ccm_itu_t_y1731, tvb, offset, 16, ENC_NA);
 	cfm_ccm_itu_tree = proto_item_add_subtree(wi, ett_cfm_ccm_itu);
-	proto_tree_add_item(cfm_ccm_itu_tree, hf_cfm_ccm_itu_TxFCf, tvb, offset, 4, ENC_BIG_ENDIAN);
+	proto_tree_add_item(cfm_ccm_itu_tree, hf_cfm_ccm_itu_TxFCf, tvb, offset, 4, ENC_NA);
 	offset += 4;
-	proto_tree_add_item(cfm_ccm_itu_tree, hf_cfm_ccm_itu_RxFCb, tvb, offset, 4, ENC_BIG_ENDIAN);
+	proto_tree_add_item(cfm_ccm_itu_tree, hf_cfm_ccm_itu_RxFCb, tvb, offset, 4, ENC_NA);
 	offset += 4;
-	proto_tree_add_item(cfm_ccm_itu_tree, hf_cfm_ccm_itu_TxFCb, tvb, offset, 4, ENC_BIG_ENDIAN);
+	proto_tree_add_item(cfm_ccm_itu_tree, hf_cfm_ccm_itu_TxFCb, tvb, offset, 4, ENC_NA);
 	offset += 4;
 	proto_tree_add_item(cfm_ccm_itu_tree, hf_cfm_ccm_itu_reserved, tvb, offset, 4, ENC_NA);
 	offset += 4;
@@ -1217,7 +1217,7 @@ static int dissect_cfm_gnm_unknown(tvbuff_t *tvb, packet_info *pinfo _U_, proto_
 
 static int dissect_cfm_gnm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
 {
-	uint8_t cfm_gnm_pdu_type = tvb_get_uint8(tvb, offset + 2);
+	uint8_t cfm_gnm_pdu_type = tvb_get_uint8(tvb, offset + 4);
 
 	switch (cfm_gnm_pdu_type) {
 	case BNM:
@@ -1550,11 +1550,11 @@ static int dissect_cfm_lmm(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tr
 	proto_tree_add_item_ret_uint(cfm_pdu_tree, hf_cfm_first_tlv_offset, tvb, offset, 1, ENC_NA, &first_tlv_offset);
 	offset += 1;
 
-	proto_tree_add_item(cfm_pdu_tree, hf_cfm_lmm_lmr_TxFCf, tvb, offset, 4, ENC_BIG_ENDIAN);
+	proto_tree_add_item(cfm_pdu_tree, hf_cfm_lmm_lmr_TxFCf, tvb, offset, 4, ENC_NA);
 	offset += 4;
-	proto_tree_add_item(cfm_pdu_tree, hf_cfm_lmm_lmr_RxFCf, tvb, offset, 4, ENC_BIG_ENDIAN);
+	proto_tree_add_item(cfm_pdu_tree, hf_cfm_lmm_lmr_RxFCf, tvb, offset, 4, ENC_NA);
 	offset += 4;
-	proto_tree_add_item(cfm_pdu_tree, hf_cfm_lmm_lmr_TxFCb, tvb, offset, 4, ENC_BIG_ENDIAN);
+	proto_tree_add_item(cfm_pdu_tree, hf_cfm_lmm_lmr_TxFCb, tvb, offset, 4, ENC_NA);
 	offset += 4;
 
 	length_remaining = first_tlv_offset - (offset - (start_offset + 2));
@@ -1590,11 +1590,11 @@ static int dissect_cfm_lmr(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tr
 	proto_tree_add_item_ret_uint(cfm_pdu_tree, hf_cfm_first_tlv_offset, tvb, offset, 1, ENC_NA, &first_tlv_offset);
 	offset += 1;
 
-	proto_tree_add_item(cfm_pdu_tree, hf_cfm_lmm_lmr_TxFCf, tvb, offset, 4, ENC_BIG_ENDIAN);
+	proto_tree_add_item(cfm_pdu_tree, hf_cfm_lmm_lmr_TxFCf, tvb, offset, 4, ENC_NA);
 	offset += 4;
-	proto_tree_add_item(cfm_pdu_tree, hf_cfm_lmm_lmr_RxFCf, tvb, offset, 4, ENC_BIG_ENDIAN);
+	proto_tree_add_item(cfm_pdu_tree, hf_cfm_lmm_lmr_RxFCf, tvb, offset, 4, ENC_NA);
 	offset += 4;
-	proto_tree_add_item(cfm_pdu_tree, hf_cfm_lmm_lmr_TxFCb, tvb, offset, 4, ENC_BIG_ENDIAN);
+	proto_tree_add_item(cfm_pdu_tree, hf_cfm_lmm_lmr_TxFCb, tvb, offset, 4, ENC_NA);
 	offset += 4;
 
 	length_remaining = first_tlv_offset - (offset - (start_offset + 2));
@@ -2109,10 +2109,10 @@ static int sender_id_tlv_chassis_id(proto_tree *cfm_tlv_tree, tvbuff_t *tvb, int
 		proto_tree_add_item(cfm_tlv_tree, hf_tlv_chassis_id_network_address_family, tvb, tlv_data_offset, 1, ENC_NA);
 
 		switch (tvb_get_uint8(tvb, tlv_data_offset)) {
-		case AFNUM_IP:
+		case AFNUM_INET:
 			proto_tree_add_item(cfm_tlv_tree, hf_tlv_chassis_id_network_address_ipv4, tvb, tlv_data_offset+1, tlv_chassis_id_length-1, ENC_BIG_ENDIAN);
 			break;
-		case AFNUM_IP6:
+		case AFNUM_INET6:
 			proto_tree_add_item(cfm_tlv_tree, hf_tlv_chassis_id_network_address_ipv6, tvb, tlv_data_offset+1, tlv_chassis_id_length-1, ENC_NA);
 			break;
 		default:
@@ -2204,10 +2204,10 @@ static int reply_ing_egr_tlv_port_id(proto_tree *cfm_tlv_tree, tvbuff_t *tvb, in
 		proto_tree_add_item(cfm_tlv_tree, hf_tlv_reply_ing_egr_portid_network_address_family, tvb, tlv_data_offset, 1, ENC_NA);
 
 		switch (tvb_get_uint8(tvb, tlv_data_offset)) {
-		case AFNUM_IP:
+		case AFNUM_INET:
 			proto_tree_add_item(cfm_tlv_tree, hf_tlv_reply_ing_egr_portid_network_address_ipv4, tvb, tlv_data_offset+1, tlv_reply_ingress_portid_length-1, ENC_BIG_ENDIAN);
 			break;
-		case AFNUM_IP6:
+		case AFNUM_INET6:
 			proto_tree_add_item(cfm_tlv_tree, hf_tlv_reply_ing_egr_portid_network_address_ipv6, tvb, tlv_data_offset+1, tlv_reply_ingress_portid_length-1, ENC_NA);
 			break;
 		default:
@@ -2237,14 +2237,15 @@ static int reply_ing_egr_tlv_port_id(proto_tree *cfm_tlv_tree, tvbuff_t *tvb, in
 /* Main CFM EOAM protocol dissector */
 static int dissect_cfm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
-	uint32_t cfm_pdu_type;
-	char* str_cfm_pdu_type;
+	int offset = 0;
+	uint8_t cfm_pdu_type;
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "CFM");
 	col_clear(pinfo->cinfo, COL_INFO);
 
 	cfm_pdu_type = tvb_get_uint8(tvb, CFM_OPCODE_OFFSET);
+	col_add_fstr(pinfo->cinfo, COL_INFO, "Type %s",
+		val_to_str(cfm_pdu_type, opcode_type_name_vals, "Unknown (0x%02x)"));
 
 	proto_item *ti;
 	proto_tree *cfm_tree;
@@ -2252,18 +2253,17 @@ static int dissect_cfm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 	/* isolate the payload of the packet */
 	ti = proto_tree_add_item(tree, proto_cfm, tvb, 0, -1, ENC_NA);
 
+	/* report type of CFM packet to base of dissection tree */
+	proto_item_append_text(ti, ", Type %s",
+		val_to_str(cfm_pdu_type, opcode_type_name_vals, "Unknown (0x%02x)"));
+
 	/* dissecting the common CFM header */
 	cfm_tree = proto_item_add_subtree(ti, ett_cfm);
 	proto_tree_add_item(cfm_tree, hf_cfm_md_level, tvb, offset, 1, ENC_NA);
 	proto_tree_add_item(cfm_tree, hf_cfm_version, tvb, offset, 1, ENC_NA);
 	offset += 1;
-	proto_tree_add_item_ret_uint(cfm_tree, hf_cfm_opcode, tvb, offset, 1, ENC_NA, &cfm_pdu_type);
+	proto_tree_add_item(cfm_tree, hf_cfm_opcode, tvb, offset, 1, ENC_NA);
 	offset += 1;
-
-	/* report type of CFM packet to base of dissection tree */
-	str_cfm_pdu_type = val_to_str(pinfo->pool, cfm_pdu_type, opcode_type_name_vals, "Unknown (0x%02x)");
-	proto_item_append_text(ti, ", Type %s", str_cfm_pdu_type);
-	col_add_fstr(pinfo->cinfo, COL_INFO, "Type %s", str_cfm_pdu_type);
 
 	switch (cfm_pdu_type) {
 	case CCM:
@@ -2353,7 +2353,7 @@ static int dissect_cfm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 	}
 
 	/* Get the First TLV offset and add the offset of the common CFM header*/
-	unsigned cfm_first_tlv_offset = tvb_get_uint8(tvb, CFM_1ST_TLV_OFFSET) + CFM_COMMON_HEADER_LEN;
+	int cfm_first_tlv_offset = tvb_get_uint8(tvb, CFM_1ST_TLV_OFFSET) + CFM_COMMON_HEADER_LEN;
 
 	/* The TLV offset should be the same as where the PDU left off or we have a problem */
 	if (cfm_first_tlv_offset != offset) {
@@ -2402,7 +2402,7 @@ static int dissect_cfm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 		}
 
 		cfm_tlv_tree = proto_tree_add_subtree_format(cfm_all_tlvs_tree, tvb, cfm_tlv_offset, cfm_tlv_length+3,
-				ett_cfm_tlv, NULL, "TLV: %s (t=%d,l=%d)", val_to_str(pinfo->pool, cfm_tlv_type, tlv_type_field_vals, "Unknown (0x%02x)"),
+				ett_cfm_tlv, NULL, "TLV: %s (t=%d,l=%d)", val_to_str(cfm_tlv_type, tlv_type_field_vals, "Unknown (0x%02x)"),
 				cfm_tlv_type, cfm_tlv_length);
 
 		proto_tree_add_item(cfm_tlv_tree, hf_cfm_tlv_type, tvb, cfm_tlv_offset, 1, ENC_NA);

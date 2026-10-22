@@ -9,16 +9,10 @@
 #ifndef __JSON_H__
 #define __JSON_H__
 
+#include <glib.h>
+
 #include "wtap.h"
 
-/**
- * @brief Open a JSON file for reading.
- *
- * @param wth Pointer to the wtap structure.
- * @param err Error code if an error occurs.
- * @param err_info Error information if an error occurs.
- * @return wtap_open_return_val The result of opening the file.
- */
 wtap_open_return_val json_open(wtap *wth, int *err, char **err_info);
 
 #endif

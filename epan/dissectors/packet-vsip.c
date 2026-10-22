@@ -19,8 +19,6 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 
 void proto_register_vsip(void);
 void proto_reg_handoff_vsip(void);
@@ -840,7 +838,8 @@ static uint32_t vsip_ValueTypeString(proto_tree *tree, packet_info *pinfo _U_, t
 
    tree = proto_tree_add_subtree(tree, tvb, offset, 2, ett_vsipValueTypeString, &ti, "ValueTypeString");
 
-   proto_tree_add_item_ret_uint16(tree, hf_vsip_ValueTypeString_Size, tvb, offset, 2, ENC_BIG_ENDIAN, &length);
+   length = tvb_get_ntohs(tvb, offset);
+   proto_tree_add_item(tree, hf_vsip_ValueTypeString_Size, tvb, offset, 2, ENC_BIG_ENDIAN);
    offset += 2;
 
    if (length > 0)
@@ -923,7 +922,7 @@ static uint32_t vsip_PingResp(proto_tree *tree, packet_info *pinfo _U_, tvbuff_t
    proto_tree_add_bitmask(tree, tvb, offset, hf_vsip_PingResp_SuppConnTypes, ett_vsipPingResp_SuppConnTypes, supp_conn_types, ENC_NA);
    offset += 1;
 
-   proto_tree_add_item(tree, hf_vsip_PingResp_DeviceGUID, tvb, offset, 16, ENC_BIG_ENDIAN);
+   proto_tree_add_item(tree, hf_vsip_PingResp_DeviceGUID, tvb, offset, 16, ENC_NA);
    offset += 16;
 
    proto_tree_add_item(tree, hf_vsip_PingResp_VendorID, tvb, offset, 2, ENC_BIG_ENDIAN);
@@ -955,13 +954,13 @@ static uint32_t vsip_ContentTypeSwitchReq(proto_tree *tree, packet_info *pinfo _
    int soffset = offset;
 
    tree = proto_tree_add_subtree(tree, tvb, offset, 33, ett_vsipContentTypeSwitchReq, NULL, "ContentTypeSwitchReq");
-   proto_tree_add_item(tree, hf_vsip_ContentTypeSwitchReq_ApplicationGUID, tvb, offset, 16, ENC_BIG_ENDIAN);
+   proto_tree_add_item(tree, hf_vsip_ContentTypeSwitchReq_ApplicationGUID, tvb, offset, 16, ENC_NA);
    offset += 16;
 
    proto_tree_add_item(tree, hf_vsip_ContentTypeSwitchReq_ContentType, tvb, offset, 1, ENC_NA);
    offset++;
 
-   proto_tree_add_item(tree, hf_vsip_ContentTypeSwitchReq_DeviceGUID, tvb, offset, 16, ENC_BIG_ENDIAN);
+   proto_tree_add_item(tree, hf_vsip_ContentTypeSwitchReq_DeviceGUID, tvb, offset, 16, ENC_NA);
    offset += 16;
 
    return offset - soffset;
@@ -973,7 +972,7 @@ static uint32_t vsip_ContentTypeSwitchResp(proto_tree *tree, packet_info *pinfo 
 
    tree = proto_tree_add_subtree(tree, tvb, offset, 17, ett_vsipContentTypeSwitchResp, NULL, "ContentTypeSwitchResp");
 
-   proto_tree_add_item(tree, hf_vsip_ContentTypeSwitchResp_DeviceGUID, tvb, offset, 16, ENC_BIG_ENDIAN);
+   proto_tree_add_item(tree, hf_vsip_ContentTypeSwitchResp_DeviceGUID, tvb, offset, 16, ENC_NA);
    offset += 16;
    proto_tree_add_item(tree, hf_vsip_ContentTypeSwitchResp_SwitchResult, tvb, offset, 1, ENC_NA);
 
@@ -1127,7 +1126,8 @@ static uint32_t vsip_SetConfigReq_ConfigItemArray(proto_tree *tree, packet_info 
    proto_tree_add_item(tree, hf_vsip_SetConfigReq_ConfigItemArray_ConfigItemID, tvb, offset, 2, ENC_BIG_ENDIAN);
    offset += 2;
 
-   proto_tree_add_item_ret_uint8(tree, hf_vsip_SetConfigReq_ConfigItemArray_ValueType, tvb, offset, 1, ENC_BIG_ENDIAN, &type);
+   type = tvb_get_uint8(tvb, offset);
+   proto_tree_add_item(tree, hf_vsip_SetConfigReq_ConfigItemArray_ValueType, tvb, offset, 1, ENC_BIG_ENDIAN);
    offset++;
 
    switch(type)
@@ -1255,7 +1255,8 @@ static uint32_t vsip_GetConfigResp_ConfigItemArray(proto_tree *tree, packet_info
    proto_tree_add_item(tree, hf_vsip_GetConfigResp_ConfigItemArray_ConfigItemID, tvb, offset, 2, ENC_BIG_ENDIAN);
    offset += 2;
 
-   proto_tree_add_item_ret_uint8(tree, hf_vsip_GetConfigResp_ConfigItemArray_ValueType, tvb, offset, 1, ENC_NA, &type);
+   type = tvb_get_uint8(tvb, offset);
+   proto_tree_add_item(tree, hf_vsip_GetConfigResp_ConfigItemArray_ValueType, tvb, offset, 1, ENC_NA);
    offset++;
 
    switch(type)

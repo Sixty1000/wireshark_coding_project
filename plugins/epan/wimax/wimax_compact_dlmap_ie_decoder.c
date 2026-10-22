@@ -17,10 +17,10 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
-#include "wimax_compact_dlmap_ie_decoder.h"
 #include "wimax-int.h"
+#include "wimax_compact_dlmap_ie_decoder.h"
+
+extern int proto_wimax;
 
 /* MASKs */
 #define MSB_NIBBLE_MASK      0xF0
@@ -1103,7 +1103,6 @@ static unsigned wimax_compact_dlmap_rcid_ie_decoder(proto_tree *tree, packet_inf
 		{	/* Get the prefix bit */
 			prefix = (tvb_get_uint8(tvb, offset) & 0x08);
 			/* display the prefix */
-			/* TODO: something wrong here - field has mask 0x8000... */
 			proto_tree_add_item(tree, hf_harq_rcid_ie_prefix_1, tvb, offset, 2, ENC_BIG_ENDIAN);
 			if(prefix)
 			{	/* display the CID11 */

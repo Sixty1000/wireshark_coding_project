@@ -47,6 +47,8 @@
 
 #include <epan/packet.h>
 #include <epan/addr_resolv.h>
+#include <epan/dccpservicecodes.h>
+#include <epan/ipproto.h>
 #include <epan/in_cksum.h>
 #include <epan/prefs.h>
 #include <epan/follow.h>
@@ -56,12 +58,10 @@
 #include <epan/conversation_filter.h>
 #include <epan/tap.h>
 #include <epan/unit_strings.h>
-#include <epan/proto_data.h>
 
 #include <wsutil/str_util.h>
 
 #include "packet-dccp.h"
-#include <epan/iana-info.h>
 
 /*
  * Some definitions and the dissect_options() logic have been taken
@@ -195,6 +195,8 @@ static const range_string dccp_feature_numbers_rvals[] = {
     {0, 0,   NULL}
 };
 
+static const unit_name_string units_bytes_sec = { "bytes/sec", NULL };
+
 static int proto_dccp;
 static int dccp_tap;
 static int dccp_follow_tap;
@@ -323,6 +325,11 @@ decode_dccp_ports(tvbuff_t *tvb, int offset, packet_info *pinfo,
     heur_dtbl_entry_t *hdtbl_entry;
 
     next_tvb = tvb_new_subset_remaining(tvb, offset);
+
+    /* If the user has a "Follow DCCP Stream" window loading, pass a pointer
+       to the payload tvb through the tap system. */
+    if (have_tap_listener(dccp_follow_tap))
+        tap_queue_packet(dccp_follow_tap, pinfo, next_tvb);
 
     /*
      * determine if this packet is part of a conversation and call dissector
@@ -558,7 +565,7 @@ dccpip_endpoint_packet(void *pit, packet_info *pinfo, epan_dissect_t *edt _U_, c
 }
 
 /* Return the current stream count */
-static uint32_t get_dccp_stream_count(void)
+uint32_t get_dccp_stream_count(void)
 {
     return dccp_stream_count;
 }
@@ -593,16 +600,25 @@ dccp_build_filter(packet_info *pinfo, void *user_data _U_)
 
 static char *dccp_follow_conv_filter(epan_dissect_t *edt _U_, packet_info *pinfo, unsigned *stream, unsigned *sub_stream _U_)
 {
-    uint8_t max_layer_num = proto_get_layer_num(pinfo, proto_dccp);
+    conversation_t *conv;
+    struct dccp_analysis *dccpd;
 
-    for (uint8_t curr_layer_num = max_layer_num; curr_layer_num; --curr_layer_num) {
-        *stream = GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, hf_dccp_stream, curr_layer_num));
-        if (*stream) {
-            --*stream;
-            return ws_strdup_printf("dcp.stream eq %u", *stream);
-        }
-     }
-
+    /* XXX: Since DCCP doesn't use the endpoint API, we can only look
+     * up using the current pinfo addresses and ports. We don't want
+     * to create a new conversation or stream.
+     * Eventually the endpoint API should support storing multiple
+     * endpoints and DCCP should be changed to use the endpoint API.
+     */
+    if (((pinfo->net_src.type == AT_IPv4 && pinfo->net_dst.type == AT_IPv4) ||
+        (pinfo->net_src.type == AT_IPv6 && pinfo->net_dst.type == AT_IPv6))
+        && (pinfo->ptype == PT_DCCP) &&
+        (conv=find_conversation(pinfo->num, &pinfo->net_src, &pinfo->net_dst, CONVERSATION_DCCP, pinfo->srcport, pinfo->destport, 0)) != NULL)
+    {
+        /* DCCP over IPv4/6 */
+        dccpd = get_dccp_conversation_data(conv, pinfo);
+        *stream = dccpd->stream;
+        return ws_strdup_printf("dccp.stream eq %u", dccpd->stream);
+    }
 
     return NULL;
 }
@@ -1149,7 +1165,6 @@ dissect_dccp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
     dccpd = get_dccp_conversation_data(conv, pinfo);
     item = proto_tree_add_uint(dccp_tree, hf_dccp_stream, tvb, offset, 0, dccpd->stream);
     proto_item_set_generated(item);
-    p_add_proto_data(pinfo->pool, pinfo, hf_dccp_stream, pinfo->curr_proto_layer_num, GUINT_TO_POINTER(dccpd->stream + 1));
 
     /* Copy the stream index into the header as well to make it available
     * to tap listeners.
@@ -1195,7 +1210,6 @@ dissect_dccp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
             SET_CKSUM_VEC_PTR(cksum_vec[2], (const uint8_t *) &phdr, 4);
             break;
         case AT_IPv6:
-        case AT_ILNP_NID:
             phdr[0] = g_htonl(reported_len);
             phdr[1] = g_htonl(IP_PROTO_DCCP);
             SET_CKSUM_VEC_PTR(cksum_vec[2], (const uint8_t *) &phdr, 8);
@@ -1298,7 +1312,7 @@ dissect_dccp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
             expert_add_info_format(pinfo, offset_item, &ei_dccp_advertised_header_length_bad,
                 "Advertised header length (%u) is smaller than the minimum (%u) for %s",
                 advertised_dccp_header_len, offset + 4,
-                val_to_str(pinfo->pool, dccph->type, dccp_packet_type_vals, "Unknown (%u)"));
+                val_to_str(dccph->type, dccp_packet_type_vals, "Unknown (%u)"));
             return tvb_reported_length(tvb);
         }
         dccph->service_code = tvb_get_ntohl(tvb, offset);
@@ -1306,7 +1320,7 @@ dissect_dccp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
             proto_tree_add_uint(dccp_tree, hf_dccp_service_code, tvb, offset, 4,
                                 dccph->service_code);
         col_append_fstr(pinfo->cinfo, COL_INFO, " (service=%s)",
-                        val_to_str(pinfo->pool, dccph->service_code, dccp_service_code_vals, "Unknown (%u)"));
+                        val_to_str(dccph->service_code, dccp_service_code_vals, "Unknown (%u)"));
         offset += 4; /* move offset past the service code */
 
         if( !(dccpd->fwd->static_flags & DCCP_S_BASE_SEQ_SET) ) {
@@ -1354,7 +1368,7 @@ dissect_dccp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
             proto_tree_add_uint(dccp_tree, hf_dccp_service_code, tvb, offset, 4,
                                 dccph->service_code);
         col_append_fstr(pinfo->cinfo, COL_INFO, " (service=%s)",
-                        val_to_str(pinfo->pool, dccph->service_code, dccp_service_code_vals, "Unknown (%u)"));
+                        val_to_str(dccph->service_code, dccp_service_code_vals, "Unknown (%u)"));
 
         offset += 4; /* move offset past the service code */
 
@@ -1374,7 +1388,7 @@ dissect_dccp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
                 expert_add_info_format(pinfo, offset_item, &ei_dccp_advertised_header_length_bad,
                     "Advertised header length (%u) is smaller than the minimum (%u) for %s",
                     advertised_dccp_header_len, offset + 8,
-                    val_to_str(pinfo->pool, dccph->type, dccp_packet_type_vals, "Unknown (%u)"));
+                    val_to_str(dccph->type, dccp_packet_type_vals, "Unknown (%u)"));
                 return tvb_reported_length(tvb);
             }
             dccph->ack_reserved = tvb_get_ntohs(tvb, offset);
@@ -1409,7 +1423,7 @@ dissect_dccp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
                 expert_add_info_format(pinfo, offset_item, &ei_dccp_advertised_header_length_bad,
                     "Advertised header length (%u) is smaller than the minimum (%u) for %s",
                     advertised_dccp_header_len, offset + 4,
-                    val_to_str(pinfo->pool, dccph->type, dccp_packet_type_vals, "Unknown (%u)"));
+                    val_to_str(dccph->type, dccp_packet_type_vals, "Unknown (%u)"));
                 return tvb_reported_length(tvb);
             }
             dccph->ack_reserved = tvb_get_uint8(tvb, offset);
@@ -1507,7 +1521,7 @@ dissect_dccp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
             expert_add_info_format(pinfo, offset_item, &ei_dccp_advertised_header_length_bad,
                 "Advertised header length (%u) is smaller than the minimum (%u) for %s",
                 advertised_dccp_header_len, offset + 8,
-                val_to_str(pinfo->pool, dccph->type, dccp_packet_type_vals, "Unknown (%u)"));
+                val_to_str(dccph->type, dccp_packet_type_vals, "Unknown (%u)"));
             return tvb_reported_length(tvb);
         }
         dccph->ack_reserved = tvb_get_ntohs(tvb, offset);
@@ -1584,25 +1598,8 @@ dissect_dccp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
     tap_queue_packet(dccp_tap, pinfo, dccph);
 
     /* call sub-dissectors */
-    if (!pinfo->flags.in_error_pkt || tvb_reported_length_remaining(tvb, offset) > 0) {
-        /* If the user has a "Follow DCCP Stream" window loading, pass a pointer
-           to the payload tvb through the tap system. */
-        if (have_tap_listener(dccp_follow_tap)) {
-            follow_stream_tap_data_t *follow_data = wmem_new(pinfo->pool, follow_stream_tap_data_t);
-            follow_data->tvb = tvb_new_subset_remaining(tvb, offset);
-            follow_data->stream_id = dccph->stream;
-            follow_data->substream_id = SUBSTREAM_UNUSED;
-            copy_address_shallow(&follow_data->src, &dccph->ip_src);
-            copy_address_shallow(&follow_data->dst, &dccph->ip_dst);
-            follow_data->ptype = PT_DCCP;
-            follow_data->srcport = dccph->sport;
-            follow_data->destport = dccph->dport;
-
-            tap_queue_packet(dccp_follow_tap, pinfo, follow_data);
-        }
-
+    if (!pinfo->flags.in_error_pkt || tvb_reported_length_remaining(tvb, offset) > 0)
         decode_dccp_ports(tvb, offset, pinfo, tree, dccph->sport, dccph->dport);
-    }
 
     return tvb_reported_length(tvb);
 }
@@ -1925,7 +1922,7 @@ proto_register_dccp(void)
         { &hf_dccp_data_dropped, { "Data Dropped", "dccp.data_dropped", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
         { &hf_dccp_ccid3_loss_event_rate, { "CCID3 Loss Event Rate", "dccp.ccid3_loss_event_rate", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL }},
         { &hf_dccp_ccid3_loss_intervals, { "CCID3 Loss Intervals", "dccp.ccid3_loss_intervals", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
-        { &hf_dccp_ccid3_receive_rate, { "CCID3 Receive Rate", "dccp.ccid3_receive_rate", FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytespsecond), 0x0, NULL, HFILL }},
+        { &hf_dccp_ccid3_receive_rate, { "CCID3 Receive Rate", "dccp.ccid3_receive_rate", FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_bytes_sec), 0x0, NULL, HFILL }},
         { &hf_dccp_option_reserved, { "Reserved", "dccp.option_reserved", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
         { &hf_dccp_ccid_option_data, { "CCID option", "dccp.ccid_option_data", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
         { &hf_dccp_option_unknown, { "Unknown", "dccp.option_unknown", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
@@ -1994,7 +1991,7 @@ proto_register_dccp(void)
     register_conversation_table(proto_dccp, false, dccpip_conversation_packet, dccpip_endpoint_packet);
     register_conversation_filter("dccp", "DCCP", dccp_filter_valid, dccp_build_filter, NULL);
     register_follow_stream(proto_dccp, "dccp_follow", dccp_follow_conv_filter, dccp_follow_index_filter, dccp_follow_address_filter,
-                           dccp_port_to_display, follow_stream_tap_listener, get_dccp_stream_count, NULL);
+                           dccp_port_to_display, follow_tvb_tap_listener, get_dccp_stream_count, NULL);
 
     register_init_routine(dccp_init);
 

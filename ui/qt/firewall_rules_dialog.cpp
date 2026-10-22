@@ -84,7 +84,7 @@ void FirewallRulesDialog::updateWidgets()
     QString rule_hint = firewall_product_rule_hint(prod_);
     QString rule_line;
 
-    rule_line = QStringLiteral("%1 %2 rules for %3, packet %4.")
+    rule_line = QString("%1 %2 rules for %3, packet %4.")
             .arg(comment_pfx)
             .arg(firewall_product_name(prod_))
             .arg(file_name_)
@@ -141,7 +141,7 @@ void FirewallRulesDialog::addRule(QString description, syntax_func rule_func, ad
     rule_func(rule_str, addr_buf, port, ptype_, inbound, deny);
     ui->textBrowser->append(QString());
 
-    QString comment_line = QStringLiteral("%1 %2").arg(comment_pfx, description);
+    QString comment_line = comment_pfx + " " + description;
     ui->textBrowser->append(comment_line);
     ui->textBrowser->append(rule_str->str);
 
@@ -168,7 +168,8 @@ void FirewallRulesDialog::on_denyCheckBox_toggled(bool)
 void FirewallRulesDialog::on_buttonBox_clicked(QAbstractButton *button)
 {
     if (button == ui->buttonBox->button(QDialogButtonBox::Save)) {
-        QString save_title = tr("Save %1 rules as…").arg(firewall_product_name(prod_));
+        QString save_title = QString("Save %1 rules as" UTF8_HORIZONTAL_ELLIPSIS)
+                .arg(firewall_product_name(prod_));
         QByteArray file_name = WiresharkFileDialog::getSaveFileName(this,
                                                  save_title,
                                                  mainApp->openDialogInitialDir().canonicalPath(),
@@ -178,10 +179,9 @@ void FirewallRulesDialog::on_buttonBox_clicked(QAbstractButton *button)
             QFile save_file(file_name);
             QByteArray rule_text = ui->textBrowser->toPlainText().toUtf8();
 
-            if (save_file.open(QIODevice::WriteOnly)) {
-                save_file.write(rule_text);
-                save_file.close();
-            }
+            save_file.open(QIODevice::WriteOnly);
+            save_file.write(rule_text);
+            save_file.close();
 
             if (save_file.error() != QFile::NoError) {
                 QMessageBox::warning(this, tr("Warning"), tr("Unable to save %1").arg(save_file.fileName()));

@@ -40,53 +40,29 @@ WSLUA_CLASS_DEFINE(FrameInfo,FAIL_ON_NULL_OR_EXPIRED("FrameInfo"));
     frame information to the file.
  */
 
-FrameInfo* push_FrameInfo(lua_State* L, wtap_rec *rec) {
-    FrameInfo f = (FrameInfo) g_malloc0(sizeof(struct _wslua_rec));
+FrameInfo* push_FrameInfo(lua_State* L, wtap_rec *rec, Buffer* buf) {
+    FrameInfo f = (FrameInfo) g_malloc0(sizeof(struct _wslua_phdr));
     f->rec = rec;
+    f->buf = buf;
     f->expired = false;
     return pushFrameInfo(L,f);
 }
 
 WSLUA_METAMETHOD FrameInfo__tostring(lua_State* L) {
-    /* Returns a short label of the form
-       `FrameInfo: encap=<name> caplen=<c> len=<r>`, or
-       `FrameInfo: (expired)` when there is no backing wtap_rec.
-       The previous form dumped raw rec_type/presence_flags/
-       pkt_encap integers and leaked the raw block pointer; the
-       symbolic encapsulation name is enough to identify a frame
-       in the debugger. */
+    /* Generates a string of debug info for the FrameInfo */
     FrameInfo fi = toFrameInfo(L,1);
 
-    if (!fi || !fi->rec) {
-        lua_pushstring(L, "FrameInfo: (expired)");
-        WSLUA_RETURN(1);
+    if (!fi) {
+        lua_pushstring(L,"FrameInfo pointer is NULL!");
+    } else {
+        if (fi->rec)
+            lua_pushfstring(L, "FrameInfo: rec_type=%u, presence_flags=%d, caplen=%d, len=%d, pkt_encap=%d, block='%p'",
+                fi->rec->rec_type, fi->rec->presence_flags, fi->rec->rec_header.packet_header.caplen, fi->rec->rec_header.packet_header.len, fi->rec->rec_header.packet_header.pkt_encap, fi->rec->block);
+        else
+            lua_pushstring(L, "FrameInfo rec pointer is NULL!");
     }
 
-    const wtap_packet_header *ph = &fi->rec->rec_header.packet_header;
-    const char *encap = wtap_encap_name(ph->pkt_encap);
-    lua_pushfstring(L, "FrameInfo: encap=%s caplen=%d len=%d",
-                    encap ? encap : "?",
-                    (int)ph->caplen, (int)ph->len);
-
-    WSLUA_RETURN(1); /* A short label identifying the frame. */
-}
-
-WSLUA_METHOD FrameInfo_setup_packet_rec(lua_State* L) {
-    /* calls wtap_setup_packet_rec() */
-#define WSLUA_ARG_FrameInfo_setup_packet_rec_ENCAP 2 /* The encapsulation type to use. */
-    FrameInfo fi = checkFrameInfo(L,1);
-    int encap = wslua_checkuint32(L, WSLUA_ARG_FrameInfo_setup_packet_rec_ENCAP);
-
-    wtap_setup_packet_rec(fi->rec, encap);
-
-    /*
-     * Always succeeds.
-     *
-     * XXX - can a method return nothing?
-     */
-    lua_pushboolean(L, true);
-
-    WSLUA_RETURN(1);
+    WSLUA_RETURN(1); /* String of debug information. */
 }
 
 /* XXX: should this function be a method of File instead? */
@@ -100,12 +76,12 @@ WSLUA_METHOD FrameInfo_read_data(lua_State* L) {
     int err = 0;
     char *err_info = NULL;
 
-    if (!fh->file) {
-        luaL_error(L, "FrameInfo read_data() got null file pointer internally");
+    if (!fi->buf || !fh->file) {
+        luaL_error(L, "FrameInfo read_data() got null buffer or file pointer internally");
         return 0;
     }
 
-    if (!wtap_read_bytes_buffer(fh->file, &fi->rec->data, len, &err, &err_info)) {
+    if (!wtap_read_packet_bytes(fh->file, fi->buf, len, &err, &err_info)) {
         lua_pushboolean(L, false);
         if (err_info) {
             lua_pushstring(L, err_info);
@@ -249,12 +225,18 @@ static int FrameInfo_set_data (lua_State* L) {
         return 0;
     }
 
+    if (!fi->buf) {
+        ws_warning("Error in FrameInfo set data: NULL frame_buffer pointer");
+        return 0;
+    }
+
    if (lua_isstring(L,2)) {
         size_t len = 0;
         const char* s = luaL_checklstring(L,2,&len);
 
         /* Make sure we have enough room for the packet */
-        ws_buffer_append(&fi->rec->data, (const uint8_t*)s, len);
+        ws_buffer_assure_space(fi->buf, len);
+        memcpy(ws_buffer_start_ptr(fi->buf), s, len);
         fi->rec->rec_header.packet_header.caplen = (uint32_t) len;
         fi->rec->rec_header.packet_header.len = (uint32_t) len;
     }
@@ -267,9 +249,11 @@ static int FrameInfo_set_data (lua_State* L) {
 static int FrameInfo_get_data (lua_State* L) {
     FrameInfo fi = checkFrameInfo(L,1);
 
-    lua_pushlstring(L, (const char*)ws_buffer_start_ptr(&fi->rec->data), ws_buffer_length(&fi->rec->data));
+    if (!fi->buf) return 0;
 
-    WSLUA_RETURN(1); /* A Lua string of the frame record's data. */
+    lua_pushlstring(L, ws_buffer_start_ptr(fi->buf), ws_buffer_length(fi->buf));
+
+    WSLUA_RETURN(1); /* A Lua string of the frame buffer's data. */
 }
 
 /* WSLUA_ATTRIBUTE FrameInfo_rec_type RW The record type of the packet frame
@@ -317,7 +301,6 @@ WSLUA_ATTRIBUTES FrameInfo_attributes[] = {
 };
 
 WSLUA_METHODS FrameInfo_methods[] = {
-    WSLUA_CLASS_FNREG(FrameInfo,setup_packet_rec),
     WSLUA_CLASS_FNREG(FrameInfo,read_data),
     { NULL, NULL }
 };
@@ -340,7 +323,7 @@ WSLUA_CLASS_DEFINE(FrameInfoConst,FAIL_ON_NULL_OR_EXPIRED("FrameInfo"));
  */
 
 FrameInfoConst* push_FrameInfoConst(lua_State* L, const wtap_rec *rec, const uint8_t *pd) {
-    FrameInfoConst f = (FrameInfoConst) g_malloc(sizeof(struct _wslua_const_rec));
+    FrameInfoConst f = (FrameInfoConst) g_malloc(sizeof(struct _wslua_const_phdr));
     f->rec = rec;
     f->pd = pd;
     f->expired = false;
@@ -348,26 +331,20 @@ FrameInfoConst* push_FrameInfoConst(lua_State* L, const wtap_rec *rec, const uin
 }
 
 WSLUA_METAMETHOD FrameInfoConst__tostring(lua_State* L) {
-    /* Returns a short label of the form
-       `FrameInfoConst: encap=<name> caplen=<c> len=<r>`, or
-       `FrameInfoConst: (expired)` when there is no backing
-       wtap_rec. Symbolic encapsulation names are preferred over
-       the raw rec_type/presence_flags/pkt_encap dump and the
-       leaked block pointer of the previous form. */
+    /* Generates a string of debug info for the FrameInfo */
     FrameInfoConst fi = toFrameInfoConst(L,1);
 
-    if (!fi || !fi->rec || fi->expired) {
-        lua_pushstring(L, "FrameInfoConst: (expired)");
-        WSLUA_RETURN(1);
+    if (!fi) {
+        lua_pushstring(L,"FrameInfo pointer is NULL!");
+    } else {
+        if (fi->rec && !fi->expired)
+            lua_pushfstring(L, "FrameInfo: rec_type=%u, presence_flags=%d, caplen=%d, len=%d, pkt_encap=%d, block='%p'",
+                fi->rec->rec_type, fi->rec->presence_flags, fi->rec->rec_header.packet_header.caplen, fi->rec->rec_header.packet_header.len, fi->rec->rec_header.packet_header.pkt_encap, fi->rec->block);
+        else
+            lua_pushfstring(L, "FrameInfo has %s", fi->rec?"expired":"null rec pointer");
     }
 
-    const wtap_packet_header *ph = &fi->rec->rec_header.packet_header;
-    const char *encap = wtap_encap_name(ph->pkt_encap);
-    lua_pushfstring(L, "FrameInfoConst: encap=%s caplen=%d len=%d",
-                    encap ? encap : "?",
-                    (int)ph->caplen, (int)ph->len);
-
-    WSLUA_RETURN(1); /* A short label identifying the frame. */
+    WSLUA_RETURN(1); /* String of debug information. */
 }
 
 /* XXX: should this function be a method of File instead? */
@@ -458,7 +435,7 @@ static int FrameInfoConst_get_data (lua_State* L) {
 
     if (!fi->pd || !fi->rec) return 0;
 
-    lua_pushlstring(L, (const char*)fi->pd, fi->rec->rec_header.packet_header.caplen);
+    lua_pushlstring(L, fi->pd, fi->rec->rec_header.packet_header.caplen);
 
     return 1;
 }

@@ -81,13 +81,13 @@ GSMMAPOperationLocalvalue
 OperationLocalvalue
 
 #.EXPORTS
-AddressString EXTERN WS_DLL
+AddressString
 Add-GeographicalInformation
 AgeOfLocationInformation
 AlertingPattern
 AreaEventInfo
 BasicServiceCode
-CallReferenceNumber EXTERN WS_DLL
+CallReferenceNumber
 CCBS-Feature
 CellGlobalIdOrServiceAreaIdOrLAI
 CellGlobalIdOrServiceAreaIdFixedLength
@@ -98,8 +98,8 @@ CUG-Info
 CurrentPassword
 D-CSI
 DeferredLocationEventType
-DefaultGPRS-Handling EXTERN WS_DLL
-DefaultSMS-Handling EXTERN WS_DLL
+DefaultGPRS-Handling
+DefaultSMS-Handling
 EraseCC-EntryArg
 EraseCC-EntryRes
 Ext-BasicServiceCode
@@ -119,63 +119,48 @@ GPRSChargingID
 GPRSMSClass
 GSMMAPLocalErrorcode
 GSN-Address
-IMEI EXTERN WS_DLL
+IMEI
 IMSI EXTERN WS_DLL
 InterrogateSS-Res
 ISDN-AddressString EXTERN WS_DLL
 ISDN-AddressString_PDU EXTERN WS_DLL
 ISDN-SubaddressString
 LAIFixedLength
-LCS-CancelDeferredLocationArg
-LCSClientExternalID EXTERN WS_DLL
+LCSClientExternalID
 LCS-ClientID
 LCS-ClientID_PDU
-LCSClientInternalID EXTERN WS_DLL
+LCSClientInternalID
 LCSClientName
-LCSClientType EXTERN WS_DLL
-LCSCodeword
-LCS-DLRSPPTransportArg
-LCS-DLRSPPTransportRes
-LCS-EventReportArg
-LCS-EventReportRes
-LCS-LocationPrivacySettingArg
-LCS-Priority EXTERN WS_DLL
-LCS-PruDisassociationArg
-LCS-PruAssociationArg
-LCS-PruAssociationRes
-LCS-ReferenceNumber
+LCSClientType
 LCSRequestorID
+LCSCodeword
+LCS-Priority
 LCSServiceTypeID
-LCS-SLMTLRArg
-LCS-SLMTLRRes
-LCS-SLMOLRArg
-LCS-SLMOLRRes
-LCS-ULRSPPTransportArg
-LCS-ULRSPPTransportRes
+LCS-ReferenceNumber
 LCS-QoS
 LocationInformation
-LocationMethod EXTERN WS_DLL
-LocationType EXTERN WS_DLL
+LocationMethod
+LocationType
 LSAIdentity
 MS-Classmark2
 NAEA-CIC
 NetworkResource
 NewPassword
-NotificationToMSUser EXTERN WS_DLL
+NotificationToMSUser
 O-CSI
 O-BcsmCamelTDPCriteriaList
 OfferedCamel4Functionalities
-PositionMethodFailure-Diagnostic EXTERN WS_DLL
+PositionMethodFailure-Diagnostic
 ProtectedPayload
 QoS-Subscribed
-RAIdentity EXTERN WS_DLL
+RAIdentity
 RegisterCC-EntryRes
 RegisterSS-Arg
 SM-RP-DA
 SM-RP-OA
 SubscriberState
 SecurityHeader
-ServiceKey EXTERN WS_DLL
+ServiceKey
 SupportedCamelPhases
 SupportedGADShapes
 SuppressionOfAnnouncement
@@ -184,7 +169,7 @@ SS-Status
 SS-Info
 SS-ForBS-Code
 TBCD-STRING
-UnauthorizedLCSClient-Diagnostic EXTERN WS_DLL
+UnauthorizedLCSClient-Diagnostic
 USSD-DataCodingScheme
 USSD-String
 USSD-Arg
@@ -700,7 +685,7 @@ MAP-DialoguePDU				B "0.4.0.0.1.1.1.1" "map-DialogueAS"
   switch(sms_encoding){
     case SMS_ENCODING_7BIT:
     case SMS_ENCODING_7BIT_LANG:
-      proto_tree_add_item(subtree, hf_gsm_map_ussd_string, parameter_tvb, 0, length, ENC_3GPP_TS_23_038_7BITS);
+      proto_tree_add_item(subtree, hf_gsm_map_ussd_string, parameter_tvb, 0, length, ENC_3GPP_TS_23_038_7BITS|ENC_NA);
       break;
     case SMS_ENCODING_8BIT:
       /* XXX - ASCII, or some extended ASCII? */
@@ -737,7 +722,8 @@ MAP-DialoguePDU				B "0.4.0.0.1.1.1.1" "map-DialogueAS"
 
   if (!parameter_tvb)
     return offset;
-  proto_tree_add_item_ret_uint8(tree, hf_gsm_map_pdp_type_org, parameter_tvb, 0,1,ENC_BIG_ENDIAN, &pdp_type_org);
+  proto_tree_add_item(tree, hf_gsm_map_pdp_type_org, parameter_tvb, 0,1,ENC_BIG_ENDIAN);
+  pdp_type_org = tvb_get_uint8(parameter_tvb,1);
   switch (pdp_type_org){
     case 0: /* ETSI */
       proto_tree_add_item(tree, hf_gsm_map_etsi_pdp_type_number, parameter_tvb, 0,1,ENC_BIG_ENDIAN);

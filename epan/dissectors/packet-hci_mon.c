@@ -18,7 +18,6 @@
 #include <wiretap/wtap.h>
 
 #include "packet-bluetooth.h"
-#include "packet-hci_mon.h"
 
 static int proto_hci_mon;
 
@@ -164,7 +163,7 @@ static value_string_ext(priority_vals_ext) = VALUE_STRING_EXT_INIT(priority_vals
 #define EVENT_PIN_CODE_REQUEST               0x000e
 #define EVENT_USER_CONFIRMATION_REQUEST      0x000f
 #define EVENT_USER_PASSKEY_REQUEST           0x0010
-#define EVENT_AUTHENTICATION_FAILED          0x0011
+#define EVENT_AUTHENTICAION_FAILED           0x0011
 #define EVENT_DEVICE_FOUND                   0x0012
 #define EVENT_DISCOVERING                    0x0013
 #define EVENT_DEVICE_BLOCKED                 0x0014
@@ -204,7 +203,7 @@ static const value_string event_vals[] = {
     { EVENT_PIN_CODE_REQUEST,               "PIN code request" },
     { EVENT_USER_CONFIRMATION_REQUEST,      "User confirmation request" },
     { EVENT_USER_PASSKEY_REQUEST,           "User passkey request" },
-    { EVENT_AUTHENTICATION_FAILED,          "Authentication failed" },
+    { EVENT_AUTHENTICAION_FAILED,           "Authentication failed" },
     { EVENT_DEVICE_FOUND,                   "Device found" },
     { EVENT_DISCOVERING,                    "Discovering" },
     { EVENT_DEVICE_BLOCKED,                 "Device blocked" },
@@ -277,7 +276,7 @@ dissect_hci_mon(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     else
         pinfo->p2p_dir = P2P_DIR_SENT;
 
-    hci_mon_item = proto_tree_add_item(tree, proto_hci_mon, tvb, offset, -1, ENC_NA);
+    hci_mon_item = proto_tree_add_item(tree, proto_hci_mon, tvb, offset, tvb_captured_length(tvb), ENC_NA);
     hci_mon_tree = proto_item_add_subtree(hci_mon_item, ett_hci_mon);
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "HCI_MON");
@@ -306,7 +305,7 @@ dissect_hci_mon(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     proto_item_set_generated(sub_item);
 
     col_append_fstr(pinfo->cinfo, COL_INFO, "Adapter Id: %u, Opcode: %s",
-            adapter_id, val_to_str_ext(pinfo->pool, opcode, &hci_mon_opcode_vals_ext, "Unknown (%u)"));
+            adapter_id, val_to_str_ext(opcode, &hci_mon_opcode_vals_ext, "Unknown (%u)"));
 
     bluetooth_data->adapter_id = adapter_id;
 
@@ -361,7 +360,7 @@ dissect_hci_mon(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
         offset = dissect_bd_addr(hf_bd_addr, pinfo, hci_mon_tree, tvb, offset, true, bluetooth_data->interface_id, bluetooth_data->adapter_id, NULL);
 
-        proto_tree_add_item(hci_mon_tree, hf_name, tvb, offset, 8, ENC_ASCII);
+        proto_tree_add_item(hci_mon_tree, hf_name, tvb, offset, 8, ENC_NA | ENC_ASCII);
         offset += 8;
 
         break;
@@ -437,10 +436,10 @@ dissect_hci_mon(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         proto_tree_add_item_ret_uint(hci_mon_tree, hf_ident_length, tvb, offset, 1, ENC_NA, &ident_length);
         offset += 1;
 
-        proto_tree_add_item(hci_mon_tree, hf_ident, tvb, offset, ident_length, ENC_ASCII);
+        proto_tree_add_item(hci_mon_tree, hf_ident, tvb, offset, ident_length, ENC_NA | ENC_ASCII);
         offset += ident_length;
 
-        proto_tree_add_item(hci_mon_tree, hf_message, tvb, offset, tvb_reported_length_remaining(tvb, offset), ENC_ASCII);
+        proto_tree_add_item(hci_mon_tree, hf_message, tvb, offset, tvb_reported_length_remaining(tvb, offset), ENC_NA | ENC_ASCII);
         offset = tvb_reported_length(tvb);
 
         break;

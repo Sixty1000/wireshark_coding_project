@@ -146,15 +146,16 @@ dissect_gdb_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 static int
 dissect_gdb_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-    unsigned  offset=0, offset_start;
-    unsigned  pos;
+    int       offset=0, offset_start;
+    int       pos;
     unsigned  packet_len;
     tvbuff_t *packet_tvb;
 
     while (tvb_captured_length_remaining(tvb, offset) > 0) {
         packet_tvb = NULL;
         offset_start = offset;
-        if (!tvb_find_uint8_remaining(tvb, offset, '#', &pos)) {
+        pos = tvb_find_uint8(tvb, offset, -1, '#');
+        if (pos != -1) {
             offset += pos;
             offset++; /* skip the hash sign */
             /* to have a complete packet, we need another two bytes

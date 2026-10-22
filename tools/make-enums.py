@@ -17,14 +17,13 @@
 
 import os
 import sys
-
+import argparse
 from pyclibrary import CParser
-
 
 def parse_files(infiles, outfile):
 
-    print(f"Input: {infiles}")
-    print(f"Output: '{outfile}'")
+    print("Input: {}".format(infiles))
+    print("Output: '{}'".format(outfile))
     pre_line_count = 0
     with open(outfile, 'r') as out_f:
         pre_line_count = len(out_f.read().splitlines())
@@ -50,7 +49,7 @@ def parse_files(infiles, outfile):
 """ % (os.path.basename(sys.argv[0]))
 
     for f in infiles:
-        source += f'#include <{f}>\n'
+        source += '#include <{}>\n'.format(f)
 
     source += """
 #define ENUM(arg) { #arg, arg }
@@ -64,7 +63,7 @@ static ws_enum_t const all_enums[] = {
 
     for s in symbols:
         if isinstance(definitions[s], int):
-            source += f'    ENUM({s}),\n'
+            source += '    ENUM({}),\n'.format(s)
 
     source += """\
     { NULL, 0 },
@@ -86,7 +85,7 @@ static ws_enum_t const all_enums[] = {
 
 epan_files = [
     "epan/address.h",
-    "epan/iana-info.h",
+    "epan/ipproto.h",
     "epan/ftypes/ftypes.h",
     "epan/proto.h",         # PyClibrary 0.3.0 needs this after ftypes.h
     "epan/stat_groups.h",

@@ -8,7 +8,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "config.h"
+#include <config.h>
 #define WS_LOG_DOMAIN  LOG_DOMAIN_MAIN
 
 #include <stdio.h>
@@ -23,10 +23,9 @@
 
 #include <wsutil/cmdarg_err.h>
 #include <wsutil/filesystem.h>
-#include <app/application_flavor.h>
 #include <wsutil/file_util.h>
 #include <wsutil/privileges.h>
-#include <wsutil/report_message.h>
+#include <cli_main.h>
 #include <wsutil/version_info.h>
 #include <wiretap/wtap_opttypes.h>
 
@@ -34,7 +33,7 @@
 #include <wsutil/plugins.h>
 #endif
 
-#include <wsutil/clopts_common.h>
+#include <wsutil/report_message.h>
 #include <wsutil/wslog.h>
 
 #include "ui/failure_message.h"
@@ -78,9 +77,10 @@ typedef struct FrameRecord_t {
 /**************************************************/
 
 
-static bool
+static void
 frame_write(FrameRecord_t *frame, wtap *wth, wtap_dumper *pdh,
-            wtap_rec *rec, const char *infile, const char *outfile)
+            wtap_rec *rec, Buffer *buf, const char *infile,
+            const char *outfile)
 {
     int    err;
     char   *err_info;
@@ -90,14 +90,14 @@ frame_write(FrameRecord_t *frame, wtap *wth, wtap_dumper *pdh,
 
 
     /* Re-read the frame from the stored location */
-    if (!wtap_seek_read(wth, frame->offset, rec, &err, &err_info)) {
+    if (!wtap_seek_read(wth, frame->offset, rec, buf, &err, &err_info)) {
         if (err != 0) {
             /* Print a message noting that the read failed somewhere along the line. */
             fprintf(stderr,
                     "reordercap: An error occurred while re-reading \"%s\".\n",
                     infile);
-            report_cfile_read_failure(infile, err, err_info);
-            return false;
+            cfile_read_failure_message(infile, err, err_info);
+            exit(1);
         }
     }
 
@@ -107,12 +107,12 @@ frame_write(FrameRecord_t *frame, wtap *wth, wtap_dumper *pdh,
     rec->ts = frame->frame_time;
 
     /* Dump frame to outfile */
-    if (!wtap_dump(pdh, rec, &err, &err_info)) {
-        report_cfile_write_failure(infile, outfile, err, err_info, frame->num,
-                                   wtap_file_type_subtype(wth));
-        return false;
+    if (!wtap_dump(pdh, rec, ws_buffer_start_ptr(buf), &err, &err_info)) {
+        cfile_write_failure_message(infile, outfile, err, err_info, frame->num,
+                                    wtap_file_type_subtype(wth));
+        exit(1);
     }
-    return true;
+    wtap_rec_reset(rec);
 }
 
 /* Comparing timestamps between 2 frames.
@@ -132,6 +132,28 @@ frames_compare(const void *a, const void *b)
     return nstime_cmp(time1, time2);
 }
 
+/*
+ * General errors and warnings are reported with an console message
+ * in reordercap.
+ */
+static void
+reordercap_cmdarg_err(const char *msg_format, va_list ap)
+{
+    fprintf(stderr, "reordercap: ");
+    vfprintf(stderr, msg_format, ap);
+    fprintf(stderr, "\n");
+}
+
+/*
+ * Report additional information for an error in command-line arguments.
+ */
+static void
+reordercap_cmdarg_err_cont(const char *msg_format, va_list ap)
+{
+    vfprintf(stderr, msg_format, ap);
+    fprintf(stderr, "\n");
+}
+
 /********************************************************************/
 /* Main function.                                                   */
 /********************************************************************/
@@ -139,9 +161,22 @@ int
 main(int argc, char *argv[])
 {
     char *configuration_init_error;
+    static const struct report_message_routines reordercap_message_routines = {
+        failure_message,
+        failure_message,
+        open_failure_message,
+        read_failure_message,
+        write_failure_message,
+        cfile_open_failure_message,
+        cfile_dump_open_failure_message,
+        cfile_read_failure_message,
+        cfile_write_failure_message,
+        cfile_close_failure_message
+    };
     wtap *wth = NULL;
     wtap_dumper *pdh = NULL;
     wtap_rec rec;
+    Buffer buf;
     int err;
     char *err_info;
     int64_t data_offset;
@@ -158,29 +193,24 @@ main(int argc, char *argv[])
     static const struct ws_option long_options[] = {
         {"help", ws_no_argument, NULL, 'h'},
         {"version", ws_no_argument, NULL, 'v'},
-        LONGOPT_WSLOG
         {0, 0, 0, 0 }
     };
-#define OPTSTRING "hnv"
-    static const char optstring[] = OPTSTRING;
     int file_count;
     char *infile;
     const char *outfile;
-    const struct file_extension_info* file_extensions;
-    unsigned num_extensions;
 
-    /* Set the program name. */
-    g_set_prgname("reordercap");
-
-    cmdarg_err_init(stderr_cmdarg_err, stderr_cmdarg_err_cont);
+    cmdarg_err_init(reordercap_cmdarg_err, reordercap_cmdarg_err_cont);
 
     /* Initialize log handler early so we can have proper logging during startup. */
-    ws_log_init(vcmdarg_err, "Reordercap Debug Console");
+    ws_log_init("reordercap", vcmdarg_err);
 
     /* Early logging command-line initialization. */
-    ws_log_parse_args(&argc, argv, optstring, long_options, vcmdarg_err, WS_EXIT_INVALID_OPTION);
+    ws_log_parse_args(&argc, argv, vcmdarg_err, WS_EXIT_INVALID_OPTION);
 
     ws_noisy("Finished log init and parsing command line log arguments");
+
+    /* Initialize the version information. */
+    ws_init_version_info("Reordercap", NULL, NULL);
 
     /*
      * Get credential information for later use.
@@ -191,7 +221,7 @@ main(int argc, char *argv[])
      * Attempt to get the pathname of the directory containing the
      * executable file.
      */
-    configuration_init_error = configuration_init(argv[0], "wireshark");
+    configuration_init_error = configuration_init(argv[0], NULL);
     if (configuration_init_error != NULL) {
         fprintf(stderr,
                 "reordercap: Can't get pathname of directory containing the reordercap program: %s.\n",
@@ -199,16 +229,12 @@ main(int argc, char *argv[])
         g_free(configuration_init_error);
     }
 
-    /* Initialize the version information. */
-    ws_init_version_info("Reordercap", NULL, application_get_vcs_version_info, NULL, NULL);
+    init_report_message("reordercap", &reordercap_message_routines);
 
-    init_report_failure_message("reordercap");
-
-    application_file_extensions(&file_extensions, &num_extensions);
-    wtap_init(true, application_configuration_environment_prefix(), file_extensions, num_extensions);
+    wtap_init(true);
 
     /* Process the options first */
-    while ((opt = ws_getopt_long(argc, argv, optstring, long_options, NULL)) != -1) {
+    while ((opt = ws_getopt_long(argc, argv, "hnv", long_options, NULL)) != -1) {
         switch (opt) {
             case 'n':
                 write_output_regardless = false;
@@ -221,11 +247,6 @@ main(int argc, char *argv[])
                 show_version();
                 goto clean_exit;
             case '?':
-            default:
-                /* wslog arguments are okay */
-                if (ws_log_is_wslog_arg(opt))
-                    break;
-
                 print_usage(stderr);
                 ret = WS_EXIT_INVALID_OPTION;
                 goto clean_exit;
@@ -247,9 +268,9 @@ main(int argc, char *argv[])
     /* Open infile */
     /* TODO: if reordercap is ever changed to give the user a choice of which
        open_routine reader to use, then the following needs to change. */
-    wth = wtap_open_offline(infile, WTAP_TYPE_AUTO, &err, &err_info, true, application_configuration_environment_prefix());
+    wth = wtap_open_offline(infile, WTAP_TYPE_AUTO, &err, &err_info, true);
     if (wth == NULL) {
-        report_cfile_open_failure(infile, err, err_info);
+        cfile_open_failure_message(infile, err, err_info);
         ret = WS_EXIT_OPEN_ERROR;
         goto clean_exit;
     }
@@ -259,8 +280,9 @@ main(int argc, char *argv[])
     frames = g_ptr_array_new();
 
     /* Read each frame from infile */
-    wtap_rec_init(&rec, DEFAULT_INIT_BUFFER_SIZE_2048);
-    while (wtap_read(wth, &rec, &err, &err_info, &data_offset)) {
+    wtap_rec_init(&rec);
+    ws_buffer_init(&buf, 1514);
+    while (wtap_read(wth, &rec, &buf, &err, &err_info, &data_offset)) {
         FrameRecord_t *newFrameRecord;
 
         newFrameRecord = g_slice_new(FrameRecord_t);
@@ -278,11 +300,13 @@ main(int argc, char *argv[])
 
         g_ptr_array_add(frames, newFrameRecord);
         prevFrame = newFrameRecord;
+        wtap_rec_reset(&rec);
     }
     wtap_rec_cleanup(&rec);
+    ws_buffer_free(&buf);
     if (err != 0) {
       /* Print a message noting that the read failed somewhere along the line. */
-      report_cfile_read_failure(infile, err, err_info);
+      cfile_read_failure_message(infile, err, err_info);
     }
 
     printf("%u frames, %u out of order\n", frames->len, wrong_order_count);
@@ -301,17 +325,17 @@ main(int argc, char *argv[])
         /* Open outfile (same filetype/encap as input file) */
         if (strcmp(outfile, "-") == 0) {
           pdh = wtap_dump_open_stdout(wtap_file_type_subtype(wth),
-                                      WS_FILE_UNCOMPRESSED, &params, &err, &err_info);
+                                      WTAP_UNCOMPRESSED, &params, &err, &err_info);
         } else {
           pdh = wtap_dump_open(outfile, wtap_file_type_subtype(wth),
-                               WS_FILE_UNCOMPRESSED, &params, &err, &err_info);
+                               WTAP_UNCOMPRESSED, &params, &err, &err_info);
         }
         g_free(params.idb_inf);
         params.idb_inf = NULL;
 
         if (pdh == NULL) {
-            report_cfile_dump_open_failure(outfile, err, err_info,
-                                           wtap_file_type_subtype(wth));
+            cfile_dump_open_failure_message(outfile, err, err_info,
+                                            wtap_file_type_subtype(wth));
             wtap_dump_params_cleanup(&params);
             ret = OUTPUT_FILE_ERROR;
             goto clean_exit;
@@ -319,23 +343,24 @@ main(int argc, char *argv[])
 
 
         /* Write out each sorted frame in turn */
-        wtap_rec_init(&rec, DEFAULT_INIT_BUFFER_SIZE_2048);
+        wtap_rec_init(&rec);
+        ws_buffer_init(&buf, 1514);
         for (i = 0; i < frames->len; i++) {
             FrameRecord_t *frame = (FrameRecord_t *)frames->pdata[i];
 
-            if (!frame_write(frame, wth, pdh, &rec, infile, outfile))
-                return EXIT_FAILURE;
+            frame_write(frame, wth, pdh, &rec, &buf, infile, outfile);
 
             g_slice_free(FrameRecord_t, frame);
         }
 
         wtap_rec_cleanup(&rec);
+        ws_buffer_free(&buf);
 
 
 
         /* Close outfile */
         if (!wtap_dump_close(pdh, NULL, &err, &err_info)) {
-            report_cfile_close_failure(outfile, err, err_info);
+            cfile_close_failure_message(outfile, err, err_info);
             wtap_dump_params_cleanup(&params);
             ret = OUTPUT_FILE_ERROR;
             goto clean_exit;

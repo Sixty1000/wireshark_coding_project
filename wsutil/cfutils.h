@@ -19,15 +19,8 @@
 extern "C" {
 #endif /* __cplusplus */
 
-/**
- * @brief Convert a Core Foundation string to a g_malloc()ated C string.
- *
- * Creates a newly allocated UTF-8 encoded C string from the given `CFStringRef`.
- * The returned string is allocated using `g_malloc()` and must be freed by the caller
- * using `g_free()` when no longer needed.
- *
- * @param cfstring Core Foundation string to convert.
- * @return         Newly allocated C string, or `NULL` on failure.
+/*
+ * Convert a CFString to a g_malloc()ated C string.
  */
 WS_DLL_PUBLIC char *CFString_to_C_string(CFStringRef cfstring);
 

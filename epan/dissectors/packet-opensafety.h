@@ -21,7 +21,7 @@
 #ifndef _OPENSAFETY_HEADER_
 #define _OPENSAFETY_HEADER_
 
-#include <epan/tfs.h>
+#include <epan/packet.h>
 
 #ifdef __cplusplus
 extern "C" {

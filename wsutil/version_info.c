@@ -12,6 +12,7 @@
 #include "version_info.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <locale.h>
 
@@ -25,12 +26,7 @@
 #endif
 
 #include <glib.h>
-#include <gmodule.h>
 #include <pcre2.h>
-
-#ifdef HAVE_XXHASH
-#include <xxhash.h>
-#endif
 
 #ifdef HAVE_ZLIB
 #include <zlib.h>
@@ -39,6 +35,8 @@
 //#ifdef HAVE_ZLIBNG
 //#include <zlib-ng.h>
 //#endif
+
+#include "vcs_version.h"
 
 #include <wsutil/cpu_info.h>
 #include <wsutil/os_version_info.h>
@@ -57,8 +55,6 @@ static void get_mem_info(GString *str);
 
 void
 ws_init_version_info(const char *appname,
-		const char* appflavor,
-		get_version_func version_func,
 		gather_feature_func gather_compile,
 		gather_feature_func gather_runtime)
 {
@@ -79,14 +75,13 @@ ws_init_version_info(const char *appname,
 	 * version - including the VCS version, for a build from
 	 * a checkout.
 	 */
-	if ((appflavor != NULL) && strstr(appname, appflavor) != NULL) {
+	if (strstr(appname, "Wireshark") != NULL) {
 		appname_with_version = ws_strdup_printf("%s %s",
-			appname, version_func());
+			appname, get_ws_vcs_version_info());
 	}
-	/* Include our application flavor. The default is "Wireshark" */
 	else {
-		appname_with_version = ws_strdup_printf("%s (%s) %s",
-			appname, (appflavor != NULL) ? appflavor : "Wireshark", version_func());
+		appname_with_version = ws_strdup_printf("%s (Wireshark) %s",
+			appname, get_ws_vcs_version_info());
 	}
 
 	/* Get the compile-time version information string */
@@ -107,72 +102,21 @@ ws_init_version_info(const char *appname,
 }
 
 /*
- * Used below in features_to_columns()
+ * Take the gathered list of present/absent features (dependencies)
+ * and add them to the given string.
+ * Callback function for g_list_foreach() used in
+ * get_compiled_version_info() and get_runtime_version_info().
  */
 static void
-rtrim_gstring(GString *str)
+feature_to_gstring(void * data, void * user_data)
 {
-	size_t end = str->len - 1;   // get to 0-based offset
-	while(str->str[end] == ' ') {
-		end--;
+	char *feature = (char *)data;
+	GString *str = (GString *)user_data;
+	if (str->len > 0) {
+		g_string_append(str, ", ");
 	}
-	end++; // return to 1-based length
-	if (end < str->len) {
-		g_string_truncate(str, end);
-	}
-}
-
-/*
- * Take the list of features, and format it into a number of vertical
- * columns, presented in column-major order. Calculates the number of
- * columns based on the length of the longest list item.
- */
-static void
-features_to_columns(feature_list l, GString *str)
-{
-	const uint8_t linelen = 85;	// Same value used in end_string() +10
-	const uint8_t linepad = 2;	// left-side padding
-	uint8_t ncols = 0;		// number of columns to show
-	uint8_t maxlen = 0;		// length of longest item
-	unsigned num = 0;		// number of items in list
-	char *c;
-	GPtrArray *a;
-	GList *iter;
-
-	num = g_list_length(*l);
-	if (num == 0) {
-		return;
-	}
-	a = g_ptr_array_sized_new(num);
-	for (iter = *l; iter != NULL; iter = iter->next) {
-		c = (char *)iter->data;
-		maxlen = MAX(maxlen, (uint8_t)strlen(c));
-		g_ptr_array_add(a, iter->data);
-	}
-	maxlen += 2; // allow space between columns
-	ncols = (linelen - linepad) / maxlen;
-	if (ncols <= 1 || num <= 1) {
-		for (iter = *l; iter != NULL; iter = iter->next) {
-			c = (char *)iter->data;
-			g_string_append_printf(str, "%*s%s\n", linepad, "", c);
-		}
-	}
-	else {
-		uint8_t nrows = (num + ncols - 1) / ncols;
-		unsigned i, j;
-		for (i = 0; i < nrows; i++) {
-			g_string_append_printf(str, "%*s", linepad, "");
-			for (j = 0; j < ncols; j++) {
-				unsigned idx = i + (j * nrows);
-				if (idx < num) {
-					g_string_append_printf(str, "%-*s", maxlen, (char *)g_ptr_array_index(a, idx));
-				}
-			}
-			rtrim_gstring(str);
-			g_string_append(str, "\n");
-		}
-	}
-	g_ptr_array_free(a, TRUE);
+	g_string_append_printf(str, "%s %s",
+			(*feature == '+' ? "with" : "without"), feature + 1);
 }
 
 /*
@@ -214,23 +158,7 @@ get_appname_and_version(void)
 void
 gather_pcre2_compile_info(feature_list l)
 {
-#define PCRE2_DATE_QUOTE(str) #str
-#define PCRE2_DATE_EXPAND_AND_QUOTE(str) PCRE2_DATE_QUOTE(str)
-	/*
-	 * PCRE2_PRERELEASE appears to be empty for a regular release;
-	 * I don't know what it is for a pre-release.
-	 */
-	with_feature(l, "PCRE2 %u.%u %s", PCRE2_MAJOR, PCRE2_MINOR, PCRE2_DATE_EXPAND_AND_QUOTE(PCRE2_DATE));
-}
-
-void
-gather_xxhash_compile_info(feature_list l)
-{
-#ifdef HAVE_XXHASH
-	with_feature(l, "xxhash " XXHASH_VERSION_STRING);
-#else
-	without_feature(l, "xxhash");
-#endif /* HAVE_XXHASH */
+	with_feature(l, "PCRE2");
 }
 
 void
@@ -266,50 +194,45 @@ GString *
 get_compiled_version_info(gather_feature_func gather_compile)
 {
 	GString *str;
-	GList *l = NULL, *with_list = NULL, *without_list = NULL;
+	GList *l = NULL;
 
-	str = g_string_new("Compile-time info:\n");
-	g_string_append_printf(str, " Bit width: %d-bit\n", (int)sizeof(str) * 8);
+	str = g_string_new("Compiled ");
+	g_string_append_printf(str, "(%d-bit) ", (int)sizeof(str) * 8);
 
 	/* Compiler info */
-	g_string_append_printf(str, "  Compiler: ");
+	g_string_append(str, "using ");
 	get_compiler_info(str);
 
 #ifdef GLIB_MAJOR_VERSION
-	g_string_append_printf(str,
-		"      GLib: %d.%d.%d", GLIB_MAJOR_VERSION, GLIB_MINOR_VERSION,
+	with_feature(&l,
+		"GLib %d.%d.%d", GLIB_MAJOR_VERSION, GLIB_MINOR_VERSION,
 		GLIB_MICRO_VERSION);
 #else
-	g_string_append(str, "      GLib: version unknown");
+	with_feature(&l,
+		"GLib (version unknown)");
 #endif
-#ifdef WS_DISABLE_DEBUG
-	g_string_append(str, ", release build");
-#endif
-#ifdef WS_DISABLE_ASSERT
-	g_string_append(str, ", without assertions");
-#endif
-	g_string_append(str, "\n");
 
 	if (gather_compile != NULL) {
 		gather_compile(&l);
 	}
 
-	sort_features(&l);
-	separate_features(&l, &with_list, &without_list);
+	l = g_list_reverse(l);
+	g_list_foreach(l, feature_to_gstring, str);
+
+#ifdef HAVE_PLUGINS
+	g_string_append(str, ", with binary plugins");
+#else
+	g_string_append(str, ", without binary plugins");
+#endif
+
+#ifdef WS_DEBUG
+	g_string_append(str, ", debug build");
+#endif
+
+	g_string_append(str, ".");
+	end_string(str);
 	free_features(&l);
 
-	if (with_list != NULL) {
-		g_string_append(str, " With:\n");
-		features_to_columns(&with_list, str);
-		free_features(&with_list);
-	}
-	if (without_list != NULL) {
-		g_string_append(str, " Without:\n");
-		features_to_columns(&without_list, str);
-		free_features(&without_list);
-	}
-
-	end_string(str);
 	return str;
 }
 
@@ -331,12 +254,11 @@ get_mem_info(GString *str)
 #elif __linux__
 	struct sysinfo info;
 	if (sysinfo(&info) == 0)
-		if (ckd_mul(&memsize, info.totalram, info.mem_unit))
-			memsize = 0;
+		memsize = info.totalram * info.mem_unit;
 #endif
 
 	if (memsize > 0)
-		g_string_append_printf(str, "%" PRId64 " MB of physical memory", memsize/(1024*1024));
+		g_string_append_printf(str, ", with %" PRId64 " MB of physical memory", memsize/(1024*1024));
 }
 
 /*
@@ -417,19 +339,15 @@ get_compiler_info(GString *str)
 			 * though the MSVC compiler toolset in VS2017 delivers many new
 			 * features and conformance improvements it is a minor version,
 			 * compatible update from 14.00 in VS2015 to 14.10 in VS2017.
-			 *
-			 * https://learn.microsoft.com/en-us/cpp/overview/compiler-versions
 			 */
 			#if COMPILER_MINOR_VERSION < 10
 				#define VS_VERSION	"2015"
 			#elif COMPILER_MINOR_VERSION < 20
 				#define VS_VERSION	"2017"
 			#elif COMPILER_MINOR_VERSION < 30
-				#define VS_VERSION	"2019"
-			#elif COMPILER_MINOR_VERSION < 50
-				#define VS_VERSION	"2022"
+			#define VS_VERSION	"2019"
 			#else
-				#define VS_VERSION	"2026"
+				#define VS_VERSION	"2022"
 			#endif
 		#else
 			/*
@@ -445,7 +363,7 @@ get_compiler_info(GString *str)
 		 * COMPILER_BUILD_NUMBER, and _MSC_BUILD, the last of which is
 		 * "the revision number element of the compiler's version number",
 		 * which I guess is not to be confused with the build number,
-		 * the _BUILD in the name notwithstanding.
+		 * the _BUILD in the name nonwithstanding.
 		 */
 		g_string_append_printf(str, "Microsoft Visual Studio " VS_VERSION " (VC++ %d.%d, build %d)",
 			VCPP_MAJOR_VERSION, COMPILER_MINOR_VERSION, COMPILER_BUILD_NUMBER);
@@ -507,7 +425,6 @@ get_compiler_info(GString *str)
 	#else
 		g_string_append(str, "unknown compiler");
 	#endif
-	g_string_append(str, "\n");
 }
 
 void
@@ -529,20 +446,11 @@ gather_pcre2_runtime_info(feature_list l)
 		without_feature(l, "PCRE2 (error querying)");
 		return;
 	}
-	buf_pcre2 = g_malloc((size_t)size + 1);
+	buf_pcre2 = g_malloc(size + 1);
 	pcre2_config(PCRE2_CONFIG_VERSION, buf_pcre2);
 	buf_pcre2[size] = '\0';
 	with_feature(l, "PCRE2 %s", buf_pcre2);
 	g_free(buf_pcre2);
-}
-
-void
-gather_xxhash_runtime_info(feature_list l)
-{
-	(void)l;
-#if defined(HAVE_XXHASH)
-	with_feature(l, "xxhash %u", XXH_versionNumber());
-#endif
 }
 
 void
@@ -568,61 +476,83 @@ get_runtime_version_info(gather_feature_func gather_runtime)
 {
 	GString *str;
 	char *lc;
-	GList *l = NULL, *with_list = NULL, *without_list = NULL;
+	GList *l = NULL;
 
-	str = g_string_new("Runtime info:\n      OS: ");
+	str = g_string_new("Running on ");
+
 	get_os_version_info(str);
 
 	/* CPU Info */
-	g_string_append(str, "\n     CPU: ");
 	get_cpu_info(str);
 
 	/* Get info about installed memory */
-	g_string_append(str, "\n  Memory: ");
 	get_mem_info(str);
 
-	g_string_append_printf(str, "\n    GLib: %u.%u.%u\n",
+	with_feature(&l, "GLib %u.%u.%u",
 			glib_major_version, glib_minor_version, glib_micro_version);
+
+	if (gather_runtime != NULL) {
+		gather_runtime(&l);
+	}
+
+	l = g_list_reverse(l);
+	g_list_foreach(l, feature_to_gstring, str);
+
 	/*
 	 * Display LC_CTYPE as a relevant, portable and sort of representative
 	 * locale configuration without being exceedingly verbose and including
 	 * the whole shebang of categories using LC_ALL.
 	 */
 	if ((lc = setlocale(LC_CTYPE, NULL)) != NULL) {
-		g_string_append_printf(str, "  Locale: LC_TYPE=%s\n", lc);
+		g_string_append_printf(str, ", with LC_TYPE=%s", lc);
 	}
+
 #ifdef HAVE_PLUGINS
-	if (g_module_supported()) {
-		g_string_append_printf(str, " Plugins: supported, %d loaded\n", plugins_get_count());
+	if (plugins_supported()) {
+		g_string_append(str, ", binary plugins supported");
 	}
-	else {
-		g_string_append(str, " Plugins: not supported by platform\n");
-	}
-#else
-	g_string_append(str, " Plugins: disabled at compile time\n");
 #endif
 
-	if (gather_runtime != NULL) {
-		gather_runtime(&l);
-	}
-
-	sort_features(&l);
-	separate_features(&l, &with_list, &without_list);
+	g_string_append_c(str, '.');
+	end_string(str);
 	free_features(&l);
 
-	if (with_list != NULL) {
-		g_string_append(str, " With:\n");
-		features_to_columns(&with_list, str);
-		free_features(&with_list);
-	}
-	if (without_list != NULL) {
-		g_string_append(str, " Without:\n");
-		features_to_columns(&without_list, str);
-		free_features(&without_list);
-	}
-
-	end_string(str);
 	return str;
+}
+
+/*
+ * Return a version number string for Wireshark, including, for builds
+ * from a tree checked out from Wireshark's version control system,
+ * something identifying what version was checked out.
+ */
+const char *
+get_ws_vcs_version_info(void)
+{
+#ifdef VCS_VERSION
+	return VERSION " (" VCS_VERSION ")";
+#else
+	return VERSION;
+#endif
+}
+
+const char *
+get_lr_vcs_version_info(void)
+{
+#ifdef VCS_COMMIT_ID
+	return LOG_VERSION " (" VCS_NUM_COMMITS "-" VCS_COMMIT_ID ")";
+#else
+	return LOG_VERSION;
+#endif
+}
+
+const char *
+get_ws_vcs_version_info_short(void)
+{
+#ifdef VCS_VERSION
+	return VCS_VERSION;
+#else
+	return VERSION;
+#endif
 }
 
 void
@@ -668,7 +598,7 @@ const char *
 get_copyright_info(void)
 {
 	return
-		"Copyright 1998-2026 Gerald Combs <gerald@wireshark.org> and contributors.";
+		"Copyright 1998-2025 Gerald Combs <gerald@wireshark.org> and contributors.";
 }
 
 const char *

@@ -24,8 +24,6 @@
 #include <epan/packet.h>
 #include <epan/etypes.h>
 #include <epan/reassemble.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 
 #define WAI_SUB_PRE_AUTHENTICATION      0x01    /* pre-authentication start */
 #define WAI_SUB_STAKEY_REQ              0x02    /* STAKey request */
@@ -507,13 +505,14 @@ dissect_identity_list(tvbuff_t *tvb, unsigned offset, proto_tree *tree)
     offset += 2;
     proto_tree_add_item(id_list_tree, hf_wai_reserved_byte, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
-    proto_tree_add_item_ret_uint16(id_list_tree, hf_wai_no_of_ids, tvb, offset, 2, ENC_BIG_ENDIAN, &no_of_ids);
+    proto_tree_add_item(id_list_tree, hf_wai_no_of_ids, tvb, offset, 2, ENC_BIG_ENDIAN);
+    no_of_ids = tvb_get_ntohs(tvb, offset);
     offset += 2;
 
     for(i=0; i < no_of_ids; i++) {
-        char number[6] = {0};
+        char number[4] = {0};
 
-        snprintf(number, 6, "%d", i);
+        snprintf(number, 4, "%d", i);
         offset += dissect_identity(tvb, offset, id_list_tree, number);
     }
 
@@ -542,14 +541,16 @@ dissect_signature_algorithm(tvbuff_t *tvb, unsigned offset, proto_tree *tree)
     proto_tree_add_item(sa_tree, hf_wai_length, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
-    alg_name_item = proto_tree_add_item_ret_uint8(sa_tree, hf_wai_hash_alg_id, tvb, offset, 1, ENC_BIG_ENDIAN, &alg_id);
+    alg_name_item = proto_tree_add_item(sa_tree, hf_wai_hash_alg_id, tvb, offset, 1, ENC_BIG_ENDIAN);
+    alg_id = tvb_get_uint8(tvb, offset);
 
     if (1 == alg_id) {
         proto_item_set_text(alg_name_item, "Algorithm Identifier: SHA-256  (0x01)");
     }
 
     offset += 1;
-    sig_name_item = proto_tree_add_item_ret_uint8(sa_tree, hf_wai_sign_alg_id, tvb, offset, 1, ENC_BIG_ENDIAN, &sig_id);
+    sig_name_item = proto_tree_add_item(sa_tree, hf_wai_sign_alg_id, tvb, offset, 1, ENC_BIG_ENDIAN);
+    sig_id = tvb_get_uint8(tvb, offset);
 
     if (1 == sig_id) {
         proto_item_set_text(sig_name_item, "Signature Algorithm Identifier: ECDSA-192  (0x01)");

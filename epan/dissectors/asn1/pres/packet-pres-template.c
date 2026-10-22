@@ -27,6 +27,15 @@
 #include "packet-pres.h"
 #include "packet-rtse.h"
 
+
+#define PNAME  "ISO 8823 OSI Presentation Protocol"
+#define PSNAME "PRES"
+#define PFNAME "pres"
+
+#define CLPNAME  "ISO 9576-1 OSI Connectionless Presentation Protocol"
+#define CLPSNAME "CLPRES"
+#define CLPFNAME "clpres"
+
 void proto_register_pres(void);
 void proto_reg_handoff_pres(void);
 
@@ -37,8 +46,8 @@ static int proto_pres;
 static int proto_clpres;
 
 /*      pointers for acse dissector  */
-static proto_tree *global_tree;
-static packet_info *global_pinfo;
+proto_tree *global_tree;
+packet_info *global_pinfo;
 
 static const char *abstract_syntax_name_oid;
 static uint32_t presentation_context_identifier;
@@ -190,8 +199,8 @@ pres_free_cb(void *r)
 /*
  * Dissect an PPDU.
  */
-static unsigned
-dissect_ppdu(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, struct SESSION_DATA_STRUCTURE* local_session)
+static int
+dissect_ppdu(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, struct SESSION_DATA_STRUCTURE* local_session)
 {
 	proto_item *ti;
 	proto_tree *pres_tree;
@@ -201,20 +210,20 @@ dissect_ppdu(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tre
 
 	/* do we have spdu type from the session dissector?  */
 	if (local_session == NULL) {
-		proto_tree_add_expert_remaining(tree, pinfo, &ei_pres_wrong_spdu_type, tvb, offset);
+		proto_tree_add_expert(tree, pinfo, &ei_pres_wrong_spdu_type, tvb, offset, -1);
 		return 0;
 	}
 
 	session = local_session;
 	if (session->spdu_type == 0) {
-		proto_tree_add_expert_format_remaining(tree, pinfo, &ei_pres_wrong_spdu_type, tvb, offset,
+		proto_tree_add_expert_format(tree, pinfo, &ei_pres_wrong_spdu_type, tvb, offset, -1,
 			"Internal error:wrong spdu type %x from session dissector.",session->spdu_type);
 		return 0;
 	}
 
 	/*  set up type of PPDU */
 	col_add_str(pinfo->cinfo, COL_INFO,
-		    val_to_str_ext(pinfo->pool, session->spdu_type, &ses_vals_ext, "Unknown PPDU type (0x%02x)"));
+		    val_to_str_ext(session->spdu_type, &ses_vals_ext, "Unknown PPDU type (0x%02x)"));
 
 	asn1_ctx.private_data = session;
 
@@ -258,7 +267,7 @@ dissect_ppdu(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tre
 static int
 dissect_pres(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* data)
 {
-	unsigned offset = 0, old_offset;
+	int offset = 0, old_offset;
 	struct SESSION_DATA_STRUCTURE* session;
 
 	session = ((struct SESSION_DATA_STRUCTURE*)data);
@@ -268,7 +277,7 @@ dissect_pres(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* d
 	if (!tvb_bytes_exist(tvb, 0, 4)) {
 		if (session && session->spdu_type != SES_MAJOR_SYNC_POINT) {
 			proto_tree_add_item(parent_tree, hf_pres_user_data, tvb, offset,
-					tvb_reported_length_remaining(tvb,offset), ENC_BIG_ENDIAN);
+					    tvb_reported_length_remaining(tvb,offset), ENC_NA);
 			return 0;  /* no, it isn't a presentation PDU */
 		}
 	}
@@ -309,7 +318,7 @@ dissect_pres(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* d
 			call_ber_oid_callback (oid, tvb, offset, pinfo, parent_tree, session);
 		} else {
 			proto_tree_add_item(parent_tree, hf_pres_user_data, tvb, offset,
-			                    tvb_reported_length_remaining(tvb,offset), ENC_BIG_ENDIAN);
+					    tvb_reported_length_remaining(tvb,offset), ENC_NA);
 		}
 		return tvb_captured_length(tvb);
 	}
@@ -318,7 +327,7 @@ dissect_pres(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* d
 		old_offset = offset;
 		offset = dissect_ppdu(tvb, offset, pinfo, parent_tree, session);
 		if (offset <= old_offset) {
-			proto_tree_add_expert_remaining(parent_tree, pinfo, &ei_pres_invalid_offset, tvb, offset);
+			proto_tree_add_expert(parent_tree, pinfo, &ei_pres_invalid_offset, tvb, offset, -1);
 			break;
 		}
 	}
@@ -365,7 +374,7 @@ void proto_register_pres(void) {
   static ei_register_info ei[] = {
      { &ei_pres_dissector_not_available, { "pres.dissector_not_available", PI_UNDECODED, PI_WARN, "Dissector is not available", EXPFILL }},
      { &ei_pres_wrong_spdu_type, { "pres.wrong_spdu_type", PI_PROTOCOL, PI_WARN, "Internal error:can't get spdu type from session dissector", EXPFILL }},
-     { &ei_pres_invalid_offset, { "pres.invalid_offset", PI_MALFORMED, PI_ERROR, "Internal error: PPDU made offset go backwards", EXPFILL }},
+     { &ei_pres_invalid_offset, { "pres.invalid_offset", PI_MALFORMED, PI_ERROR, "Internal error:can't get spdu type from session dissector", EXPFILL }},
   };
 
   static uat_field_t users_flds[] = {
@@ -393,11 +402,11 @@ void proto_register_pres(void) {
   module_t *pres_module;
 
   /* Register protocol */
-  proto_pres = proto_register_protocol("ISO 8823 OSI Presentation Protocol", "PRES", "pres");
+  proto_pres = proto_register_protocol(PNAME, PSNAME, PFNAME);
   register_dissector("pres", dissect_pres, proto_pres);
 
   /* Register connectionless protocol (just for the description) */
-  proto_clpres = proto_register_protocol("ISO 9576-1 OSI Connectionless Presentation Protocol", "CLPRES", "clpres");
+  proto_clpres = proto_register_protocol(CLPNAME, CLPSNAME, CLPFNAME);
 
   /* Register fields and subtrees */
   proto_register_field_array(proto_pres, hf, array_length(hf));

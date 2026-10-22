@@ -29,7 +29,7 @@ FilterExpressionFrame::FilterExpressionFrame(QWidget *parent) :
 {
     ui->setupUi(this);
 
-#ifdef Q_OS_MACOS
+#ifdef Q_OS_MAC
     foreach (QWidget *w, findChildren<QWidget *>()) {
         w->setAttribute(Qt::WA_MacSmallSize, true);
     }

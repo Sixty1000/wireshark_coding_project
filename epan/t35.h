@@ -9,9 +9,14 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-#pragma once
-#include <wsutil/value_string.h>
+
+#ifndef __T35_H__
+#define __T35_H__
+
+#include <epan/value_string.h>
 
 extern const value_string T35CountryCode_vals[];
 extern const value_string T35Extension_vals[];
 extern const value_string H221ManufacturerCode_vals[];
+
+#endif  /* __T35_H__ */

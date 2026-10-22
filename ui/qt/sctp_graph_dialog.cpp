@@ -24,8 +24,6 @@
 
 #include <ui/qt/utils/qt_ui_utils.h>
 #include <ui/qt/widgets/qcustomplot.h>
-#include <ui/qt/utils/plot_theme.h>
-#include <ui/qt/utils/theme_manager.h>
 #include "ui/qt/widgets/wireshark_file_dialog.h"
 #include "main_application.h"
 
@@ -43,13 +41,12 @@ SCTPGraphDialog::SCTPGraphDialog(QWidget *parent, const sctp_assoc_info_t *assoc
     selected_assoc_id = assoc->assoc_id;
 
     ui->setupUi(this);
-    PlotTheme::track(ui->sctpPlot);
     Qt::WindowFlags flags = Qt::Window | Qt::WindowSystemMenuHint
             | Qt::WindowMinimizeButtonHint
             | Qt::WindowMaximizeButtonHint
             | Qt::WindowCloseButtonHint;
     this->setWindowFlags(flags);
-    this->setWindowTitle(tr("SCTP TSNs and SACKs over Time: %1 Port1 %2 Port2 %3")
+    this->setWindowTitle(QString(tr("SCTP TSNs and SACKs over Time: %1 Port1 %2 Port2 %3"))
             .arg(gchar_free_to_qstring(cf_get_display_name(cap_file_))).arg(assoc->port1).arg(assoc->port2));
     if ((direction == 1 && assoc->n_array_tsn1 == 0) || (direction == 2 && assoc->n_array_tsn2 == 0)) {
         QMessageBox msgBox;
@@ -167,17 +164,8 @@ void SCTPGraphDialog::drawSACKGraph(const sctp_assoc_info_t* selected_assoc)
                 tsnumber = g_ntohl(sack_header->cum_tsn_ack);
                 dup_nr=g_ntohs(sack_header->nr_of_dups);
                 if (nr>0) {  // Gap Reports green
-                    // Flexible Array Member #1.  XXX - UB in C++ technically;
-                    // also are we checking at any point that all the data is
-                    // there, since this was just copied straight from the TVB
-                    // and the overall chunk length might be inconsistent with
-                    // the number of gaps and duplicated TSNs indicated and/or
-                    // present.
                     gap = &sack_header->gaps[0];
                     for (i=0;i<nr; i++) {
-                        // Really we're just doing this, but as FAMs are UB
-                        // in C++ some compilers or run-times might complain.
-                        //gap = &sack_header->gaps[i];
                         gap_start=g_ntohs(gap->start);
                         gap_end = g_ntohs(gap->end);
                         for (j=gap_start; j<=gap_end; j++) {
@@ -195,10 +183,7 @@ void SCTPGraphDialog::drawSACKGraph(const sctp_assoc_info_t* selected_assoc)
                     fs.append(tsn->frame_number);
                 }
                 if (dup_nr > 0) { // Duplicates cyan
-                    // XXX - Flexible Array Member #2, basically. This is sort
-                    // of horrifying. Jump over the gaps array to where the
-                    // duplicated TSN array should be.
-                    dup_list = (uint32_t*)(&sack_header->gaps[0] + nr);
+                    dup_list = &sack_header->a_rwnd + 2 + nr;
                     for (i = 0; i < dup_nr; i++) {
                         tsnumber = g_ntohl(dup_list[i]);
                         if (tsnumber >= minTSN) {
@@ -224,56 +209,52 @@ void SCTPGraphDialog::drawSACKGraph(const sctp_assoc_info_t* selected_assoc)
     // Add SACK graph
     if (xs.size() > 0) {
         QCPGraph *gr = ui->sctpPlot->addGraph();
-        gr->setName(QStringLiteral("SACK"));
-        const QColor color = ThemeManager::instance()->graphColor(4);
-        myScatter.setPen(QPen(color));
-        myScatter.setBrush(color);
+        gr->setName(QString("SACK"));
+        myScatter.setPen(QPen(Qt::red));
+        myScatter.setBrush(Qt::red);
         ui->sctpPlot->graph(graphcount)->setScatterStyle(myScatter);
         ui->sctpPlot->graph(graphcount)->setLineStyle(QCPGraph::lsNone);
         ui->sctpPlot->graph(graphcount)->setData(xs, ys);
-        typeStrings.insert(graphcount, tr("CumTSNAck"));
+        typeStrings.insert(graphcount, QString(tr("CumTSNAck")));
         graphcount++;
     }
 
     // Add Gap Acks
     if (xg.size() > 0) {
         QCPGraph *gr = ui->sctpPlot->addGraph();
-        gr->setName(QStringLiteral("GAP"));
-        const QColor color = ThemeManager::instance()->graphColor(3);
-        myScatter.setPen(QPen(color));
-        myScatter.setBrush(color);
+        gr->setName(QString("GAP"));
+        myScatter.setPen(QPen(Qt::green));
+        myScatter.setBrush(Qt::green);
         ui->sctpPlot->graph(graphcount)->setScatterStyle(myScatter);
         ui->sctpPlot->graph(graphcount)->setLineStyle(QCPGraph::lsNone);
         ui->sctpPlot->graph(graphcount)->setData(xg, yg);
-        typeStrings.insert(graphcount, tr("Gap Ack"));
+        typeStrings.insert(graphcount, QString(tr("Gap Ack")));
         graphcount++;
     }
 
     // Add NR Gap Acks
     if (xn.size() > 0) {
         QCPGraph *gr = ui->sctpPlot->addGraph();
-        gr->setName(QStringLiteral("NR_GAP"));
-        const QColor color = ThemeManager::instance()->graphColor(1);
-        myScatter.setPen(QPen(color));
-        myScatter.setBrush(color);
+        gr->setName(QString("NR_GAP"));
+        myScatter.setPen(QPen(Qt::blue));
+        myScatter.setBrush(Qt::blue);
         ui->sctpPlot->graph(graphcount)->setScatterStyle(myScatter);
         ui->sctpPlot->graph(graphcount)->setLineStyle(QCPGraph::lsNone);
         ui->sctpPlot->graph(graphcount)->setData(xn, yn);
-        typeStrings.insert(graphcount, tr("NR Gap Ack"));
+        typeStrings.insert(graphcount, QString(tr("NR Gap Ack")));
         graphcount++;
     }
 
     // Add Duplicates
     if (xd.size() > 0) {
         QCPGraph *gr = ui->sctpPlot->addGraph();
-        gr->setName(QStringLiteral("DUP"));
-        const QColor color = ThemeManager::instance()->graphColor(6);
-        myScatter.setPen(QPen(color));
-        myScatter.setBrush(color);
+        gr->setName(QString("DUP"));
+        myScatter.setPen(QPen(Qt::cyan));
+        myScatter.setBrush(Qt::cyan);
         ui->sctpPlot->graph(graphcount)->setScatterStyle(myScatter);
         ui->sctpPlot->graph(graphcount)->setLineStyle(QCPGraph::lsNone);
         ui->sctpPlot->graph(graphcount)->setData(xd, yd);
-        typeStrings.insert(graphcount, tr("Duplicate Ack"));
+        typeStrings.insert(graphcount, QString(tr("Duplicate Ack")));
     }
 }
 
@@ -323,14 +304,13 @@ void SCTPGraphDialog::drawTSNGraph(const sctp_assoc_info_t* selected_assoc)
     // Add TSN graph
     if (xt.size() > 0) {
         QCPGraph *gr = ui->sctpPlot->addGraph();
-        gr->setName(QStringLiteral("TSN"));
-        const QColor color = ThemeManager::instance()->graphColor(0);
-        myScatter.setPen(QPen(color));
-        myScatter.setBrush(color);
+        gr->setName(QString("TSN"));
+        myScatter.setPen(QPen(Qt::black));
+        myScatter.setBrush(Qt::black);
         ui->sctpPlot->graph(graphcount)->setScatterStyle(myScatter);
         ui->sctpPlot->graph(graphcount)->setLineStyle(QCPGraph::lsNone);
         ui->sctpPlot->graph(graphcount)->setData(xt, yt);
-        typeStrings.insert(graphcount, tr("TSN"));
+        typeStrings.insert(graphcount, QString(tr("TSN")));
     }
 }
 
@@ -489,7 +469,7 @@ void SCTPGraphDialog::graphClicked(QCPAbstractPlottable* plottable, int, QMouseE
     if (cap_file_ && frame_num > 0) {
         cf_goto_frame(cap_file_, frame_num, false);
     }
-    ui->hintLabel->setText(tr("<small><i>%1: %2 Time: %3 secs </i></small>")
+    ui->hintLabel->setText(QString(tr("<small><i>%1: %2 Time: %3 secs </i></small>"))
                            .arg(plottable->name())
                            .arg(floor(ui->sctpPlot->yAxis->pixelToCoord(event->pos().y()) + 0.5))
                            .arg(ui->sctpPlot->xAxis->pixelToCoord(event->pos().x())));
@@ -497,20 +477,18 @@ void SCTPGraphDialog::graphClicked(QCPAbstractPlottable* plottable, int, QMouseE
 
 void SCTPGraphDialog::save_graph(QDialog *dlg, QCustomPlot *plot)
 {
-    QString file_name;
+    QString file_name, extension;
     QDir path(mainApp->openDialogInitialDir());
     QString pdf_filter = tr("Portable Document Format (*.pdf)");
     QString png_filter = tr("Portable Network Graphics (*.png)");
     QString bmp_filter = tr("Windows Bitmap (*.bmp)");
     // Gaze upon my beautiful graph with lossy artifacts!
     QString jpeg_filter = tr("JPEG File Interchange Format (*.jpeg *.jpg)");
-    QString filter = QStringLiteral("%1;;%2;;%3;;%4").arg(
-        pdf_filter,
-        png_filter,
-        bmp_filter,
-        jpeg_filter
-    );
-    QString extension = png_filter;
+    QString filter = QString("%1;;%2;;%3;;%4")
+            .arg(pdf_filter)
+            .arg(png_filter)
+            .arg(bmp_filter)
+            .arg(jpeg_filter);
 
     file_name = WiresharkFileDialog::getSaveFileName(dlg, mainApp->windowTitleString(tr("Save Graph As…")),
                                              path.canonicalPath(), filter, &extension);

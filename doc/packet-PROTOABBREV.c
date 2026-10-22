@@ -32,7 +32,6 @@
 #include <epan/packet.h>   /* Required dissection API header */
 #include <epan/expert.h>   /* Include only as needed */
 #include <epan/prefs.h>    /* Include only as needed */
-#include <epan/range.h>    /* Include only as needed */
 
 #if 0
 /* IF AND ONLY IF your protocol dissector exposes code to other dissectors
@@ -69,8 +68,8 @@ static bool pref_hex;
 #define PROTOABBREV_TLS_PORT 5678
 static unsigned tls_port_pref = PROTOABBREV_TLS_PORT;
 
-#define PROTOABBREV_TCP_PORTS "1234-1235"
-static range_t *tcp_port_range;
+#define PROTOABBREV_TCP_PORTS "1234"
+static range_t *tcp_port_range = PROTOABBREV_TCP_PORTS;
 
 /* Initialize the subtree pointers */
 static int ett_PROTOABBREV;
@@ -137,7 +136,8 @@ dissect_PROTOABBREV(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
      *
      * If
      * - you may be appending to the column later OR
-     * - you have constructed the string locally
+     * - you have constructed the string locally OR
+     * - the string was returned from a call to val_to_str()
      * then use "col_add_str()" instead, as that takes a copy of the string.
      *
      * The function "col_add_fstr()" can be used instead of "col_add_str()"; it
@@ -300,9 +300,6 @@ proto_register_PROTOABBREV(void)
             " PROTOABBREV TLS port if other than the default",
             10, &tls_port_pref);
 
-    /* Register an example port range preference */
-    range_convert_str(wmem_epan_scope(), &tcp_port_range, PROTOABBREV_TCP_PORTS, MAX_TCP_PORT);
-    prefs_register_range_preference(PROTOABBREV_module, "tcp.port", &tcp_port_range, MAX_TCP_PORT);
 }
 
 /* If this dissector uses sub-dissector registration add a registration routine.
@@ -369,3 +366,15 @@ proto_reg_handoff_PROTOABBREV(void)
 }
 #endif
 
+/*
+ * Editor modelines  -  https://www.wireshark.org/tools/modelines.html
+ *
+ * Local variables:
+ * c-basic-offset: 4
+ * tab-width: 8
+ * indent-tabs-mode: nil
+ * End:
+ *
+ * vi: set shiftwidth=4 tabstop=8 expandtab:
+ * :indentSize=4:tabSize=8:noTabs=true:
+ */

@@ -52,6 +52,9 @@ typedef struct z3950_diaginfo_t {
     int      diagcondition;
 } z3950_diaginfo_t;
 
+#define PNAME  "Z39.50 Protocol"
+#define PSNAME "Z39.50"
+#define PFNAME "z3950"
 #define Z3950_PORT 210    /* UDP port */
 
 /* Known attribute set ids */
@@ -879,8 +882,8 @@ static const value_string marc_tag_names[] = {
     { 0, NULL}
 };
 
-static unsigned
-dissect_z3950_printable_OCTET_STRING(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_z3950_printable_OCTET_STRING(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
     tvbuff_t *next_tvb = NULL;
     int hf_alternate = 0;
     unsigned old_offset = offset;
@@ -894,8 +897,8 @@ dissect_z3950_printable_OCTET_STRING(bool implicit_tag _U_, tvbuff_t *tvb _U_, u
 
     if (hf_alternate > 0) {
         /* extract the value of the octet string so we can look at it. */
-        /* This does not display anything because hf_index is -1. */
-        offset = dissect_ber_octet_string(implicit_tag, actx, tree, tvb, offset, -1, &next_tvb);
+        /* This does not display anything because tree is NULL. */
+        offset = dissect_ber_octet_string(implicit_tag, actx, NULL, tvb, offset, hf_index, &next_tvb);
 
         if (next_tvb &&
             tvb_ascii_isprint(next_tvb, 0, tvb_reported_length(next_tvb))) {
@@ -928,7 +931,7 @@ dissect_z3950(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
 
 
     /* make entry in the Protocol column on summary display */
-    col_set_str(pinfo->cinfo, COL_PROTOCOL, "Z39.50");
+    col_set_str(pinfo->cinfo, COL_PROTOCOL, PSNAME);
 
     /* create the z3950 protocol tree */
     z3950_item = proto_tree_add_item(tree, proto_z3950, tvb, 0, -1, ENC_NA);
@@ -1150,7 +1153,7 @@ void proto_register_z3950(void) {
 
 
     /* Register protocol */
-    proto_z3950 = proto_register_protocol("Z39.50 Protocol", "Z39.50", "z3950");
+    proto_z3950 = proto_register_protocol(PNAME, PSNAME, PFNAME);
     /* Register fields and subtrees */
     proto_register_field_array(proto_z3950, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
@@ -1166,7 +1169,7 @@ void proto_register_z3950(void) {
                                    &z3950_desegment);
 
     /* Allow dissector to be found by name. */
-    z3950_handle = register_dissector("Z39.50", dissect_z3950_segment,
+    z3950_handle = register_dissector(PSNAME, dissect_z3950_segment,
 					      proto_z3950);
 
 }
@@ -1181,7 +1184,7 @@ proto_reg_handoff_z3950(void)
 
 #include "packet-z3950-dis-tab.c"
 
-    register_ber_oid_dissector(Z3950_RECORDSYNTAX_MARC21_OID, dissect_marc_record, proto_z3950, "MARC21 (formerly USMARC)");
+    register_ber_oid_dissector(Z3950_RECORDSYNTAX_MARC21_OID, dissect_marc_record, proto_z3950, "MARC21");
 
     oid_add_from_string("Z39.50", "1.2.840.10003");
     oid_add_from_string("Z39.50-APDU", "1.2.840.10003.2");
@@ -1202,6 +1205,7 @@ proto_reg_handoff_z3950(void)
     oid_add_from_string("UNIMARC","1.2.840.10003.5.1");
     oid_add_from_string("INTERMARC","1.2.840.10003.5.2");
     oid_add_from_string("CCF","1.2.840.10003.5.3");
+    oid_add_from_string("MARC21 (formerly USMARC)",Z3950_RECORDSYNTAX_MARC21_OID);
     oid_add_from_string("UKMARC","1.2.840.10003.5.11");
     oid_add_from_string("NORMARC","1.2.840.10003.5.12");
     oid_add_from_string("Librismarc","1.2.840.10003.5.13");
@@ -1226,8 +1230,14 @@ proto_reg_handoff_z3950(void)
     oid_add_from_string("MARC21-fin","1.2.840.10003.5.32");
     oid_add_from_string("COMARC","1.2.840.10003.5.33");
     /* Non-MARC record syntaxes */
+    oid_add_from_string("Explain","1.2.840.10003.5.100");
     oid_add_from_string("Explain with ZSQL","1.2.840.10003.5.100.1");
+    oid_add_from_string("SUTRS","1.2.840.10003.5.101");
+    oid_add_from_string("OPAC","1.2.840.10003.5.102");
+    oid_add_from_string("Summary","1.2.840.10003.5.103");
     oid_add_from_string("GRS-0","1.2.840.10003.5.104");
+    oid_add_from_string("GRS-1","1.2.840.10003.5.105");
+    oid_add_from_string("ESTaskPackage","1.2.840.10003.5.106");
     oid_add_from_string("fragment","1.2.840.10003.5.108");
     /* Attribute sets */
     oid_add_from_string("bib-1",Z3950_ATSET_BIB1_OID);
@@ -1266,10 +1276,9 @@ dissect_marc_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
     proto_tree *marc_tree, *leader_tree,
                *directory_tree,
                *fields_tree;
-    wmem_array_t *marc_directory_array;
     marc_directory_entry *marc_directory;
     unsigned len = tvb_reported_length(tvb);
-    const char *marc_value_str;
+    const uint8_t *marc_value_str;
     unsigned record_length = 0,
           data_offset = 0,
           length_of_field_size,
@@ -1295,7 +1304,7 @@ dissect_marc_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
     marc_value_str = NULL;
     item = proto_tree_add_item_ret_string(leader_tree,
                       hf_marc_leader_length, tvb, offset, 5, ENC_ASCII|ENC_NA,
-                      pinfo->pool,(const uint8_t**)&marc_value_str);
+                      pinfo->pool,&marc_value_str);
     offset += 5;
 
     if (marc_value_str) {
@@ -1364,7 +1373,7 @@ dissect_marc_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
 
     item = proto_tree_add_item_ret_string(leader_tree, hf_marc_leader_data_offset,
                tvb, offset, 5, ENC_ASCII|ENC_NA,
-               pinfo->pool,(const uint8_t**)&marc_value_str);
+               pinfo->pool,&marc_value_str);
     offset += 5;
     if (marc_value_str) {
         if (isdigit_string(marc_value_str)) {
@@ -1439,8 +1448,10 @@ dissect_marc_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
 
     directory_entry_len = 3 + length_of_field_size
                             + starting_character_position_size;
+    directory_entry_count = ((data_offset - 1) - MARC_LEADER_LENGTH) / directory_entry_len;
 
-    marc_directory_array = wmem_array_new(pinfo->pool, sizeof(marc_directory_entry));
+    marc_directory = (marc_directory_entry *)wmem_alloc0(pinfo->pool,
+                                 directory_entry_count * sizeof(marc_directory_entry));
 
     directory_item = proto_tree_add_item(marc_tree, hf_marc_directory,
                          tvb, offset, data_offset - offset, ENC_NA);
@@ -1449,7 +1460,9 @@ dissect_marc_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
     dir_index = 0;
     /* Minus one for the terminator character */
     while (offset < (data_offset - 1)) {
-        marc_directory_entry new_entry = {0};
+        uint32_t tag_value = 0,
+                length_value = 0,
+                starting_char_value = 0;
         proto_item *length_item;
         proto_item *directory_entry_item;
         proto_tree *directory_entry_tree;
@@ -1461,11 +1474,11 @@ dissect_marc_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
         marc_value_str = NULL;
         item = proto_tree_add_item_ret_string(directory_entry_tree, hf_marc_directory_entry_tag,
                    tvb, offset, 3, ENC_ASCII,
-                   pinfo->pool, (const uint8_t**)&marc_value_str);
+                   pinfo->pool, &marc_value_str);
         offset += 3;
         if (marc_value_str) {
             if (isdigit_string(marc_value_str)) {
-                new_entry.tag = (unsigned)strtoul(marc_value_str, NULL, 10);
+                tag_value = (unsigned)strtoul(marc_value_str, NULL, 10);
             }
             else {
                 expert_add_info_format(pinfo, item,
@@ -1478,11 +1491,11 @@ dissect_marc_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
         length_item = proto_tree_add_item_ret_string(directory_entry_tree,
             hf_marc_directory_entry_length,
             tvb, offset, length_of_field_size, ENC_ASCII,
-            pinfo->pool, (const uint8_t**)&marc_value_str);
+            pinfo->pool, &marc_value_str);
         offset += length_of_field_size;
         if (marc_value_str) {
             if (isdigit_string(marc_value_str)) {
-                new_entry.length = (unsigned)strtoul(marc_value_str, NULL, 10);
+                length_value = (unsigned)strtoul(marc_value_str, NULL, 10);
             }
             else {
                 expert_add_info_format(pinfo, length_item,
@@ -1494,11 +1507,11 @@ dissect_marc_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
         marc_value_str = NULL;
         item = proto_tree_add_item_ret_string(directory_entry_tree, hf_marc_directory_entry_starting_position,
             tvb, offset, starting_character_position_size, ENC_ASCII,
-            pinfo->pool, (const uint8_t**)&marc_value_str);
+            pinfo->pool, &marc_value_str);
         offset += starting_character_position_size;
         if (marc_value_str) {
             if (isdigit_string(marc_value_str)) {
-                new_entry.starting_character = (unsigned)strtoul(marc_value_str, NULL, 10);
+                starting_char_value = (unsigned)strtoul(marc_value_str, NULL, 10);
             }
             else {
                 expert_add_info_format(pinfo, item,
@@ -1508,24 +1521,23 @@ dissect_marc_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
             }
         }
 
-        if (new_entry.starting_character >= (record_length - data_offset)) {
+        if (starting_char_value >= (record_length - data_offset)) {
             expert_add_info_format(pinfo, item,
                 &ei_marc_invalid_value,
                 "MARC directory entry %d starting char value %d is outside record size %d",
-                dir_index, new_entry.starting_character, (record_length - data_offset));
+                dir_index, starting_char_value, (record_length - data_offset));
         }
-        if ((new_entry.starting_character + new_entry.length) >= (record_length - data_offset)) {
+        if ((starting_char_value + length_value) >= (record_length - data_offset)) {
             expert_add_info_format(pinfo, length_item,
                 &ei_marc_invalid_value,
                 "MARC directory entry %d length value %d goes outside record size %d",
-                dir_index, new_entry.length, (record_length - data_offset));
+                dir_index, length_value, (record_length - data_offset));
         }
-        wmem_array_append_one(marc_directory_array, new_entry);
+        marc_directory[dir_index].tag = tag_value;
+        marc_directory[dir_index].length = length_value;
+        marc_directory[dir_index].starting_character = starting_char_value;
         dir_index++;
     }
-    directory_entry_count = wmem_array_get_count(marc_directory_array);
-    marc_directory = (marc_directory_entry *)wmem_array_finalize(marc_directory_array);
-
     proto_tree_add_item(directory_tree, hf_marc_directory_terminator,
         tvb, offset, 1, ENC_ASCII);
     offset += 1;
@@ -1570,14 +1582,16 @@ dissect_marc_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
                     tvb, offset, 1, ENC_ASCII);
             offset += 1;
             do {
-                unsigned next_subfield;
+                int next_subfield;
                 proto_tree_add_item(field_tree, hf_marc_field_subfield_indicator,
                         tvb, offset, 1, ENC_ASCII);
                 offset += 1;
                 proto_tree_add_item(field_tree, hf_marc_field_subfield_tag,
                         tvb, offset, 1, ENC_ASCII);
                 offset += 1;
-                if (tvb_find_uint8_length(tvb, offset, next_offset - offset, MARC_SUBFIELD_INDICATOR, &next_subfield)) {
+                next_subfield = tvb_find_uint8(tvb, offset, next_offset - offset,
+                                                MARC_SUBFIELD_INDICATOR);
+                if (next_subfield >= 0) {
                     proto_tree_add_item(field_tree, hf_marc_field_subfield,
                             tvb, offset, next_subfield - offset, ENC_ASCII);
                     offset += (next_subfield - offset);

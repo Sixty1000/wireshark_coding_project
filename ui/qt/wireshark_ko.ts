@@ -2,6 +2,14 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="ko">
 <context>
+    <name>Abbreviation</name>
+    <message>
+        <source></source>
+        <comment>for &quot;not applicable&quot;</comment>
+        <translation></translation>
+    </message>
+</context>
+<context>
     <name>AboutDialog</name>
     <message>
         <source>About Wireshark</source>
@@ -56,12 +64,28 @@
         <translation>유형별 필터:</translation>
     </message>
     <message>
+        <source>Keyboard Shortcuts</source>
+        <translation>키보드 단축키</translation>
+    </message>
+    <message>
+        <source>Search Shortcuts</source>
+        <translation>단축키 검색</translation>
+    </message>
+    <message>
         <source>Acknowledgments</source>
         <translation>감사 표시</translation>
     </message>
     <message>
         <source>License</source>
         <translation>라이선스</translation>
+    </message>
+    <message>
+        <source>About Logray</source>
+        <translation>Logray 정보</translation>
+    </message>
+    <message>
+        <source>Logray</source>
+        <translation>Logray</translation>
     </message>
     <message>
         <source>The directory does not exist</source>
@@ -139,29 +163,6 @@
     <message>
         <source>Value</source>
         <translation>값</translation>
-    </message>
-</context>
-<context>
-    <name>AnnotationEditDialog</name>
-    <message>
-        <source>Color:</source>
-        <translation>색상:</translation>
-    </message>
-    <message>
-        <source>Comment (max %1 characters)</source>
-        <translation>주석(최대 %1 글자)</translation>
-    </message>
-    <message>
-        <source>Comment:</source>
-        <translation>주석</translation>
-    </message>
-    <message>
-        <source>Select Annotation Color</source>
-        <translation>주석 색상 선택</translation>
-    </message>
-    <message>
-        <source>Annotations are session-only and will be lost when the capture is closed.</source>
-        <translation>주석은 세션이 유효하는 동안에만 유지됩니다. 캡쳐가 끝나면 사라집니다.</translation>
     </message>
 </context>
 <context>
@@ -719,142 +720,45 @@
     </message>
 </context>
 <context>
-    <name>BreakpointConditionDelegate</name>
+    <name>ByteViewTab</name>
     <message>
-        <source>Expression</source>
-        <translation>표현</translation>
-    </message>
-    <message>
-        <source>Lua expression — pause when truthy</source>
-        <translation>Lua 표현 - 진실일 때 잠시 멈춤</translation>
-    </message>
-    <message>
-        <source>Evaluated each time control reaches this line; locals, upvalues, and globals are visible like Watch / Evaluate.
-Runtime errors are treated as false (silent) and surface as a warning icon on the row.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Hit Count</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Pause after N hits (0 disables)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Gate the pause on a hit counter. The dropdown next to N picks the comparison mode: from pauses on every hit from N onwards (default); every pauses on hits N, 2N, 3N, …; once pauses on the N-th hit and deactivates the breakpoint. Use 0 to disable the gate. The counter is preserved across edits to Expression / Hit Count / Log Message; lowering the target below the current count rolls the counter back to 0 so the breakpoint can wait for the next N hits. Right-click the row to reset it explicitly. Combined with an Expression on the same row, the hit-count gate runs first.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Log Message</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Log message — supports {expr} and tags such as {filename}, {basename}, {line}, {function}, {hits}, {timestamp}, {delta}…</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Logpoints write a message to the Evaluate output (and Wireshark&apos;s info log) each time the line is reached. By default execution continues without pausing; tick the Pause box on this editor to also pause after emitting (useful for log-then-inspect without duplicating the breakpoint). The line is emitted verbatim — there is no automatic file:line prefix. Inside {} the text is evaluated as a Lua expression in this frame and converted to text the same way tostring() does; reserved tags below shadow any same-named Lua local / upvalue / global. Origin: {filename}, {basename}, {line}, {function}, {what}. Counters and scope: {hits}, {depth}, {thread}. Time: {timestamp}, {datetime}, {epoch}, {epoch_ms}, {elapsed}, {delta}. Use {{ and }} for literal { and }. Per-placeholder errors substitute &apos;&lt;error: ...&gt;&apos; without aborting the line.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>from</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>every</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>once</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Comparison mode for the hit count:
-from — pause on every hit from N onwards.
-every — pause on hits N, 2N, 3N…
-once — pause once on the N-th hit and deactivate the breakpoint.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Pause</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Pause: format and emit the log message AND pause execution.
-Off = logpoint only (matches the historical &quot;logpoints never pause&quot; convention).</source>
-        <translation type="unfinished"></translation>
+        <source>Packet bytes</source>
+        <translation>패킷 바이트</translation>
     </message>
 </context>
 <context>
-    <name>CaptureCardWidget</name>
+    <name>ByteViewText</name>
     <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Capture live packets from your network.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Capture</source>
-        <translation type="unfinished">캡처</translation>
+        <source>Allow hover highlighting</source>
+        <translation>마우스로 가리킬 때 강조 표시 허용</translation>
     </message>
     <message>
-        <source>Start a new capture session</source>
-        <translation type="unfinished"></translation>
+        <source>Show bytes as hexadecimal</source>
+        <translation>16진수로 바이트 표시</translation>
     </message>
     <message>
-        <source>&lt;h2&gt;Capture&lt;/h2&gt;</source>
-        <translation type="unfinished"></translation>
+        <source>…as decimal</source>
+        <translation>10진수로 표시</translation>
     </message>
     <message>
-        <source>…using this filter:</source>
-        <translation type="unfinished"></translation>
+        <source>…as octal</source>
+        <translation>8진수로 표시</translation>
     </message>
     <message>
-        <source>Capture filter</source>
-        <translation type="unfinished">캡처 필터</translation>
+        <source>…as bits</source>
+        <translation>비트 단위로 표시</translation>
     </message>
     <message>
-        <source>Enter a capture filter expression to limit which data is recorded during live capture.</source>
-        <translation type="unfinished"></translation>
+        <source>Show text based on packet</source>
+        <translation>패킷의 내용을 텍스트로 표시</translation>
     </message>
     <message>
-        <source>Interface type filter</source>
-        <translation type="unfinished"></translation>
+        <source>…as ASCII</source>
+        <translation>ASCII로 표시</translation>
     </message>
     <message>
-        <source>Filters the capture source list by type. Shows how many sources are currently visible and how many are hidden by the active filter.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Capture sources</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Lists available capture sources. Select one or more to capture from.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>%1 / %2 interfaces</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>%1 / %2</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>All interfaces shown</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message numerus="yes">
-        <source>%n interface(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-        </translation>
-    </message>
-    <message numerus="yes">
-        <source>%n interface(s) shown, %1 hidden</source>
-        <translation type="unfinished">
-            <numerusform>%n interface shown, %1 hidden</numerusform>
-        </translation>
+        <source>…as EBCDIC</source>
+        <translation>EBCDIC으로 표시</translation>
     </message>
 </context>
 <context>
@@ -1065,6 +969,10 @@ Off = logpoint only (matches the historical &quot;logpoints never pause&quot; co
 <context>
     <name>CaptureFilePropertiesDialog</name>
     <message>
+        <source>Details</source>
+        <translation>자세한 정보</translation>
+    </message>
+    <message>
         <source>Edit Comments</source>
         <translation>주석 편집</translation>
     </message>
@@ -1121,34 +1029,30 @@ Off = logpoint only (matches the historical &quot;logpoints never pause&quot; co
         <translation>시간</translation>
     </message>
     <message>
-        <source>Capture start</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>First packet</source>
         <translation>처음 패킷</translation>
+    </message>
+    <message>
+        <source>First event</source>
+        <translation>첫 이벤트</translation>
     </message>
     <message>
         <source>Last packet</source>
         <translation>마지막 패킷</translation>
     </message>
     <message>
-        <source>Capture end</source>
-        <translation type="unfinished"></translation>
+        <source>Last event</source>
+        <translation>마지막 이벤트</translation>
+    </message>
+    <message>
+        <source>Elapsed</source>
+        <translation>경과 시간</translation>
     </message>
     <message numerus="yes">
         <source>%Ln day(s)</source>
         <translation type="unfinished">
             <numerusform></numerusform>
         </translation>
-    </message>
-    <message>
-        <source>Elapsed (first to last packet)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Elapsed capturing</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Section %1</source>
@@ -1179,12 +1083,12 @@ Off = logpoint only (matches the historical &quot;logpoints never pause&quot; co
         <translation>인터페이스</translation>
     </message>
     <message>
-        <source>Interface Description</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Dropped packets</source>
         <translation>누락된 패킷</translation>
+    </message>
+    <message>
+        <source>Dropped events</source>
+        <translation>누락된 이벤트</translation>
     </message>
     <message>
         <source>Capture filter</source>
@@ -1197,6 +1101,10 @@ Off = logpoint only (matches the historical &quot;logpoints never pause&quot; co
     <message>
         <source>Packet size limit (snaplen)</source>
         <translation>패킷 크기 제한(snaplen)</translation>
+    </message>
+    <message>
+        <source>Event size limit (snaplen)</source>
+        <translation>이벤트 크기 제한(snaplen)</translation>
     </message>
     <message>
         <source>none</source>
@@ -1251,6 +1159,10 @@ Off = logpoint only (matches the historical &quot;logpoints never pause&quot; co
         <translation>패킷 수</translation>
     </message>
     <message>
+        <source>Events</source>
+        <translation>이벤트</translation>
+    </message>
+    <message>
         <source>Time span, s</source>
         <translation>시간 간격, 초</translation>
     </message>
@@ -1261,6 +1173,10 @@ Off = logpoint only (matches the historical &quot;logpoints never pause&quot; co
     <message>
         <source>Average packet size, B</source>
         <translation>평균 패킷 크기, 바이트</translation>
+    </message>
+    <message>
+        <source>Average event size, B</source>
+        <translation>평균 이벤트 크기, 바이트</translation>
     </message>
     <message>
         <source>Bytes</source>
@@ -1279,6 +1195,10 @@ Off = logpoint only (matches the historical &quot;logpoints never pause&quot; co
         <translation>패킷 주석</translation>
     </message>
     <message>
+        <source>Event Comments</source>
+        <translation>이벤트 주석</translation>
+    </message>
+    <message>
         <source>&lt;p&gt;Frame %1: </source>
         <translation>&lt;p&gt;프레임 %1: </translation>
     </message>
@@ -1290,71 +1210,60 @@ Off = logpoint only (matches the historical &quot;logpoints never pause&quot; co
 
 </translation>
     </message>
+    <message>
+        <source>Created by Logray %1
+
+</source>
+        <translation>Logray %1에서 생성됨
+
+</translation>
+    </message>
 </context>
 <context>
-    <name>CaptureFilterEntry</name>
+    <name>CaptureFilterCombo</name>
+    <message>
+        <source>Capture filter selector</source>
+        <translation>캡처 필터 선택자</translation>
+    </message>
+</context>
+<context>
+    <name>CaptureFilterEdit</name>
     <message>
         <source>Capture filter entry</source>
-        <translation type="unfinished"></translation>
+        <translation>캡처 필터 항목</translation>
     </message>
     <message>
-        <source>Saved Capture Filters</source>
-        <translation type="unfinished"></translation>
+        <source>Manage saved bookmarks.</source>
+        <translation>저장한 북마크를 관리합니다.</translation>
     </message>
     <message>
-        <source>Save this filter</source>
-        <translation type="unfinished">이 필터 저장</translation>
-    </message>
-    <message>
-        <source>Remove this filter</source>
-        <translation type="unfinished">이 필터 삭제</translation>
-    </message>
-    <message>
-        <source>Manage Capture Filters</source>
-        <translation type="unfinished"></translation>
+        <source>Apply this filter string to the display.</source>
+        <translation>디스플레이에 이 필터 문자열을 적용합니다.</translation>
     </message>
     <message>
         <source>Multiple filters selected. Override them here or leave this blank to preserve them.</source>
         <extracomment>This is a very long concept that needs to fit into a short space.</extracomment>
-        <translation type="unfinished"></translation>
+        <translation>여러 필터를 선택했습니다. 여기에서 필터를 덮어쓸 수 있으며, 비워 두면 유지합니다.</translation>
     </message>
     <message>
         <source>&lt;p&gt;The interfaces you have selected have different capture filters. Typing a filter here will override them. Doing nothing will preserve them.&lt;/p&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;p&gt;선택한 인터페이스에 다른 캡처 필터가 있습니다. 여기에서 필터를 덮어쓸 수 있으며, 비워 두면 필터를 유지합니다.&lt;/p&gt;</translation>
     </message>
     <message>
         <source>Enter a capture filter %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>CaptureFilterSyntaxWorker</name>
-    <message>
-        <source>Unable to check capture filter</source>
-        <translation type="unfinished"></translation>
+        <translation>캡처 필터 입력 %1</translation>
     </message>
     <message>
-        <source>Unable to check capture filter (BPF extensions require a live handle)</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>CaptureFilterValidator</name>
-    <message>
-        <source>No interfaces selected</source>
-        <translation type="unfinished"></translation>
+        <source>Save this filter</source>
+        <translation>이 필터 저장</translation>
     </message>
     <message>
-        <source>Unable to check capture filter</source>
-        <translation type="unfinished"></translation>
+        <source>Remove this filter</source>
+        <translation>이 필터 삭제</translation>
     </message>
     <message>
-        <source>Unable to check capture filter (BPF extensions require a live handle)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Syntax checking unavailable</source>
-        <translation type="unfinished"></translation>
+        <source>Manage Capture Filters</source>
+        <translation>캡처 필터 관리</translation>
     </message>
 </context>
 <context>
@@ -1384,6 +1293,38 @@ Off = logpoint only (matches the historical &quot;logpoints never pause&quot; co
     <message>
         <source>Input</source>
         <translation>입력</translation>
+    </message>
+    <message>
+        <source>Interface</source>
+        <translation>인터페이스</translation>
+    </message>
+    <message>
+        <source>Traffic</source>
+        <translation>트래픽</translation>
+    </message>
+    <message>
+        <source>Link-layer Header</source>
+        <translation>링크 레이어 헤더</translation>
+    </message>
+    <message>
+        <source>Promiscuous</source>
+        <translation>무작위</translation>
+    </message>
+    <message>
+        <source>Snaplen (B)</source>
+        <translation>Snaplen(B)</translation>
+    </message>
+    <message>
+        <source>Buffer (MB)</source>
+        <translation>버퍼(MB)</translation>
+    </message>
+    <message>
+        <source>Monitor Mode</source>
+        <translation>모니터 모드</translation>
+    </message>
+    <message>
+        <source>Capture Filter</source>
+        <translation>캡처 필터</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;You probably want to enable this. Usually a network card will only capture the traffic sent to its own network address. If you want to capture all traffic that the network card can &amp;quot;see&amp;quot;, mark this option. See the FAQ for some more details of capturing packets from a switched network.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -1440,10 +1381,6 @@ Off = logpoint only (matches the historical &quot;logpoints never pause&quot; co
     <message>
         <source>pcap</source>
         <translation>pcap</translation>
-    </message>
-    <message>
-        <source>Compression:</source>
-        <translation>압축:</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Instead of using a single capture file, multiple files will be created.&lt;/p&gt;&lt;p&gt;The generated file names will contain an incrementing number and the start time of the capture.&lt;/p&gt;&lt;p&gt;NOTE: If enabled, at least one of the new-file criteria MUST be selected.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -1516,16 +1453,16 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>모든 802.11 인터페이스에서 모니터 모드 활성화</translation>
     </message>
     <message>
+        <source>compression</source>
+        <translation>압축</translation>
+    </message>
+    <message>
         <source>None</source>
         <translation>없음</translation>
     </message>
     <message>
         <source>gzip</source>
         <translation>gzip</translation>
-    </message>
-    <message>
-        <source>LZ4</source>
-        <translation>LZ4</translation>
     </message>
     <message>
         <source>File infix pattern</source>
@@ -1550,22 +1487,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;File index number before the date and time. This is the historic Wireshark ordering.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;날짜와 시간 이전에 파일 순서 번호를 배치합니다. Wireshark에서 역사적으로 사용했던 방식입니다..&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>Create a new interface bookmark.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Remove this interface bookmark.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Processes:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Executable paths, command lines and user names will be stored in the capture file. A command line can contain a password.</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;After capturing has switched to the next file and the given number of files has exceeded, the oldest file will be removed.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -1688,18 +1609,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>시작</translation>
     </message>
     <message>
-        <source>Don&apos;t record processes</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Record process IDs and names</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Record process IDs, names, paths, command lines and users</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Leave blank to use a temporary file</source>
         <translation>비워 두면 임시 파일 사용</translation>
     </message>
@@ -1712,16 +1621,20 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>임시 디렉터리 지정</translation>
     </message>
     <message>
-        <source>Not supported on this platform.</source>
-        <translation type="unfinished"></translation>
+        <source>%1: %2</source>
+        <translation>%1: %2</translation>
     </message>
     <message>
-        <source>Process information can only be recorded in pcapng files.</source>
-        <translation type="unfinished"></translation>
+        <source>Addresses</source>
+        <translation>주소</translation>
     </message>
     <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Record which processes on this computer sent or received each packet, for the packets of TCP and UDP sockets. Which processes can be identified depends on your privileges, and the packets of very short-lived sockets can be missed.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <source>Address</source>
+        <translation>주소</translation>
+    </message>
+    <message>
+        <source>no addresses</source>
+        <translation>주소 없음</translation>
     </message>
     <message>
         <source>Error</source>
@@ -1775,14 +1688,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>pcapng 형식으로 패킷 캡처</translation>
     </message>
     <message>
-        <source>Record the processes that packets belong to:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;What to record, in pcapng files, of the processes on this computer that sent or received each packet. Executable paths, command lines and user names can be sensitive: a command line can contain a password.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Update the list of packets while capture is in progress. This can result in dropped packets on high-speed networks.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;캡처가 진행되는 동안 패킷 목록을 업데이트합니다. 고속 네트워크에서는 패킷이 손실될 수도 있습니다.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
@@ -1803,40 +1708,12 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;새 패킷 업데이트 시간 간격입니다. GUI 업데이트 주기와 타이머 정밀도에 영향을 줍니다.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
-        <source>Temporary directory</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Directory in which to write temporary capture files. Leave empty to use the system default. Overridden by the --temp-dir option.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Browse…</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Don&apos;t load interfaces on startup</source>
         <translation>시작할 때 인터페이스를 불러오지 않기</translation>
     </message>
     <message>
         <source>Disable external capture interfaces</source>
         <translation>외부 캡처 인터페이스 비활성화</translation>
-    </message>
-    <message>
-        <source>Nothing</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Process IDs and names</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Process IDs, names, paths, command lines and users</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Temporary Directory</source>
-        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -1983,24 +1860,12 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>출현 횟수:</translation>
     </message>
     <message>
-        <source>Display as:</source>
-        <translation>표시 형식:</translation>
+        <source>Resolve Names:</source>
+        <translation>해석된 이름:</translation>
     </message>
     <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;p&gt;Values will show the raw values for fields.&lt;p&gt;Strings will show human-readable strings instead of raw values for fields. Only applicable to custom columns with fields that have value strings and custom columns which can be resolved to strings.&lt;p&gt;Details will show the values using the same format as in Packet Details. Only applicable to custom columns.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Values</source>
-        <translation>값</translation>
-    </message>
-    <message>
-        <source>Strings</source>
-        <translation>문자열</translation>
-    </message>
-    <message>
-        <source>Details</source>
-        <translation>자세한 정보</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;p&gt;Show human-readable strings instead of raw values for fields. Only applicable to custom columns with fields that have value strings.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;p&gt;필드의 원시값 대신 사람이 읽을 수 있는 문자열로 표시합니다. 문자열 값을 갖는 필드가 있는 사용자 지정 칼럼에만 적용할 수 있습니다.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Missing fields.</source>
@@ -2030,28 +1895,28 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>유형</translation>
     </message>
     <message>
+        <source>Fields</source>
+        <translation>필드</translation>
+    </message>
+    <message>
         <source>Field Occurrence</source>
         <translation>필드 출현 횟수</translation>
     </message>
     <message>
-        <source>Display Format</source>
-        <translation>표시 형식</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;Values will show the raw values for fields.&lt;p&gt;Strings will show human-readable strings instead of raw values for fields. Only applicable to custom columns with fields that have value strings and custom columns which can be resolved to strings.&lt;p&gt;Details will show the values using the same format as in Packet Details. Only applicable to custom columns.&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <source>Resolved</source>
+        <translation>해석됨</translation>
     </message>
     <message>
         <source>Width</source>
         <translation>폭</translation>
     </message>
     <message>
-        <source>Custom Expression</source>
-        <translation>사용자 정의 표현식</translation>
-    </message>
-    <message>
         <source>Alignment</source>
         <translation>정렬</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;Show human-readable strings instead of raw values for fields. Only applicable to custom columns with fields that have value strings.&lt;/html&gt;</source>
+        <translation>&lt;html&gt;필드의 원시값 대신 사람이 읽을 수 있는 문자열로 보여 줍니다. 문자열 값을 갖는 필드를 가진 사용자 지정 칼럼에 대해서만 적용 가능합니다.&lt;/html&gt;</translation>
     </message>
     <message>
         <source>New Column</source>
@@ -2095,26 +1960,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <source>Copy filter text to the clipboard.</source>
         <translation>필터 텍스트를 클립보드에 복사합니다.</translation>
     </message>
-    <message>
-        <source>No capture filter</source>
-        <translation type="unfinished">캡처 필터 없음</translation>
-    </message>
-    <message>
-        <source>Multiple filters</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Capture filters cannot be compiled for standard input.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Capture filters cannot be compiled for pipes.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Capture filter: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
 </context>
 <context>
     <name>CompressionGroupBox</name>
@@ -2133,10 +1978,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Compress with &amp;LZ4</source>
         <translation>LZ4로 압축(&amp;L)</translation>
-    </message>
-    <message>
-        <source>Compress with Zstandard</source>
-        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -2235,14 +2076,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Graph a TCP conversation.</source>
         <translation>TCP 대화를 그래프로 표시합니다.</translation>
-    </message>
-    <message>
-        <source>I/O Graphs</source>
-        <translation>I/O 그래프</translation>
-    </message>
-    <message>
-        <source>I/OGraph TCP conversations.</source>
-        <translation>I/O 그래프 TCP 대화입니다.</translation>
     </message>
 </context>
 <context>
@@ -2397,100 +2230,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
 </context>
 <context>
-    <name>DataSourceTab</name>
-    <message>
-        <source>Packet bytes</source>
-        <translation type="unfinished">패킷 바이트</translation>
-    </message>
-    <message>
-        <source>Displays the raw bytes of the selected packet in hexadecimal and ASCII.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Event data</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Displays the raw data of the selected event.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Packet annotations are not saved and will be lost when the capture is closed.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Packet Annotations</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Select one or more bytes first.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Add Annotation</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>No annotation found at the selection.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Edit Annotation</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Start byte set: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Set start byte first.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Start byte (absolute): %1
-End byte (absolute): %2
-Distance (absolute, bytes): %3
-Distance (signed, bytes): %4</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>selected protocol</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>selected field</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>parent protocol</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>
-Reference range (%1): start %2, length %3</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>
-Start byte (relative to reference): %1
-End byte (relative to reference): %2</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>
-Relative to reference: n/a (outside reference range)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Compute Offset</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Offset markers cleared.</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
     <name>DecodeAsDialog</name>
     <message>
         <source>Change the dissection behavior for a protocol.</source>
@@ -2581,256 +2320,14 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
 </context>
 <context>
-    <name>DisAudioStream</name>
+    <name>DisplayFilterCombo</name>
     <message>
-        <source>No DIS signal payload is available for playback.</source>
-        <translation type="unfinished"></translation>
+        <source>Display filter selector</source>
+        <translation>표시 필터 선택기</translation>
     </message>
     <message>
-        <source>Unable to decode DIS audio payload for this stream.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Audio format is not supported by the current output device.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Unable to open playback buffer.</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>DisStreamAnalysisDialog</name>
-    <message>
-        <source>DIS Stream Analysis</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Stream</source>
-        <translation type="unfinished">스트림</translation>
-    </message>
-    <message>
-        <source>Codec</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Duration (s)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Packets</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Signal Packets</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Transmitter Packets</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Estimated Lost</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Jitter (mean/max ms)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Delta (mean/max ms)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Capture Time (s)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Amplitude</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>0.000 / 0.000 s</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Playback</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Packet</source>
-        <translation type="unfinished">패킷</translation>
-    </message>
-    <message>
-        <source>Time (s)</source>
-        <translation type="unfinished">시간(초)</translation>
-    </message>
-    <message>
-        <source>Delta (ms)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Jitter (ms)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Lost</source>
-        <translation type="unfinished">누락</translation>
-    </message>
-    <message>
-        <source>Status</source>
-        <translation type="unfinished">상태</translation>
-    </message>
-    <message>
-        <source>Go To First Packet</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Play</source>
-        <translation type="unfinished">재생</translation>
-    </message>
-    <message>
-        <source>Stop</source>
-        <translation type="unfinished">정지</translation>
-    </message>
-    <message>
-        <source>-</source>
-        <translation type="unfinished">-</translation>
-    </message>
-    <message>
-        <source>Unknown</source>
-        <translation type="unfinished">알 수 없음</translation>
-    </message>
-    <message>
-        <source>Problem</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>OK</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Waveform</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Jitter Spikes</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Estimated Loss</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Problem Packets</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Pause</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Double click on graph to set start of playback.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Start: %1 s. Double click on graph to set start of playback.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>DIS Playback</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>DisStreamDialog</name>
-    <message>
-        <source>DIS Streams</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Start</source>
-        <translation type="unfinished">시작</translation>
-    </message>
-    <message>
-        <source>End</source>
-        <translation type="unfinished">종료</translation>
-    </message>
-    <message>
-        <source>Src Address</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Src Port</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Dst Address</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Dst Port</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Radio</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Entity</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Signal</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Tx</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Lost</source>
-        <translation type="unfinished">누락</translation>
-    </message>
-    <message>
-        <source>Max Delta (ms)</source>
-        <translation type="unfinished">최대 간격(ms)</translation>
-    </message>
-    <message>
-        <source>Mean Jitter (ms)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Max Jitter (ms)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Pb</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Prepare Filter</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Play</source>
-        <translation type="unfinished">재생</translation>
-    </message>
-    <message>
-        <source>Stop</source>
-        <translation type="unfinished">정지</translation>
-    </message>
-    <message>
-        <source>Analyze</source>
-        <translation type="unfinished">분석</translation>
-    </message>
-    <message>
-        <source>X</source>
-        <translation type="unfinished">X</translation>
-    </message>
-    <message>
-        <source>DIS Playback</source>
-        <translation type="unfinished"></translation>
+        <source>Select from previously used filters.</source>
+        <translation>이전에 사용한 사용한 필터에서 선택합니다.</translation>
     </message>
 </context>
 <context>
@@ -2872,10 +2369,6 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>읽기 필터 적용 %1</translation>
     </message>
     <message>
-        <source>Enter a custom column expression %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Current filter: %1</source>
         <translation>현재 필터: %1</translation>
     </message>
@@ -2896,48 +2389,8 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>표시 필터 관리</translation>
     </message>
     <message>
-        <source>Filter Button Preferences…</source>
-        <oldsource>Filter Button Preferences...</oldsource>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>DisplayFilterEntry</name>
-    <message>
-        <source>Display filter entry</source>
-        <translation type="unfinished">표시 필터 항목</translation>
-    </message>
-    <message>
-        <source>Saved Display Filters</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Save this filter</source>
-        <translation type="unfinished">이 필터 저장</translation>
-    </message>
-    <message>
-        <source>Remove this filter</source>
-        <translation type="unfinished">이 필터 삭제</translation>
-    </message>
-    <message>
-        <source>Manage Display Filters</source>
-        <translation type="unfinished">표시 필터 관리</translation>
-    </message>
-    <message>
-        <source>Filter Button Preferences…</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Apply a display filter %1 &lt;%2/&gt;</source>
-        <translation type="unfinished">표시 필터 적용 %1 &lt;%2/&gt;</translation>
-    </message>
-    <message>
-        <source>Display Filter Expression…</source>
-        <translation type="unfinished">표시 필터 표현식…</translation>
-    </message>
-    <message>
-        <source>Left align buttons</source>
-        <translation type="unfinished">왼쪽으로 버튼 정렬</translation>
+        <source>Filter Button Preferences...</source>
+        <translation>필터 버튼 속성...</translation>
     </message>
 </context>
 <context>
@@ -3036,13 +2489,6 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
 </context>
 <context>
-    <name>DisplayFilterValidator</name>
-    <message>
-        <source>&quot;%1&quot; is deprecated in favour of &quot;%2&quot;. See Help section 6.4.8 for details.</source>
-        <translation type="unfinished">&quot;%1&quot;은(는) &quot;%2&quot;(으)로 대체될 예정입니다. 도움말의 6.4.8절을 참조하십시오.</translation>
-    </message>
-</context>
-<context>
     <name>DissectorSyntaxLineEdit</name>
     <message>
         <source>Dissector entry</source>
@@ -3066,18 +2512,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Dissector Tables</source>
         <translation>분해기 표</translation>
-    </message>
-    <message>
-        <source>Everywhere</source>
-        <translation type="unfinished">모든 곳</translation>
-    </message>
-    <message>
-        <source>Only Name</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Only Description</source>
-        <translation type="unfinished">설명만</translation>
     </message>
 </context>
 <context>
@@ -3113,29 +2547,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Selector Name</source>
         <translation>선택기 이름</translation>
-    </message>
-</context>
-<context>
-    <name>DistributionDialog</name>
-    <message>
-        <source>Field Values Distribution</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Field Value</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Occurrences</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Percent</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Distribution:</source>
-        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -3177,28 +2588,24 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>모든 곳</translation>
     </message>
     <message>
-        <source>Only Protocol</source>
-        <translation type="unfinished"></translation>
+        <source>Only Protocols</source>
+        <translation>프로토콜만</translation>
     </message>
     <message>
         <source>Only Description</source>
         <translation>설명만</translation>
     </message>
     <message>
-        <source>all</source>
-        <translation type="unfinished"></translation>
+        <source>Only enabled protocols</source>
+        <translation>활성화된 프로토콜만</translation>
     </message>
     <message>
-        <source>enabled</source>
-        <translation type="unfinished">활성화됨</translation>
+        <source>Only disabled protocols</source>
+        <translation>비활성화된 프로토콜만</translation>
     </message>
     <message>
-        <source>disabled</source>
-        <translation type="unfinished">비활성화됨</translation>
-    </message>
-    <message>
-        <source>protocols</source>
-        <translation type="unfinished"></translation>
+        <source>any protocol</source>
+        <translation>모든 프로토콜</translation>
     </message>
     <message>
         <source>non-heuristic protocols</source>
@@ -3312,14 +2719,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Save Endpoints Map</source>
         <translation>종단점 지도 저장</translation>
-    </message>
-    <message>
-        <source>Hide aggregated</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Hide IPv4 aggregated endpoints (see subnets file &amp; IPv4 preferences)</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Failed to save map file %1.</source>
@@ -3466,46 +2865,7 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
 </context>
 <context>
-    <name>ExpertInfoModel</name>
-    <message>
-        <source>Severity: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Summary: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Summary: Packet comments listed below.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Group: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Protocol: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Count: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Packet: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Header Field: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
     <name>ExpertInfoProxyModel</name>
-    <message>
-        <source>Count: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
     <message>
         <source>Packet</source>
         <translation>패킷</translation>
@@ -3579,14 +2939,6 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>내용 유형:</translation>
     </message>
     <message>
-        <source>Unique</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Only display the first of identical entries</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Searching for objects</source>
         <translation>객체 검색 중</translation>
     </message>
@@ -3597,14 +2949,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Only display entries containing this string</source>
         <translation>이 문자열을 포함하는 항목만 표시</translation>
-    </message>
-    <message>
-        <source>Save All</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Save Displayed</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Preview</source>
@@ -3625,10 +2969,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Save Object As…</source>
         <translation>다른 이름으로 객체 저장...</translation>
-    </message>
-    <message>
-        <source>Save Objects In…</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Save All Objects In…</source>
@@ -3681,17 +3021,6 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
 </context>
 <context>
-    <name>ExtArgTable</name>
-    <message>
-        <source>Add custom data</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Custom:</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
     <name>ExtcapArgumentFileSelection</name>
     <message>
         <source>Clear</source>
@@ -3702,16 +3031,12 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>모든 파일 (</translation>
     </message>
     <message>
-        <source>%1 Open File</source>
-        <translation type="unfinished"></translation>
+        <source>Open File</source>
+        <translation>파일 열기</translation>
     </message>
     <message>
-        <source>%1 Select File</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>%1 Select Folder</source>
-        <translation type="unfinished"></translation>
+        <source>Select File</source>
+        <translation>파일 선택</translation>
     </message>
 </context>
 <context>
@@ -3724,14 +3049,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Start</source>
         <translation>시작</translation>
-    </message>
-    <message>
-        <source>Interface Sub-options</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Ok</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Default</source>
@@ -3750,31 +3067,23 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>%1 extcap 인터페이스에 대한 도움말을 찾을 수 없습니다. 주어진 파일: %2</translation>
     </message>
     <message>
-        <source>Bookmark</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Type a name to create a bookmark</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Save parameters on capture start</source>
-        <translation type="unfinished"></translation>
+        <source>Save parameter(s) on capture start</source>
+        <translation>캡처를 시작할 때 인자 저장</translation>
     </message>
 </context>
 <context>
     <name>FieldFilterEdit</name>
     <message>
-        <source>Field entry</source>
-        <translation>필드 항목</translation>
+        <source>Display filter entry</source>
+        <translation>표시 필터 항목</translation>
     </message>
     <message>
         <source>Enter a field %1</source>
         <translation>필드 입력 %1</translation>
     </message>
     <message>
-        <source>Invalid field: </source>
-        <translation>잘못된 필드:</translation>
+        <source>Invalid filter: </source>
+        <translation>잘못된 필터: </translation>
     </message>
 </context>
 <context>
@@ -3905,45 +3214,6 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
 </context>
 <context>
-    <name>FilterExpressionEdit</name>
-    <message>
-        <source>Saved Filters</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Save this filter</source>
-        <translation type="unfinished">이 필터 저장</translation>
-    </message>
-    <message>
-        <source>Remove this filter</source>
-        <translation type="unfinished">이 필터 삭제</translation>
-    </message>
-    <message>
-        <source>Manage Saved Filters</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Filter Button Preferences…</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Manage saved filters</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Clear the filter</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Apply this filter</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Recent filters</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
     <name>FilterExpressionFrame</name>
     <message>
         <source>Frame</source>
@@ -3993,9 +3263,8 @@ Relative to reference: n/a (outside reference range)</source>
 <context>
     <name>FilterExpressionToolBar</name>
     <message>
-        <source>Filter Button Preferences…</source>
-        <oldsource>Filter Button Preferences...</oldsource>
-        <translation type="unfinished"></translation>
+        <source>Filter Button Preferences...</source>
+        <translation>필터 버튼 속성...</translation>
     </message>
     <message>
         <source>Edit</source>
@@ -4027,13 +3296,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Filter Expression</source>
         <translation>필터 표현식</translation>
-    </message>
-</context>
-<context>
-    <name>FilterValidator</name>
-    <message>
-        <source>Invalid filter: %1</source>
-        <translation type="unfinished">잘못된 필터: %1</translation>
     </message>
 </context>
 <context>
@@ -4100,10 +3362,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>MAC destination address.</source>
         <translation>MAC 목적지 주소.</translation>
-    </message>
-    <message>
-        <source>Save %1 rules as…</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Text file (*.txt);;All Files (</source>
@@ -4201,14 +3459,6 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>전역 Extcap 경로</translation>
     </message>
     <message>
-        <source>Personal Themes</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>User-installed theme files (*.jsonc)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>MaxMind DB path</source>
         <translation>MaxMind DB 경로</translation>
     </message>
@@ -4255,6 +3505,11 @@ Relative to reference: n/a (outside reference range)</source>
 <context>
     <name>FollowStreamDialog</name>
     <message>
+        <source>Filter Out This Stream</source>
+        <oldsource>Hide this stream</oldsource>
+        <translation>필터로 이 스트림 제외</translation>
+    </message>
+    <message>
         <source>Print</source>
         <translation>인쇄</translation>
     </message>
@@ -4299,14 +3554,6 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>Raw(무편집) 형식</translation>
     </message>
     <message>
-        <source>Prepare as Filter</source>
-        <translation type="unfinished">필터로 준비</translation>
-    </message>
-    <message>
-        <source>Apply as Filter</source>
-        <translation type="unfinished">필터로 적용</translation>
-    </message>
-    <message>
         <source>Save as…</source>
         <translation>다른 이름으로 저장…</translation>
     </message>
@@ -4334,6 +3581,22 @@ Relative to reference: n/a (outside reference range)</source>
         <source>%Ln turn(s).</source>
         <translation>
             <numerusform>턴 %Ln회.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Event %1. </source>
+        <translation>이벤트 %1개. </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln &lt;span style=&quot;color: %1; background-color:%2&quot;&gt;reads&lt;/span&gt;, </source>
+        <translation>
+            <numerusform>&lt;span style=&quot;color: %1; background-color:%2&quot;&gt;읽기&lt;/span&gt; %Ln개, </numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln &lt;span style=&quot;color: %1; background-color:%2&quot;&gt;writes&lt;/span&gt;, </source>
+        <translation>
+            <numerusform>&lt;span style=&quot;color: %1; background-color:%2&quot;&gt;쓰기&lt;/span&gt; %Ln개, </numerusform>
         </translation>
     </message>
     <message>
@@ -4367,6 +3630,18 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>%1 stream not found on the selected packet.</source>
         <translation>선택한 패킷에서 %1 스트림을 찾을 수 없습니다.</translation>
+    </message>
+    <message>
+        <source>Read activity(%6)</source>
+        <translation>읽기 활동(%6)</translation>
+    </message>
+    <message>
+        <source>Write activity(%6)</source>
+        <translation>쓰기 활동(%6)</translation>
+    </message>
+    <message>
+        <source>Entire I/O activity (%1)</source>
+        <translation>전체 I/O 활동(%M)</translation>
     </message>
     <message>
         <source>Entire conversation (%1)</source>
@@ -4467,16 +3742,61 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>글꼴 선택</translation>
     </message>
     <message>
-        <source>Theme</source>
-        <translation type="unfinished"></translation>
+        <source>Colors:</source>
+        <translation>색상:</translation>
     </message>
     <message>
-        <source>Theme Author Information</source>
-        <translation type="unfinished"></translation>
+        <source>System Default</source>
+        <translation>시스템 기본값</translation>
     </message>
     <message>
-        <source>Theme Description</source>
-        <translation type="unfinished"></translation>
+        <source>Solid</source>
+        <translation>단색</translation>
+    </message>
+    <message>
+        <source>Sample ignored packet text</source>
+        <translation>무시된 패킷 텍스트 예제</translation>
+    </message>
+    <message>
+        <source>Sample marked packet text</source>
+        <translation>표시된 패킷 텍스트 예제</translation>
+    </message>
+    <message>
+        <source>Sample active selected item</source>
+        <translation>활성 선택된 항목 예제</translation>
+    </message>
+    <message>
+        <source>Style:</source>
+        <translation>스타일:</translation>
+    </message>
+    <message>
+        <source>Gradient</source>
+        <translation>그라디언트</translation>
+    </message>
+    <message>
+        <source>Sample inactive selected item</source>
+        <translation>비활성 선택된 항목 예제</translation>
+    </message>
+    <message>
+        <source>Sample &quot;Follow Stream&quot; client text</source>
+        <translation>&quot;스트림 따라라기&quot; 클라이언트 텍스트 예제</translation>
+    </message>
+    <message>
+        <source>Sample &quot;Follow Stream&quot; server text</source>
+        <translation>&quot;스트림 따라가기&quot; 서버 텍스트 예제</translation>
+    </message>
+    <message>
+        <source>Sample valid filter</source>
+        <translation>올바른 필터 예제</translation>
+    </message>
+    <message>
+        <source>Sample invalid filter</source>
+        <translation>잘못된 필터 예제</translation>
+    </message>
+    <message>
+        <source>Sample warning filter</source>
+        <oldsource>Sample deprecated filter</oldsource>
+        <translation>경고 필터 예제</translation>
     </message>
     <message>
         <source>Example GIF query packets have jumbo window sizes</source>
@@ -4486,30 +3806,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Lazy badgers move unique waxy jellyfish packets</source>
         <translation>겉표지보다 큰 몇 향수류</translation>
-    </message>
-    <message>
-        <source>System</source>
-        <translation type="unfinished">시스템</translation>
-    </message>
-    <message>
-        <source>Light</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Dark</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Appearance mode:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Theme:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Theme by %1</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Font</source>
@@ -4650,85 +3946,6 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
 </context>
 <context>
-    <name>HexDataSourceView</name>
-    <message>
-        <source>Allow hover highlighting</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Annotations</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Add annotation…</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Edit annotation…</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Remove annotation</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Offset markers</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Start byte for offset</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>End byte for offset</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Clear offset markers</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Show bytes as hexadecimal</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>…as decimal</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>…as octal</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>…as bits</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Show text as frame encoding</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Show text based on event</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>…as ASCII</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>…as EBCDIC</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>…as UTF-8</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Comment: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
     <name>IOConsoleDialog</name>
     <message>
         <source>Dialog</source>
@@ -4737,10 +3954,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Enter code</source>
         <translation>코드 입력</translation>
-    </message>
-    <message>
-        <source>Console</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Evaluate</source>
@@ -4762,6 +3975,94 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>대화 상자</translation>
     </message>
     <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
+
+&lt;h3&gt;Valuable and amazing time-saving keyboard shortcuts&lt;/h3&gt;
+&lt;table&gt;&lt;tbody&gt;
+
+&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;Zoom in&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;Zoom out&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;x&lt;/th&gt;&lt;td&gt;Zoom in X axis&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;X&lt;/th&gt;&lt;td&gt;Zoom out X axis&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;y&lt;/th&gt;&lt;td&gt;Zoom in Y axis&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Y&lt;/th&gt;&lt;td&gt;Zoom out Y axis&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;Reset graph to its initial state&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;Move right 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;Move left 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↑&lt;/th&gt;&lt;td&gt;Move up 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↓&lt;/th&gt;&lt;td&gt;Move down 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;Move right 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;Move left 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;Move up 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;Move down 1 pixel&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;Go to packet under cursor&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;z&lt;/th&gt;&lt;td&gt;Toggle mouse drag / zoom&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;Toggle capture / session time origin&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;Toggle crosshairs&lt;/td&gt;&lt;/th&gt;
+
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;/body&gt;&lt;/html&gt;</source>
+        <oldsource>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
+
+&lt;h3&gt;Valuable and amazing time-saving keyboard shortcuts&lt;/h3&gt;
+&lt;table&gt;&lt;tbody&gt;
+
+&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;Zoom in&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;Zoom out&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;Reset graph to its initial state&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;Move right 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;Move left 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↑&lt;/th&gt;&lt;td&gt;Move up 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↓&lt;/th&gt;&lt;td&gt;Move down 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;Move right 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;Move left 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;Move up 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;Move down 1 pixel&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;Go to packet under cursor&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;z&lt;/th&gt;&lt;td&gt;Toggle mouse drag / zoom&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;Toggle capture / session time origin&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;Toggle crosshairs&lt;/td&gt;&lt;/th&gt;
+
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;/body&gt;&lt;/html&gt;</oldsource>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
+
+&lt;h3&gt;가치있고 놀라운 시간 절약형 키보드 단축키&lt;/h3&gt;
+&lt;table&gt;&lt;tbody&gt;
+
+&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;확대&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;축소&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;x&lt;/th&gt;&lt;td&gt;X축 확대&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;X&lt;/th&gt;&lt;td&gt;X축 축소&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;y&lt;/th&gt;&lt;td&gt;Y축 확대&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Y&lt;/th&gt;&lt;td&gt;Y축 축소&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;초기 상태로 그래프 다시 설정&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;오른쪽으로 10픽셀 이동&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;왼쪽으로 10픽셀 이동&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↑&lt;/th&gt;&lt;td&gt;위쪽으로 10픽셀 이동&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↓&lt;/th&gt;&lt;td&gt;아래쪽으로 10픽셀 이동&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;오른쪽으로 1픽셀 이동&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;왼쪽으로 1픽셀 이동&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;위쪽으로 1픽셀 이동&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;아래쪽으로 1픽셀 이동&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;커서 위치의 패킷으로 이동&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;z&lt;/th&gt;&lt;td&gt;마우스 드래그/크기 조절 전환&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;캡처/세션 시간 기점 전환&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;십자선 전환&lt;/td&gt;&lt;/th&gt;
+
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
         <source>Add a new graph.</source>
         <translation>새로운 그래프를 추가합니다.</translation>
     </message>
@@ -4770,20 +4071,20 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>모든 그래프를 지웁니다.</translation>
     </message>
     <message>
-        <source>Remove the selected graphs.</source>
-        <translation type="unfinished"></translation>
+        <source>Remove the selected graph(s).</source>
+        <translation>선택한 그래프를 삭제합니다.</translation>
     </message>
     <message>
-        <source>Duplicate the selected graphs.</source>
-        <translation type="unfinished"></translation>
+        <source>Duplicate the selected graph(s).</source>
+        <translation>선택한 그래프를 복제합니다.</translation>
     </message>
     <message>
-        <source>Move the selected graphs upwards.</source>
-        <translation type="unfinished"></translation>
+        <source>Move the selected graph(s) upwards.</source>
+        <translation>선택한 그래프를 위로 이동합니다.</translation>
     </message>
     <message>
-        <source>Move the selected graphs downwards.</source>
-        <translation type="unfinished"></translation>
+        <source>Move the selected graph(s) downwards.</source>
+        <translation>선택한 그래프를 아래로 이동합니다.</translation>
     </message>
     <message>
         <source>Mouse</source>
@@ -4822,41 +4123,8 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>자동 업데이트</translation>
     </message>
     <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
-
-&lt;h3&gt;Valuable and amazing time-saving keyboard shortcuts&lt;/h3&gt;
-&lt;table&gt;&lt;tbody&gt;
-
-&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;Zoom in&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;Zoom out&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;x&lt;/th&gt;&lt;td&gt;Zoom in X axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;X&lt;/th&gt;&lt;td&gt;Zoom out X axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;y&lt;/th&gt;&lt;td&gt;Zoom in Y axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;Y&lt;/th&gt;&lt;td&gt;Zoom out Y axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;Reset graph to its initial state&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;Move right 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;Move left 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;↑&lt;/th&gt;&lt;td&gt;Move up 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;↓&lt;/th&gt;&lt;td&gt;Move down 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;Move right 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;Move left 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;Move up 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;Move down 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;Move right 100 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;Move left 100 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;Move up 100 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;Move down 100 pixels&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;Go to packet under cursor&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;z&lt;/th&gt;&lt;td&gt;Toggle mouse drag / zoom&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;Toggle capture / session time origin&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;Toggle crosshairs&lt;/td&gt;&lt;/th&gt;
-
-&lt;/tbody&gt;&lt;/table&gt;
-&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <source>Enable legend</source>
+        <translation>범례 활성화</translation>
     </message>
     <message>
         <source>Reset Graph</source>
@@ -4956,38 +4224,6 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>Shift+아래쪽</translation>
     </message>
     <message>
-        <source>Move Up 100 Pixels</source>
-        <translation type="unfinished">위쪽으로 100픽셀 이동</translation>
-    </message>
-    <message>
-        <source>Alt+Up</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Move Left 100 Pixels</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Alt+Left</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Move Right 100 Pixels</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Alt+Right</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Move Down 100 Pixels</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Alt+Down</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Go To Packet Under Cursor</source>
         <translation>커서 위치의 패킷으로 이동</translation>
     </message>
@@ -5022,14 +4258,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>T</source>
         <translation>T</translation>
-    </message>
-    <message>
-        <source>Toggle X-axis between relative time and time of day</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Toggle Y-axis between logarithmic and linear scale</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Crosshairs</source>
@@ -5208,16 +4436,24 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>5분</translation>
     </message>
     <message>
-        <source>%1 I/O Graphs: %2</source>
-        <translation type="unfinished"></translation>
+        <source>Wireshark I/O Graphs: %1</source>
+        <translation>Wireshark I/O 그래프: %1</translation>
     </message>
     <message>
         <source>Filtered packets</source>
         <translation>필터된 패킷</translation>
     </message>
     <message>
+        <source>Filtered events</source>
+        <translation>필터된 이벤트</translation>
+    </message>
+    <message>
         <source>All packets</source>
         <translation>모든 패킷</translation>
+    </message>
+    <message>
+        <source>All events</source>
+        <translation>모든 이벤트</translation>
     </message>
     <message>
         <source>All Packets</source>
@@ -5228,6 +4464,14 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>TCP 오류</translation>
     </message>
     <message>
+        <source>All Events</source>
+        <translation>모든 이벤트</translation>
+    </message>
+    <message>
+        <source>All Execs</source>
+        <translation>모든 실행</translation>
+    </message>
+    <message>
         <source>Hover over the graph for details.</source>
         <translation>자세한 정보를 보려면 그래프 위에 마우스를 올리십시오.</translation>
     </message>
@@ -5236,12 +4480,24 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>이 주기 안에 패킷 없음</translation>
     </message>
     <message>
+        <source>No events in interval</source>
+        <translation>이 주기 안에 이벤트 없음</translation>
+    </message>
+    <message>
         <source>Click to select packet</source>
         <translation>클릭하여 패킷 선택</translation>
     </message>
     <message>
         <source>Packet</source>
         <translation>패킷</translation>
+    </message>
+    <message>
+        <source>Click to select event</source>
+        <translation>클릭하여 이벤트 선택</translation>
+    </message>
+    <message>
+        <source>Event</source>
+        <translation>이벤트</translation>
     </message>
     <message>
         <source>%1 (%2s%3).</source>
@@ -5651,6 +4907,10 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>패킷 형식 정규 표현식</translation>
     </message>
     <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Perl compatible regular expression capturing a single packet in the file with named groups identifieing data to import. Anchors ^ and $ also match before/after newlines &lt;/p&gt;&lt;p&gt;Required is only a data group, also supported are time, dir and seqno.&lt;/p&gt;&lt;p&gt;Regex flags: DUPNAMES, MULTILINE and NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;파일에서 각각 패킷을 가져올 때 이름 있는 그룹을 통해서 가져올 데이터를 나타내는 Perl 호환 정규 표현식입니다. 앵커 문자 ^, $는 각각 줄의 맨 처음과 맨 끝과 일치합니다.&lt;/p&gt;&lt;p&gt;필수 항목은 데이터 그룹이며, 선택적 항목은 시간, 방향, 순서 번호입니다.&lt;/p&gt;&lt;p&gt;정규 표현식 플래그: DUPNAMES, MULTILINE, NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
         <source>This is regexHintLabel, it will be set to default_regex_hint</source>
         <translation>정규 표현식 힌트 레이블이며 default_regex_hint로 지정됨</translation>
     </message>
@@ -5729,18 +4989,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>None</source>
         <translation>없음</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Whether to treat multiple byte groups as being in little-endian byte order, instead of the default, network (big-endian) order.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Little-endian:</source>
-        <translation>리틀 엔디언:</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Perl compatible regular expression capturing a single packet in the file with named groups identifying data to import. Anchors ^ and $ also match before/after newlines &lt;/p&gt;&lt;p&gt;The only required group is data, but time, dir and seqno are also supported.&lt;/p&gt;&lt;p&gt;Regex flags: DUPNAMES, MULTILINE and NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>&lt;small&gt;&lt;i&gt;recommended regex:&lt;/small&gt;&lt;/i&gt;</source>
@@ -5911,9 +5159,8 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>지원되는 필드는 data, dir, time, seqno</translation>
     </message>
     <message>
-        <source>Missing capturing group data (use (?&lt;data&gt;(…)) )</source>
-        <oldsource>Missing capturing group data (use (?&lt;data&gt;(...)) )</oldsource>
-        <translation type="unfinished"></translation>
+        <source>Missing capturing group data (use (?&lt;data&gt;(...)) )</source>
+        <translation>그룹 데이터를 캡처하는 표현식 없음(사용: (?&lt;data&gt;(...)) )</translation>
     </message>
     <message>
         <source>Import From Hex Dump</source>
@@ -5926,107 +5173,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Import Text File</source>
         <translation>텍스트 파일 가져오기</translation>
-    </message>
-</context>
-<context>
-    <name>ImsiListDialog</name>
-    <message>
-        <source>IMSI List</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;small&gt;Select one or more IMSIs to view flow sequence or prepare a display filter.&lt;/small&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Only show IMSIs matching the current display filter</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Limit to display filter</source>
-        <translation type="unfinished">표시 필터로 제한</translation>
-    </message>
-    <message>
-        <source>IMSI</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Packets</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>First Frame</source>
-        <translation type="unfinished">첫 프레임</translation>
-    </message>
-    <message>
-        <source>Last Frame</source>
-        <translation type="unfinished">마지막 프레임</translation>
-    </message>
-    <message>
-        <source>Protocols</source>
-        <translation type="unfinished">프로토콜</translation>
-    </message>
-    <message>
-        <source>Prepare Filter</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Prepare a display filter matching selected IMSIs.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;small&gt;%1 IMSIs found. Double-click to filter.&lt;/small&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>InPacketFindBar</name>
-    <message>
-        <source>String</source>
-        <translation type="unfinished">문자열</translation>
-    </message>
-    <message>
-        <source>Regular Expression</source>
-        <translation type="unfinished">정규 표현식</translation>
-    </message>
-    <message>
-        <source>Case sensitive</source>
-        <translation type="unfinished">대소문자 구분</translation>
-    </message>
-    <message>
-        <source>Find</source>
-        <translation type="unfinished">찾기</translation>
-    </message>
-    <message>
-        <source>Cancel</source>
-        <translation type="unfinished">취소</translation>
-    </message>
-    <message>
-        <source>invalid pattern</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>no matches</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>%1 of %2</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>InfoBannerWidget</name>
-    <message>
-        <source>Tips and announcements</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>%1: %2 (%3 of %4)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Action: %1</source>
-        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -6076,14 +5222,6 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>가상</translation>
     </message>
     <message>
-        <source>Tunnel Interfaces</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Loopback Devices</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Remote interfaces</source>
         <translation>원격 인터페이스</translation>
     </message>
@@ -6096,16 +5234,12 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>외부 캡처 인터페이스가 비활성화되었습니다.</translation>
     </message>
     <message>
-        <source>&lt;p&gt;Local interfaces are unavailable because WinPcap is installed but is no longer supported.&lt;/p&gt;&lt;p&gt;You can fix this by uninstalling WinPcap and installing &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;.&lt;/p&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>&lt;p&gt;Local interfaces are unavailable because no packet capture driver is installed.&lt;/p&gt;&lt;p&gt;You can fix this by installing &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;.&lt;/p&gt;</source>
         <translation>&lt;p&gt;설치된 패킷 캡처 드라이버가 없어서 사용 가능한 로컬 인터페이스가 없습니다.&lt;/p&gt;&lt;p&gt;문제를 해결하려면 &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;을 설치하십시오.&lt;/p&gt;</translation>
     </message>
     <message>
-        <source>&lt;p&gt;Local interfaces are unavailable because the packet capture driver isn&apos;t loaded.&lt;/p&gt;&lt;p&gt;You can fix this by running &lt;pre&gt;net start npcap&lt;/pre&gt; if you have Npcap installed. The command must be run as Administrator.&lt;/p&gt;</source>
-        <translation type="unfinished"></translation>
+        <source>&lt;p&gt;Local interfaces are unavailable because the packet capture driver isn&apos;t loaded.&lt;/p&gt;&lt;p&gt;You can fix this by running &lt;pre&gt;net start npcap&lt;/pre&gt; if you have Npcap installed or &lt;pre&gt;net start npf&lt;/pre&gt; if you have WinPcap installed. Both commands must be run as Administrator.&lt;/p&gt;</source>
+        <translation>&lt;p&gt;패킷 캡처 드라이버를 불러오지 않았기 때문에 로컬 인터페이스를 사용할 수 없습니다.&lt;/p&gt;&lt;p&gt;Npcap이 설치된 경우 &lt;pre&gt;net start npcap&lt;/pre&gt;을 실행하거나 WinPcap이 설치된 경우 &lt;pre&gt;net start npf&lt;/pre&gt;를 실행하여 이 문제를 해결할 수 있습니다. 두 명령 모두 관리자 권한으로 실행해야 합니다.&lt;/p&gt;</translation>
     </message>
     <message>
         <source>&lt;p&gt;You don&apos;t have permission to capture on local interfaces.&lt;/p&gt;&lt;p&gt;You can fix this by &lt;a href=&quot;file://%1&quot;&gt;installing ChmodBPF&lt;/a&gt;.&lt;/p&gt;</source>
@@ -6131,35 +5265,12 @@ Relative to reference: n/a (outside reference range)</source>
         <source>Hide Interface</source>
         <translation>인터페이스 숨기기</translation>
     </message>
-    <message>
-        <source>Unknown</source>
-        <translation type="unfinished">알 수 없음</translation>
-    </message>
-    <message>
-        <source>Hide all &apos;%1&apos; interfaces</source>
-        <translation type="unfinished"></translation>
-    </message>
 </context>
 <context>
     <name>InterfaceSortFilterModel</name>
     <message>
         <source>No interfaces to be displayed. %1 interfaces hidden.</source>
         <translation>표시할 인터페이스가 없습니다. 인터페이스 %1개는 숨겨졌습니다.</translation>
-    </message>
-</context>
-<context>
-    <name>InterfaceStatsWorker</name>
-    <message>
-        <source>The interface statistics stream stopped unexpectedly.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Unable to start the interface statistics stream.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>This build has no packet capture support.</source>
-        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -6242,16 +5353,8 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>모니터 모드</translation>
     </message>
     <message>
-        <source>Optimize</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Capture Filter</source>
         <translation>캡처 필터</translation>
-    </message>
-    <message>
-        <source>Traffic</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Addresses</source>
@@ -6276,46 +5379,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Capture filter</source>
         <translation>캡처 필터</translation>
-    </message>
-</context>
-<context>
-    <name>JsonDataSourceView</name>
-    <message>
-        <source>Event JSON</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>KeyboardShortcutsDialog</name>
-    <message>
-        <source>Keyboard Shortcuts</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Search Shortcuts</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Print Shortcutlist</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Close</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Copy</source>
-        <translation type="unfinished">복사</translation>
-    </message>
-    <message numerus="yes">
-        <source>Copy Row(s)</source>
-        <translation type="unfinished">
-            <numerusform>행 복사</numerusform>
-        </translation>
-    </message>
-    <message>
-        <source>%1 %2</source>
-        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -7210,81 +6273,6 @@ Relative to reference: n/a (outside reference range)</source>
         <source>Show file load time</source>
         <translation>파일 불러오기 시간 표시</translation>
     </message>
-    <message>
-        <source>Packet list multi-color display mode:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Off</source>
-        <translation type="unfinished">끄기</translation>
-    </message>
-    <message>
-        <source>Scrollbar only</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Equal stripes</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Shift right</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>75%</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>80%</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>85%</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>90%</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>95%</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Separator style:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Vertical</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Diagonal</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Bubble</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Display multiple colors in packet details</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>LearnCardWidget</name>
-    <message>
-        <source>&lt;h2&gt;Learn&lt;/h2&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Learn</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Opens the Wireshark documentation website</source>
-        <translation type="unfinished"></translation>
-    </message>
 </context>
 <context>
     <name>LteMacStatisticsDialog</name>
@@ -7299,10 +6287,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Include RACH frames in filter</source>
         <translation>필터의 RACH 프레임 포함</translation>
-    </message>
-    <message>
-        <source>3GPP Mac Statistics (%1 UEs, %2 frames)</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>MAC Statistics</source>
@@ -7661,14 +6645,6 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>3GPP RLC 통계</translation>
     </message>
     <message>
-        <source>Launch UL Graph</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Launch DL Graph</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Include SR frames in filter</source>
         <translation>필터의 SR 프레임 포함</translation>
     </message>
@@ -7729,554 +6705,8 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>DL 누락</translation>
     </message>
     <message>
-        <source>LTE RLC Statistics (%1 UEs, %2 frames)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>RLC Statistics</source>
         <translation>RLC 통계</translation>
-    </message>
-</context>
-<context>
-    <name>LuaDebuggerBreakpointsController</name>
-    <message numerus="yes">
-        <source>Are you sure you want to remove %Ln breakpoint(s)?</source>
-        <translation type="obsolete">
-            <numerusform>Are you sure you want to remove %Ln breakpoint?</numerusform>
-        </translation>
-    </message>
-</context>
-<context>
-    <name>LuaDebuggerCodeTabsController</name>
-    <message numerus="yes">
-        <source>There are unsaved changes in %Ln open file(s).</source>
-        <translation type="unfinished">
-            <numerusform>열려진 %Ln 파일에 저장되지 않은 변경사항이 있습니다.</numerusform>
-        </translation>
-    </message>
-    <message>
-        <source>Save Lua Script</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Could not write to %1:
-%2</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Lua Debugger</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Save changes to %1 before closing?</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>LuaDebuggerCodeView</name>
-    <message>
-        <source>Click: add or remove breakpoint
-Drag existing breakpoint: move to nearest free visible line
-Shift+click: on an empty line, add a disabled breakpoint;
-on an existing breakpoint, toggle its active state</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>LuaDebuggerDialog</name>
-    <message>
-        <source>Open Lua Script</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Save (%1)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Continue execution (F5)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Step over (F10)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Step into (F11)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Step out (Shift+F11)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Run to line (%1)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Reload Lua Plugins (Ctrl+Shift+L)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Find in script (%1)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Go to line (%1)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Location</source>
-        <translation type="unfinished">위치</translation>
-    </message>
-    <message>
-        <source>Variables</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>From: Locals</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>From: Upvalues</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>From: Globals</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>
-… (truncated)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;p&gt;&lt;b&gt;Locals&lt;/b&gt;&lt;br/&gt;Parameters and local variables for the selected stack frame.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Upvalues&lt;/b&gt;&lt;br/&gt;Outer variables that this function actually uses from surrounding code. Anything the function does not reference does not appear here.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Globals&lt;/b&gt;&lt;br/&gt;Names from the global environment table.&lt;/p&gt;&lt;p&gt;Values that differ from the previous pause are drawn in a &lt;b&gt;bold accent color&lt;/b&gt;, and briefly flash on the pause that introduced the change.&lt;/p&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Name</source>
-        <translation type="unfinished">이름</translation>
-    </message>
-    <message>
-        <source>Value</source>
-        <translation type="unfinished">값</translation>
-    </message>
-    <message>
-        <source>Type</source>
-        <translation type="unfinished">유형</translation>
-    </message>
-    <message>
-        <source>Watch</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Stack Trace</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Function</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Select a row to inspect locals and upvalues for that frame. Double-click a Lua frame to open its source location.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Breakpoints</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;p&gt;&lt;b&gt;Expression&lt;/b&gt;&lt;br/&gt;Pause only when this Lua expression is truthy in the current frame. Runtime errors count as false and surface a warning icon on the row.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Hit Count&lt;/b&gt;&lt;br/&gt;Gate the pause on a hit counter. The dropdown next to &lt;i&gt;N&lt;/i&gt; picks the comparison mode: &lt;code&gt;from&lt;/code&gt; pauses on every hit from &lt;i&gt;N&lt;/i&gt; onwards (default); &lt;code&gt;every&lt;/code&gt; pauses on hits &lt;i&gt;N&lt;/i&gt;, 2&amp;times;&lt;i&gt;N&lt;/i&gt;, 3&amp;times;&lt;i&gt;N&lt;/i&gt;, &amp;hellip;; &lt;code&gt;once&lt;/code&gt; pauses on the &lt;i&gt;N&lt;/i&gt;-th hit and deactivates the breakpoint. The counter is preserved across edits; right-click the row to reset it.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Log Message&lt;/b&gt;&lt;br/&gt;Write a line to the &lt;i&gt;Evaluate&lt;/i&gt; output (and Wireshark&apos;s debug log) each time the breakpoint fires &amp;mdash; after the &lt;i&gt;Hit Count&lt;/i&gt; gate and any &lt;i&gt;Expression&lt;/i&gt; allow it. By default execution continues; click the pause toggle on the editor row to also pause after emitting. Tags: &lt;code&gt;{expr}&lt;/code&gt; (any Lua value); &lt;code&gt;{filename}&lt;/code&gt;, &lt;code&gt;{basename}&lt;/code&gt;, &lt;code&gt;{line}&lt;/code&gt;, &lt;code&gt;{function}&lt;/code&gt;, &lt;code&gt;{what}&lt;/code&gt;; &lt;code&gt;{hits}&lt;/code&gt;, &lt;code&gt;{depth}&lt;/code&gt;, &lt;code&gt;{thread}&lt;/code&gt;; &lt;code&gt;{timestamp}&lt;/code&gt;, &lt;code&gt;{datetime}&lt;/code&gt;, &lt;code&gt;{epoch}&lt;/code&gt;, &lt;code&gt;{epoch_ms}&lt;/code&gt;, &lt;code&gt;{elapsed}&lt;/code&gt;, &lt;code&gt;{delta}&lt;/code&gt;; &lt;code&gt;{{&lt;/code&gt; / &lt;code&gt;}}&lt;/code&gt; for literal braces.&lt;/p&gt;&lt;p&gt;Edit the &lt;i&gt;Location&lt;/i&gt; cell (double-click, F2, or right-click &amp;rarr; Edit) to attach one of these. A white core inside the breakpoint dot &amp;mdash; in this list and in the gutter &amp;mdash; marks rows that carry extras.&lt;/p&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Active</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Line</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Hits</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>ON — Break on Lua errors</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>OFF — Break on Lua errors</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Files</source>
-        <translation>파일들</translation>
-    </message>
-    <message>
-        <source>Evaluate</source>
-        <translation type="unfinished">평가</translation>
-    </message>
-    <message>
-        <source>&lt;b&gt;Lua Expression Evaluation&lt;/b&gt;&lt;br&gt;&lt;br&gt;Code runs in a protected environment: runtime errors are caught and shown in the output instead of propagating.&lt;br&gt;&lt;br&gt;&lt;b&gt;What works:&lt;/b&gt;&lt;ul&gt;&lt;li&gt;Read/modify global variables (&lt;code&gt;_G.x = 42&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Modify table contents (&lt;code&gt;my_table.field = 99&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Call functions and inspect return values&lt;/li&gt;&lt;/ul&gt;&lt;b&gt;Limitations:&lt;/b&gt;&lt;ul&gt;&lt;li&gt;Local variables cannot be modified directly (use &lt;code&gt;debug.setlocal()&lt;/code&gt;) unless there is an associated &lt;i&gt;assign&lt;/i&gt; method (&lt;code&gt;pinfo.src_port&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Long-running expressions are automatically aborted&lt;/li&gt;&lt;li&gt;&lt;b&gt;Warning:&lt;/b&gt; Changes to globals persist and can affect ongoing dissection&lt;/li&gt;&lt;/ul&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Enter Lua expression</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Output</source>
-        <translation type="unfinished">출력</translation>
-    </message>
-    <message>
-        <source>Execute the Lua code (Ctrl+Return)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Clear</source>
-        <translation type="unfinished">지우기</translation>
-    </message>
-    <message>
-        <source>Clear output</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Settings</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Auto (follow color scheme)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Dark</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Light</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Color theme for the code editor</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Code View Theme:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Type: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message numerus="yes">
-        <source>There are unsaved changes in %Ln open file(s).</source>
-        <translation type="vanished">
-            <numerusform>열려진 %Ln 파일에 저장되지 않은 변경사항이 있습니다.</numerusform>
-        </translation>
-    </message>
-    <message>
-        <source>Remove All Breakpoints</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Add Watch (%1)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;p&gt;Each row is either a &lt;b&gt;Variables-tree path&lt;/b&gt; or a &lt;b&gt;Lua expression&lt;/b&gt;; the panel auto-detects which based on the syntax you type.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Path watches&lt;/b&gt; &amp;mdash; resolved against the paused frame&apos;s locals, upvalues, and globals:&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Section-qualified: &lt;code&gt;Locals.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;, &lt;code&gt;Upvalues.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;, &lt;code&gt;Globals.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;.&lt;/li&gt;&lt;li&gt;Section root alone: &lt;code&gt;Locals&lt;/code&gt;, &lt;code&gt;Upvalues&lt;/code&gt;, &lt;code&gt;Globals&lt;/code&gt; (&lt;code&gt;_G&lt;/code&gt; is an alias for &lt;code&gt;Globals&lt;/code&gt;).&lt;/li&gt;&lt;li&gt;Unqualified name: resolved in &lt;b&gt;Locals &amp;rarr; Upvalues &amp;rarr; Globals&lt;/b&gt; order; the row tooltip shows which section matched.&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;After the first segment, chain &lt;code&gt;.field&lt;/code&gt; or bracket keys &amp;mdash; integer (&lt;code&gt;[1]&lt;/code&gt;, &lt;code&gt;[-1]&lt;/code&gt;, &lt;code&gt;[0x1F]&lt;/code&gt;), boolean (&lt;code&gt;[true]&lt;/code&gt;), or short-literal string (&lt;code&gt;[&quot;key&quot;]&lt;/code&gt;, &lt;code&gt;[&apos;k&apos;]&lt;/code&gt;). Depth is capped at 32 segments.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Expression watches&lt;/b&gt; &amp;mdash; anything that is not a plain path (operators, function/method calls, table constructors, length &lt;code&gt;#&lt;/code&gt;, comparisons, &amp;hellip;) is evaluated as Lua against the same locals/upvalues/globals. &lt;b&gt;You do not need a leading &lt;code&gt;=&lt;/code&gt; or &lt;code&gt;return&lt;/code&gt;&lt;/b&gt;; value-returning expressions auto-return their value. Examples: &lt;code&gt;#packets&lt;/code&gt;, &lt;code&gt;tbl[i + 1]&lt;/code&gt;, &lt;code&gt;obj:method()&lt;/code&gt;, &lt;code&gt;a == b&lt;/code&gt;, &lt;code&gt;{x, y}&lt;/code&gt;. Tables produced by an expression are expandable, and children re-resolve on every pause.&lt;/p&gt;&lt;p&gt;Values are only read while the debugger is &lt;b&gt;paused&lt;/b&gt;; otherwise the Value column shows a muted em dash. Values that differ from the previous pause are drawn in a &lt;b&gt;bold accent color&lt;/b&gt;, and briefly flash on the pause that introduced the change.&lt;/p&gt;&lt;p&gt;Double-click or press &lt;b&gt;F2&lt;/b&gt; to edit a row; &lt;b&gt;Delete&lt;/b&gt; removes it; drag rows to reorder. Use the &lt;b&gt;Evaluate&lt;/b&gt; panel below to run statements with side effects (assignments, blocks, loops).&lt;/p&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Remove Watch (%1)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Remove All Watches (%1)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>No breakpoints</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Edit Breakpoint</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Remove Breakpoint (%1)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Remove All Breakpoints (%1)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Undo</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Redo</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Cut</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Copy</source>
-        <translation type="unfinished">복사</translation>
-    </message>
-    <message>
-        <source>Paste</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Select All</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Add Breakpoint</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Remove Breakpoint</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Run to this line</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Add Watch: &quot;%1&quot;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Debugger is paused. Uncheck to disable.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Debugger is enabled. Uncheck to disable.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Debugger is disabled while a live capture is running. Stop the capture to re-enable.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Debugger is disabled. Check to enable.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Disabled (live capture)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Disabled</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Paused</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>(runtime error)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Running</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Lua Scripts (*.lua);;All Files (*)</source>
-        <translation>Lua 스크립트 (*.lua);;모든 파일(*)</translation>
-    </message>
-    <message>
-        <source>Lua Debugger</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Continue</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>F5</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Step Over</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>F10</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Step Into</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>F11</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Step Out</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Shift+F11</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Add Watch</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Ctrl+Shift+W</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Open File</source>
-        <translation>파일 열기</translation>
-    </message>
-    <message>
-        <source>Save</source>
-        <translation type="unfinished">저장</translation>
-    </message>
-    <message>
-        <source>Ctrl+S</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Find…</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Ctrl+F</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Go to Line…</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Ctrl+G</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Reload Lua Plugins</source>
-        <translation type="unfinished">Lua 플러그인 다시 로드</translation>
-    </message>
-    <message>
-        <source>Ctrl+Shift+L</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>LuaDebuggerFindFrame</name>
-    <message>
-        <source>Find:</source>
-        <translation type="unfinished">찾기:</translation>
-    </message>
-    <message>
-        <source>Find Next</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Find Previous</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Replace:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Replace</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Replace All</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Close</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>LuaDebuggerGoToLineFrame</name>
-    <message>
-        <source>Line:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Go to line</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Cancel</source>
-        <translation type="unfinished">취소</translation>
-    </message>
-</context>
-<context>
-    <name>LuaDebuggerPauseOverlay</name>
-    <message>
-        <source>Lua debugger paused</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Use the Lua Debugger window to step, continue, or evaluate. The main window resumes when execution is released.</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>LuaDebuggerWatchController</name>
-    <message numerus="yes">
-        <source>Are you sure you want to remove %Ln watch(es)?</source>
-        <translation type="obsolete">
-            <numerusform>Are you sure you want to remove %Ln watch?</numerusform>
-        </translation>
-    </message>
-    <message>
-        <source>Lua Debugger</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message numerus="yes">
-        <source>Watch expression is too long (maximum %Ln characters).</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-        </translation>
-    </message>
-</context>
-<context>
-    <name>LuaDebuggerWatchRowPresenter</name>
-    <message>
-        <source>Enter a variable path (e.g. Locals.x, Globals.t.k) or a Lua expression in the Watch column to see a value here.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Value shown only while the debugger is paused.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Value shown only while the debugger is paused. The debugger is currently disabled.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Type: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>error</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Could not evaluate watch.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Expression — re-evaluated on every pause.</source>
-        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -8335,46 +6765,6 @@ on an existing breakpoint, toggle its active state</source>
         <translation>: 현재 최고 정보 수준</translation>
     </message>
     <message>
-        <source>Expert information</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Opens the expert information dialog, showing errors, warnings, and other relevant information about the capture.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Capture comment</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Opens the Capture File Properties dialog to view or edit capture-level comments.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Information</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Displays general information, status messages, and expert severity details.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Packet statistics</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Shows the number of captured, displayed, and selected packets.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Configuration profile</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Displays the current configuration profile and allows switching between profiles.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>ERROR</source>
         <translation>오류</translation>
     </message>
@@ -8421,8 +6811,12 @@ on an existing breakpoint, toggle its active state</source>
         <translation>선택된 패킷: %1 %2 </translation>
     </message>
     <message>
-        <source> %1 Aggregated: %2</source>
-        <translation type="unfinished"></translation>
+        <source>Selected Event: %1 %2 </source>
+        <translation>선택된 이벤트: %1 %2 </translation>
+    </message>
+    <message>
+        <source>Events: %1</source>
+        <translation>이벤트: %1</translation>
     </message>
     <message>
         <source> %1 Selected: %2 (%3%)</source>
@@ -8454,24 +6848,24 @@ on an existing breakpoint, toggle its active state</source>
         <translation>패킷 없음</translation>
     </message>
     <message>
-        <source>From Zip File…</source>
-        <oldsource>From Zip File...</oldsource>
-        <translation type="unfinished"></translation>
+        <source>No Events</source>
+        <translation>이벤트 없음</translation>
     </message>
     <message>
-        <source>From Directory…</source>
-        <oldsource>From Directory...</oldsource>
-        <translation type="unfinished"></translation>
+        <source>From Zip File...</source>
+        <translation>ZIP 파일에서...</translation>
     </message>
     <message>
-        <source>Selected Personal Profile…</source>
-        <oldsource>Selected Personal Profile...</oldsource>
-        <translation type="unfinished"></translation>
+        <source>From Directory...</source>
+        <translation>디렉터리에서...</translation>
     </message>
     <message>
-        <source>All Personal Profiles…</source>
-        <oldsource>All Personal Profiles...</oldsource>
-        <translation type="unfinished"></translation>
+        <source>Selected Personal Profile...</source>
+        <translation>선택한 개인 프로필...</translation>
+    </message>
+    <message>
+        <source>All Personal Profiles...</source>
+        <translation>모든 개인 프로필...</translation>
     </message>
     <message>
         <source>Packets: %1</source>
@@ -8491,36 +6885,8 @@ on an existing breakpoint, toggle its active state</source>
 <context>
     <name>MainWindow</name>
     <message>
-        <source> before updating</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Please close the current file before updating.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Display filter as %1</source>
         <translation>%1(으)로 표시 필터</translation>
-    </message>
-    <message>
-        <source>…as %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>The Wireshark Network Analyzer</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>The Stratoshark System Call and Log Analyzer</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Capturing from %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Clear Menu</source>
-        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -8713,8 +7079,8 @@ on an existing breakpoint, toggle its active state</source>
         <translation>MAC 주소</translation>
     </message>
     <message>
-        <source>Search vendor name using a case-insensitive regular expression.</source>
-        <translation type="unfinished"></translation>
+        <source>Search vendor name using a case-insentitive regular expression.</source>
+        <translation>대소문자를 구분하지 않는 정규 표현식으로 제조사 이름을 검색합니다.</translation>
     </message>
     <message>
         <source>Vendor Name</source>
@@ -8758,29 +7124,6 @@ on an existing breakpoint, toggle its active state</source>
     <message>
         <source>Vendor Name</source>
         <translation>제조사 이름</translation>
-    </message>
-</context>
-<context>
-    <name>MarkerDialog</name>
-    <message>
-        <source>Choose marker:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Enter new position:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Move marker</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Delete marker</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>OK</source>
-        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -9008,10 +7351,6 @@ on an existing breakpoint, toggle its active state</source>
         <translation>패킷 다이어그램</translation>
     </message>
     <message>
-        <source>Displays a visual diagram of the selected packet&apos;s fields.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Show Field Values</source>
         <translation>필드 값 표시</translation>
     </message>
@@ -9059,20 +7398,8 @@ on an existing breakpoint, toggle its active state</source>
         <translation>대화 상자</translation>
     </message>
     <message>
-        <source>&amp;Edit</source>
-        <translation type="unfinished">편집(&amp;E)</translation>
-    </message>
-    <message>
         <source>&lt;small&gt;&lt;i&gt;&lt;/i&gt;&lt;/small&gt;</source>
         <translation>&lt;small&gt;&lt;i&gt;&lt;/i&gt;&lt;/small&gt;</translation>
-    </message>
-    <message>
-        <source>Find in Packet</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Find in the packet details tree (Ctrl+Alt+F)</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Show packet bytes</source>
@@ -9081,14 +7408,6 @@ on an existing breakpoint, toggle its active state</source>
     <message>
         <source>Layout:</source>
         <translation>레이아웃:</translation>
-    </message>
-    <message>
-        <source>Find in &amp;Packet</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Find in the packet details tree (%1)</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Packet %1</source>
@@ -9120,221 +7439,81 @@ on an existing breakpoint, toggle its active state</source>
     </message>
 </context>
 <context>
-    <name>PacketFormatBlankGroupBox</name>
-    <message>
-        <source>The selected format has no options</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>PacketFormatCArraysGroupBox</name>
+    <name>PacketFormatGroupBox</name>
     <message>
         <source>GroupBox</source>
-        <translation type="unfinished">그룹 상자</translation>
+        <translation>그룹 상자</translation>
     </message>
     <message>
         <source>Packet Format</source>
-        <translation type="unfinished">패킷 형식</translation>
-    </message>
-    <message>
-        <source>Include secondary data sources</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Generate arrays for secondary data sources like reassembled or decrypted buffers in addition to the frame&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Include an array to index into the list of frames&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Include index</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>PacketFormatCSVGroupBox</name>
-    <message>
-        <source>GroupBox</source>
-        <translation type="unfinished">그룹 상자</translation>
-    </message>
-    <message>
-        <source>Packet Format</source>
-        <translation type="unfinished">패킷 형식</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Escape non-ASCII and whitespace characters&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>ASCII</source>
-        <translation type="unfinished">ASCII</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Export as a UTF-8 CSV&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>UTF-8</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Include a Byte Order Mark at the beginning of the file, for Windows&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Include Byte Order Mark</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Prefix values that a spreadsheet would evaluate as a formula (those starting with &quot;=&quot;, &quot;+&quot;, &quot;-&quot; or &quot;@&quot;) with an apostrophe, so that packet data cannot inject a formula into the exported file&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Escape spreadsheet formulas</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Replace whitespace characters (tabs, newlines, etc.) with C-style escapes&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Escape whitespace</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>PacketFormatJSONGroupBox</name>
-    <message>
-        <source>GroupBox</source>
-        <translation type="unfinished">그룹 상자</translation>
-    </message>
-    <message>
-        <source>Packet Format</source>
-        <translation type="unfinished">패킷 형식</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Avoid duplicate keys in the JSON by using a list for sibling fields with the same key&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>No duplicate keys</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Output compact JSON without indentation (significantly faster and smaller)&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Compact (no indentation)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Export a name/value pair for each field with the field value&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Values</source>
-        <translation type="unfinished">값</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Export a name/value pair for each field with the hex bytes of its packet data&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Raw Bytes</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>PacketFormatTextGroupBox</name>
-    <message>
-        <source>GroupBox</source>
-        <translation type="unfinished">그룹 상자</translation>
-    </message>
-    <message>
-        <source>Packet Format</source>
-        <translation type="unfinished">패킷 형식</translation>
+        <translation>패킷 형식</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Packet summary lines similar to the packet list&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;패킷 목록과 유사한 패킷 요약 행&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Summary line</source>
-        <translation type="unfinished"></translation>
+        <translation>요약 행</translation>
     </message>
     <message>
         <source>Include column headings</source>
-        <translation type="unfinished"></translation>
+        <translation>열 머리글 포함</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Packet details similar to the protocol tree&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;프로토콜 트리와 유사한 패킷 자세한 정보&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Details:</source>
-        <translation type="unfinished"></translation>
+        <translation>자세한 정보:</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Export only top-level packet detail items&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;최상위 패킷 자세한 정보 항목만 내보내기&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>All co&amp;llapsed</source>
-        <translation type="unfinished"></translation>
+        <translation>모두 접기(&amp;L)</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Expand and collapse packet details as they are currently displayed.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;현재 표시된 대로 패킷 자세한 정보를 확장 및 축소합니다.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>As displa&amp;yed</source>
-        <translation type="unfinished"></translation>
+        <translation>표시된 대로(&amp;Y)</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Export all packet detail items&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;모든 패킷 항목을 내보내기&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>All e&amp;xpanded</source>
-        <translation type="unfinished"></translation>
+        <translation>모두 펴기(&amp;X)</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Export a hexdump of the packet data similar to the packet bytes view&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;패킷 바이트 보기와 유사하게 패킷의 16진수 데이터 내보내기&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Bytes</source>
-        <translation type="unfinished">바이트</translation>
+        <translation>바이트</translation>
     </message>
     <message>
         <source>Include secondary data sources</source>
-        <translation type="unfinished"></translation>
+        <translation>2차 데이터 원본 포함</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Generate hexdumps for secondary data sources like reassembled or decrypted buffers in addition to the frame&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Include timestamp preamble</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Include each frame timestamp immediately before its hex dump, using the current time display format.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;프레임 외에도 재조합하거나 복호화한 것 등의 2차 데이터 원본의 16진수 덤프를 생성합니다&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
 </context>
 <context>
     <name>PacketList</name>
     <message>
-        <source>Go to Packet</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Tag Links</source>
-        <translation type="unfinished"></translation>
+        <source>Protocol Preferences</source>
+        <translation>프로토콜 설정</translation>
     </message>
     <message>
         <source>Summary as Text</source>
@@ -9347,10 +7526,6 @@ on an existing breakpoint, toggle its active state</source>
     <message>
         <source>…as YAML</source>
         <translation>…YAML로</translation>
-    </message>
-    <message>
-        <source>…as HTML</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Decode As…</source>
@@ -9367,26 +7542,6 @@ on an existing breakpoint, toggle its active state</source>
     <message>
         <source>[ Comment text exceeds %1. Stopping. ]</source>
         <translation>[ 주석 텍스트가 %1를 초과합니다. 중지합니다. ]</translation>
-    </message>
-    <message>
-        <source>Unpin Selected Rows</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message numerus="yes">
-        <source>Pin Selected Rows (max %Ln)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-        </translation>
-    </message>
-    <message>
-        <source>Pin Selected Rows</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message numerus="yes">
-        <source>At most %Ln rows can be pinned.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-        </translation>
     </message>
 </context>
 <context>
@@ -9412,18 +7567,6 @@ on an existing breakpoint, toggle its active state</source>
         <translation>내용에 맞게 조정</translation>
     </message>
     <message>
-        <source>&lt;html&gt;Values will show the raw values for fields.&lt;p&gt;Strings will show human-readable strings instead of raw values for fields. Only applicable to custom columns with fields that have value strings and custom columns which can be resolved to strings.&lt;p&gt;Details will show the values using the same format as in Packet Details. Only applicable to custom columns.&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Display as Values</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Display as Strings</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Column Preferences…</source>
         <translation>열 설정…</translation>
     </message>
@@ -9432,16 +7575,8 @@ on an existing breakpoint, toggle its active state</source>
         <translation>열 너비 조정…</translation>
     </message>
     <message>
-        <source>Unfreeze Columns</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Freeze Column</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Display as Packet Details</source>
-        <translation type="unfinished"></translation>
+        <source>Resolve Names</source>
+        <translation>이름 해석</translation>
     </message>
     <message>
         <source>Remove this Column</source>
@@ -9459,39 +7594,20 @@ on an existing breakpoint, toggle its active state</source>
 <context>
     <name>PacketListModel</name>
     <message>
-        <source>Marked</source>
-        <translation type="unfinished">마크됨</translation>
-    </message>
-    <message>
-        <source>Ignored</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Reference Time</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Modified</source>
-        <translation type="unfinished">수정됨</translation>
-    </message>
-</context>
-<context>
-    <name>PacketListProxyModel</name>
-    <message>
         <source>Column</source>
-        <translation type="unfinished"></translation>
+        <translation>열</translation>
     </message>
     <message>
         <source>%1 can only be sorted with %2 or fewer visible rows; increase cache size in Layout preferences</source>
-        <translation type="unfinished"></translation>
+        <translation>%1(으)로는 표시된 행이 %2개 이하일 때만 정렬할 수 있습니다. 레이아웃 설정에서 캐시 크기를 증가시키십시오</translation>
     </message>
     <message>
         <source>Sorting &quot;%1&quot;…</source>
-        <translation type="unfinished"></translation>
+        <translation>&quot;%1&quot; 정렬 중…</translation>
     </message>
     <message>
         <source>Sorting …</source>
-        <translation type="unfinished"></translation>
+        <translation>정렬 중 …</translation>
     </message>
 </context>
 <context>
@@ -9565,487 +7681,6 @@ on an existing breakpoint, toggle its active state</source>
     <message>
         <source>Select a path</source>
         <translation>경로 선택</translation>
-    </message>
-</context>
-<context>
-    <name>PinnedRowsModel</name>
-    <message>
-        <source>This packet is pinned but doesn&apos;t match the display filter.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>This packet is pinned but has been aggregated into a later row with the same key.</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>Plot</name>
-    <message>
-        <source>Field cannot be empty.</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>PlotAction</name>
-    <message>
-        <source>Plot %1 with current filter</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Plot %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>PlotDialog</name>
-    <message>
-        <source>Dialog</source>
-        <translation type="unfinished">대화 상자</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
-
-&lt;h3&gt;Valuable and amazing time-saving keyboard shortcuts&lt;/h3&gt;
-&lt;table&gt;&lt;tbody&gt;
-
-&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;Zoom in&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;Zoom out&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;x&lt;/th&gt;&lt;td&gt;Zoom in X axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;X&lt;/th&gt;&lt;td&gt;Zoom out X axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;y&lt;/th&gt;&lt;td&gt;Zoom in Y axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;Y&lt;/th&gt;&lt;td&gt;Zoom out Y axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;Reset plot to its initial state&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;Move right 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;Move left 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;↑&lt;/th&gt;&lt;td&gt;Move up 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;↓&lt;/th&gt;&lt;td&gt;Move down 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;Move right 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;Move left 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;Move up 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;Move down 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;Move right 100 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;Move left 100 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;Move up 100 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;Move down 100 pixels&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;Go to packet under cursor&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;Toggle time origin&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;Toggle crosshairs&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;a&lt;/th&gt;&lt;td&gt;Toggle top axis&lt;/td&gt;&lt;/th&gt;
-
-&lt;/tbody&gt;&lt;/table&gt;
-&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Add a new plot.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Remove the selected plots.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Duplicate the selected plots.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Move the selected plots upwards.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Move the selected plots downwards.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Clear all plots.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Automatic update</source>
-        <translation type="unfinished">자동 업데이트</translation>
-    </message>
-    <message>
-        <source>Reset Plot</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Reset the plot to its initial state.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>0</source>
-        <translation type="unfinished">0</translation>
-    </message>
-    <message>
-        <source>Zoom In</source>
-        <translation type="unfinished">확대</translation>
-    </message>
-    <message>
-        <source>+</source>
-        <translation type="unfinished">+</translation>
-    </message>
-    <message>
-        <source>Zoom Out</source>
-        <translation type="unfinished">축소</translation>
-    </message>
-    <message>
-        <source>-</source>
-        <translation type="unfinished">-</translation>
-    </message>
-    <message>
-        <source>Move Up 10 Pixels</source>
-        <translation type="unfinished">위쪽으로 10픽셀 이동</translation>
-    </message>
-    <message>
-        <source>Up</source>
-        <translation type="unfinished">위쪽</translation>
-    </message>
-    <message>
-        <source>Move Left 10 Pixels</source>
-        <translation type="unfinished">왼쪽으로 10픽셀 이동</translation>
-    </message>
-    <message>
-        <source>Left</source>
-        <translation type="unfinished">왼쪽</translation>
-    </message>
-    <message>
-        <source>Move Right 10 Pixels</source>
-        <translation type="unfinished">오른쪽으로 10픽셀 이동</translation>
-    </message>
-    <message>
-        <source>Right</source>
-        <translation type="unfinished">오른쪽</translation>
-    </message>
-    <message>
-        <source>Move Down 10 Pixels</source>
-        <translation type="unfinished">아래쪽으로 10픽셀 이동</translation>
-    </message>
-    <message>
-        <source>Down</source>
-        <translation type="unfinished">아래쪽</translation>
-    </message>
-    <message>
-        <source>Move Up 1 Pixel</source>
-        <translation type="unfinished">위쪽으로 1픽셀 이동</translation>
-    </message>
-    <message>
-        <source>Shift+Up</source>
-        <translation type="unfinished">Shift+위쪽</translation>
-    </message>
-    <message>
-        <source>Move Left 1 Pixel</source>
-        <translation type="unfinished">왼쪽으로 1픽셀 이동</translation>
-    </message>
-    <message>
-        <source>Shift+Left</source>
-        <translation type="unfinished">Shift+왼쪽</translation>
-    </message>
-    <message>
-        <source>Move Right 1 Pixel</source>
-        <translation type="unfinished">오른쪽으로 1픽셀 이동</translation>
-    </message>
-    <message>
-        <source>Shift+Right</source>
-        <translation type="unfinished">Shift+오른쪽</translation>
-    </message>
-    <message>
-        <source>Move Down 1 Pixel</source>
-        <translation type="unfinished">아래쪽으로 1픽셀 이동</translation>
-    </message>
-    <message>
-        <source>Move down 1 Pixel</source>
-        <translation type="unfinished">아래쪽으로 1픽셀 이동</translation>
-    </message>
-    <message>
-        <source>Shift+Down</source>
-        <translation type="unfinished">Shift+아래쪽</translation>
-    </message>
-    <message>
-        <source>Move Up 100 Pixels</source>
-        <translation type="unfinished">위쪽으로 100픽셀 이동</translation>
-    </message>
-    <message>
-        <source>Alt+Up</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Move Left 100 Pixels</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Alt+Left</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Move Right 100 Pixels</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Alt+Right</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Move Down 100 Pixels</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Alt+Down</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Go To Packet Under Cursor</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Go to packet currently under the cursor</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>G</source>
-        <translation type="unfinished">G</translation>
-    </message>
-    <message>
-        <source>Time origin</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Toggle between time relative to first data point and time relative to capture start</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>T</source>
-        <translation type="unfinished">T</translation>
-    </message>
-    <message>
-        <source>Log scale</source>
-        <translation type="unfinished">로그 표기</translation>
-    </message>
-    <message>
-        <source>Toggle Y-axis between logarithmic and linear scale</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Crosshairs</source>
-        <translation type="unfinished">십자선</translation>
-    </message>
-    <message>
-        <source>Toggle crosshairs</source>
-        <translation type="unfinished">십자선 표시 전환</translation>
-    </message>
-    <message>
-        <source>Space</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Top axis</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Toggle top axis on and off</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>A</source>
-        <translation type="unfinished">A</translation>
-    </message>
-    <message>
-        <source>Legend</source>
-        <translation type="unfinished">범례</translation>
-    </message>
-    <message>
-        <source>Toggle legend</source>
-        <translation type="unfinished">범례 전환</translation>
-    </message>
-    <message>
-        <source>Zoom In X Axis</source>
-        <translation type="unfinished">X축 확대</translation>
-    </message>
-    <message>
-        <source>X</source>
-        <translation type="unfinished">X</translation>
-    </message>
-    <message>
-        <source>Zoom Out X Axis</source>
-        <translation type="unfinished">X축 축소</translation>
-    </message>
-    <message>
-        <source>Shift+X</source>
-        <translation type="unfinished">Shift+X</translation>
-    </message>
-    <message>
-        <source>Zoom In Y Axis</source>
-        <translation type="unfinished">Y축 확대</translation>
-    </message>
-    <message>
-        <source>Y</source>
-        <translation type="unfinished">Y</translation>
-    </message>
-    <message>
-        <source>Zoom Out Y Axis</source>
-        <translation type="unfinished">Y축 축소</translation>
-    </message>
-    <message>
-        <source>Shift+Y</source>
-        <translation type="unfinished">Shift+Y</translation>
-    </message>
-    <message>
-        <source>Add Marker</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Move Marker</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Show Pos Marker</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Show Markers Difference</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Delete Marker</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Delete All</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Show Markers DataPoints</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Auto Scroll</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Multiple Value Axes</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Plots</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Save As…</source>
-        <translation type="unfinished">다른 이름으로 저장…</translation>
-    </message>
-    <message>
-        <source>Copy</source>
-        <translation type="unfinished">복사</translation>
-    </message>
-    <message>
-        <source>Copy plots from another profile.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Markers</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Filtered packets</source>
-        <translation type="unfinished">필터된 패킷</translation>
-    </message>
-    <message>
-        <source>All packets</source>
-        <translation type="unfinished">모든 패킷</translation>
-    </message>
-    <message>
-        <source>Seq. num.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Frame num.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Release to zoom, x = %1 to %2, y = %3 to %4</source>
-        <translation type="unfinished">커서를 놓으면 크기 조정, x = %1 - %2, y = %3 - %4</translation>
-    </message>
-    <message>
-        <source>Unable to select range.</source>
-        <translation type="unfinished">범위를 선택할 수 없습니다.</translation>
-    </message>
-    <message>
-        <source>Select a plot for details.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Click to select packet</source>
-        <translation type="unfinished">클릭하여 패킷 선택</translation>
-    </message>
-    <message>
-        <source>%1 Plots: %2</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Packet</source>
-        <translation type="unfinished">패킷</translation>
-    </message>
-    <message>
-        <source>%1 (%2s%3).</source>
-        <translation type="unfinished">%1 (%2s%3).</translation>
-    </message>
-    <message>
-        <source>Move to top left</source>
-        <translation type="unfinished">왼쪽 위로 이동</translation>
-    </message>
-    <message>
-        <source>Move to top center</source>
-        <translation type="unfinished">가운데 위로 이동</translation>
-    </message>
-    <message>
-        <source>Move to top right</source>
-        <translation type="unfinished">오른쪽 위로 이동</translation>
-    </message>
-    <message>
-        <source>Move to bottom left</source>
-        <translation type="unfinished">왼쪽 아래로 이동</translation>
-    </message>
-    <message>
-        <source>Move to bottom center</source>
-        <translation type="unfinished">가운데 아래로 이동</translation>
-    </message>
-    <message>
-        <source>Move to bottom right</source>
-        <translation type="unfinished">오른쪽 아래로 이동</translation>
-    </message>
-    <message>
-        <source>Time (s)</source>
-        <translation type="unfinished">시간(초)</translation>
-    </message>
-    <message>
-        <source>relative to capture start</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>relative to first data point</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Portable Document Format (*.pdf)</source>
-        <translation type="unfinished">PDF 형식 (*.pdf)</translation>
-    </message>
-    <message>
-        <source>Portable Network Graphics (*.png)</source>
-        <translation type="unfinished">PNG 형식 (*.png)</translation>
-    </message>
-    <message>
-        <source>Windows Bitmap (*.bmp)</source>
-        <translation type="unfinished">Windows 비트맵 (*.bmp)</translation>
-    </message>
-    <message>
-        <source>JPEG File Interchange Format (*.jpeg *.jpg)</source>
-        <translation type="unfinished">JPEG 형식 (*.jpeg *.jpg)</translation>
-    </message>
-    <message>
-        <source>Save Graph As…</source>
-        <translation type="unfinished">다른 이름으로 그래프 저장…</translation>
     </message>
 </context>
 <context>
@@ -10147,16 +7782,6 @@ on an existing breakpoint, toggle its active state</source>
         <source>Preferences</source>
         <translation>설정</translation>
     </message>
-    <message>
-        <source>Copy</source>
-        <translation type="unfinished">복사</translation>
-    </message>
-    <message numerus="yes">
-        <source>Copy Row(s)</source>
-        <translation type="unfinished">
-            <numerusform>행 복사</numerusform>
-        </translation>
-    </message>
 </context>
 <context>
     <name>PrefsModel</name>
@@ -10177,12 +7802,8 @@ on an existing breakpoint, toggle its active state</source>
         <translation>열</translation>
     </message>
     <message>
-        <source>Theme and Font</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Welcome Page</source>
-        <translation type="unfinished"></translation>
+        <source>Font and Colors</source>
+        <translation>글꼴 및 색상</translation>
     </message>
     <message>
         <source>Capture</source>
@@ -10199,10 +7820,6 @@ on an existing breakpoint, toggle its active state</source>
     <message>
         <source>RSA Keys</source>
         <translation>RSA 키</translation>
-    </message>
-    <message>
-        <source>Aggregation</source>
-        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -10291,6 +7908,10 @@ on an existing breakpoint, toggle its active state</source>
         <translation>설정 프로필</translation>
     </message>
     <message>
+        <source>Auto switch event limit</source>
+        <translation>자동 전환 이벤트 제한</translation>
+    </message>
+    <message>
         <source>Import</source>
         <comment>noun</comment>
         <translation>가져오기</translation>
@@ -10301,30 +7922,30 @@ on an existing breakpoint, toggle its active state</source>
         <translation>내보내기</translation>
     </message>
     <message>
-        <source>From Zip File…</source>
-        <oldsource>From Zip File...</oldsource>
-        <translation type="unfinished"></translation>
+        <source>From Zip File...</source>
+        <translation>ZIP 파일에서...</translation>
     </message>
     <message>
-        <source>From Directory…</source>
-        <oldsource>From Directory...</oldsource>
-        <translation type="unfinished"></translation>
+        <source>From Directory...</source>
+        <translation>디렉터리에서...</translation>
     </message>
     <message numerus="yes">
-        <source>%Ln Selected Personal Profile(s)…</source>
-        <oldsource>%Ln Selected Personal Profile(s)...</oldsource>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <source>%Ln Selected Personal Profile(s)...</source>
+        <translation>
+            <numerusform>선택한 개인 프로필 %Ln개...</numerusform>
         </translation>
     </message>
     <message>
-        <source>All Personal Profiles…</source>
-        <oldsource>All Personal Profiles...</oldsource>
-        <translation type="unfinished"></translation>
+        <source>All Personal Profiles...</source>
+        <translation>모든 개인 프로필...</translation>
     </message>
     <message>
         <source>New profile</source>
         <translation>새 프로필</translation>
+    </message>
+    <message>
+        <source>Profile Error</source>
+        <translation>프로필 오류</translation>
     </message>
     <message>
         <source>Exporting profiles</source>
@@ -10349,6 +7970,22 @@ on an existing breakpoint, toggle its active state</source>
         <translation type="vanished">
             <numerusform>선택한 개인 프로필 %Ln개</numerusform>
         </translation>
+    </message>
+    <message>
+        <source>An import of profiles is not allowed, while changes are pending</source>
+        <translation>변경 사항이 보류 중일 때 프로필 가져오기는 허용되지 않습니다</translation>
+    </message>
+    <message>
+        <source>An import is pending to be saved. Additional imports are not allowed</source>
+        <translation>가져온 항목 저장이 보류 중입니다. 추가 가져오기는 허용되지 않습니다</translation>
+    </message>
+    <message>
+        <source>An export of profiles is only allowed for personal profiles</source>
+        <translation>프로필 내보내기는 개인 프로필에만 허용됩니다</translation>
+    </message>
+    <message>
+        <source>An export of profiles is not allowed, while changes are pending</source>
+        <translation>변경 사항이 보류 중일 때 프로필 내보내기는 허용되지 않습니다</translation>
     </message>
     <message numerus="yes">
         <source>%Ln profile(s) exported</source>
@@ -10418,24 +8055,24 @@ on an existing breakpoint, toggle its active state</source>
         <translation>이것은 시스템에서 제공한 프로필입니다</translation>
     </message>
     <message>
+        <source>A profile change for this name is pending</source>
+        <translation>이 이름의 프로필 변경을 보류하고 있습니다</translation>
+    </message>
+    <message>
+        <source> (See: %1)</source>
+        <translation> (참조: %1)</translation>
+    </message>
+    <message>
+        <source>This is an invalid profile definition</source>
+        <translation>잘못된 프로필 정의입니다</translation>
+    </message>
+    <message>
         <source>A profile already exists with this name</source>
         <translation>이 이름의 프로필이 이미 있습니다</translation>
     </message>
     <message>
-        <source>Duplicate profile name (%1)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>A profile change for this name is pending (See: %1)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>%1 (originally %2)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>The %1 profile is being deleted</source>
-        <translation type="unfinished"></translation>
+        <source>A profile with this name is being deleted</source>
+        <translation>이 이름의 프로필이 삭제되고 있습니다</translation>
     </message>
     <message>
         <source>Created from default settings</source>
@@ -10459,8 +8096,16 @@ on an existing breakpoint, toggle its active state</source>
         <translation>복사</translation>
     </message>
     <message>
+        <source>Exporting profiles while changes are pending is not allowed</source>
+        <translation>변경 사항이 보류 중일 때 프로필 내보내기는 허용되지 않습니다</translation>
+    </message>
+    <message>
         <source>No profiles found to export</source>
         <translation>내보낼 프로필을 찾지 못했습니다</translation>
+    </message>
+    <message>
+        <source>Can&apos;t delete profile directory</source>
+        <translation>프로필 디렉터리를 삭제할 수 없습니다</translation>
     </message>
     <message>
         <source>A profile name cannot contain the following characters: %1</source>
@@ -10473,6 +8118,18 @@ on an existing breakpoint, toggle its active state</source>
     <message>
         <source>A profile cannot start or end with a period (.)</source>
         <translation>프로필은 마침표(.)로 시작하거나 끝낼 수 없습니다</translation>
+    </message>
+    <message>
+        <source>Default</source>
+        <translation>기본값</translation>
+    </message>
+    <message>
+        <source>Global</source>
+        <translation>전역</translation>
+    </message>
+    <message>
+        <source>Personal</source>
+        <translation>개인</translation>
     </message>
     <message>
         <source>Renamed from: %1</source>
@@ -10520,33 +8177,13 @@ on an existing breakpoint, toggle its active state</source>
         <source>Loading</source>
         <translation>불러오는 중</translation>
     </message>
-    <message>
-        <source>Task progress</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Shows the progress of the current background task.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Progress bar</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Shows the percentage of the task that has been completed.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Stop</source>
-        <translation type="unfinished">정지</translation>
-    </message>
-    <message>
-        <source>Stops the current background task.</source>
-        <translation type="unfinished"></translation>
-    </message>
 </context>
 <context>
     <name>ProtoTree</name>
+    <message>
+        <source>Packet details</source>
+        <translation>패킷 자세한 정보</translation>
+    </message>
     <message>
         <source>Not a field or protocol</source>
         <translation>필드나 프로토콜이 아님</translation>
@@ -10570,10 +8207,6 @@ on an existing breakpoint, toggle its active state</source>
     <message>
         <source>Collapse All</source>
         <translation>모두 접기</translation>
-    </message>
-    <message>
-        <source>Distribution…</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Copy</source>
@@ -10612,36 +8245,8 @@ on an existing breakpoint, toggle its active state</source>
         <translation>필터 필드 참조</translation>
     </message>
     <message>
-        <source>Tagging Rules...</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Tag Links</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Coloring Rule Preferences...</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Coloring Rules...</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Resume Coloring Rule</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Pause Coloring Rule</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Resume All Coloring Rules</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Copied %1</source>
-        <translation type="unfinished"></translation>
+        <source>Copied </source>
+        <translation>복사됨 </translation>
     </message>
     <message>
         <source>Wiki Page for %1</source>
@@ -10654,29 +8259,6 @@ on an existing breakpoint, toggle its active state</source>
     <message>
         <source>Colorize with Filter</source>
         <translation>필터로 색상화</translation>
-    </message>
-</context>
-<context>
-    <name>ProtoTreeModel</name>
-    <message>
-        <source>Comment</source>
-        <translation type="unfinished">주석</translation>
-    </message>
-    <message>
-        <source>Chat</source>
-        <translation type="unfinished">대화</translation>
-    </message>
-    <message>
-        <source>Note</source>
-        <translation type="unfinished">주의</translation>
-    </message>
-    <message>
-        <source>Warning</source>
-        <translation type="unfinished">경고</translation>
-    </message>
-    <message>
-        <source>Error</source>
-        <translation type="unfinished">오류</translation>
     </message>
 </context>
 <context>
@@ -10843,6 +8425,34 @@ on an existing breakpoint, toggle its active state</source>
 </context>
 <context>
     <name>QObject</name>
+    <message>
+        <source>Average Throughput (bits/s)</source>
+        <translation>평균 처리량(비트/초)</translation>
+    </message>
+    <message>
+        <source>Round Trip Time (ms)</source>
+        <translation>왕복 시간(ms)</translation>
+    </message>
+    <message>
+        <source>Segment Length (B)</source>
+        <translation>세그먼트 길이(바이트)</translation>
+    </message>
+    <message>
+        <source>Sequence Number (B)</source>
+        <translation>시퀀스 번호(바이트)</translation>
+    </message>
+    <message>
+        <source>Time (s)</source>
+        <translation>시간(초)</translation>
+    </message>
+    <message>
+        <source>Window Size (B)</source>
+        <translation>윈도 크기(바이트)</translation>
+    </message>
+    <message>
+        <source>Unacked (Outstanding) Bytes (B)</source>
+        <translation>ACK되지 않은(대기 중) 바이트(바이트)</translation>
+    </message>
     <message>
         <source>[no capture file]</source>
         <translation>[캡처 파일 없음]</translation>
@@ -11180,40 +8790,12 @@ on an existing breakpoint, toggle its active state</source>
         <translation>DRB-%1</translation>
     </message>
     <message>
-        <source>Left</source>
-        <translation type="unfinished">왼쪽</translation>
-    </message>
-    <message>
-        <source>Center</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Right</source>
-        <translation type="unfinished">오른쪽</translation>
-    </message>
-    <message>
         <source>Unknown</source>
         <translation>알 수 없음</translation>
     </message>
     <message>
-        <source>Values</source>
-        <translation type="unfinished">값</translation>
-    </message>
-    <message>
-        <source>Strings</source>
-        <translation type="unfinished">문자열</translation>
-    </message>
-    <message>
-        <source>Details</source>
-        <translation type="unfinished">자세한 정보</translation>
-    </message>
-    <message>
         <source>UE Id</source>
         <translation>UE Id</translation>
-    </message>
-    <message>
-        <source></source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Name</source>
@@ -11240,9 +8822,8 @@ on an existing breakpoint, toggle its active state</source>
         <translation>잘못된 표시 필터</translation>
     </message>
     <message>
-        <source>The filter expression &quot;%1&quot; isn&apos;t a valid display filter.
-(%2).</source>
-        <translation type="unfinished"></translation>
+        <source>The filter expression %1 isn&apos;t a valid display filter. (%2).</source>
+        <translation>필터 표현식 %1이(가) 올바른 표시 필터가 아닙니다. (%2).</translation>
     </message>
     <message>
         <source>Error</source>
@@ -11337,304 +8918,23 @@ on an existing breakpoint, toggle its active state</source>
         <translation>부하</translation>
     </message>
     <message>
-        <source>Average Throughput</source>
-        <translation type="unfinished"></translation>
+        <source>Left</source>
+        <translation>왼쪽</translation>
     </message>
     <message>
-        <source>Round Trip Time</source>
-        <translation type="unfinished">왕복 시간</translation>
+        <source>Center</source>
+        <translation>가운데</translation>
     </message>
     <message>
-        <source>Segment Length</source>
-        <translation type="unfinished">세그먼트 길이</translation>
-    </message>
-    <message>
-        <source>Sequence Number</source>
-        <translation type="unfinished">시퀀스 번호</translation>
-    </message>
-    <message>
-        <source>Time</source>
-        <translation type="unfinished">시간</translation>
-    </message>
-    <message>
-        <source>Window Size</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Unacked (Outstanding) Bytes</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Dissector</source>
-        <translation type="unfinished">분해기</translation>
-    </message>
-    <message>
-        <source>File Type</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Codec</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Analysis</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Tap Listener</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Display Filter</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>User Interface</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>not found</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Global</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Personal</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Type: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>%1 = %2</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Copy Name</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Copy Value</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Copy Path</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Copy Name &amp;&amp; Value</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Add Watch: &quot;%1&quot;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Reload Lua Plugins</source>
-        <translation type="unfinished">Lua 플러그인 다시 로드</translation>
-    </message>
-    <message>
-        <source>Are you sure you want to reload all Lua plugins?
-
-This will restart all Lua scripts and may affect capture analysis.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Evaluation available when debugger is paused</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Enter Lua expression</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Error: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Error: Unknown error</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Open Source</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Copy Location</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Show in Finder</source>
-        <translation type="unfinished">Finder에 표시</translation>
-    </message>
-    <message>
-        <source>Show in Folder</source>
-        <translation type="unfinished">폴더 위치 표시</translation>
-    </message>
-    <message>
-        <source>Add Watch</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Remove All Watches</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Duplicate Watch</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Edit Watch</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Remove</source>
-        <translation type="unfinished">삭제</translation>
-    </message>
-    <message>
-        <source>Clear All Watches</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message numerus="yes">
-        <source>Are you sure you want to remove %Ln watch(es)?</source>
-        <translation type="unfinished">
-            <numerusform>Are you sure you want to remove %Ln watch?</numerusform>
-        </translation>
-    </message>
-    <message>
-        <source>Maximum watch depth reached</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Maximum watch depth reached.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Location</source>
-        <translation type="unfinished">위치</translation>
-    </message>
-    <message>
-        <source>&lt;p&gt;&lt;b&gt;Hit-count summary&lt;/b&gt;&lt;/p&gt;&lt;p&gt;&lt;code&gt;≥N&lt;/code&gt; &amp;mdash; &lt;i&gt;from&lt;/i&gt; mode: pause from hit &lt;i&gt;N&lt;/i&gt; onwards.&lt;br/&gt;&lt;code&gt;×N&lt;/code&gt; &amp;mdash; &lt;i&gt;every&lt;/i&gt; mode: pause on hits &lt;i&gt;N&lt;/i&gt;, &lt;i&gt;2N&lt;/i&gt;, &lt;i&gt;3N&lt;/i&gt;, &amp;hellip;&lt;br/&gt;&lt;code&gt;@N&lt;/code&gt; &amp;mdash; &lt;i&gt;once&lt;/i&gt; mode: pause once on the &lt;i&gt;N&lt;/i&gt;th hit, then deactivate.&lt;/p&gt;&lt;p&gt;The cell starts with the running hit counter; if a gate is set it follows in parentheses, e.g. &lt;code&gt;3 (≥10)&lt;/code&gt;. With no hit gate the cell is just the counter.&lt;/p&gt;&lt;p&gt;Edit the &lt;i&gt;Location&lt;/i&gt; cell to set or change the gate (see the breakpoint-extras section).&lt;/p&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Edit...</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Reset Hit Count</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Reset All Hit Counts</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Remove All Breakpoints</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Clear All Breakpoints</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message numerus="yes">
-        <source>Are you sure you want to remove %Ln breakpoint(s)?</source>
-        <translation type="unfinished">
-            <numerusform>Are you sure you want to remove %Ln breakpoint?</numerusform>
-        </translation>
-    </message>
-    <message>
-        <source>Location: %1:%2</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Condition: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>pauses on hits %1, 2×%1, 3×%1, …</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>pauses once on hit %1, then deactivates the breakpoint</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>pauses on every hit from %1 onwards</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Hit Count: %1 / %2 (%3)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Hits: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Log: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>(logpoint — also pauses)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>(logpoint — does not pause)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Condition error on last evaluation — treated as false (silent). Edit or reset the breakpoint to clear.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Condition error: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>File not found: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&amp;Edit...</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&amp;Disable</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&amp;Enable</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&amp;Remove</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>No breakpoints
-%1: add or remove breakpoint on the current line in the editor</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>All breakpoints are inactive — click to activate all
-%1: add or remove on the current line in the editor</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Click to deactivate all breakpoints
-%1: add or remove on the current line in the editor</source>
-        <translation type="unfinished"></translation>
+        <source>Right</source>
+        <translation>오른쪽</translation>
     </message>
 </context>
 <context>
-    <name>RecentCaptureFilesListModel</name>
+    <name>QObject::QObject::QObject</name>
     <message>
-        <source>%1 (file no longer found at path)</source>
-        <translation type="unfinished"></translation>
+        <source>CCCH</source>
+        <translation>CCCH</translation>
     </message>
 </context>
 <context>
@@ -12149,11 +9449,9 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <source>Stream %1 Delta</source>
         <translation>스트림 %1 델타</translation>
     </message>
-    <message numerus="yes">
-        <source> %Ln stream(s), </source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-        </translation>
+    <message>
+        <source> %1 streams, </source>
+        <translation> 스트림 %1개, </translation>
     </message>
     <message>
         <source>Save one stream CSV</source>
@@ -12166,6 +9464,10 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source>&amp;Analyze</source>
         <translation>분석(&amp;A)</translation>
+    </message>
+    <message>
+        <source>Open the analysis window for the selected stream(s)</source>
+        <translation>선택한 스트림에 대한 분석 창 열기</translation>
     </message>
     <message>
         <source>&amp;Set List</source>
@@ -12182,10 +9484,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source>Replace existing list in RTP Analysis Dialog with new one</source>
         <translation>RTP 분석 대화 상자의 기존 목록을 새로운 목록으로 교체</translation>
-    </message>
-    <message>
-        <source>Open the analysis window for the selected stream(s)</source>
-        <translation>선택한 스트림에 대한 분석 창 열기</translation>
     </message>
     <message>
         <source>Add new set to existing list in RTP Analysis Dialog</source>
@@ -12272,8 +9570,8 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>필터 준비(&amp;F)</translation>
     </message>
     <message>
-        <source>Prepare a filter matching the selected streams.</source>
-        <translation type="unfinished"></translation>
+        <source>Prepare a filter matching the selected stream(s).</source>
+        <translation>선택한 스트림과 일치하는 필터를 준비합니다.</translation>
     </message>
     <message>
         <source>&amp;Current Tab</source>
@@ -12463,18 +9761,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>시간</translation>
     </message>
     <message>
-        <source>Visual Sample Rate:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Adjust the sampling rate used for the waveform display. Higher values display higher frequency harmonics but take additional processing time. Values between 1 kHz and 48 kHz are supported.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source> Hz</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>&amp;Export</source>
         <translation>내보내기(&amp;E)</translation>
     </message>
@@ -12549,14 +9835,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source>Invert muting of selected streams</source>
         <translation>선택한 스트림의 음소거 상태 반전</translation>
-    </message>
-    <message>
-        <source>Solo</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Unmute selected streams and mute all other streams</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Route audio to left channel of selected streams</source>
@@ -12651,8 +9929,8 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>필터 준비(&amp;F)</translation>
     </message>
     <message>
-        <source>Prepare a filter matching the selected streams.</source>
-        <translation type="unfinished"></translation>
+        <source>Prepare a filter matching the selected stream(s).</source>
+        <translation>선택한 스트림과 일치하는 필터를 준비합니다.</translation>
     </message>
     <message>
         <source>R&amp;efresh streams</source>
@@ -12779,9 +10057,8 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>오디오 없음</translation>
     </message>
     <message>
-        <source>Decoding streams…</source>
-        <oldsource>Decoding streams...</oldsource>
-        <translation type="unfinished"></translation>
+        <source>Decoding streams...</source>
+        <translation>스트림 디코드 중...</translation>
     </message>
     <message>
         <source>Out of Sequence</source>
@@ -12803,11 +10080,9 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <source>Double click on cell to change audio routing</source>
         <translation>오디오 라우팅을 변경하려면 셀을 두 번 클릭</translation>
     </message>
-    <message numerus="yes">
-        <source>%Ln stream(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-        </translation>
+    <message>
+        <source>%1 streams</source>
+        <translation>스트림 %1개</translation>
     </message>
     <message>
         <source>, %1 selected</source>
@@ -12826,21 +10101,12 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>, 시작: %1, 커서: %2, &quot;G&quot; 키를 누르면 패킷 %3(으)로 이동합니다. 그래프에서 두 번 클릭하면 재생 시작점을 설정합니다.</translation>
     </message>
     <message>
-        <source>Playback of stream %1 failed.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Save failed.</source>
-        <translation type="unfinished"></translation>
+        <source>Playback of stream %1 failed!</source>
+        <translation>스트림 %1 재생이 실패했습니다!</translation>
     </message>
     <message>
         <source>Automatic</source>
         <translation>자동</translation>
-    </message>
-    <message>
-        <source>Resampling waveform…</source>
-        <oldsource>Resampling waveform...</oldsource>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>WAV (*.wav)</source>
@@ -12883,6 +10149,10 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>저장하기에 적합한 스트림 없음</translation>
     </message>
     <message>
+        <source>Save failed!</source>
+        <translation>저장이 실패했습니다!</translation>
+    </message>
+    <message>
         <source>Can&apos;t write header of AU file</source>
         <translation>AU 파일 헤더를 기록할 수 없음</translation>
     </message>
@@ -12899,9 +10169,8 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>오디오 라우팅을 변경하려면 두 번 클릭하십시오</translation>
     </message>
     <message>
-        <source>Preparing to play…</source>
-        <oldsource>Preparing to play...</oldsource>
-        <translation type="unfinished"></translation>
+        <source>Preparing to play...</source>
+        <translation>재생 준비 중...</translation>
     </message>
     <message>
         <source>Unknown</source>
@@ -13003,8 +10272,8 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>분석(&amp;A)</translation>
     </message>
     <message>
-        <source>Open the analysis window for the selected streams and add it to it</source>
-        <translation type="unfinished"></translation>
+        <source>Open the analysis window for the selected stream(s) and add it to it</source>
+        <translation>선택한 스트림에 대한 분석 창을 열고 추가합니다</translation>
     </message>
     <message>
         <source>Find the reverse stream matching the selected forward stream.</source>
@@ -13059,8 +10328,8 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>패킷 마크</translation>
     </message>
     <message>
-        <source>Mark the packets of the selected streams.</source>
-        <translation type="unfinished"></translation>
+        <source>Mark the packets of the selected stream(s).</source>
+        <translation>선택한 스트림의 패킷을 마크합니다.</translation>
     </message>
     <message>
         <source>M</source>
@@ -13103,8 +10372,8 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>G</translation>
     </message>
     <message>
-        <source>Prepare a filter matching the selected streams.</source>
-        <translation type="unfinished"></translation>
+        <source>Prepare a filter matching the selected stream(s).</source>
+        <translation>선택한 스트림과 일치하는 필터를 준비합니다.</translation>
     </message>
     <message>
         <source>P</source>
@@ -13162,17 +10431,13 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <source>as YAML</source>
         <translation>YAML로</translation>
     </message>
-    <message numerus="yes">
-        <source>%Ln stream(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-        </translation>
+    <message>
+        <source>%1 streams</source>
+        <translation>스트림 %1개</translation>
     </message>
-    <message numerus="yes">
-        <source>, %1 selected, %Ln total packet(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-        </translation>
+    <message>
+        <source>, %1 selected, %2 total packets</source>
+        <translation>, %1개 선택됨, 총 패킷 %2개</translation>
     </message>
     <message>
         <source>Save RTPDump As…</source>
@@ -13675,14 +10940,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>여러 번 발견됨</translation>
     </message>
     <message>
-        <source>Search the selected packet details tree</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Find in selected Packet</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Search for data using display filter syntax (e.g. ip.addr==10.1.1.1), a hexadecimal string (e.g. fffffda5), a plain string (e.g. My String) or a regular expression (e.g. colou?r).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <oldsource>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Search for data using display filter syntax (e.g. ip.addr==10.1.1.1), a hexadecimal string (e.g. fffffda5) or a plain string (e.g. My String).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</oldsource>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;표시 필터 문법(예: ip.addr==10.1.1.1), 16진수 문자열(예: ffffda5), 일반 문자열(예: My String) 또는 정규 표현식(예: colou?r)을 사용하여 데이터를 검색합니다.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
@@ -13720,12 +10977,20 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>잘못된 필터입니다.</translation>
     </message>
     <message>
-        <source>Search for a plain text string in the current packet details tree (e.g. My String).</source>
-        <translation type="unfinished"></translation>
+        <source>Event List</source>
+        <translation>이벤트 목록</translation>
     </message>
     <message>
-        <source>Search using a regular expression in the current packet details tree (e.g. colou?r).</source>
-        <translation type="unfinished"></translation>
+        <source>Event Details</source>
+        <translation>이벤트 자세한 정보</translation>
+    </message>
+    <message>
+        <source>Event Bytes</source>
+        <translation>이벤트 바이트</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Search the Info column of the event list (summary pane), decoded event display labels (tree view pane) or the ASCII-converted event data (hex view pane).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;이벤트 목록의 정보 열(요약 패널), 디코드된 이벤트 표시 이름표(트리 보기 패널), ASCII로 변환된 이벤트 데이터(16진수 보기 패널) 중에서 검색합니다.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>That filter doesn&apos;t test anything.</source>
@@ -13770,30 +11035,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source>No packet matched that filter.</source>
         <translation>필터와 일치하는 패킷이 없습니다.</translation>
-    </message>
-    <message>
-        <source>Find in Packet supports string and regular expression search only.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>[no matches] %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>No %1 found.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>[%1 of %2]</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Search for a plain text string/char in the current packet details tree (e.g. &apos;flag&apos; or &apos;f&apos;).</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Search using a regular expression in the current packet details tree (e.g. &apos;d&apos;).</source>
-        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -14150,14 +11391,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
 <context>
     <name>ShortcutListModel</name>
     <message>
-        <source>Display Filter Input</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Jump to display filter input box</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Shortcut</source>
         <translation>단축키</translation>
     </message>
@@ -14283,10 +11516,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>UTF-8</translation>
     </message>
     <message>
-        <source>UTF-8 Unescaped</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>YAML</source>
         <translation>YAML</translation>
     </message>
@@ -14331,10 +11560,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
 </context>
 <context>
     <name>ShowPacketBytesTextEdit</name>
-    <message>
-        <source>&lt;html&gt;Mouse byte selection is enabled when&lt;p&gt;&quot;Decode as&quot; = None&lt;p&gt;AND&lt;p&gt;&quot;Show as&quot; = ASCII, ASCII &amp; Control, EBCDIC or Raw&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
     <message>
         <source>Show Selected</source>
         <translation>선택한 항목 표시</translation>
@@ -14494,6 +11719,124 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>대화 상자</translation>
     </message>
     <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
+
+&lt;h3&gt;Valuable and amazing time-saving keyboard shortcuts&lt;/h3&gt;
+&lt;table&gt;&lt;tbody&gt;
+
+&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;Zoom in&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;Zoom out&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;x&lt;/th&gt;&lt;td&gt;Zoom in X axis&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;X&lt;/th&gt;&lt;td&gt;Zoom out X axis&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;y&lt;/th&gt;&lt;td&gt;Zoom in Y axis&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Y&lt;/th&gt;&lt;td&gt;Zoom out Y axis&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;Reset graph to its initial state&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;Move right 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;Move left 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↑&lt;/th&gt;&lt;td&gt;Move up 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↓&lt;/th&gt;&lt;td&gt;Move down 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;Move right 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;Move left 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;Move up 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;Move down 1 pixel&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Pg Up&lt;/i&gt;&lt;/th&gt;&lt;td&gt;Next stream&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Pg Dn&lt;/i&gt;&lt;/th&gt;&lt;td&gt;Previous stream&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;d&lt;/th&gt;&lt;td&gt;Switch direction (swap TCP endpoints)&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;Go to packet under cursor&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;z&lt;/th&gt;&lt;td&gt;Toggle mouse drag / zoom&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;s&lt;/th&gt;&lt;td&gt;Toggle relative / absolute sequence numbers&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;Toggle capture / session time origin&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;Toggle crosshairs&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;1&lt;/th&gt;&lt;td&gt;Round Trip Time graph&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;2&lt;/th&gt;&lt;td&gt;Throughput graph&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;3&lt;/th&gt;&lt;td&gt;Stevens-style Time / Sequence graph&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;4&lt;/th&gt;&lt;td&gt;tcptrace-style Time / Sequence graph&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;5&lt;/th&gt;&lt;td&gt;Window Scaling graph&lt;/td&gt;&lt;/th&gt;
+
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;/body&gt;&lt;/html&gt;</source>
+        <oldsource>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
+
+&lt;h3&gt;Valuable and amazing time-saving keyboard shortcuts&lt;/h3&gt;
+&lt;table&gt;&lt;tbody&gt;
+
+&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;Zoom in&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;Zoom out&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;Reset graph to its initial state&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;Move right 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;Move left 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↑&lt;/th&gt;&lt;td&gt;Move up 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↓&lt;/th&gt;&lt;td&gt;Move down 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;Move right 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;Move left 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;Move up 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;Move down 1 pixel&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Pg Up&lt;/i&gt;&lt;/th&gt;&lt;td&gt;Next stream&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Pg Dn&lt;/i&gt;&lt;/th&gt;&lt;td&gt;Previous stream&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;d&lt;/th&gt;&lt;td&gt;Switch direction (swap TCP endpoints)&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;Go to packet under cursor&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;z&lt;/th&gt;&lt;td&gt;Toggle mouse drag / zoom&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;s&lt;/th&gt;&lt;td&gt;Toggle relative / absolute sequence numbers&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;Toggle capture / session time origin&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;Toggle crosshairs&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;1&lt;/th&gt;&lt;td&gt;Round Trip Time graph&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;2&lt;/th&gt;&lt;td&gt;Throughput graph&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;3&lt;/th&gt;&lt;td&gt;Stevens-style Time / Sequence graph&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;4&lt;/th&gt;&lt;td&gt;tcptrace-style Time / Sequence graph&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;5&lt;/th&gt;&lt;td&gt;Window Scaling graph&lt;/td&gt;&lt;/th&gt;
+
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;/body&gt;&lt;/html&gt;</oldsource>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
+
+&lt;h3&gt;가치있고 놀라운 시간 절약형 키보드 단축키&lt;/h3&gt;
+&lt;table&gt;&lt;tbody&gt;
+
+&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;확대&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;축소&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;x&lt;/th&gt;&lt;td&gt;X축 확대&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;X&lt;/th&gt;&lt;td&gt;X축 축소&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;y&lt;/th&gt;&lt;td&gt;Y축 확대&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Y&lt;/th&gt;&lt;td&gt;Y축 축소&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;초기 상태로 그래프 다시 설정&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;오른쪽으로 10픽셀 이동&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;왼쪽으로 10픽셀 이동&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↑&lt;/th&gt;&lt;td&gt;위쪽으로 10픽셀 이동&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↓&lt;/th&gt;&lt;td&gt;아래쪽으로 10픽셀 이동&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;오른쪽으로 1픽셀 이동&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;왼쪽으로 1픽셀 이동&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;위쪽으로 1픽셀 이동&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;아래쪽으로 1픽셀 이동&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Pg Up&lt;/i&gt;&lt;/th&gt;&lt;td&gt;다음 스트림&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Pg Dn&lt;/i&gt;&lt;/th&gt;&lt;td&gt;이전 스트림&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;d&lt;/th&gt;&lt;td&gt;방향 전환(TCP 종단점 변경)&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;커서 아래 패킷으로 이동&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;z&lt;/th&gt;&lt;td&gt;마우스 드래그/크기 조정 전환&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;s&lt;/th&gt;&lt;td&gt;절대/상대 시퀀스 번호 전환&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;캡처/세션 시간 원본 전환&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;십자선 전환&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;1&lt;/th&gt;&lt;td&gt;왕복 시간 그래프&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;2&lt;/th&gt;&lt;td&gt;처리량 그래프&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;3&lt;/th&gt;&lt;td&gt;스티븐스 스타일 시간/시퀀스 그래프&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;4&lt;/th&gt;&lt;td&gt;tcptrace 스타일 시간/시퀀스 그래프&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;5&lt;/th&gt;&lt;td&gt;윈도 스케일링 그래프&lt;/td&gt;&lt;/th&gt;
+
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
         <source>&lt;small&gt;&lt;i&gt;Mouse over for shortcuts&lt;/i&gt;&lt;/small&gt;</source>
         <translation>&lt;small&gt;&lt;i&gt;마우스를 올려 두면 단축키 표시&lt;/i&gt;&lt;/small&gt;</translation>
     </message>
@@ -14545,14 +11888,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source>zooms</source>
         <translation>확대</translation>
-    </message>
-    <message>
-        <source>Sampling Method</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Select which packets and how the RTT sampling is done</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Display Round Trip Time vs Sequence Number</source>
@@ -14755,14 +12090,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>Z</translation>
     </message>
     <message>
-        <source>Legend</source>
-        <translation type="unfinished">범례</translation>
-    </message>
-    <message>
-        <source>Toggle legend</source>
-        <translation type="unfinished">범례 전환</translation>
-    </message>
-    <message>
         <source>Relative / Absolute Sequence Numbers</source>
         <translation>상대적/절대적 시퀀스 번호</translation>
     </message>
@@ -14785,18 +12112,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source>T</source>
         <translation>T</translation>
-    </message>
-    <message>
-        <source>Axis SI Units</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Toggle axis SI units</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>U</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Crosshairs</source>
@@ -14825,50 +12140,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source>Throughput</source>
         <translation>처리량</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
-
-&lt;h3&gt;Valuable and amazing time-saving keyboard shortcuts&lt;/h3&gt;
-&lt;table&gt;&lt;tbody&gt;
-
-&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;Zoom in&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;Zoom out&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;x&lt;/th&gt;&lt;td&gt;Zoom in X axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;X&lt;/th&gt;&lt;td&gt;Zoom out X axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;y&lt;/th&gt;&lt;td&gt;Zoom in Y axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;Y&lt;/th&gt;&lt;td&gt;Zoom out Y axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;Reset graph to its initial state&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;Move right 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;Move left 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;↑&lt;/th&gt;&lt;td&gt;Move up 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;↓&lt;/th&gt;&lt;td&gt;Move down 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;Move right 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;Move left 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;Move up 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;Move down 1 pixel&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Pg Up&lt;/i&gt;&lt;/th&gt;&lt;td&gt;Next stream&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Pg Dn&lt;/i&gt;&lt;/th&gt;&lt;td&gt;Previous stream&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;d&lt;/th&gt;&lt;td&gt;Switch direction (swap TCP endpoints)&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;Go to packet under cursor&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;z&lt;/th&gt;&lt;td&gt;Toggle mouse drag / zoom&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;s&lt;/th&gt;&lt;td&gt;Toggle relative / absolute sequence numbers&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;Toggle capture / session time origin&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;u&lt;/th&gt;&lt;td&gt;Toggle axis SI units&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;Toggle crosshairs&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;1&lt;/th&gt;&lt;td&gt;Round Trip Time graph&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;2&lt;/th&gt;&lt;td&gt;Throughput graph&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;3&lt;/th&gt;&lt;td&gt;Stevens-style Time / Sequence graph&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;4&lt;/th&gt;&lt;td&gt;tcptrace-style Time / Sequence graph&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;5&lt;/th&gt;&lt;td&gt;Window Scaling graph&lt;/td&gt;&lt;/th&gt;
-
-&lt;/tbody&gt;&lt;/table&gt;
-&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Switch to the Throughput graph</source>
@@ -14915,38 +12186,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>4</translation>
     </message>
     <message>
-        <source>All Data Packets</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Sampling from all data packets</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>All Data Packets w/ SACK</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Sampling from all data packets w/ SACK</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Data Packets matching RTT</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Sampling from RTT packets</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Data Packets matching Karn RTT</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Sampling from Karn RTT packets</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Zoom In X Axis</source>
         <translation>X축 확대</translation>
     </message>
@@ -14977,42 +12216,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source>Shift+Y</source>
         <translation>Shift+Y</translation>
-    </message>
-    <message>
-        <source>Segments</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>ACK</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Dup ACKs</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>SACK</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Most recent SACK</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>SACK 2</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Subsequent SACKs</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Receive Window</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Zero Window</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Save As…</source>
@@ -15049,30 +12252,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source> for %1:%2 %3 %4:%5</source>
         <translation> 대상: %1:%2 %3 %4:%5</translation>
-    </message>
-    <message>
-        <source>Move to top left</source>
-        <translation type="unfinished">왼쪽 위로 이동</translation>
-    </message>
-    <message>
-        <source>Move to top center</source>
-        <translation type="unfinished">가운데 위로 이동</translation>
-    </message>
-    <message>
-        <source>Move to top right</source>
-        <translation type="unfinished">오른쪽 위로 이동</translation>
-    </message>
-    <message>
-        <source>Move to bottom left</source>
-        <translation type="unfinished">왼쪽 아래로 이동</translation>
-    </message>
-    <message>
-        <source>Move to bottom center</source>
-        <translation type="unfinished">가운데 아래로 이동</translation>
-    </message>
-    <message>
-        <source>Move to bottom right</source>
-        <translation type="unfinished">오른쪽 아래로 이동</translation>
     </message>
     <message>
         <source>%1 %2 (%3s len %4 seq %5 ack %6 win %7)</source>
@@ -15171,177 +12350,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     </message>
 </context>
 <context>
-    <name>TaggingRulesDialog</name>
-    <message>
-        <source>Dialog</source>
-        <translation type="unfinished">대화 상자</translation>
-    </message>
-    <message>
-        <source>Follow Link:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>How to open a tag link in the packet list.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Ctrl+Shift+Click</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Click</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Right-click only</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Emoji Size:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Emoji size as a percentage of the row height. Does not affect text tag labels or the separator character.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>100%</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>90%</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>80%</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>70%</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>60%</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>50%</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Separator:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Single character shown between tags when more than one rule matches. Leave empty for none.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Save these tagging rules and open the Coloring Rules dialog with this rule&apos;s filter and name pre-filled.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Copy to Coloring Rule</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;small&gt;&lt;i&gt;A hint.&lt;/i&gt;&lt;/small&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Add a new tagging rule.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Delete this tagging rule.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Duplicate this tagging rule.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Clear all tagging rules.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Tagging Rules %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Shift+Command+Click</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Import…</source>
-        <translation type="unfinished">가져오기...</translation>
-    </message>
-    <message>
-        <source>Select a file and add its rules to the end of the list.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Export…</source>
-        <translation type="unfinished">내보내기...</translation>
-    </message>
-    <message>
-        <source>Save rules to a file.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Copy tagging rules from another profile.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Open </source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>(no tagrules.jsonc file yet — will be created on save)</source>
-        <oldsource>(no tagrules file yet — will be created on save)</oldsource>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Click to edit. Drag to move. Sample Emojis &lt;a href=&quot;https://emojipedia.org&quot;&gt;here&lt;/a&gt;. All matching rules are applied.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Import Tagging Rules</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Export %1 Tagging Rules</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>TaggingRulesModel</name>
-    <message>
-        <source>Name</source>
-        <translation type="unfinished">이름</translation>
-    </message>
-    <message>
-        <source>Filter</source>
-        <translation type="unfinished">필터</translation>
-    </message>
-    <message>
-        <source>Tag</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Link</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Comment</source>
-        <translation type="unfinished">주석</translation>
-    </message>
-    <message>
-        <source>New tagging rule</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
     <name>TapParameterDialog</name>
     <message>
         <source>Dialog</source>
@@ -15407,312 +12415,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source>Error saving file %1</source>
         <translation>파일 저장 오류 %1</translation>
-    </message>
-</context>
-<context>
-    <name>TcpDedupDialog</name>
-    <message>
-        <source>TCP Duplication Table</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>The &quot;Detect duplication (capture-level) packets&quot; preference must be enabled in
-Preferences → Protocols → TCP to use this table.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Time</source>
-        <translation type="unfinished">시간</translation>
-    </message>
-    <message>
-        <source>Delta</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Frame Number</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Duplication Total</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Frame List</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Info</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Stream:</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>ThemeDebugDialog</name>
-    <message>
-        <source>Theme Debug</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Name:</source>
-        <translation type="unfinished">이름:</translation>
-    </message>
-    <message>
-        <source>Internal:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Version:</source>
-        <translation type="unfinished">버전:</translation>
-    </message>
-    <message>
-        <source>Author:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Description:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Mode:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Dark mode:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Theme</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Geometry:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Frame geometry:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Screen:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>DPI / DPR:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Window state:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>These values refresh live while the dialog is open.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Main Window</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Track widget under mouse</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>The inspector reports any widget in this application under the cursor — including child dialogs. Widgets that belong to this debug window are skipped so the last hovered target stays pinned. Hold Alt+Shift and click any widget to pin it: this turns off tracking and locks the readout onto that widget (re-check the box above to resume). Note: on macOS, tool windows are hidden whenever another application has focus, so tracking pauses until Wireshark is frontmost again.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Cursor (global):</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Class:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Object name:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Font:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Global rect:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Parent chain:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Palette (Active group):</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Role</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Color</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>ThemeManager token</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Swatch</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Stylesheet:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>(no stylesheet)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Widget Inspector</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Token</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Hex</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Tokens</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Refresh</source>
-        <translation type="unfinished">새로 고침</translation>
-    </message>
-    <message>
-        <source>yes</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>no</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>(no main window)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>(unknown)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>maximized</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>minimized</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>fullscreen</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>active</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>normal</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>(unset)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>(none)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>(unnamed)</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>ThemePreviewWidget</name>
-    <message>
-        <source>No.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Time</source>
-        <translation type="unfinished">시간</translation>
-    </message>
-    <message>
-        <source>Delta</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Source</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Destination</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Protocol</source>
-        <translation type="unfinished">프로토콜</translation>
-    </message>
-    <message>
-        <source>Length</source>
-        <translation type="unfinished">길이</translation>
-    </message>
-    <message>
-        <source>Show Coloring Rules</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Save Image As…</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Save Theme Preview</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>PNG Image (*.png)</source>
-        <translation type="unfinished">PNG 그림 (*.png)</translation>
-    </message>
-    <message>
-        <source>Could not write the image to &quot;%1&quot;.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Info</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Ready</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Profile: Default</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Packets: %1</source>
-        <translation type="unfinished">패킷: %1</translation>
-    </message>
-    <message>
-        <source>Displayed: %1 (100.0%)</source>
-        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -15795,14 +12497,6 @@ Preferences → Protocols → TCP to use this table.</source>
     <message>
         <source>Name resolution</source>
         <translation>이름 해석</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Display exact numbers instead of rounding with SI prefixes. (Exact numbers always used when sorting.)&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Display raw data</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Only show conversations matching the current display filter&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -16027,16 +12721,16 @@ Preferences → Protocols → TCP to use this table.</source>
         <translation>플로 시퀀스(&amp;S)</translation>
     </message>
     <message>
-        <source>Show flow sequence for selected calls.</source>
-        <translation type="unfinished"></translation>
+        <source>Show flow sequence for selected call(s).</source>
+        <translation>선택한 호에 대한 플로 시퀀스를 표시합니다.</translation>
     </message>
     <message>
         <source>Prepare &amp;Filter</source>
         <translation>필터 준비(&amp;F)</translation>
     </message>
     <message>
-        <source>Prepare a filter matching the selected calls.</source>
-        <translation type="unfinished"></translation>
+        <source>Prepare a filter matching the selected calls(s).</source>
+        <translation>선택한 호와 일치하는 필터를 준비합니다.</translation>
     </message>
     <message>
         <source>Cop&amp;y</source>
@@ -16187,129 +12881,14 @@ Preferences → Protocols → TCP to use this table.</source>
     </message>
 </context>
 <context>
-    <name>WelcomeHeaderWidget</name>
-    <message>
-        <source>Form</source>
-        <translation type="unfinished">폼</translation>
-    </message>
-    <message>
-        <source>Application Name</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Application name</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Wireshark</source>
-        <translation type="unfinished">Wireshark</translation>
-    </message>
-    <message>
-        <source>Version information</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Version of the application currently running</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Variant of the application running</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Build variant of the application currently running</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Development Build</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Update Available</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Graphical indicator that an update is available</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Update available</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>A new update is available</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Update available: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Release Notes</source>
-        <translation type="unfinished">릴리스 노트</translation>
-    </message>
-    <message>
-        <source>Opens a browser to show the release notes for the available update</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Download Update</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Starts the download process for the currently available update</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Dismiss update notification</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Dismiss the update notification and show the information about an update again on either next application start or when a new update is available</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Update %1 is available</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>A new update for version %1 is available (current version is %2)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Release Notes for update %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Opens a browser to show the release notes for %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Download update %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Starts the download process for update %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
     <name>WelcomePage</name>
     <message>
         <source>Form</source>
         <translation>폼</translation>
     </message>
     <message>
-        <source>Open</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>List of recently opened files. Files that can no longer be found on disk are shown in italics.</source>
-        <translation type="unfinished"></translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:large;&quot;&gt;Welcome to Wireshark&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:large;&quot;&gt;Wireshark에 오신 것을 환영합니다&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Open a file on your file system&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -16328,20 +12907,116 @@ Preferences → Protocols → TCP to use this table.</source>
         <translation>이전에 열었던 캡처 파일</translation>
     </message>
     <message>
-        <source>Tips and announcements</source>
-        <translation type="unfinished"></translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Capture live packets from your network.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;여러분의 네트워크에서 패킷을 바로 캡처하십시오.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
-        <source>Rotating tips, sponsor acknowledgements, and announcements for Wireshark and Stratoshark conferences.</source>
-        <translation type="unfinished"></translation>
+        <source>&lt;h2&gt;Capture&lt;/h2&gt;</source>
+        <translation>&lt;h2&gt;캡처&lt;/h2&gt;</translation>
     </message>
     <message>
-        <source>Learn</source>
-        <translation type="unfinished"></translation>
+        <source>…using this filter:</source>
+        <translation>…다음 필터 사용:</translation>
     </message>
     <message>
-        <source>Links to documentation, wiki, and community resources.</source>
-        <translation type="unfinished"></translation>
+        <source>Interface list</source>
+        <translation>인터페이스 목록</translation>
+    </message>
+    <message>
+        <source>List of available capture interfaces</source>
+        <translation>사용 가능한 캡처 인터페이스 목록</translation>
+    </message>
+    <message>
+        <source>&lt;h2&gt;Learn&lt;/h2&gt;</source>
+        <translation>&lt;h2&gt;배우기&lt;/h2&gt;</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head&gt;
+&lt;style&gt;
+a:link {
+  color: palette(text);
+  text-decoration: none;
+}
+a:hover {
+  color: palette(text);
+  text-decoration: underline;
+}
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+
+&lt;table&gt;&lt;tr&gt;
+&lt;th&gt;&lt;a href=&quot;https://www.wireshark.org/docs/wsug_html_chunked/&quot;&gt;User&apos;s Guide&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://gitlab.com/wireshark/wireshark/-/wikis/&quot;&gt;Wiki&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://ask.wireshark.org/&quot;&gt;Questions and Answers&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://www.wireshark.org/lists/&quot;&gt;Mailing Lists&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://sharkfest.wireshark.org/&quot;&gt;SharkFest&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://discord.com/invite/ts9GZCjGj5&quot;&gt;Wireshark Discord&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://wiresharkfoundation.org/donate/&quot;&gt;Donate&lt;/a&gt;&lt;/th&gt;
+
+&lt;/tr&gt;&lt;/table&gt;
+&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head&gt;
+&lt;style&gt;
+a:link {
+  color: palette(text);
+  text-decoration: none;
+}
+a:hover {
+  color: palette(text);
+  text-decoration: underline;
+}
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+
+&lt;table&gt;&lt;tr&gt;
+&lt;th&gt;&lt;a href=&quot;https://www.wireshark.org/docs/wsug_html_chunked/&quot;&gt;사용자 설명서&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://gitlab.com/wireshark/wireshark/-/wikis/&quot;&gt;위키&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://ask.wireshark.org/&quot;&gt;질문과 답변&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://www.wireshark.org/lists/&quot;&gt;메일링 리스트&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://sharkfest.wireshark.org/&quot;&gt;SharkFest&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://discord.com/invite/ts9GZCjGj5&quot;&gt;Wireshark Discord&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://wiresharkfoundation.org/donate/&quot;&gt;기부하기&lt;/a&gt;&lt;/th&gt;
+
+&lt;/tr&gt;&lt;/table&gt;
+&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Show in Finder</source>
@@ -16352,22 +13027,46 @@ Preferences → Protocols → TCP to use this table.</source>
         <translation>폴더 위치 표시</translation>
     </message>
     <message>
-        <source>Welcome page</source>
-        <translation type="unfinished"></translation>
+        <source>Welcome to %1</source>
+        <translation>%1에 오신 것을 환영합니다</translation>
     </message>
     <message>
-        <source>The %1 welcome page provides access to recent files, capture interfaces, and learning resources.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>List of recently opened capture files. Double-click or press Enter to open.</source>
-        <translation type="unfinished"></translation>
+        <source>All interfaces shown</source>
+        <translation>모든 인터페이스가 표시됨</translation>
     </message>
     <message numerus="yes">
         <source>%n interface(s) shown, %1 hidden</source>
-        <translation type="obsolete">
-            <numerusform>%n interface shown, %1 hidden</numerusform>
+        <translation>
+            <numerusform>인터페이스 %n개 표시됨, %1개 숨겨짐</numerusform>
         </translation>
+    </message>
+    <message>
+        <source>You are sniffing the glue that holds the Internet together using Wireshark </source>
+        <translation>Wireshark를 사용하여 인터넷을 고정하는 접착제의 냄새를 맡고(스니핑) 있습니다 </translation>
+    </message>
+    <message>
+        <source>You are sniffing the glue that holds your system together using Logray </source>
+        <translation>Logray를 사용하여 시스템을 고정하는 접착제의 냄새를 맡고(스니핑) 있습니다 </translation>
+    </message>
+    <message>
+        <source>You are running Wireshark </source>
+        <translation>실행 중인 Wireshark 버전: </translation>
+    </message>
+    <message>
+        <source>You are running Logray </source>
+        <translation>실행 중인 Logray 버전: </translation>
+    </message>
+    <message>
+        <source> You receive automatic updates.</source>
+        <translation> 자동 업데이트를 받고 있습니다.</translation>
+    </message>
+    <message>
+        <source> You have disabled automatic updates.</source>
+        <translation> 자동 업데이트를 사용하지 않도록 설정했습니다.</translation>
+    </message>
+    <message>
+        <source>not found</source>
+        <translation>찾을 수 없음</translation>
     </message>
     <message>
         <source>Copy file path</source>
@@ -16379,65 +13078,6 @@ Preferences → Protocols → TCP to use this table.</source>
     </message>
 </context>
 <context>
-    <name>WelcomePagePreferencesFrame</name>
-    <message>
-        <source>Frame</source>
-        <translation type="unfinished">프레임</translation>
-    </message>
-    <message>
-        <source>Show the Open and Capture sections next to each other when the window is wide enough, otherwise stacked.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Prefer Open and Capture sections side-by-side</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Tips Section</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Show Tips section in sidebar</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Show slides</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Event Notifications (e.g. SharkFest)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Sponsorship and Donor information</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Tip of the Day</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Auto advance slides</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Slide display interval</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source> s</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Learn Section</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Show Learn section in sidebar</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
     <name>WirelessFrame</name>
     <message>
         <source>Frame</source>
@@ -16446,14 +13086,6 @@ Preferences → Protocols → TCP to use this table.</source>
     <message>
         <source>Interface</source>
         <translation>인터페이스</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Set the 802.11 band.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Band</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Set the 802.11 channel.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -16498,6 +13130,14 @@ Preferences → Protocols → TCP to use this table.</source>
     <message>
         <source>802.11 Preferences</source>
         <translation>802.11 설정</translation>
+    </message>
+    <message>
+        <source>AirPcap Control Panel</source>
+        <translation>AirPcap 제어판</translation>
+    </message>
+    <message>
+        <source>Open the AirPcap Control Panel</source>
+        <translation>AirPcap 제어판 열기</translation>
     </message>
     <message>
         <source>Unable to set channel or offset.</source>
@@ -17710,84 +14350,12 @@ Preferences → Protocols → TCP to use this table.</source>
         <translation>옵션(&amp;O)…</translation>
     </message>
     <message>
-        <source>Main Window</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Allows jumping to a specific packet by its number.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Search packet</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Allows searching for packets based on different criteria like display filters or text.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Edit Address</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Allows editing address resolution information for the current capture.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Edit Column</source>
-        <translation type="unfinished">열 편집</translation>
-    </message>
-    <message>
-        <source>Allows adding, removing, or modifying columns in the packet list.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Edit Preference</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Allows changing protocol or application preferences.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Edit Filter Expression</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Allows creating or editing display filter buttons.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Main View</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Main Menu</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>&amp;3GPP Uu</source>
         <translation>3GPP Uu(&amp;3)</translation>
     </message>
     <message>
         <source>&amp;Wireless</source>
         <translation>무선(&amp;W)</translation>
-    </message>
-    <message>
-        <source>Contains buttons for common actions like starting a capture or opening a file.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Status Bar</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Shows information about the current capture file and application state.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Contains the display filter edit box and expression buttons.</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>&amp;User&apos;s Guide</source>
@@ -17800,30 +14368,6 @@ Preferences → Protocols → TCP to use this table.</source>
     <message>
         <source>Display Filters</source>
         <translation>표시 필터</translation>
-    </message>
-    <message>
-        <source>Display Filter Reference</source>
-        <translation>표시 필터 참조</translation>
-    </message>
-    <message>
-        <source>First Packet in Conversation</source>
-        <translation>대화 내의 첫 패킷</translation>
-    </message>
-    <message>
-        <source>Go to the first packet in this conversation</source>
-        <translation>이 대화 내의 첫 패킷으로 이동</translation>
-    </message>
-    <message>
-        <source>Last Packet in Conversation</source>
-        <translation>대화 내의 마지막 패킷</translation>
-    </message>
-    <message>
-        <source>Go to the last packet in this conversation</source>
-        <translation>이 대화 내의 마지막 패킷으로 이동</translation>
-    </message>
-    <message>
-        <source>Redissect Packets</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Capture &amp;Filters…</source>
@@ -17844,10 +14388,6 @@ Preferences → Protocols → TCP to use this table.</source>
     <message>
         <source>As &amp;YAML</source>
         <translation>YAML로(&amp;Y)</translation>
-    </message>
-    <message>
-        <source>As &amp;HTML</source>
-        <translation>HTML로(&amp;H)</translation>
     </message>
     <message>
         <source>All Visible Items</source>
@@ -17910,14 +14450,6 @@ Preferences → Protocols → TCP to use this table.</source>
         <translation>캡처 파일에 사용된 TLS 비밀 정보 주입</translation>
     </message>
     <message>
-        <source>Inject ESP Secrets</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Embed used ESP secrets in the capture file</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Discard All Secrets</source>
         <translation>모든 비밀 정보 버리기</translation>
     </message>
@@ -17932,22 +14464,6 @@ Preferences → Protocols → TCP to use this table.</source>
     <message>
         <source>TCP throughput</source>
         <translation>TCP 처리량</translation>
-    </message>
-    <message>
-        <source>Duplication Table</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>TCP capture-level duplicate packet table</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Distribution</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Distribution statistics</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>General</source>
@@ -17970,14 +14486,6 @@ Preferences → Protocols → TCP to use this table.</source>
         <translation>HTTP 요청 시퀀스</translation>
     </message>
     <message>
-        <source>&amp;BPv7</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>BPv7 PDU and block statistics</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>E2AP</source>
         <translation>E2AP</translation>
     </message>
@@ -17996,14 +14504,6 @@ Preferences → Protocols → TCP to use this table.</source>
     <message>
         <source>Create graphs based on display filter fields</source>
         <translation>표시 필터 필드를 기반으로 그래프 생성</translation>
-    </message>
-    <message>
-        <source>Plots</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Plot display filter fields over time</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>&amp;Main Toolbar</source>
@@ -18054,22 +14554,6 @@ Preferences → Protocols → TCP to use this table.</source>
         <translation>보통 크기</translation>
     </message>
     <message>
-        <source>Pin Selected Rows</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Keep the selected packets at the top of the packet list, or unpin them if they are all pinned</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Unpin All Rows</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Unpin all of the packets pinned to the top of the packet list</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Reset layout to default size</source>
         <translation>레이아웃을 기본값으로 초기화</translation>
     </message>
@@ -18110,14 +14594,6 @@ Preferences → Protocols → TCP to use this table.</source>
         <translation>UNIX/POSIX 기원(1970-01-01)으로부터의 초 단위 시간으로 패킷 시간을 표현합니다.</translation>
     </message>
     <message>
-        <source>Seconds Since Capture Start</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Show packet times as seconds since the start of the capture file.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Seconds Since Previous Captured Packet</source>
         <translation>이전에 캡처된 패킷부터 초 단위 시간</translation>
     </message>
@@ -18134,12 +14610,24 @@ Preferences → Protocols → TCP to use this table.</source>
         <translation>이전에 표시된 패킷부터 초 단위의 지난 시간으로 패킷 시간을 표시합니다.</translation>
     </message>
     <message>
+        <source>UTC Date and Time of Day (1970-01-01 01:02:03.123456)</source>
+        <translation>UTC 날짜와 시간(1970-01-01 01:02:03.123456)</translation>
+    </message>
+    <message>
         <source>Show packet times as the UTC date and time of day.</source>
         <translation>UTC 날짜와 시간으로 패킷 시간을 표현합니다.</translation>
     </message>
     <message>
+        <source>UTC Year, Day of Year, and Time of Day (1970/001 01:02:03.123456)</source>
+        <translation>UTC 년, 연중일, 시간(1970/001 01:02:03.123456)</translation>
+    </message>
+    <message>
         <source>Show packet times as the UTC year, day of the year and time of day.</source>
         <translation>UTC 년, 연중일, 시간으로 패킷 시간을 표시합니다.</translation>
+    </message>
+    <message>
+        <source>UTC Time of Day (01:02:03.123456)</source>
+        <translation>UTC 시간(01:02:03.123456)</translation>
     </message>
     <message>
         <source>Show packet times as the UTC time of day.</source>
@@ -18262,22 +14750,6 @@ Preferences → Protocols → TCP to use this table.</source>
         <translation>지원하는 프로토콜(&amp;S)</translation>
     </message>
     <message>
-        <source>&amp;Keyboard Shortcuts</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Show the current keyboard shortcuts</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&amp;Theme Debug</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Show the active theme, main window geometry, and live widget info</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>MAP Summary</source>
         <translation>MAP 요약</translation>
     </message>
@@ -18292,14 +14764,6 @@ Preferences → Protocols → TCP to use this table.</source>
     <message>
         <source>&amp;Coloring Rules…</source>
         <translation>색상화 규칙(&amp;C)…</translation>
-    </message>
-    <message>
-        <source>&amp;Tagging Rules…</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Edit the packet tagging rules.</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Show Linked Packet in New Window</source>
@@ -18416,18 +14880,6 @@ Preferences → Protocols → TCP to use this table.</source>
         <translation>표시된 모든 항목 마크 해제(&amp;U)</translation>
     </message>
     <message>
-        <source>UTC Date and Time of Day (1970-01-01 01:02:03.123456Z)</source>
-        <translation>UTC 날짜와 시간(1970-01-01 01:02:03.123456Z)</translation>
-    </message>
-    <message>
-        <source>UTC Year, Day of Year, and Time of Day (1970/001 01:02:03.123456Z)</source>
-        <translation>UTC 년, 연중일, 시간(1970/001 01:02:03.123456Z)</translation>
-    </message>
-    <message>
-        <source>UTC Time of Day (01:02:03.123456Z)</source>
-        <translation>UTC 시간(01:02:03.123456Z)</translation>
-    </message>
-    <message>
         <source>All VoIP Calls</source>
         <translation>모든 VoIP 호</translation>
     </message>
@@ -18471,10 +14923,6 @@ Preferences → Protocols → TCP to use this table.</source>
     <message>
         <source>Automatically scroll to the last packet during a live capture.</source>
         <translation>라이브 캡처를 진행하는 동안 최신 패킷으로 자동으로 스크롤합니다.</translation>
-    </message>
-    <message>
-        <source>Aggregate Packets</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Expert Information</source>
@@ -18604,8 +15052,16 @@ Preferences → Protocols → TCP to use this table.</source>
         <translation>파일을 병합하기 전에 변경된 내용을 저장해야 합니다.</translation>
     </message>
     <message>
+        <source>Invalid Display Filter</source>
+        <translation>잘못된 표시 필터</translation>
+    </message>
+    <message>
         <source>Invalid Read Filter</source>
         <translation>잘못된 읽기 필터</translation>
+    </message>
+    <message>
+        <source>The filter expression %1 isn&apos;t a valid read filter. (%2).</source>
+        <translation>필터 표현식 %1은(는) 잘못된 읽기 필터입니다. (%2).</translation>
     </message>
     <message>
         <source> before importing a capture</source>
@@ -18619,14 +15075,6 @@ Preferences → Protocols → TCP to use this table.</source>
     <message>
         <source>You cannot export packets to the current capture file.</source>
         <translation>현재 캡처 파일로 패킷을 내보낼 수 없습니다.</translation>
-    </message>
-    <message>
-        <source>Display frames grouped by your configured aggregation fields.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Display frames grouped by your configured aggregation fields. To activate, go to Preferences → Aggregation.</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Do you want to save the changes you&apos;ve made%1?</source>
@@ -18650,29 +15098,8 @@ Preferences → Protocols → TCP to use this table.</source>
         <translation>업데이트 확인…</translation>
     </message>
     <message>
-        <source>Main View Splitter</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Contains the packet list, protocol tree, and packet bytes.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Extra View Splitter</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Contains packet extras and bytes views.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Unable to drop files during capture.</source>
         <translation>캡처 중에는 파일을 버릴 수 없습니다.</translation>
-    </message>
-    <message>
-        <source>The filter expression &quot;%1&quot; isn&apos;t a valid read filter.
-(%2).</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Unknown file type returned by merge dialog.</source>
@@ -18685,10 +15112,6 @@ Preferences → Protocols → TCP to use this table.</source>
     <message>
         <source>Unknown file type returned by export dialog.</source>
         <translation>내보내기 대화 상자에서 알 수 없는 파일 형식을 반환했습니다.</translation>
-    </message>
-    <message>
-        <source>Unsaved packets…</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Do you want to stop the capture and save the captured packets%1?</source>
@@ -18737,30 +15160,6 @@ Preferences → Protocols → TCP to use this table.</source>
         <translation>도구 모음 표시 또는 숨기기</translation>
     </message>
     <message>
-        <source>DIS Streams</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Show and analyze DIS radio streams</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>IMSI List</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Show all IMSIs in the capture</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Lua Debugger</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Software update checking is not available on this platform.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Continue &amp;without Saving</source>
         <oldsource>Continue without Saving</oldsource>
         <translation>저장하지 않고 계속(&amp;W)</translation>
@@ -18769,6 +15168,14 @@ Preferences → Protocols → TCP to use this table.</source>
         <source>Stop and Continue &amp;without Saving</source>
         <oldsource>Stop and Continue without Saving</oldsource>
         <translation>정지하고 저장하지 않고 계속(&amp;W)</translation>
+    </message>
+    <message>
+        <source>The Wireshark Network Analyzer</source>
+        <translation>Wireshark 네트워크 분석기</translation>
+    </message>
+    <message>
+        <source>Capturing from %1</source>
+        <translation>%1에서 캡처 중</translation>
     </message>
     <message>
         <source> before opening another file</source>
@@ -18781,6 +15188,10 @@ Preferences → Protocols → TCP to use this table.</source>
     <message>
         <source>%1: %2</source>
         <translation>%1: %2</translation>
+    </message>
+    <message>
+        <source>Clear Menu</source>
+        <translation>메뉴 비우기</translation>
     </message>
     <message>
         <source> before closing the file</source>
@@ -18812,14 +15223,6 @@ Preferences → Protocols → TCP to use this table.</source>
     <message>
         <source>Are you sure you want to remove all packet comments?</source>
         <translation>모든 패킷 주석을 삭제하시겠습니까?</translation>
-    </message>
-    <message>
-        <source>No %1 Secrets</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>There are no available secrets used to decrypt %1 traffic in the capture file.  Would you like to view information about how to decrypt %2 traffic on the wiki?</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Unable to build conversation filter.</source>
@@ -18895,12 +15298,8 @@ Preferences → Protocols → TCP to use this table.</source>
         <translation>Wireshark를 초기화하는 동안 기다려 주십시오…</translation>
     </message>
     <message>
-        <source> before exporting PDUs</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source> before stripping headers</source>
-        <translation type="unfinished"></translation>
+        <source> before updating</source>
+        <translation> 업데이트 전</translation>
     </message>
     <message>
         <source>There are no TLS Session Keys to save.</source>
@@ -18915,6 +15314,14 @@ Preferences → Protocols → TCP to use this table.</source>
     <message>
         <source>TLS Session Keys (*.keys *.txt);;All Files (</source>
         <translation>TLS 세션 키 (*.keys *.txt);;모든 파일 (</translation>
+    </message>
+    <message>
+        <source>No TLS Secrets</source>
+        <translation>TLS 비밀 정보 없음</translation>
+    </message>
+    <message>
+        <source>There are no available secrets used to decrypt TLS traffic in the capture file.  Would you like to view information about how to decrypt TLS traffic on the wiki?</source>
+        <translation>캡처 파일의 TLS 트래픽을 복호화하는 데 필요한 비밀 정보가 없습니다. 위키에서 TLS 트래픽 복호화에 대한 정보를 보시겠습니까?</translation>
     </message>
     <message>
         <source>Are you sure you want to discard all decryption secrets?</source>

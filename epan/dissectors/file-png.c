@@ -17,7 +17,6 @@
 #include <epan/packet.h>
 #include <epan/expert.h>
 #include <epan/tfs.h>
-#include <wsutil/array.h>
 
 #define MAKE_TYPE_VAL(a, b, c, d)   ((a)<<24 | (b)<<16 | (c)<<8 | (d))
 
@@ -188,20 +187,19 @@ dissect_png_srgb(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree)
 static void
 dissect_png_text(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree)
 {
-    unsigned offset=0, nul_offset;
-    bool nul_offset_found;
+    int offset=0, nul_offset;
 
-    nul_offset_found = tvb_find_uint8_length(tvb, offset, tvb_captured_length_remaining(tvb, offset), 0, &nul_offset);
+    nul_offset = tvb_find_uint8(tvb, offset, tvb_captured_length_remaining(tvb, offset), 0);
     /* nul_offset == 0 means empty keyword, this is not allowed by the png standard */
-    if (nul_offset==0 || nul_offset_found == false) {
+    if (nul_offset<=0) {
         /* XXX exception */
         return;
     }
 
-    proto_tree_add_item(tree, hf_png_text_keyword, tvb, offset, nul_offset, ENC_ISO_8859_1);
+    proto_tree_add_item(tree, hf_png_text_keyword, tvb, offset, nul_offset, ENC_ISO_8859_1|ENC_NA);
     offset = nul_offset+1; /* length of the key word + 0 character */
 
-    proto_tree_add_item(tree, hf_png_text_string, tvb, offset, tvb_captured_length_remaining(tvb, offset), ENC_ISO_8859_1);
+    proto_tree_add_item(tree, hf_png_text_string, tvb, offset, tvb_captured_length_remaining(tvb, offset), ENC_ISO_8859_1|ENC_NA);
 
 }
 
@@ -246,7 +244,7 @@ static void
 dissect_png_chrm(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree)
 {
     float  wx, wy, rx, ry, gx, gy, bx, by;
-    unsigned offset = 0;
+    int    offset = 0;
 
     wx = tvb_get_ntohl(tvb, offset) / 100000.0f;
     proto_tree_add_float(tree, hf_png_chrm_white_x,
@@ -303,7 +301,7 @@ dissect_png(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void *da
 {
     proto_tree *tree;
     proto_item *ti;
-    unsigned    offset=0;
+    int         offset=0;
     /* http://libpng.org/pub/png/spec/1.2/PNG-Structure.html#PNG-file-signature */
     static const uint8_t magic[8] = { 137, 80, 78, 71, 13, 10, 26, 10 };
 

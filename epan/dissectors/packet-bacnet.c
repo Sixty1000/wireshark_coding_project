@@ -16,8 +16,8 @@
 
 #include <epan/packet.h>
 #include <epan/tfs.h>
+#include <epan/llcsaps.h>
 #include "packet-bacnet.h"
-#include "packet-llc.h"
 
 void proto_register_bacnet(void);
 void proto_reg_handoff_bacnet(void);
@@ -342,17 +342,14 @@ static int * const wrapper_control_flags[] = {
 };
 
 
-unsigned
+int
 bacnet_dissect_sec_wrapper(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
-					unsigned offset, bool *pis_net_msg_flg, bool *decrypted)
+					int offset, bool *pis_net_msg_flg)
 {
 	uint8_t bacnet_dlen;
 	uint8_t bacnet_wrapper_control;
 	uint16_t bacnet_len;
-	unsigned len;
-
-	if (decrypted)
-		*decrypted = true;
+	int len;
 
 	/* get control octet from wrapper */
 	bacnet_wrapper_control = tvb_get_uint8(tvb, offset);
@@ -472,8 +469,7 @@ bacnet_dissect_sec_wrapper(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tr
 			len, ENC_NA);
 		/* no further decoding possible */
 		tvb_set_reported_length(tvb, 0);
-		if (decrypted)
-			*decrypted = false;
+		offset = -1;
 	}
 
 	return offset;
@@ -498,7 +494,6 @@ dissect_bacnet_npdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int off
 	uint8_t i;
 	tvbuff_t *next_tvb;
 	uint32_t vendor_id;
-	bool sec_decrypted;
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "BACnet-NPDU");
 	col_set_str(pinfo->cinfo, COL_INFO, "Building Automation and Control Network NPDU");
@@ -716,8 +711,8 @@ dissect_bacnet_npdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int off
 			break;
 		/* Challenge-Request */
 		case BAC_NET_CHALL_REQ:
-			offset = bacnet_dissect_sec_wrapper(tvb, pinfo, tree, offset, NULL, &sec_decrypted);
-			if (!sec_decrypted) {
+			offset = bacnet_dissect_sec_wrapper(tvb, pinfo, tree, offset, NULL);
+			if (offset < 0) {
 				call_data_dissector(tvb, pinfo, tree);
 				return tvb_captured_length(tvb);
 			}
@@ -740,8 +735,8 @@ dissect_bacnet_npdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int off
 			bool is_net_msg_flg;
 			uint16_t bacnet_len;
 
-			offset = bacnet_dissect_sec_wrapper(tvb, pinfo, tree, offset, &is_net_msg_flg, &sec_decrypted);
-			if (!sec_decrypted) {
+			offset = bacnet_dissect_sec_wrapper(tvb, pinfo, tree, offset, &is_net_msg_flg);
+			if (offset < 0) {
 				call_data_dissector(tvb, pinfo, tree);
 				return tvb_captured_length(tvb);
 			}
@@ -769,8 +764,8 @@ dissect_bacnet_npdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int off
 		{
 			uint8_t bacnet_responsecode;
 
-			offset = bacnet_dissect_sec_wrapper(tvb, pinfo, tree, offset, NULL, &sec_decrypted);
-			if (!sec_decrypted) {
+			offset = bacnet_dissect_sec_wrapper(tvb, pinfo, tree, offset, NULL);
+			if (offset < 0) {
 				call_data_dissector(tvb, pinfo, tree);
 				return tvb_captured_length(tvb);
 			}
@@ -862,8 +857,8 @@ dissect_bacnet_npdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int off
 			break;
 		/* Request-Key-Update */
 		case BAC_NET_REQ_KEY_UP:
-			offset = bacnet_dissect_sec_wrapper(tvb, pinfo, tree, offset, NULL, &sec_decrypted);
-			if (!sec_decrypted) {
+			offset = bacnet_dissect_sec_wrapper(tvb, pinfo, tree, offset, NULL);
+			if (offset < 0) {
 				call_data_dissector(tvb, pinfo, tree);
 				return tvb_captured_length(tvb);
 			}
@@ -894,8 +889,8 @@ dissect_bacnet_npdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int off
 			break;
 		/* Update-Keyset */
 		case BAC_NET_UPD_KEYSET:
-			offset = bacnet_dissect_sec_wrapper(tvb, pinfo, tree, offset, NULL, &sec_decrypted);
-			if (!sec_decrypted) {
+			offset = bacnet_dissect_sec_wrapper(tvb, pinfo, tree, offset, NULL);
+			if (offset < 0) {
 				call_data_dissector(tvb, pinfo, tree);
 				return tvb_captured_length(tvb);
 			}
@@ -979,8 +974,8 @@ dissect_bacnet_npdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int off
 			break;
 		/* Update-distribution-Key */
 		case BAC_NET_UPD_DKEY:
-			offset = bacnet_dissect_sec_wrapper(tvb, pinfo, tree, offset, NULL, &sec_decrypted);
-			if (!sec_decrypted) {
+			offset = bacnet_dissect_sec_wrapper(tvb, pinfo, tree, offset, NULL);
+			if (offset < 0) {
 				call_data_dissector(tvb, pinfo, tree);
 				return tvb_captured_length(tvb);
 			}
@@ -1008,8 +1003,8 @@ dissect_bacnet_npdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int off
 		{
 			uint8_t keycount;
 
-			offset = bacnet_dissect_sec_wrapper(tvb, pinfo, tree, offset, NULL, &sec_decrypted);
-			if (!sec_decrypted) {
+			offset = bacnet_dissect_sec_wrapper(tvb, pinfo, tree, offset, NULL);
+			if (offset < 0) {
 				call_data_dissector(tvb, pinfo, tree);
 				return tvb_captured_length(tvb);
 			}
@@ -1026,8 +1021,8 @@ dissect_bacnet_npdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int off
 		}
 		/* Set-Masterkey */
 		case BAC_NET_SET_MKEY:
-			offset = bacnet_dissect_sec_wrapper(tvb, pinfo, tree, offset, NULL, &sec_decrypted);
-			if (!sec_decrypted) {
+			offset = bacnet_dissect_sec_wrapper(tvb, pinfo, tree, offset, NULL);
+			if (offset < 0) {
 				call_data_dissector(tvb, pinfo, tree);
 				return tvb_captured_length(tvb);
 			}

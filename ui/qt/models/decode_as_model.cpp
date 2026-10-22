@@ -88,7 +88,6 @@ void DecodeAsItem::init(const char* table_name, const void *selector)
         /* Special handling for DCE/RPC dissectors */
         if (strcmp(tableName_, DCERPC_TABLE_NAME) == 0) {
             selectorDCERPC_ = (decode_dcerpc_bind_values_t*)(selector);
-            memset(&selectorUUID_, 0, sizeof(selectorUUID_));
         }
     }
 
@@ -143,12 +142,6 @@ void DecodeAsItem::setDissectorHandle(dissector_handle_t handle)
         current_dissector_ = dissector_handle_get_description(handle);
     }
 }
-
-void DecodeAsItem::setUUID(const guid_key& key)
-{
-    memcpy(&selectorUUID_, &key, sizeof(guid_key));
-}
-
 
 void DecodeAsItem::updateHandles()
 {
@@ -283,7 +276,7 @@ QVariant DecodeAsModel::data(const QModelIndex &index, int role) const
                 return tr("<none>");
             } else if (selector_type == FT_GUID) {
                 if (item->selectorDCERPC() != NULL) {
-                    return QStringLiteral("ctx_id");
+                    return QString("ctx_id");
                 } else {
                     return tr("GUID");
                 }
@@ -383,17 +376,8 @@ bool DecodeAsModel::setData(const QModelIndex &cur_index, const QVariant &value,
         break;
     case DecodeAsModel::colProtocol:
     {
-        dissector_info_t* dissector_info = VariantPointer<dissector_info_t>::asPtr(value);
-        if (dissector_info != NULL)
-        {
-            item->setDissectorHandle(dissector_info->dissector_handle);
-            if (strcmp(item->tableName(), DCERPC_TABLE_NAME) == 0)
-                item->setUUID(dissector_info->dcerpc_uuid);
-        }
-        else
-        {
-            item->setDissectorHandle(NULL);
-        }
+        dissector_handle_t handle = VariantPointer<dissector_handle>::asPtr(value);
+        item->setDissectorHandle(handle);
         break;
     }
     case DecodeAsModel::colSelector:
@@ -619,11 +603,11 @@ QString DecodeAsModel::entryString(const char *table_name, const void *value)
                 ws_assert_not_reached();
                 break;
             }
-            entry_str = int_to_qstring(num_val, width, 16);
+            entry_str = QString("%1").arg(int_to_qstring(num_val, width, 16));
             break;
 
         case BASE_OCT:
-            entry_str = QStringLiteral("0%1").arg(num_val, 0, 8);
+            entry_str = "0" + QString::number(num_val, 8);
             break;
         }
         break;
@@ -658,12 +642,7 @@ void DecodeAsModel::fillTable()
     beginResetModel();
 
     dissector_all_tables_foreach_changed(buildChangedList, this);
-    //Currently this is just for DCE/RPC "special handling" of Decode As
-    for (GList* cur = decode_as_list; cur; cur = cur->next) {
-        decode_as_t* entry = (decode_as_t*)cur->data;
-        if (entry->build_changed_list != NULL)
-            entry->build_changed_list(buildDceRpcChangedList, this);
-    }
+    decode_dcerpc_add_show_list(buildDceRpcChangedList, this);
 
     endResetModel();
 }
@@ -707,7 +686,6 @@ void DecodeAsModel::buildDceRpcChangedList(void *data, void *user_data)
     guid_val.ver = binding->ver;
     guid_val.guid = binding->uuid;
     item->setDissectorHandle(dissector_get_guid_handle(sub_dissectors, &guid_val));
-    item->setUUID(guid_val);
 
     model->decode_as_items_ << item;
 }
@@ -728,12 +706,20 @@ void DecodeAsModel::gatherChangedEntries(const char *table_name,
     case FT_UINT16:
     case FT_UINT24:
     case FT_UINT32:
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
         model->changed_uint_entries_.emplaceBack(table_name, GPOINTER_TO_UINT(key), dissector_handle_get_pref_suffix(current));
+#else
+        model->changed_uint_entries_ << UIntEntry(table_name, GPOINTER_TO_UINT(key), dissector_handle_get_pref_suffix(current));
+#endif
         break;
     case FT_NONE:
         //need to reset dissector table, so this needs to be in a changed list,
         //might as well be the uint one.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
         model->changed_uint_entries_.emplaceBack(table_name, 0, "");
+#else
+        model->changed_uint_entries_ << UIntEntry(table_name, 0, "");
+#endif
         break;
 
     case FT_STRING:
@@ -849,21 +835,11 @@ void DecodeAsModel::applyChanges()
                     }
                     break;
                 } else {
-
-                    if (strcmp(item->tableName(), DCERPC_TABLE_NAME) == 0)
-                    {
-                        decode_as_entry->change_value(decode_as_entry->table_name, selector_value, item->selectorUUID(), item->currentDissector().toUtf8().constData());
-                    }
-                    else
-                    {
-                        decode_as_entry->change_value(decode_as_entry->table_name, selector_value, item->dissectorHandle(), item->currentDissector().toUtf8().constData());
-                    }
+                    decode_as_entry->change_value(decode_as_entry->table_name, selector_value, item->dissectorHandle(), item->currentDissector().toUtf8().constData());
+                    sub_dissectors = find_dissector_table(decode_as_entry->table_name);
 
                     /* For now, only numeric dissector tables can use preferences */
                     if (item->dissectorHandle() != NULL) {
-
-                        sub_dissectors = find_dissector_table(decode_as_entry->table_name);
-
                         if (FT_IS_UINT(dissector_table_get_type(sub_dissectors))) {
                             module = prefs_find_module(proto_get_protocol_filter_name(dissector_handle_get_protocol_index(item->dissectorHandle())));
                             pref_value = prefs_find_preference(module, QByteArray(decode_as_entry->table_name).append(dissector_handle_get_pref_suffix(item->dissectorHandle())));

@@ -12,6 +12,7 @@
 #include "config.h"
 
 #include <epan/packet.h>
+#include <epan/exceptions.h>
 
 void proto_register_h1(void);
 void proto_reg_handoff_h1(void);
@@ -106,7 +107,8 @@ static bool dissect_h1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
     proto_tree_add_item(h1_tree, hf_h1_header, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
-    proto_tree_add_item_ret_uint8(h1_tree, hf_h1_len, tvb, offset, 1, ENC_BIG_ENDIAN, &h1_len);
+    h1_len = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item(h1_tree, hf_h1_len, tvb, offset, 1, ENC_BIG_ENDIAN);
     proto_item_set_len(h1_ti, h1_len);
     offset++;
 
@@ -145,7 +147,7 @@ static bool dissect_h1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
                 proto_tree_add_item(block_tree, hf_h1_opcode,
                         tvb, offset, 1, ENC_BIG_ENDIAN);
                 col_append_str (pinfo->cinfo, COL_INFO,
-                        val_to_str(pinfo->pool, tvb_get_uint8(tvb,  offset),
+                        val_to_str (tvb_get_uint8(tvb,  offset),
                         opcode_vals, "Unknown Opcode (0x%2.2x)"));
                 break;
 
@@ -153,7 +155,7 @@ static bool dissect_h1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
                 proto_tree_add_item(block_tree, hf_h1_org, tvb,
                         offset, 1, ENC_BIG_ENDIAN);
                 col_append_fstr(pinfo->cinfo, COL_INFO, " %s",
-                        val_to_str(pinfo->pool, tvb_get_uint8(tvb,  offset),
+                        val_to_str (tvb_get_uint8(tvb,  offset),
                             org_vals,"Unknown Type (0x%2.2x)"));
                 offset++;
 
@@ -179,7 +181,7 @@ static bool dissect_h1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
                 proto_tree_add_item(block_tree, hf_h1_response_value,
                         tvb, offset, 1, ENC_BIG_ENDIAN);
                 col_append_fstr (pinfo->cinfo, COL_INFO, " %s",
-                        val_to_str(pinfo->pool, tvb_get_uint8(tvb,  offset),
+                        val_to_str (tvb_get_uint8(tvb,  offset),
                             returncode_vals,"Unknown Returncode (0x%2.2x"));
                 break;
         }
@@ -204,7 +206,7 @@ proto_register_h1 (void)
             {"H1-Header", "h1.header", FT_UINT16, BASE_HEX, NULL, 0x0,
                 NULL, HFILL }},
         {&hf_h1_len,
-            {"Length indicator", "h1.len", FT_UINT8, BASE_DEC, NULL, 0x0,
+            {"Length indicator", "h1.len", FT_UINT16, BASE_DEC, NULL, 0x0,
                 NULL, HFILL }},
         {&hf_h1_block_type,
             {"Block type", "h1.block_type", FT_UINT8, BASE_HEX, VALS(block_type_vals), 0x0,

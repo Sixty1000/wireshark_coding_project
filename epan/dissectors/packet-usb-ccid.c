@@ -2,7 +2,7 @@
  * Dissector for the Integrated Circuit Card Interface Device Class
  *
  * References:
- * https://www.usb.org/sites/default/files/DWG_Smart-Card_CCID_Rev110.pdf
+ * http://www.usb.org/developers/devclass_docs/DWG_Smart-Card_CCID_Rev110.pdf
  *
  * Copyright 2011, Tyson Key <tyson.key@gmail.com>
  *
@@ -611,7 +611,7 @@ dissect_ccid(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         /* sent/received is from the perspective of the card reader */
         pinfo->p2p_dir = P2P_DIR_SENT;
 
-        if (!dissector_try_payload_with_data(subdissector_table, next_tvb, pinfo, tree, true, urb)) {
+        if (!dissector_try_payload_new(subdissector_table, next_tvb, pinfo, tree, true, urb)) {
             call_data_dissector(next_tvb, pinfo, tree);
         }
         break;
@@ -635,7 +635,7 @@ dissect_ccid(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         next_tvb = tvb_new_subset_length(tvb, 10, payload_len);
         pinfo->p2p_dir = P2P_DIR_RECV;
 
-        if (!dissector_try_payload_with_data(subdissector_table, next_tvb, pinfo, tree, true, urb)) {
+        if (!dissector_try_payload_new(subdissector_table, next_tvb, pinfo, tree, true, urb)) {
             call_data_dissector(next_tvb, pinfo, tree);
         }
         break;
@@ -655,9 +655,10 @@ dissect_ccid(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         proto_tree_add_item(ccid_tree, hf_ccid_bSeq, tvb, 6, 1, ENC_LITTLE_ENDIAN);
         proto_tree_add_bitmask(ccid_tree, tvb, 7, hf_ccid_bStatus, ett_ccid_status, bStatus_fields, ENC_LITTLE_ENDIAN);
         proto_tree_add_item(ccid_tree, hf_ccid_bError, tvb, 8, 1, ENC_LITTLE_ENDIAN);
-        proto_tree_add_item_ret_uint8(ccid_tree, hf_ccid_bProtocolNum, tvb, 9, 1, ENC_LITTLE_ENDIAN, &bProtocolNum);
+        proto_tree_add_item(ccid_tree, hf_ccid_bProtocolNum, tvb, 9, 1, ENC_LITTLE_ENDIAN);
 
         /* abProtocolDataStructure */
+        bProtocolNum = tvb_get_uint8(tvb, 9);
         switch (bProtocolNum)
         {
             case 0: /* T=0 */

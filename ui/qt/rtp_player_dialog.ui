@@ -309,7 +309,7 @@
         <number>0</number>
        </property>
        <property name="maximum">
-        <double>2000.000000000000000</double>
+        <double>500.000000000000000</double>
        </property>
        <property name="singleStep">
         <double>5.000000000000000</double>
@@ -400,35 +400,6 @@
         </size>
        </property>
       </spacer>
-     </item>
-     <item>
-      <widget class="QLabel" name="visualSRLabel">
-       <property name="text">
-        <string>Visual Sample Rate:</string>
-       </property>
-       <property name="toolTip">
-        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Adjust the sampling rate used for the waveform display. Higher values display higher frequency harmonics but take additional processing time. Values between 1 kHz and 48 kHz are supported.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QSpinBox" name="visualSRSpinBox">
-       <property name="toolTip">
-        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Adjust the sampling rate used for the waveform display. Higher values display higher frequency harmonics but take additional processing time. Values between 1 kHz and 48 kHz are supported.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-       </property>
-       <property name="minimum">
-        <number>1000</number>
-       </property>
-       <property name="maximum">
-        <number>48000</number>
-       </property>
-       <property name="suffix">
-        <string> Hz</string>
-       </property>
-       <property name="stepType">
-        <enum>QAbstractSpinBox::AdaptiveDecimalStepType</enum>
-       </property>
-      </widget>
      </item>
     </layout>
    </item>
@@ -616,7 +587,6 @@
    <addaction name="actionAudioRoutingMute"/>
    <addaction name="actionAudioRoutingUnmute"/>
    <addaction name="actionAudioRoutingMuteInvert"/>
-   <addaction name="actionAudioRoutingSolo"/>
    <addaction name="actionAudioRoutingP"/>
    <addaction name="actionAudioRoutingL"/>
    <addaction name="actionAudioRoutingLR"/>
@@ -653,17 +623,6 @@
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+M</string>
-   </property>
-  </action>
-  <action name="actionAudioRoutingSolo">
-   <property name="text">
-    <string>Solo</string>
-   </property>
-   <property name="toolTip">
-    <string>Unmute selected streams and mute all other streams</string>
-   </property>
-   <property name="shortcut">
-    <string notr="true">Ctrl+Shift+M</string>
    </property>
   </action>
   <action name="actionAudioRoutingP">
@@ -820,7 +779,7 @@
     <string>Prepare &amp;Filter</string>
    </property>
    <property name="toolTip">
-    <string>Prepare a filter matching the selected streams.</string>
+    <string>Prepare a filter matching the selected stream(s).</string>
    </property>
   </action>
   <action name="actionReadCapture">

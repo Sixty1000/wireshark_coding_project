@@ -79,21 +79,40 @@ typedef enum {
  * @param ... Printf like parameters
  * @return The newly created dialog
  */
+/*
+ * XXX This is a bit clunky. We typically pass in:
+ * - simple_dialog_primary_start
+ * - The primary message
+ * - simple_dialog_primary_end
+ * - Optionally, the secondary message.
+ *
+ * In the Qt UI we use primary_start and _end to split the primary and
+ * secondary messages. They are then added to a QMessageBox via setText and
+ * setInformativeText respectively. No formatting is applied.
+ *
+ * Callers are responsible for wrapping the primary message and formatting
+ * the message text.
+ *
+ * Explicitly passing in separate primary and secondary messages would let us
+ * get rid of primary_start and primary_end and reduce the amount of
+ * gymnastics we have to do in the Qt UI.
+ */
 extern void *simple_dialog(ESD_TYPE_E type, int btn_mask,
     const char *msg_format, ...)
     G_GNUC_PRINTF(3, 4);
 
-/**
- * @brief Show a simple dialog asynchronously.
- *
- * @param type Type of the dialog to show.
- * @param btn_mask Bitmask defining which buttons to display on the dialog.
- * @param msg_format Format string for the message to be displayed.
- * @return void* Always returns NULL.
- */
 extern void *simple_dialog_async(ESD_TYPE_E type, int btn_mask,
     const char *msg_format, ...)
     G_GNUC_PRINTF(3, 4);
+
+/** Surround the primary dialog message text by
+ *  simple_dialog_primary_start() and simple_dialog_primary_end().
+ */
+extern const char *simple_dialog_primary_start(void);
+/** Surround the primary dialog message text by
+ *  simple_dialog_primary_start() and simple_dialog_primary_end().
+ */
+extern const char *simple_dialog_primary_end(void);
 
 /** Escape the message text, if it probably contains Pango escape sequences.
  *  For example html like tags starting with a <.
@@ -103,43 +122,26 @@ extern void *simple_dialog_async(ESD_TYPE_E type, int btn_mask,
  */
 extern char *simple_dialog_format_message(const char *msg);
 
-/**
- * @brief Show an Alert box, with optional "don't show this message again" variable
+/*
+ * Alert box, with optional "don't show this message again" variable
  * and checkbox, and optional secondary text.
- *
- * @param type Type of the alert box to show.
- * @param notagain Pointer to a boolean variable that will be set to true if the user checks the "don't show this message again" checkbox, or false otherwise.
- * @param secondary_msg Optional secondary message to display in the alert box, or NULL if no secondary message is needed.
- * @param msg_format Format string for the primary message to be displayed in the alert box.
- * @param ... Additional arguments for the format string of the primary message.
  */
 extern void simple_message_box(ESD_TYPE_E type, bool *notagain,
                                const char *secondary_msg,
                                const char *msg_format, ...) G_GNUC_PRINTF(4, 5);
 
-/**
- * @brief Display an error alert box, taking a format and a va_list argument.
- *
- * @param msg_format The format string for the message.
- * @param ap         The va_list of arguments for the format string.
+/*
+ * Error alert box, taking a format and a va_list argument.
  */
 extern void vsimple_error_message_box(const char *msg_format, va_list ap);
 
-
-/**
- * @brief Display an error alert box, taking a format and a list of arguments.
- *
- * @param msg_format The format string for the message.
- * @param ...        Arguments for the format string.
+/*
+ * Error alert box, taking a format and a list of arguments.
  */
 extern void simple_error_message_box(const char *msg_format, ...) G_GNUC_PRINTF(1, 2);
 
-
-/**
- * @brief Display a warning alert box, taking a format and a va_list argument.
- *
- * @param msg_format The format string for the message.
- * @param ap         The va_list of arguments for the format string.
+/*
+ * Warning alert box, taking a format and a va_list argument.
  */
 extern void vsimple_warning_message_box(const char *msg_format, va_list ap);
 

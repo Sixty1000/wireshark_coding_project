@@ -17,11 +17,10 @@
 #include <epan/etypes.h>
 #include <epan/in_cksum.h>
 #include <epan/expert.h>
-#include <epan/iana-info.h>
+#include <epan/ipproto.h>
+#include <epan/llcsaps.h>
 #include "packet-gre.h"
 #include "packet-wccp.h"
-#include "packet-llc.h"
-
 
 #include <epan/decode_as.h>
 
@@ -155,22 +154,6 @@ const value_string gre_typevals[] = {
     { GRE_ARUBA_8360,      "ARUBA WLAN" },
     { GRE_ARUBA_8370,      "ARUBA WLAN" },
     { GRE_ARUBA_9000,      "ARUBA WLAN" },
-    { GRE_ARUBA_9100,      "ARUBA WLAN" },
-    { GRE_ARUBA_9110,      "ARUBA WLAN" },
-    { GRE_ARUBA_9120,      "ARUBA WLAN" },
-    { GRE_ARUBA_9130,      "ARUBA WLAN" },
-    { GRE_ARUBA_9140,      "ARUBA WLAN" },
-    { GRE_ARUBA_9150,      "ARUBA WLAN" },
-    { GRE_ARUBA_9160,      "ARUBA WLAN" },
-    { GRE_ARUBA_9170,      "ARUBA WLAN" },
-    { GRE_ARUBA_9180,      "ARUBA WLAN" },
-    { GRE_ARUBA_9190,      "ARUBA WLAN" },
-    { GRE_ARUBA_91A0,      "ARUBA WLAN" },
-    { GRE_ARUBA_91B0,      "ARUBA WLAN" },
-    { GRE_ARUBA_91C0,      "ARUBA WLAN" },
-    { GRE_ARUBA_91D0,      "ARUBA WLAN" },
-    { GRE_ARUBA_91E0,      "ARUBA WLAN" },
-    { GRE_ARUBA_91F0,      "ARUBA WLAN" },
     { 0,                   NULL }
 };
 
@@ -229,7 +212,7 @@ static const true_false_string gre_wccp_redirect_header_valid_val = {
 
 
 static int
-dissect_gre_3gpp2_attribs(tvbuff_t *tvb, packet_info* pinfo, int offset, proto_tree *tree)
+dissect_gre_3gpp2_attribs(tvbuff_t *tvb, int offset, proto_tree *tree)
 {
     bool        last_attrib  = false;
     proto_item *attr_item;
@@ -246,7 +229,7 @@ dissect_gre_3gpp2_attribs(tvbuff_t *tvb, packet_info* pinfo, int offset, proto_t
         uint8_t attrib_length = tvb_get_uint8(tvb, offset + 1);
 
         attr_tree = proto_tree_add_subtree(atree, tvb, offset, attrib_length + 1 + 1, ett_3gpp2_attr, &attr_item,
-                                        val_to_str(pinfo->pool, (attrib_id&0x7f), gre_3gpp2_attrib_id_vals, "%u (Unknown)"));
+                                        val_to_str((attrib_id&0x7f), gre_3gpp2_attrib_id_vals, "%u (Unknown)"));
 
         proto_tree_add_item(attr_tree, hf_gre_3gpp2_attrib_id, tvb, offset, 1, ENC_BIG_ENDIAN);
         proto_tree_add_item(attr_tree, hf_gre_3gpp2_attrib_length, tvb, offset+1, 1, ENC_BIG_ENDIAN);
@@ -277,7 +260,7 @@ dissect_gre_3gpp2_attribs(tvbuff_t *tvb, packet_info* pinfo, int offset, proto_t
         {
             value = tvb_get_uint8(tvb,offset) >>6;
             proto_tree_add_item(attr_tree, hf_gre_3gpp2_seg, tvb, offset, attrib_length, ENC_BIG_ENDIAN);
-            proto_item_append_text(attr_item," - %s",val_to_str(pinfo->pool, value, gre_3gpp2_seg_vals, "0x%02X - Unknown"));
+            proto_item_append_text(attr_item," - %s",val_to_str(value, gre_3gpp2_seg_vals, "0x%02X - Unknown"));
         }
         break;
         case ID_3GPP2_FLOW_CTRL:
@@ -349,7 +332,7 @@ dissect_gre(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "GRE");
 
-    col_add_fstr(pinfo->cinfo, COL_INFO, "Encapsulated %s", val_to_str(pinfo->pool, type, gre_typevals, "0x%04X (unknown)"));
+    col_add_fstr(pinfo->cinfo, COL_INFO, "Encapsulated %s", val_to_str(type, gre_typevals, "0x%04X (unknown)"));
 
     switch (type) {
 
@@ -380,7 +363,7 @@ dissect_gre(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
      */
     if (1) {
         ti = proto_tree_add_protocol_format(tree, proto_gre, tvb, offset, -1, "Generic Routing Encapsulation (%s)",
-                                            val_to_str(pinfo->pool, type, gre_typevals, "0x%04X - unknown"));
+                                            val_to_str(type, gre_typevals, "0x%04X - unknown"));
         gre_tree = proto_item_add_subtree(ti, ett_gre);
 
 
@@ -472,13 +455,15 @@ dissect_gre(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
                 it_routing = proto_tree_add_item(gre_tree, hf_gre_routing, tvb, offset, -1, ENC_NA);
                 r_tree = proto_item_add_subtree(ti, ett_gre_routing);
 
-                proto_tree_add_item_ret_uint16(r_tree, hf_gre_routing_address_family , tvb, offset, 2, ENC_BIG_ENDIAN, &sre_af);
+                sre_af = tvb_get_ntohs(tvb, offset);
+                proto_tree_add_item(r_tree, hf_gre_routing_address_family , tvb, offset, 2, ENC_BIG_ENDIAN);
                 offset += 2;
 
                 proto_tree_add_item(r_tree, hf_gre_routing_sre_offset , tvb, offset, 1, ENC_BIG_ENDIAN);
                 offset += 1;
 
-                proto_tree_add_item_ret_uint8(r_tree, hf_gre_routing_sre_length , tvb, offset, 1, ENC_BIG_ENDIAN, &sre_length);
+                sre_length = tvb_get_uint8(tvb, offset);
+                proto_tree_add_item(r_tree, hf_gre_routing_sre_length , tvb, offset, 1, ENC_BIG_ENDIAN);
                 offset += 1;
 
                 proto_item_set_len(it_routing, 2 + 1 +1 + sre_length);
@@ -495,7 +480,7 @@ dissect_gre(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
             offset += 4;
         }
         if (type == ETHERTYPE_3GPP2) {
-            offset = dissect_gre_3gpp2_attribs(tvb, pinfo, offset, gre_tree);
+            offset = dissect_gre_3gpp2_attribs(tvb, offset, gre_tree);
         }
 
         proto_item_set_len(ti, offset);
@@ -513,8 +498,8 @@ dissect_gre(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
         }
         next_tvb = tvb_new_subset_remaining(tvb, offset);
         pinfo->flags.in_gre_pkt = true;
-        if (!dissector_try_uint_with_data(gre_dissector_table, type, next_tvb, pinfo, tree, true, &gre_hdr_info))
-            if (!dissector_try_payload_with_data(gre_subdissector_table, next_tvb, pinfo, tree, true, &gre_hdr_info)) {
+        if (!dissector_try_uint_new(gre_dissector_table, type, next_tvb, pinfo, tree, true, &gre_hdr_info))
+            if (!dissector_try_payload_new(gre_subdissector_table, next_tvb, pinfo, tree, true, &gre_hdr_info)) {
               call_data_dissector(next_tvb, pinfo, gre_tree);
             }
     }

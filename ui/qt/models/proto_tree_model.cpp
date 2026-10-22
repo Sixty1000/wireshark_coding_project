@@ -9,13 +9,10 @@
 
 #include <ui/qt/models/proto_tree_model.h>
 
-#include <epan/expert.h>
 #include <epan/prefs.h>
 #include <wsutil/wslog.h>
 
 #include <ui/qt/utils/color_utils.h>
-#include <ui/qt/utils/coloring_rule_utils.h>
-#include <ui/qt/utils/theme_manager.h>
 
 #include <QApplication>
 #include <QPalette>
@@ -101,32 +98,6 @@ QVariant ProtoTreeModel::data(const QModelIndex &index, int role) const
     }
 
     switch (role) {
-    case Qt::AccessibleTextRole:
-    {
-        QString label = index_node->labelText();
-        uint32_t severity = finfo.flag(PI_SEVERITY_MASK);
-        if (severity > 0) {
-            return QString("%1: %2").arg(val_to_str_const(severity, expert_severity_vals, "Unknown severity"), label);
-        }
-        return label;
-    }
-    case Qt::AccessibleDescriptionRole:
-    {
-        switch(finfo.flag(PI_SEVERITY_MASK)) {
-        case(PI_COMMENT):
-            return tr("Comment");
-        case(PI_CHAT):
-            return tr("Chat");
-        case(PI_NOTE):
-            return tr("Note");
-        case(PI_WARN):
-            return tr("Warning");
-        case(PI_ERROR):
-            return tr("Error");
-        default:
-            return QVariant();
-        }
-    }
     case Qt::DisplayRole:
         return index_node->labelText();
     case Qt::BackgroundRole:
@@ -135,22 +106,19 @@ QVariant ProtoTreeModel::data(const QModelIndex &index, int role) const
         case(0):
             break;
         case(PI_COMMENT):
-            return ThemeManager::instance()->color(ThemeManager::ExpertComment);
+            return ColorUtils::expert_color_comment;
         case(PI_CHAT):
-            return ThemeManager::instance()->color(ThemeManager::ExpertChat);
+            return ColorUtils::expert_color_chat;
         case(PI_NOTE):
-            return ThemeManager::instance()->color(ThemeManager::ExpertNote);
+            return ColorUtils::expert_color_note;
         case(PI_WARN):
-            return ThemeManager::instance()->color(ThemeManager::ExpertWarn);
+            return ColorUtils::expert_color_warn;
         case(PI_ERROR):
-            return ThemeManager::instance()->color(ThemeManager::ExpertError);
+            return ColorUtils::expert_color_error;
         default:
             ws_warning("Unhandled severity flag: %u", finfo.flag(PI_SEVERITY_MASK));
         }
         if (finfo.headerInfo().type == FT_PROTOCOL) {
-            if (QApplication::palette().window() == QApplication::palette().base()) {
-                return QApplication::palette().alternateBase();
-            }
             return QApplication::palette().window();
         }
         return QApplication::palette().base();
@@ -158,13 +126,10 @@ QVariant ProtoTreeModel::data(const QModelIndex &index, int role) const
     case Qt::ForegroundRole:
     {
         if (finfo.flag(PI_SEVERITY_MASK)) {
-            return ThemeManager::instance()->color(ThemeManager::ExpertForeground);
+            return ColorUtils::expert_color_foreground;
         }
         if (finfo.isLink()) {
             return ColorUtils::themeLinkBrush();
-        }
-        if (ColoringRuleUtils::isDisabledEntryItem(index_node)) {
-            return ColorUtils::disabledForeground();
         }
         if (finfo.headerInfo().type == FT_PROTOCOL) {
             return QApplication::palette().windowText();
@@ -177,20 +142,6 @@ QVariant ProtoTreeModel::data(const QModelIndex &index, int role) const
             font.setUnderline(true);
             return font;
         }
-        if (ColoringRuleUtils::isDisabledEntryItem(index_node)) {
-            QFont font;
-            font.setItalic(true);
-            return font;
-        }
-        break;
-    case ColoringRuleEntryRole:
-    {
-        ColoringRuleEntry entry;
-        if (ColoringRuleUtils::entryForNode(index_node, &entry)) {
-            return QVariant::fromValue(entry);
-        }
-        break;
-    }
     default:
         break;
     }

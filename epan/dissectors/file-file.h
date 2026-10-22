@@ -12,7 +12,7 @@
 
 /*
  * Routine used to register file record end routine.  The routine should only
- * be registered when the dissector is used in the file record, not in the
+ * be registred when the dissector is used in the file record, not in the
  * proto_register_XXX function.
  */
 void

@@ -53,9 +53,9 @@ static int ett_pcnfsd_auth_password;
 static int ett_pcnfsd_gids;
 
 static int
-dissect_pcnfsd_username(tvbuff_t *tvb, packet_info* pinfo, unsigned offset, proto_tree *tree)
+dissect_pcnfsd_username(tvbuff_t *tvb, int offset, proto_tree *tree)
 {
-    return dissect_rpc_string(tvb, pinfo, tree, hf_pcnfsd_username, offset, NULL);
+    return dissect_rpc_string(tvb, tree, hf_pcnfsd_username, offset, NULL);
 }
 
 #define MAP_REQ_UID     0
@@ -73,23 +73,25 @@ static const value_string names_mapreq[] =
 };
 
 static int
-dissect_pcnfsd2_dissect_mapreq_arg_item(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
+dissect_pcnfsd2_dissect_mapreq_arg_item(tvbuff_t *tvb, int offset,
+    packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
     proto_tree_add_item(tree, hf_pcnfsd_mapreq, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
 
     offset = dissect_rpc_uint32(tvb, tree, hf_pcnfsd_uid, offset);
 
-    offset = dissect_pcnfsd_username(tvb, pinfo, offset, tree);
+    offset = dissect_pcnfsd_username(tvb, offset, tree);
 
     return offset;
 }
 
 static int
-dissect_pcnfsd2_mapid_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+dissect_pcnfsd2_mapid_call(tvbuff_t *tvb, packet_info *pinfo,
+    proto_tree *tree, void* data _U_)
 {
-    unsigned offset = 0;
-    offset = dissect_rpc_string(tvb, pinfo, tree, hf_pcnfsd_comment, offset, NULL);
+    int offset = 0;
+    offset = dissect_rpc_string(tvb, tree, hf_pcnfsd_comment, offset, NULL);
 
     offset = dissect_rpc_list(tvb, pinfo, tree, offset,
           dissect_pcnfsd2_dissect_mapreq_arg_item, NULL);
@@ -110,7 +112,8 @@ static const value_string names_maprstat[] =
 };
 
 static int
-dissect_pcnfsd2_dissect_mapreq_res_item(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
+dissect_pcnfsd2_dissect_mapreq_res_item(tvbuff_t *tvb, int offset,
+    packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
     proto_tree_add_item(tree, hf_pcnfsd_mapreq, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
@@ -120,16 +123,17 @@ dissect_pcnfsd2_dissect_mapreq_res_item(tvbuff_t *tvb, unsigned offset, packet_i
 
     offset = dissect_rpc_uint32(tvb, tree, hf_pcnfsd_uid, offset);
 
-    offset = dissect_pcnfsd_username(tvb, pinfo, offset, tree);
+    offset = dissect_pcnfsd_username(tvb, offset, tree);
 
     return offset;
 }
 
 static int
-dissect_pcnfsd2_mapid_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+dissect_pcnfsd2_mapid_reply(tvbuff_t *tvb, packet_info *pinfo,
+    proto_tree *tree, void* data _U_)
 {
-    unsigned offset = 0;
-    offset = dissect_rpc_string(tvb, pinfo, tree, hf_pcnfsd_comment, offset, NULL);
+    int offset = 0;
+    offset = dissect_rpc_string(tvb, tree, hf_pcnfsd_comment, offset, NULL);
 
     offset = dissect_rpc_list(tvb, pinfo, tree, offset,
           dissect_pcnfsd2_dissect_mapreq_res_item, NULL);
@@ -138,78 +142,57 @@ dissect_pcnfsd2_mapid_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 }
 
 /* "NFS Illustrated 14.7.13 */
-static wmem_strbuf_t*
-pcnfsd_decode_obscure(wmem_allocator_t *pool, const char* data, size_t len)
+static char *
+pcnfsd_decode_obscure(wmem_allocator_t *pool, const char* data, int len)
 {
-    wmem_strbuf_t *decoded_buf;
+    char *decoded_buf;
+    char *decoded_data;
 
-    decoded_buf = wmem_strbuf_new_sized(pool, len + 1);
-    for ( ; len>0 ; len--, data++) {
-        /* dissect_rpc_string/dissect_rpc_opaque_data already called
-         * tvb_get_string_enc(..., ENC_ASCII), which replaced any non-ASCII
-         * with UTF-8 REPLACEMENT CHARACTER, so leave unchanged any byte
-         * with the high bit set.
-         * XXX - It might be easier to get the raw bytes and deobfuscate
-         * prior to making UTF-8.
-         */
-        if (*data & 0x80) {
-            wmem_strbuf_append_c(decoded_buf, *data);
-        } else {
-            wmem_strbuf_append_c(decoded_buf, *data ^ 0x5b);
-        }
+    decoded_buf = (char *)wmem_alloc(pool, len);
+    decoded_data = decoded_buf;
+    for ( ; len>0 ; len--, data++, decoded_data++) {
+        *decoded_data = (*data ^ 0x5b) & 0x7f;
     }
-    /* Return the wmem_strbuf_t for clarity, since the deobfuscation can
-     * place an internal '\0' byte. (We could just use the original string
-     * length, but this makes it more apparent.) */
     return decoded_buf;
 }
 
 
 /* "NFS Illustrated" 14.7.13 */
 static int
-dissect_pcnfsd2_auth_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+dissect_pcnfsd2_auth_call(tvbuff_t *tvb, packet_info *pinfo,
+    proto_tree *tree, void* data _U_)
 {
-    unsigned    newoffset;
+    int         newoffset;
     const char *ident         = NULL;
-    wmem_strbuf_t *ident_decoded;
+    const char *ident_decoded;
     proto_item *ident_item;
     proto_tree *ident_tree;
     const char *password      = NULL;
-    wmem_strbuf_t *password_decoded;
     proto_item *password_item = NULL;
     proto_tree *password_tree = NULL;
-    unsigned offset = 0;
+    int offset = 0;
 
-    offset = dissect_rpc_string(tvb, pinfo, tree,
+    offset = dissect_rpc_string(tvb, tree,
         hf_pcnfsd_auth_client, offset, NULL);
 
     ident_tree = proto_tree_add_subtree(tree, tvb,
                 offset, -1, ett_pcnfsd_auth_ident, &ident_item, "Authentication Ident");
 
-    /* XXX - Because this is obfuscated with a XOR pattern, it really needs
-     * to retrieve the raw bytes and XOR them first; the obfuscation can place
-     * a '\0' in the middle of the string if the unobfuscated identity or
-     * password has a '[' (ASCII 0x5b) , so the counted string length in the
-     * frame should be used, not strlen().
-     */
-    newoffset = dissect_rpc_string(tvb, pinfo, ident_tree,
+    newoffset = dissect_rpc_string(tvb, ident_tree,
         hf_pcnfsd_auth_ident_obscure, offset, &ident);
     proto_item_set_len(ident_item, newoffset-offset);
 
-    if (ident && ident_tree) {
+    if (ident) {
         /* Only attempt to decode the ident if it has been specified */
         if (strcmp(ident, RPC_STRING_EMPTY) != 0)
-            ident_decoded = pcnfsd_decode_obscure(pinfo->pool, ident, strlen(ident));
+            ident_decoded = pcnfsd_decode_obscure(pinfo->pool, ident, (int)strlen(ident));
         else
-            ident_decoded = wmem_strbuf_new(pinfo->pool, ident);
+            ident_decoded = ident;
 
-        proto_tree_add_string(ident_tree,
-            hf_pcnfsd_auth_ident_clear,
-            tvb, offset+4,
-            (int)wmem_strbuf_get_len(ident_decoded),
-            wmem_strbuf_get_str(ident_decoded));
-
-        wmem_strbuf_destroy(ident_decoded);
+        if (ident_tree)
+            proto_tree_add_string(ident_tree,
+                hf_pcnfsd_auth_ident_clear,
+                tvb, offset+4, (int)strlen(ident_decoded), ident_decoded);
     }
     if (ident_item) {
         proto_item_set_text(ident_item, "Authentication Ident: %s",
@@ -222,26 +205,21 @@ dissect_pcnfsd2_auth_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
                                           tvb, 0, 0, "", "Authentication Password");
     password_tree = proto_item_add_subtree(password_item, ett_pcnfsd_auth_password);
 
-    newoffset = dissect_rpc_string(tvb, pinfo, password_tree,
+    newoffset = dissect_rpc_string(tvb, password_tree,
         hf_pcnfsd_auth_password_obscure, offset, &password);
     if (password_item) {
         proto_item_set_len(password_item, newoffset-offset);
     }
 
-    if (password && password_tree) {
+    if (password) {
         /* Only attempt to decode the password if it has been specified */
         if (strcmp(password, RPC_STRING_EMPTY))
-            password_decoded = pcnfsd_decode_obscure(pinfo->pool, password, strlen(password));
-        else
-            password_decoded = wmem_strbuf_new(pinfo->pool, password);
+            pcnfsd_decode_obscure(pinfo->pool, password, (int)strlen(password));
 
-        proto_tree_add_string(password_tree,
-            hf_pcnfsd_auth_password_clear,
-            tvb, offset+4,
-            (int)wmem_strbuf_get_len(password_decoded),
-            wmem_strbuf_get_str(password_decoded));
-
-        wmem_strbuf_destroy(password_decoded);
+        if (password_tree)
+            proto_tree_add_string(password_tree,
+                hf_pcnfsd_auth_password_clear,
+                tvb, offset+4, (int)strlen(password), password);
     }
     if (password_item) {
         proto_item_set_text(password_item, "Authentication Password: %s",
@@ -250,7 +228,7 @@ dissect_pcnfsd2_auth_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
 
     offset = newoffset;
 
-    offset = dissect_rpc_string(tvb, pinfo, tree,
+    offset = dissect_rpc_string(tvb, tree,
         hf_pcnfsd_comment, offset, NULL);
 
     return offset;
@@ -259,12 +237,13 @@ dissect_pcnfsd2_auth_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
 
 /* "NFS Illustrated" 14.7.13 */
 static int
-dissect_pcnfsd2_auth_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+dissect_pcnfsd2_auth_reply(tvbuff_t *tvb, packet_info *pinfo _U_,
+    proto_tree *tree, void* data _U_)
 {
     int         gids_count;
     proto_tree *gtree;
     int         gids_i;
-    unsigned offset = 0;
+    int offset = 0;
 
     offset = dissect_rpc_uint32(tvb, tree, hf_pcnfsd_status, offset);
     offset = dissect_rpc_uint32(tvb, tree, hf_pcnfsd_uid, offset);
@@ -280,11 +259,11 @@ dissect_pcnfsd2_auth_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
         offset = dissect_rpc_uint32(tvb, gtree,
                 hf_pcnfsd_gid, offset);
     }
-    offset = dissect_rpc_string(tvb, pinfo, tree,
+    offset = dissect_rpc_string(tvb, tree,
         hf_pcnfsd_homedir, offset, NULL);
     /* should be signed int32 */
     offset = dissect_rpc_uint32(tvb, tree, hf_pcnfsd_def_umask, offset);
-    offset = dissect_rpc_string(tvb, pinfo, tree,
+    offset = dissect_rpc_string(tvb, tree,
         hf_pcnfsd_comment, offset, NULL);
 
     return offset;

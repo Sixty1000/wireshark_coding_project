@@ -189,7 +189,6 @@ static int ett_lanman_server;
 
 static expert_field ei_smb_pipe_bogus_netwkstauserlogon;
 static expert_field ei_smb_pipe_bad_type;
-static expert_field ei_smb_pipe_entry_no_data;
 
 /*
  * See
@@ -312,11 +311,11 @@ add_string_param_update_parent(tvbuff_t *tvb, int offset, int count, packet_info
     proto_tree *tree, int convert _U_, int hf_index, smb_info_t *smb_info _U_)
 {
 	proto_item *ti, *parent_ti;
-	const char *str;
+	const uint8_t *str;
 
 	DISSECTOR_ASSERT(hf_index > 0);
 	ti = proto_tree_add_item_ret_string(tree, hf_index, tvb, offset,
-	    count, ENC_ASCII|ENC_NA, pinfo->pool, (const uint8_t**)&str);
+	    count, ENC_ASCII|ENC_NA, pinfo->pool, &str);
 	    /* XXX - code page? */
 	parent_ti = proto_item_get_parent(ti);
 	proto_item_append_text(parent_ti, ": %s",
@@ -359,14 +358,14 @@ add_string_param(tvbuff_t *tvb, int offset, int count _U_,
 		proto_tree_add_item(tree, hf_index, tvb, offset, string_len,
 		    ENC_ASCII|ENC_NA);	/* XXX - code page? */
 	} else {
-		proto_tree_add_item(tree, hf_smb_pipe_string_param, tvb, offset, string_len, ENC_ASCII);
+		proto_tree_add_item(tree, hf_smb_pipe_string_param, tvb, offset, string_len, ENC_NA|ENC_ASCII);
 	}
 	offset += string_len;
 	return offset;
 }
 
 static const char *
-get_stringz_pointer_value(wmem_allocator_t *scope, tvbuff_t *tvb, int offset, int convert, int *cptrp,
+get_stringz_pointer_value(tvbuff_t *tvb, int offset, int convert, int *cptrp,
     int *lenp)
 {
 	int cptr;
@@ -381,20 +380,20 @@ get_stringz_pointer_value(wmem_allocator_t *scope, tvbuff_t *tvb, int offset, in
 	    (string_len = tvb_strnlen(tvb, cptr, -1)) != -1) {
 	    	string_len++;	/* include the terminating '\0' */
 			*lenp = string_len;
-			return tvb_format_text(scope, tvb, cptr, string_len - 1);
+			return tvb_format_text(wmem_packet_scope(), tvb, cptr, string_len - 1);
 	} else
 		return NULL;
 }
 
 static int
 add_stringz_pointer_param(tvbuff_t *tvb, int offset, int count _U_,
-    packet_info *pinfo, proto_tree *tree, int convert, int hf_index, smb_info_t *smb_info _U_)
+    packet_info *pinfo _U_, proto_tree *tree, int convert, int hf_index, smb_info_t *smb_info _U_)
 {
 	int cptr;
 	const char *string;
 	int string_len;
 
-	string = get_stringz_pointer_value(pinfo->pool, tvb, offset, convert, &cptr,
+	string = get_stringz_pointer_value(tvb, offset, convert, &cptr,
 	    &string_len);
 	offset += 4;
 
@@ -404,7 +403,7 @@ add_stringz_pointer_param(tvbuff_t *tvb, int offset, int count _U_,
 			proto_tree_add_item(tree, hf_index, tvb, cptr,
 			    string_len, ENC_ASCII|ENC_NA);	/* XXX - code page? */
 		} else {
-			proto_tree_add_item(tree, hf_smb_pipe_stringz_param, tvb, cptr, string_len, ENC_ASCII);
+			proto_tree_add_item(tree, hf_smb_pipe_stringz_param, tvb, cptr, string_len, ENC_NA|ENC_ASCII);
 		}
 	} else {
 		if (hf_index > 0) {
@@ -517,7 +516,7 @@ add_reltime(tvbuff_t *tvb, int offset, int count _U_, packet_info *pinfo _U_,
 	nstime.nsecs = 0;
 	proto_tree_add_time_format_value(tree, hf_index, tvb, offset, 4,
 	    &nstime, "%s",
-	    signed_time_secs_to_str(pinfo->pool, nstime.secs));
+	    signed_time_secs_to_str(pinfo->pool,  (int32_t) nstime.secs));
 	offset += 4;
 	return offset;
 }
@@ -1594,8 +1593,8 @@ find_lanman(int lanman_num)
 	return &lmd[i];
 }
 
-static const char *
-get_count(const char *desc, int *countp)
+static const unsigned char *
+get_count(const unsigned char *desc, int *countp)
 {
 	int count = 0;
 	unsigned char c;
@@ -1606,13 +1605,9 @@ get_count(const char *desc, int *countp)
 	}
 
 	while ((c = *desc) != '\0' && g_ascii_isdigit(c)) {
-		/* counts larger than any SMB payload make no sense */
-		if (count <= 0xFFFF)
-			count = (count * 10) + c - '0';
+		count = (count * 10) + c - '0';
 		desc++;
 	}
-	if (count > 0xFFFF)
-		count = 0xFFFF;
 
 	*countp = count;	/* XXX - what if it's 0? */
 	return desc;
@@ -1620,7 +1615,7 @@ get_count(const char *desc, int *countp)
 
 static int
 dissect_request_parameters(tvbuff_t *tvb, int offset, packet_info *pinfo,
-    proto_tree *tree, const char *desc, const item_t *items,
+    proto_tree *tree, const unsigned char *desc, const item_t *items,
     bool *has_data_p, smb_info_t *smb_info)
 {
 	unsigned c;
@@ -1828,7 +1823,7 @@ dissect_request_parameters(tvbuff_t *tvb, int offset, packet_info *pinfo,
 
 static int
 dissect_response_parameters(tvbuff_t *tvb, int offset, packet_info *pinfo,
-    proto_tree *tree, const char *desc, const item_t *items,
+    proto_tree *tree, const unsigned char *desc, const item_t *items,
     bool *has_data_p, bool *has_ent_count_p, uint16_t *ent_count_p, smb_info_t *smb_info)
 {
 	unsigned c;
@@ -1962,7 +1957,7 @@ dissect_response_parameters(tvbuff_t *tvb, int offset, packet_info *pinfo,
 
 static int
 dissect_transact_data(tvbuff_t *tvb, int offset, int convert,
-    packet_info *pinfo, proto_tree *tree, const char *desc,
+    packet_info *pinfo, proto_tree *tree, const unsigned char *desc,
     const item_t *items, uint16_t *aux_count_p, smb_info_t *smb_info)
 {
 	unsigned c;
@@ -2119,7 +2114,7 @@ dissect_transact_data(tvbuff_t *tvb, int offset, int convert,
 				 * Descriptor character is 'z', but this
 				 * isn't a string parameter.
 				 */
-				string = get_stringz_pointer_value(pinfo->pool, tvb, offset,
+				string = get_stringz_pointer_value(tvb, offset,
 				    convert, &cptr, &string_len);
 				offset += 4;
 				proto_tree_add_expert_format(tree, pinfo, &ei_smb_pipe_bad_type, tvb, cptr, string_len,
@@ -2563,14 +2558,11 @@ dissect_response_data(tvbuff_t *tvb, packet_info *pinfo, int convert,
 			/* auxiliary data */
 			if (trp->aux_data_descrip != NULL) {
 				for (j = 0; j < aux_count; j++) {
-					int old_offset = offset;
 					offset = dissect_transact_data(
 					    tvb, offset, convert,
 					    pinfo, entry_tree,
-					    trp->aux_data_descrip,
+					    trp->data_descrip,
 					    lanman->resp_aux_data, NULL, smb_info);
-					if (offset <= old_offset)
-						break;
 				}
 			}
 
@@ -2581,16 +2573,6 @@ dissect_response_data(tvbuff_t *tvb, packet_info *pinfo, int convert,
 				 */
 				proto_item_set_len(entry_item,
 				    offset - start_offset);
-			}
-
-			/*
-			 * An entry whose descriptor consumes no data
-			 * would be repeated for every remaining entry.
-			 */
-			if (offset <= start_offset) {
-				proto_tree_add_expert(entry_tree, pinfo,
-				    &ei_smb_pipe_entry_no_data, tvb, offset, 0);
-				break;
 			}
 		}
 	}
@@ -2649,7 +2631,7 @@ dissect_pipe_lanman(tvbuff_t *pd_tvb, tvbuff_t *p_tvb, tvbuff_t *d_tvb,
 	if (smb_info->request) { /* this is a request */
 		/* function code */
 		cmd = tvb_get_letohs(p_tvb, offset);
-		col_add_fstr(pinfo->cinfo, COL_INFO, "%s Request", val_to_str_ext(pinfo->pool, cmd, &commands_ext, "Unknown Command (%u)"));
+		col_add_fstr(pinfo->cinfo, COL_INFO, "%s Request", val_to_str_ext(cmd, &commands_ext, "Unknown Command (%u)"));
 
 		proto_tree_add_uint(tree, hf_function_code, p_tvb, offset, 2,
 		    cmd);
@@ -2674,7 +2656,8 @@ dissect_pipe_lanman(tvbuff_t *pd_tvb, tvbuff_t *p_tvb, tvbuff_t *d_tvb,
 		}
 
 		/* parameter descriptor */
-		proto_tree_add_item_ret_string_and_length(tree, hf_param_desc, p_tvb, offset, -1, ENC_ASCII, pinfo->pool, (const uint8_t**)&param_descrip, &descriptor_len);
+		param_descrip = tvb_get_stringz_enc(pinfo->pool, p_tvb, offset, &descriptor_len, ENC_ASCII);
+		proto_tree_add_string(tree, hf_param_desc, p_tvb, offset, descriptor_len, param_descrip);
 		if (!pinfo->fd->visited) {
 			/*
 			 * Save the parameter descriptor for future use.
@@ -2685,7 +2668,8 @@ dissect_pipe_lanman(tvbuff_t *pd_tvb, tvbuff_t *p_tvb, tvbuff_t *d_tvb,
 		offset += descriptor_len;
 
 		/* return descriptor */
-		proto_tree_add_item_ret_string_and_length(tree, hf_return_desc, p_tvb, offset, -1, ENC_ASCII, pinfo->pool, (const uint8_t**)&data_descrip, &descriptor_len);
+		data_descrip = tvb_get_stringz_enc(pinfo->pool, p_tvb, offset, &descriptor_len, ENC_ASCII);
+		proto_tree_add_string(tree, hf_return_desc, p_tvb, offset, descriptor_len, data_descrip);
 		if (!pinfo->fd->visited) {
 			/*
 			 * Save the return descriptor for future use.
@@ -2708,7 +2692,8 @@ dissect_pipe_lanman(tvbuff_t *pd_tvb, tvbuff_t *p_tvb, tvbuff_t *d_tvb,
 			 * There are more parameters left, so the next
 			 * item is the auxiliary data descriptor.
 			 */
-			proto_tree_add_item_ret_string_and_length(tree, hf_aux_data_desc, p_tvb, offset, -1, ENC_ASCII, pinfo->pool, (const uint8_t**)&aux_data_descrip, &descriptor_len);
+			aux_data_descrip = tvb_get_stringz_enc(pinfo->pool, p_tvb, offset, &descriptor_len, ENC_ASCII);
+			proto_tree_add_string(tree, hf_aux_data_desc, p_tvb, offset, descriptor_len, aux_data_descrip);
 			if (!pinfo->fd->visited) {
 				/*
 				 * Save the auxiliary data descriptor for
@@ -2753,13 +2738,10 @@ dissect_pipe_lanman(tvbuff_t *pd_tvb, tvbuff_t *p_tvb, tvbuff_t *d_tvb,
 			/* auxiliary data */
 			if (aux_data_descrip != NULL) {
 				for (i = 0; i < aux_count; i++) {
-					int old_offset = offset;
 					offset = dissect_transact_data(d_tvb,
 					    offset, -1, pinfo, data_tree,
 					    aux_data_descrip,
 					    lanman->req_aux_data, NULL, smb_info);
-					if (offset <= old_offset)
-						break;
 				}
 			}
 
@@ -2786,7 +2768,7 @@ dissect_pipe_lanman(tvbuff_t *pd_tvb, tvbuff_t *p_tvb, tvbuff_t *d_tvb,
 		&&  ( tvb_reported_length(d_tvb)==0 ) ){
 			/* command */
 			col_add_fstr(pinfo->cinfo, COL_INFO, "%s Interim Response",
-					     val_to_str_ext(pinfo->pool, trp->lanman_cmd, &commands_ext, "Unknown Command (%u)"));
+					     val_to_str_ext(trp->lanman_cmd, &commands_ext, "Unknown Command (%u)"));
 
 			proto_tree_add_uint(tree, hf_function_code, p_tvb, 0, 0, trp->lanman_cmd);
 			return true;
@@ -2794,7 +2776,7 @@ dissect_pipe_lanman(tvbuff_t *pd_tvb, tvbuff_t *p_tvb, tvbuff_t *d_tvb,
 
 		/* command */
 		col_add_fstr(pinfo->cinfo, COL_INFO, "%s Response",
-				     val_to_str_ext(pinfo->pool, trp->lanman_cmd, &commands_ext, "Unknown Command (%u)"));
+				     val_to_str_ext(trp->lanman_cmd, &commands_ext, "Unknown Command (%u)"));
 
 		proto_tree_add_uint(tree, hf_function_code, p_tvb, 0, 0,
 		    trp->lanman_cmd);
@@ -2880,15 +2862,15 @@ proto_register_pipe_lanman(void)
 			&commands_ext, 0, "LANMAN Function Code/Command", HFILL }},
 
 		{ &hf_param_desc,
-			{ "Parameter Descriptor", "lanman.param_desc", FT_STRINGZ, BASE_NONE,
+			{ "Parameter Descriptor", "lanman.param_desc", FT_STRING, BASE_NONE,
 			NULL, 0, "LANMAN Parameter Descriptor", HFILL }},
 
 		{ &hf_return_desc,
-			{ "Return Descriptor", "lanman.ret_desc", FT_STRINGZ, BASE_NONE,
+			{ "Return Descriptor", "lanman.ret_desc", FT_STRING, BASE_NONE,
 			NULL, 0, "LANMAN Return Descriptor", HFILL }},
 
 		{ &hf_aux_data_desc,
-			{ "Auxiliary Data Descriptor", "lanman.aux_data_desc", FT_STRINGZ, BASE_NONE,
+			{ "Auxiliary Data Descriptor", "lanman.aux_data_desc", FT_STRING, BASE_NONE,
 			NULL, 0, "LANMAN Auxiliary Data Descriptor", HFILL }},
 
 		{ &hf_detail_level,
@@ -3529,7 +3511,7 @@ dissect_pipe_smb(tvbuff_t *sp_tvb, tvbuff_t *s_tvb, tvbuff_t *pd_tvb,
 		    offset, 2, function);
 		offset += 2;
 		col_add_fstr(pinfo->cinfo, COL_INFO, "%s %s",
-			    val_to_str(pinfo->pool, function, functions, "Unknown function (0x%04x)"),
+			    val_to_str(function, functions, "Unknown function (0x%04x)"),
 			    smb_info->request ? "Request" : "Response");
 
 		if (tri != NULL)
@@ -3560,7 +3542,7 @@ dissect_pipe_smb(tvbuff_t *sp_tvb, tvbuff_t *s_tvb, tvbuff_t *pd_tvb,
 			 * It's a FID.
 			 */
 			fid = tvb_get_letohs(s_tvb, 2);
-			dissect_smb_fid(s_tvb, pinfo, pipe_tree, offset, 2, (uint16_t) fid, false, false, false, true, smb_info);
+			dissect_smb_fid(s_tvb, pinfo, pipe_tree, offset, 2, (uint16_t) fid, false, false, false, smb_info);
 			if (tri != NULL)
 				tri->fid = fid;
 			break;
@@ -3587,12 +3569,12 @@ dissect_pipe_smb(tvbuff_t *sp_tvb, tvbuff_t *s_tvb, tvbuff_t *pd_tvb,
 			proto_tree_add_uint(pipe_tree, hf_smb_pipe_function, NULL,
 			    0, 0, function);
 			col_add_fstr(pinfo->cinfo, COL_INFO, "%s %s",
-				    val_to_str(pinfo->pool, function, functions, "Unknown function (0x%04x)"),
+				    val_to_str(function, functions, "Unknown function (0x%04x)"),
 				    smb_info->request ? "Request" : "Response");
 
 			fid = tri->fid;
 			if (fid != -1)
-				dissect_smb_fid(d_tvb, pinfo, pipe_tree, 0, 0, (uint16_t) fid, false, false, true, true, smb_info);
+				dissect_smb_fid(d_tvb, pinfo, pipe_tree, 0, 0, (uint16_t) fid, false, false, true, smb_info);
 		} else {
 			function = -1;
 			fid = -1;
@@ -3901,7 +3883,6 @@ proto_register_smb_pipe(void)
 	static ei_register_info ei[] = {
 		{ &ei_smb_pipe_bogus_netwkstauserlogon, { "smb_pipe.bogus_netwkstauserlogon_parameters", PI_PROTOCOL, PI_WARN, "Bogus NetWkstaUserLogon parameters", EXPFILL }},
 		{ &ei_smb_pipe_bad_type, { "smb_pipe.bad_type", PI_PROTOCOL, PI_ERROR, "Bad type field", EXPFILL }},
-		{ &ei_smb_pipe_entry_no_data, { "smb_pipe.entry_no_data", PI_MALFORMED, PI_ERROR, "Entry contains no data; remaining entries not dissected", EXPFILL }},
 	};
 
 	expert_module_t* expert_smb_pipe;

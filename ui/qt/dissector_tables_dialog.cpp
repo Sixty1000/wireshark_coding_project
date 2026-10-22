@@ -36,11 +36,6 @@ DissectorTablesDialog::DissectorTablesDialog(QWidget *parent) :
     //expand the "type" tables
     ui->tableTree->expandToDepth(0);
     ui->tableTree->resizeColumnToContents(DissectorTablesModel::colTableName);
-    ui->tableTree->collapseAll();
-
-    ui->cmbSearchType->addItem(tr("Everywhere"), QVariant::fromValue(DissectorTablesProxyModel::EveryWhere));
-    ui->cmbSearchType->addItem(tr("Only Name"), QVariant::fromValue(DissectorTablesProxyModel::OnlyName));
-    ui->cmbSearchType->addItem(tr("Only Description"), QVariant::fromValue(DissectorTablesProxyModel::OnlyDescription));
 
     ui->txtSearchLine->setFocus();
 }
@@ -50,24 +45,10 @@ DissectorTablesDialog::~DissectorTablesDialog()
     delete ui;
 }
 
-void DissectorTablesDialog::searchFilterChange()
+void DissectorTablesDialog::on_txtSearchLine_textChanged(const QString &search_re)
 {
-    QString search_re = ui->txtSearchLine->text();
-
-    DissectorTablesProxyModel::SearchTypes type = DissectorTablesProxyModel::EveryWhere;
-
-    if (ui->cmbSearchType->currentData().canConvert<DissectorTablesProxyModel::SearchType>())
-        type = ui->cmbSearchType->currentData().value<DissectorTablesProxyModel::SearchType>();
-
-    proxyModel_->setFilter(search_re, type);
-}
-
-void DissectorTablesDialog::on_txtSearchLine_textChanged(const QString &)
-{
-    searchFilterChange();
-}
-
-void DissectorTablesDialog::on_cmbSearchType_currentIndexChanged(int)
-{
-    searchFilterChange();
+    proxyModel_->setFilter(search_re);
+    /* If items are filtered out, then filtered back in, the tree remains collapsed
+       Force an expansion */
+    ui->tableTree->expandToDepth(0);
 }

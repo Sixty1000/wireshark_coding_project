@@ -9,16 +9,10 @@
 #ifndef __W_TOSHIBA_H__
 #define __W_TOSHIBA_H__
 
+#include <glib.h>
 #include "wtap.h"
+#include "ws_symbol_export.h"
 
-/**
- * @brief Open a Toshiba file.
- *
- * @param wth Pointer to the wtap structure.
- * @param err Error code if an error occurs.
- * @param err_info Error information if an error occurs.
- * @return wtap_open_return_val The result of opening the file.
- */
 wtap_open_return_val toshiba_open(wtap *wth, int *err, char **err_info);
 
 #endif

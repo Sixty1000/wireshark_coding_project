@@ -17,20 +17,16 @@
 #include <epan/packet.h>
 #include <wiretap/wtap.h>
 
+#include <epan/rtp_pt.h>
+
 #include <epan/conversation.h>
 #include <epan/expert.h>
 #include <epan/reassemble.h>
 #include <epan/proto_data.h>
-#include <epan/exported_pdu.h>
-#include <epan/tap.h>
-#include <epan/follow.h>
 #include <epan/exceptions.h>
 #include <epan/show_exception.h>
-#include <epan/addr_resolv.h>
 #include "packet-l2tp.h"
-#include "packet-udp.h"
 #include "packet-mp2t.h"
-#include "packet-rtp_pt.h"
 
 void proto_register_mp2t(void);
 void proto_reg_handoff_mp2t(void);
@@ -46,9 +42,6 @@ static dissector_handle_t mpeg_sect_handle;
 
 static heur_dissector_list_t heur_subdissector_list;
 
-static int exported_pdu_tap;
-static int mp2t_follow_tap;
-
 static int proto_mp2t;
 static int ett_mp2t;
 static int ett_mp2t_header;
@@ -56,7 +49,6 @@ static int ett_mp2t_af;
 static int ett_mp2t_analysis;
 static int ett_stuff;
 
-static int hf_mp2t_stream;
 static int hf_mp2t_header;
 static int hf_mp2t_sync_byte;
 static int hf_mp2t_tei;
@@ -162,7 +154,6 @@ static int hf_mp2t_pointer;
  * the stream information is at pinfo->pool, they don't actually clash.
  */
 #define MP2T_PROTO_DATA_STREAM 1
-#define MP2T_PROTO_DATA_PID 2
 
 static const value_string mp2t_sync_byte_vals[] = {
     { MP2T_SYNC_BYTE, "Correct" },
@@ -293,8 +284,6 @@ static const fragment_items mp2t_msg_frag_items = {
 
 static wmem_map_t *mp2t_stream_hashtable;
 
-static uint32_t mp2t_stream_count;
-
 typedef struct {
     const conversation_t* conv;
     int dir;
@@ -338,8 +327,6 @@ typedef struct mp2t_analysis_data {
      */
     wmem_tree_t    *frame_table;
 
-    uint32_t stream;
-
     /* Total counters per conversation / multicast stream */
     uint32_t total_skips;
     uint32_t total_discontinuity;
@@ -373,7 +360,6 @@ typedef struct pid_analysis_data {
     int8_t                   cc_prev;      /* Previous CC number */
     enum pid_payload_type    pload_type;
     wmem_tree_t             *stream_types;
-    wmem_tree_t             *registration_ids;
 
     /* Fragments information used for first pass */
     bool                     fragmentation;
@@ -406,7 +392,6 @@ init_mp2t_conversation_data(void)
 
     mp2t_data = wmem_new0(wmem_file_scope(), struct mp2t_analysis_data);
 
-    mp2t_data->stream = mp2t_stream_count++;
     mp2t_data->pid_table = wmem_tree_new(wmem_file_scope());
 
     mp2t_data->frame_table = wmem_tree_new(wmem_file_scope());
@@ -468,78 +453,11 @@ get_pid_analysis(mp2t_analysis_data_t *mp2t_data, uint32_t pid)
         pid_data->cc_prev = -1;
         pid_data->pid     = pid;
         pid_data->stream_types = wmem_tree_new(wmem_file_scope());
-        pid_data->registration_ids = wmem_tree_new(wmem_file_scope());
         pid_data->frag_id = (pid << (32 - 13)) | 0x1;
 
         wmem_tree_insert32(mp2t_data->pid_table, pid, (void *)pid_data);
     }
     return pid_data;
-}
-
-uint32_t
-mp2t_get_stream_count(void)
-{
-    return mp2t_stream_count;
-}
-
-static void
-mp2t_init(void)
-{
-    mp2t_stream_count = 0;
-}
-
-static gboolean
-mp2t_stream_find(void *key _U_, void *value, void *user_data)
-{
-    uint32_t stream = GPOINTER_TO_UINT(user_data);
-    mp2t_analysis_data_t *mp2t_data = (mp2t_analysis_data_t*)value;
-    if (mp2t_data->stream == stream) {
-        return true;
-    }
-    return false;
-}
-
-bool
-mp2t_get_sub_stream_id(unsigned stream, unsigned sub_stream, bool le, unsigned *sub_stream_out)
-{
-    mp2t_analysis_data_t *mp2t_data = wmem_map_find(mp2t_stream_hashtable, mp2t_stream_find, GUINT_TO_POINTER(stream));
-    pid_analysis_data_t *pid_data;
-    if (!mp2t_data) {
-        return false;
-    }
-    if (le) {
-        pid_data = wmem_tree_lookup32_le(mp2t_data->pid_table, sub_stream);
-    } else {
-        pid_data = wmem_tree_lookup32_ge(mp2t_data->pid_table, sub_stream);
-    }
-    if (!pid_data) {
-        return false;
-    }
-
-    *sub_stream_out = pid_data->pid;
-    return true;
-}
-
-char *mp2t_follow_conv_filter(epan_dissect_t *edt _U_, packet_info *pinfo, unsigned *stream, unsigned *sub_stream)
-{
-    char *filter = NULL;
-    mp2t_stream_key *stream_key;
-    unsigned pid;
-
-    stream_key = (mp2t_stream_key *)p_get_proto_data(pinfo->pool, pinfo, proto_mp2t, MP2T_PROTO_DATA_STREAM);
-    if (stream_key) {
-        mp2t_analysis_data_t *mp2t_data = get_mp2t_conversation_data(stream_key);
-        pid = GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, proto_mp2t, MP2T_PROTO_DATA_PID));
-        *stream = mp2t_data->stream;
-        *sub_stream = pid;
-        filter = ws_strdup_printf("mp2t.stream == %u && mp2t.pid == 0x%04x", *stream, pid);
-    }
-    return filter;
-}
-
-char *mp2t_follow_index_filter(unsigned stream, unsigned sub_stream)
-{
-    return ws_strdup_printf("mp2t.stream == %u && mp2t.pid == 0x%04x", stream, sub_stream);
 }
 
 /* Structure to handle packets, spanned across
@@ -639,55 +557,17 @@ mp2t_add_stream_type(packet_info *pinfo, uint32_t pid, uint32_t stream_type)
     wmem_tree_insert32(pid_data->stream_types, pinfo->num, GUINT_TO_POINTER(stream_type));
 }
 
-void
-mp2t_add_registration_id(packet_info *pinfo, uint32_t pid, uint32_t registration_id)
-{
-    mp2t_stream_key *stream;
-    uint32_t *stored_id;
-
-    stream = (mp2t_stream_key *)p_get_proto_data(pinfo->pool, pinfo,
-            proto_mp2t, MP2T_PROTO_DATA_STREAM);
-    if (!stream) {
-        return;
-    }
-
-    mp2t_analysis_data_t *mp2t_data = get_mp2t_conversation_data(stream);
-    pid_analysis_data_t *pid_data = get_pid_analysis(mp2t_data, pid);
-
-    stored_id = wmem_new(wmem_file_scope(), uint32_t);
-    *stored_id = registration_id;
-    wmem_tree_insert32(pid_data->registration_ids, pinfo->num, stored_id);
-}
-
 static void
 mp2t_dissect_packet(tvbuff_t *tvb, const pid_analysis_data_t *pid_analysis,
             packet_info *pinfo, proto_tree *tree)
 {
-    if (have_tap_listener(mp2t_follow_tap)) {
-        tap_queue_packet(mp2t_follow_tap, pinfo, tvb);
-    }
-
     switch (pid_analysis->pload_type) {
         case pid_pload_docsis:
             call_dissector(docsis_handle, tvb, pinfo, tree);
             break;
         case pid_pload_pes:
-        {
-            mpeg_pes_stream_info_t stream_info = {
-                .stream_type = (uint8_t)GPOINTER_TO_UINT(
-                    wmem_tree_lookup32_le(pid_analysis->stream_types, pinfo->num)),
-                .registration_id = 0,
-            };
-            uint32_t *registration_id = (uint32_t *)wmem_tree_lookup32_le(
-                pid_analysis->registration_ids, pinfo->num);
-
-            if (registration_id != NULL) {
-                stream_info.registration_id = *registration_id;
-            }
-
-            call_dissector_with_data(mpeg_pes_handle, tvb, pinfo, tree, &stream_info);
+            call_dissector_with_data(mpeg_pes_handle, tvb, pinfo, tree, wmem_tree_lookup32_le(pid_analysis->stream_types, pinfo->num));
             break;
-        }
         case pid_pload_sect:
             call_dissector(mpeg_sect_handle, tvb, pinfo, tree);
             break;
@@ -982,7 +862,8 @@ mp2t_process_fragmented_payload(tvbuff_t *tvb, int offset, unsigned remaining_le
 
     /* PES packet don't have pointer fields, others do */
     if (pusi_flag && pid_analysis->pload_type != pid_pload_pes) {
-        pi = proto_tree_add_item_ret_uint8(header_tree, hf_mp2t_pointer, tvb, offset, 1, ENC_BIG_ENDIAN, &pointer);
+        pointer = tvb_get_uint8(tvb, offset);
+        pi = proto_tree_add_item(header_tree, hf_mp2t_pointer, tvb, offset, 1, ENC_BIG_ENDIAN);
         offset++;
         remaining_len--;
         if (pointer > remaining_len) {
@@ -1346,10 +1227,11 @@ dissect_mp2t_adaptation_field(tvbuff_t *tvb, int offset, proto_tree *tree)
     uint8_t     af_flags;
     int         stuffing_len;
 
-    proto_tree_add_item_ret_uint8(tree, hf_mp2t_af_length, tvb, offset, 1, ENC_BIG_ENDIAN, &af_length);
+    af_length = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item(tree, hf_mp2t_af_length, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
     /* fix issues where afc==3 but af_length==0
-     *  Adaptation field...spec section 2.4.3.5: The value 0 is for inserting a single
+     *  Adaptaion field...spec section 2.4.3.5: The value 0 is for inserting a single
      *  stuffing byte in a Transport Stream packet. When the adaptation_field_control
      *  value is '11', the value of the adaptation_field_length shall be in the range 0 to 182.
      */
@@ -1509,12 +1391,8 @@ dissect_tsp(tvbuff_t *tvb, int offset, packet_info *pinfo,
     afc = (header & MP2T_AFC_MASK) >> MP2T_AFC_SHIFT;
     cc  = (header & MP2T_CC_MASK)  >> MP2T_CC_SHIFT;
 
-    p_add_proto_data(pinfo->pool, pinfo, proto_mp2t, MP2T_PROTO_DATA_PID, GUINT_TO_POINTER(pid));
     proto_item_append_text(ti, " PID=0x%x CC=%d", pid, cc);
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "MPEG TS");
-
-    hi = proto_tree_add_uint(mp2t_tree, hf_mp2t_stream, tvb, 0, 0, mp2t_data->stream);
-    proto_item_set_generated(hi);
 
     hi = proto_tree_add_item( mp2t_tree, hf_mp2t_header, tvb, offset, 4, ENC_BIG_ENDIAN);
     mp2t_header_tree = proto_item_add_subtree( hi, ett_mp2t_header );
@@ -1591,18 +1469,6 @@ dissect_tsp(tvbuff_t *tvb, int offset, packet_info *pinfo,
     }
 }
 
-static void
-export_pdu(tvbuff_t *tvb, packet_info *pinfo)
-{
-    if (have_tap_listener(exported_pdu_tap)) {
-        exp_pdu_data_t *exp_pdu_data = wmem_new0(pinfo->pool, exp_pdu_data_t);
-
-        exp_pdu_data->tvb_captured_length = tvb_captured_length(tvb);
-        exp_pdu_data->tvb_reported_length = tvb_reported_length(tvb);
-        exp_pdu_data->pdu_tvb = tvb;
-        tap_queue_packet(exported_pdu_tap, pinfo, exp_pdu_data);
-    }
-}
 
 static int
 dissect_mp2t( tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_ )
@@ -1648,7 +1514,6 @@ dissect_mp2t( tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
          * data.
          */
         saved_proto = pinfo->current_proto;
-        export_pdu(tvb_new_subset_length(tvb, offset, MP2T_PACKET_SIZE), pinfo);
         TRY {
             mp2t_data = get_mp2t_conversation_data(stream);
             dissect_tsp(tvb, offset, pinfo, tree, mp2t_data);
@@ -1701,10 +1566,6 @@ void
 proto_register_mp2t(void)
 {
     static hf_register_info hf[] = {
-        { &hf_mp2t_stream, {
-            "Stream index", "mp2t.stream",
-            FT_UINT32, BASE_DEC, NULL, 0, NULL, HFILL
-        } } ,
         { &hf_mp2t_header, {
             "Header", "mp2t.header",
             FT_UINT32, BASE_HEX, NULL, 0, NULL, HFILL
@@ -1987,15 +1848,6 @@ proto_register_mp2t(void)
         &mp2t_reassembly_table_functions);
 
     mp2t_stream_hashtable = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), mp2t_stream_hash, mp2t_stream_equal);
-
-    register_init_routine(mp2t_init);
-
-    exported_pdu_tap = register_export_pdu_tap_with_encap("MP2T", WTAP_ENCAP_MPEG_2_TS);
-    mp2t_follow_tap = register_tap("mp2t_follow");
-
-    /* MPEG2 TS is sometimes carried on UDP or RTP over UDP so using the UDP
-     * address filter is better than nothing for tshark. */
-    register_follow_stream(proto_mp2t, "mp2t_follow", mp2t_follow_conv_filter, mp2t_follow_index_filter, udp_follow_address_filter, udp_port_to_display, follow_tvb_tap_listener, mp2t_get_stream_count, mp2t_get_sub_stream_id);
 }
 
 

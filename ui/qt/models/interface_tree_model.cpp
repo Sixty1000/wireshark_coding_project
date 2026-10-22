@@ -12,12 +12,10 @@
 
 #include <ui/qt/models/interface_tree_model.h>
 
-#include <ui/qt/manager/interface_statistics.h>
-
 #ifdef HAVE_LIBPCAP
 #include "ui/capture.h"
 #include "capture/capture-pcap-util.h"
-#include "ui/capture_opts.h"
+#include "capture_opts.h"
 #include "ui/capture_ui_utils.h"
 #include "ui/capture_globals.h"
 #endif
@@ -26,10 +24,7 @@
 
 #include <ui/qt/utils/qt_ui_utils.h>
 #include <ui/qt/utils/stock_icon.h>
-#include <ui/qt/utils/themes/contrast_adapt_icon.h>
 #include "main_application.h"
-#include <ui/qt/main_window.h>
-#include <ui/qt/manager/interface_list_manager.h>
 
 /* Needed for the meta type declaration of QList<int>* */
 #include <ui/qt/models/sparkline_delegate.h>
@@ -45,14 +40,23 @@ const QString InterfaceTreeModel::DefaultNumericValue = QObject::tr("default");
  * to the index from within the view, has to be filtered through the proxy model.
  */
 InterfaceTreeModel::InterfaceTreeModel(QObject *parent) :
-    QAbstractTableModel(parent),
-    interface_stats_(nullptr)
+    QAbstractTableModel(parent)
+#ifdef HAVE_LIBPCAP
+    ,stat_cache_(NULL)
+#endif
 {
-    connect(mainApp, &MainApplication::interfaceListChanged, this, &InterfaceTreeModel::interfaceListChanged);
+    connect(mainApp, &MainApplication::appInitialized, this, &InterfaceTreeModel::interfaceListChanged);
+    connect(mainApp, &MainApplication::localInterfaceListChanged, this, &InterfaceTreeModel::interfaceListChanged);
 }
 
 InterfaceTreeModel::~InterfaceTreeModel(void)
 {
+#ifdef HAVE_LIBPCAP
+    if (stat_cache_) {
+        capture_stat_stop(stat_cache_);
+        stat_cache_ = NULL;
+    }
+#endif // HAVE_LIBPCAP
 }
 
 QString InterfaceTreeModel::interfaceError()
@@ -155,10 +159,12 @@ QVariant InterfaceTreeModel::data(const QModelIndex &index, int role) const
             {
                 return device->has_snaplen ? QString::number(device->snaplen) : DefaultNumericValue;
             }
+#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
             else if (col == IFTREE_COL_BUFFERLEN)
             {
                 return QString::number(device->buffer);
             }
+#endif
             else if (col == IFTREE_COL_TYPE)
             {
                 return QVariant::fromValue((int)device->if_info.type);
@@ -209,37 +215,30 @@ QVariant InterfaceTreeModel::data(const QModelIndex &index, int role) const
             {
                 return device->pmode ? Qt::Checked : Qt::Unchecked;
             }
+#ifdef HAVE_PCAP_CREATE
             else if (col == IFTREE_COL_MONITOR_MODE)
             {
                 return device->monitor_mode_enabled ? Qt::Checked : Qt::Unchecked;
             }
-            else if (col == IFTREE_COL_OPTIMIZE)
-            {
-                return device->optimize ? Qt::Checked : Qt::Unchecked;
-            }
+#endif
         }
         /* Used by SparkLineDelegate for loading the data for the statistics line */
         else if (role == Qt::UserRole)
         {
             if (col == IFTREE_COL_STATS)
             {
-                if (interface_stats_ && interface_stats_->isActive(device->name))
-                    return QVariant::fromValue(interface_stats_->pointsFor(device->name));
+                if ((active.contains(device->name) && active[device->name]) && points.contains(device->name))
+                    return QVariant::fromValue(points[device->name]);
             }
             else if (col == IFTREE_COL_ACTIVE)
             {
-                return QVariant::fromValue(interface_stats_ != nullptr && interface_stats_->isActive(device->name));
+                if (active.contains(device->name))
+                    return QVariant::fromValue(active[device->name]);
             }
             else if (col == IFTREE_COL_HIDDEN)
             {
                 return QVariant::fromValue((bool)device->hidden);
             }
-        }
-        /* Dropped-packet series, drawn as the sparkline's secondary line */
-        else if (role == SparkLineDelegate::SecondaryPointsRole)
-        {
-            if (col == IFTREE_COL_STATS && interface_stats_ && interface_stats_->isActive(device->name))
-                return QVariant::fromValue(interface_stats_->droppedPointsFor(device->name));
         }
         /* Displays the configuration icon for extcap interfaces */
         else if (role == Qt::DecorationRole)
@@ -247,11 +246,7 @@ QVariant InterfaceTreeModel::data(const QModelIndex &index, int role) const
             if (col == IFTREE_COL_EXTCAP)
             {
                 if (device->if_info.type == IF_EXTCAP)
-                    // Pilot: contrast-adapting SVG engine in an item view, so the
-                    // Selected-row (highlight) background path gets exercised.
-                    // QPalette::Base since the surface here is the tree, not chrome.
-                    return QIcon(ContrastAdaptIcon(QStringLiteral(":/svg_icons/capture-options.svg"),
-                                                   QPalette::Base, QSize(16, 16)));
+                    return QIcon(StockIcon("x-capture-options"));
             }
         }
         else if (role == Qt::TextAlignmentRole)
@@ -317,29 +312,21 @@ QVariant InterfaceTreeModel::headerData(int section, Qt::Orientation orientation
             {
                 return tr("Snaplen (B)");
             }
+#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
             else if (section == IFTREE_COL_BUFFERLEN)
             {
                 return tr("Buffer (MB)");
             }
+#endif
+#ifdef HAVE_PCAP_CREATE
             else if (section == IFTREE_COL_MONITOR_MODE)
             {
                 return tr("Monitor Mode");
             }
-            else if (section == IFTREE_COL_OPTIMIZE)
-            {
-                return tr("Optimize");
-            }
+#endif
             else if (section == IFTREE_COL_CAPTURE_FILTER)
             {
                 return tr("Capture Filter");
-            }
-            else if (section == IFTREE_COL_STATS)
-            {
-                return tr("Traffic");
-            }
-            else if (section == IFTREE_COL_EXTCAP)
-            {
-                return QString();
             }
         }
     }
@@ -369,9 +356,11 @@ bool InterfaceTreeModel::isRemote(int idx)
  */
 void InterfaceTreeModel::interfaceListChanged()
 {
-    // Statistics/activity history lives in InterfaceStatistics and is retained
-    // across rescans there; the model just re-reads the (possibly changed) list.
     beginResetModel();
+
+    points.clear();
+    active.clear();
+
     endResetModel();
 }
 
@@ -389,14 +378,14 @@ QVariant InterfaceTreeModel::toolTipForInterface(int idx) const
     QString tt_str = "<p>";
     if (device->no_addresses > 0)
     {
-        tt_str += QStringLiteral("%1: %2")
+        tt_str += QString("%1: %2")
                 .arg(device->no_addresses > 1 ? tr("Addresses") : tr("Address"))
                 .arg(html_escape(device->addresses))
                 .replace('\n', ", ");
     }
     else if (device->if_info.type == IF_EXTCAP)
     {
-        tt_str = tr("Extcap interface: %1").arg(get_basename(device->if_info.extcap));
+        tt_str = QString(tr("Extcap interface: %1")).arg(get_basename(device->if_info.extcap));
     }
     else
     {
@@ -411,7 +400,7 @@ QVariant InterfaceTreeModel::toolTipForInterface(int idx) const
     }
     else
     {
-        tt_str += QStringLiteral("%1: %2")
+        tt_str += QString("%1: %2")
                 .arg(tr("Capture filter"))
                 .arg(html_escape(cfilter));
     }
@@ -425,39 +414,76 @@ QVariant InterfaceTreeModel::toolTipForInterface(int idx) const
 #endif
 }
 
-void InterfaceTreeModel::setStatistics(InterfaceStatistics *statistics)
+#ifdef HAVE_LIBPCAP
+void InterfaceTreeModel::setCache(if_stat_cache_t *stat_cache)
 {
-    if (interface_stats_ == statistics)
-        return;
+    stopStatistic();
+    stat_cache_ = stat_cache;
+}
 
-    if (interface_stats_)
-        disconnect(interface_stats_, nullptr, this, nullptr);
-
-    interface_stats_ = statistics;
-
-    if (interface_stats_)
+void InterfaceTreeModel::stopStatistic()
+{
+    if (stat_cache_)
     {
-        connect(interface_stats_, &InterfaceStatistics::statisticsUpdated,
-                this, &InterfaceTreeModel::onStatisticsUpdated);
-        connect(interface_stats_, &InterfaceStatistics::activityChanged,
-                this, &InterfaceTreeModel::onActivityChanged);
+        capture_stat_stop(stat_cache_);
+        stat_cache_ = NULL;
     }
 }
+#endif
 
-void InterfaceTreeModel::onStatisticsUpdated()
+void InterfaceTreeModel::updateStatistic(unsigned int idx)
 {
-    if (rowCount() == 0)
+#ifdef HAVE_LIBPCAP
+    if (! global_capture_opts.all_ifaces || global_capture_opts.all_ifaces->len <= (unsigned) idx)
         return;
 
-    // Repaint the live statistics (sparkline) column for every interface.
-    emit dataChanged(index(0, IFTREE_COL_STATS), index(rowCount() - 1, IFTREE_COL_STATS));
-}
+    interface_t *device = &g_array_index(global_capture_opts.all_ifaces, interface_t, idx);
 
-void InterfaceTreeModel::onActivityChanged()
-{
-    // The activity-first sort key changed; ask the proxy to re-sort.
-    emit layoutAboutToBeChanged();
-    emit layoutChanged();
+    if (device->if_info.type == IF_PIPE || device->if_info.type == IF_EXTCAP)
+        return;
+
+    if (!stat_cache_)
+    {
+        // Start gathering statistics using dumpcap
+        //
+        // The stat cache will only properly configure if it has the list
+        // of interfaces in global_capture_opts->all_ifaces.
+        // We crash if we try to do this from InterfaceFrame::showEvent,
+        // because main.cpp calls mainw->show() before capture_opts_init().
+        stat_cache_ = capture_stat_start(&global_capture_opts);
+    }
+
+    struct pcap_stat stats;
+    unsigned diff = 0;
+    bool isActive = false;
+
+    if (capture_stats(stat_cache_, device->name, &stats))
+    {
+        if ( (int) stats.ps_recv > 0 )
+            isActive = true;
+
+        if ((int)(stats.ps_recv - device->last_packets) >= 0)
+        {
+            diff = stats.ps_recv - device->last_packets;
+            device->packet_diff = diff;
+        }
+        device->last_packets = stats.ps_recv;
+    }
+
+    points[device->name].append(diff);
+
+    if (active[device->name] != isActive)
+    {
+        emit layoutAboutToBeChanged();
+        active[device->name] = isActive;
+        emit layoutChanged();
+    }
+
+    emit dataChanged(index(idx, IFTREE_COL_STATS), index(idx, IFTREE_COL_STATS));
+
+#else
+    Q_UNUSED(idx)
+#endif
 }
 
 QItemSelection InterfaceTreeModel::selectedDevices()

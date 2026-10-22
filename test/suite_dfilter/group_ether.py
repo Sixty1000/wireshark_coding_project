@@ -2,7 +2,8 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-# from suite_dfilter.dfiltertest import *
+import pytest
+from suite_dfilter.dfiltertest import *
 
 
 class TestDfilterEther:

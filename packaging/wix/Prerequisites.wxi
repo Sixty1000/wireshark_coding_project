@@ -14,26 +14,9 @@
          to ensure the entire fragment is included. -->
     <Property Id="IncludePrerequisites">1</Property>
 
-    <!-- The VersionNT variable was frozen. For later Windows versions, look
-         at the Build Number. Qt 6.2 and later are officially supported on
-         Windows 10, version 1809 (Build 17763) and later, which corresponds
-         with Server 2019. In practice, it seems that version 1607 (Build 14393)
-         & Server 2016 work on Qt versions before 6.8 but not on 6.8 and later.
-    -->
-
-    <Property Id="WINDOWSBUILDNUMBER" Secure="yes">
-      <RegistrySearch Id='WindowsBuildRegistrySearch'
-          Type='raw'
-          Root='HKLM'
-          Key='SOFTWARE\Microsoft\Windows NT\CurrentVersion'
-          Name='CurrentBuildNumber'
-          >
-      </RegistrySearch>
-    </Property>
-
     <!-- This should match the following:
          - The NTDDI_VERSION and _WIN32_WINNT parts of cmakeconfig.h.in
-         - The <compatibility><application> section in resources\wireshark.exe.manifest.in
+         - The <compatibility><application> section in image\wireshark.exe.manifest.in
          - The WinVer parts of packaging\nsis\wireshark.nsi
     -->
     <Condition Message="Windows 2000 is no longer supported. Please install $(var.WiresharkName) 1.2 or 1.0 instead.">
@@ -52,20 +35,12 @@
       <![CDATA[Installed OR (VersionNT < 600) OR (VersionNT > 600)]]>
     </Condition>
 
-    <Condition Message="Windows 7, 8, 8.1, 10 version 1511, Server 2008R2, and Server 2012 are no longer supported. Please install $(var.WiresharkName) 4.0 instead.">
-      <![CDATA[Installed OR (VersionNT < 601) OR (WINDOWSBUILDNUMBER >= 14393)]]>
+    <Condition Message="Windows 7, 8, 8.1, Server 2008R2, and Server 2012 are no longer supported. Please install $(var.WiresharkName) 4.0 instead.">
+      <![CDATA[Installed OR (VersionNT < 601) OR (VersionNT > 602)]]>
     </Condition>
 
-    <Condition Message="Windows 10 versions before 1809 and Server 2016 are no longer supported. Please install $(var.WiresharkName) 4.4 instead.">
-      <![CDATA[Installed OR (WINDOWSBUILDNUMBER < 14393) OR (WINDOWSBUILDNUMBER >= 17763)]]>
-    </Condition>
-
-    <Condition Message="Windows 10 versions before 21H2 and Server 2019 are no longer supported. Please install $(var.WiresharkName) 4.6 instead.">
-      <![CDATA[Installed OR (WINDOWSBUILDNUMBER < 17763) OR (WINDOWSBUILDNUMBER >= 19044)]]>
-    </Condition>
-
-    <Condition Message="$(var.WiresharkName)$(var.WiresharkVersion) is only supported on Windows 10, version 21H2 or Windows Server 2022, or higher.">
-      <![CDATA[Installed OR (WINDOWSBUILDNUMBER >= 19044)]]>
+    <Condition Message="$(var.WiresharkName)$(var.WiresharkVersion) is only supported on Windows 10, Windows Server 2016, or higher.">
+      <![CDATA[Installed OR (VersionNT >= 603)]]>
     </Condition>
 
 <!--
@@ -127,47 +102,6 @@
     <Condition Message="[NSIS_DISPLAY_NAME_64] was installed in [NSIS_INSTALL_LOCATION_64] using the .exe installer. Please uninstall it using Programs and Features.">
       <![CDATA[Installed OR NOT NSIS_INSTALL_LOCATION_64]]>
     </Condition>
-
-<!--
-  Starting with Visual Studio 2019 the Visual C++ Redistributable merge
-  modules are deprecated and aren't available for Arm64:
-  https://docs.microsoft.com/en-us/visualstudio/releases/2019/release-notes#-deprecations
-
-  Additionally, https://learn.microsoft.com/en-us/cpp/porting/binary-compat-2015-2017
-  says
-
-  "The Redistributable your app uses has a similar binary-compatibility
-  restriction. When you mix binaries built by different supported
-  versions of the build tools, the Redistributable version must be at
-  least as new as the latest build tools used by any app component."
-
-  Instead of bundling the runtime, check whether a minimum version of
-  the redistributable is already installed and abort with a helpful
-  message if it isn't.
--->
-
-    <?if $(var.Platform) = x64 ?>
-    <?define VCRedistUpgradeCode = "{36F68A90-239C-34DF-B58C-64B30153CE35}" ?>
-    <?else?>
-    <?define VCRedistUpgradeCode = "{DC9BAE42-810B-423A-9E25-E4073F1C7B00}" ?>
-    <?endif?>
-
-    <Upgrade Id="$(var.VCRedistUpgradeCode)">
-      <UpgradeVersion OnlyDetect="yes" Property="VCREDIST_INSTALLED" Minimum="0.0.0" IncludeMinimum="yes" />
-      <?ifdef VCRedistMinVersion?>
-      <UpgradeVersion OnlyDetect="yes" Property="VCREDIST_MIN_VERSION_INSTALLED" Minimum="$(var.VCRedistMinVersion)" IncludeMinimum="yes" />
-      <?endif?>
-    </Upgrade>
-
-    <Condition Message="The Microsoft Visual C++ Redistributable is required but wasn't found. Please download and install it from https://aka.ms/vs/17/release/vc_redist.$(var.Platform).exe before continuing.">
-      <![CDATA[Installed OR VCREDIST_INSTALLED]]>
-    </Condition>
-
-    <?ifdef VCRedistMinVersion?>
-    <Condition Message="The installed Microsoft Visual C++ Redistributable is older than the version $(var.WiresharkName) was built with ($(var.VCRedistMinVersion)). Please update it from https://aka.ms/vs/17/release/vc_redist.$(var.Platform).exe before continuing.">
-      <![CDATA[Installed OR VCREDIST_MIN_VERSION_INSTALLED]]>
-    </Condition>
-    <?endif?>
 
   </Fragment>
 </Include>

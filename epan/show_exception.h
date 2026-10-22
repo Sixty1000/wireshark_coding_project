@@ -8,35 +8,27 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-#pragma once
-#include <epan/proto.h>
 
-/**
- * @brief Registers exception handling routines.
- *
- * Called to register the pseudo-protocols used for exceptions
+#ifndef __SHOW_EXCEPTION_H__
+#define __SHOW_EXCEPTION_H__
+
+/*
+ * Called to register the pseudo-protocols used for exceptions.
  */
 void register_show_exception(void);
 
-/**
- * @brief Routine used to add an indication of an arbitrary exception to the tree.
- *
- * @param tvb The current tvbuff_t structure.
- * @param pinfo The current packet_info structure.
- * @param tree The protocol tree to add the exception indication to.
- * @param exception The exception code.
- * @param exception_message The message describing the exception.
+/*
+ * Routine used to add an indication of an arbitrary exception to the tree.
  */
 WS_DLL_PUBLIC
 void show_exception(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     unsigned long exception, const char *exception_message);
 
-/**
- * @brief Routine used to add an indication of a ReportedBoundsError exception to the tree.
- *
- * @param tvb The TVB containing the data to be analyzed.
- * @param pinfo Packet information structure.
- * @param tree Protocol tree for displaying the error.
+/*
+ * Routine used to add an indication of a ReportedBoundsError exception
+ * to the tree.
  */
-WS_DLL_PUBLIC void
+void
 show_reported_bounds_error(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
+
+#endif /* __SHOW_EXCEPTION_H__ */

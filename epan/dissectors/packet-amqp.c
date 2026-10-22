@@ -445,7 +445,7 @@ static const value_string match_criteria[] = {
 /*  Private functions  */
 
 static unsigned
-dissect_amqp_0_9_field_value(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, unsigned length,
+dissect_amqp_0_9_field_value(tvbuff_t *tvb, packet_info *pinfo, int offset, unsigned length,
                              const char *name, proto_tree *field_table_tree);
 
 static void
@@ -479,7 +479,6 @@ generate_ack_reference(tvbuff_t *tvb, packet_info *pinfo, proto_tree *prop_tree)
 /*  AMQP 0-10 type decoding information  */
 
 typedef int (*type_formatter)(tvbuff_t *tvb,
-                              packet_info* pinfo,
                               unsigned offset,        /* In tvb where data starts */
                               unsigned length,        /* Length of data, if known */
                               const char **value); /* Receive formatted val */
@@ -546,7 +545,6 @@ get_amqp_1_0_value_formatter(tvbuff_t *tvb,
 
 static unsigned
 get_amqp_1_0_type_formatter(tvbuff_t *tvb,
-                            packet_info* pinfo,
                             int offset,
                             int *hf_amqp_type,
                             const char **name,
@@ -601,104 +599,104 @@ dissect_amqp_1_0_false(tvbuff_t *tvb, packet_info *pinfo,
                                proto_item *item, int hf_amqp_type);
 
 static int
-format_amqp_1_0_null(tvbuff_t *tvb _U_, packet_info* pinfo _U_,
+format_amqp_1_0_null(tvbuff_t *tvb _U_,
                      unsigned offset _U_, unsigned length _U_,
                      const char **value);
 
 static int
-format_amqp_1_0_boolean_true(tvbuff_t *tvb, packet_info* pinfo, unsigned offset, unsigned length _U_,
+format_amqp_1_0_boolean_true(tvbuff_t *tvb, unsigned offset, unsigned length _U_,
                              const char **value);
 
 static int
-format_amqp_1_0_boolean_false(tvbuff_t *tvb, packet_info* pinfo, unsigned offset, unsigned length _U_,
+format_amqp_1_0_boolean_false(tvbuff_t *tvb, unsigned offset, unsigned length _U_,
                               const char **value);
 
 static int
-format_amqp_1_0_boolean(tvbuff_t *tvb, packet_info* pinfo, unsigned offset, unsigned length _U_,
+format_amqp_1_0_boolean(tvbuff_t *tvb, unsigned offset, unsigned length _U_,
                         const char **value);
 
 static int
-format_amqp_1_0_uint(tvbuff_t *tvb, packet_info* pinfo, unsigned offset, unsigned length,
+format_amqp_1_0_uint(tvbuff_t *tvb, unsigned offset, unsigned length,
                      const char **value);
 
 static int
-format_amqp_1_0_int(tvbuff_t *tvb, packet_info* pinfo, unsigned offset, unsigned length,
+format_amqp_1_0_int(tvbuff_t *tvb, unsigned offset, unsigned length,
                     const char **value);
 
 static int
-format_amqp_1_0_float(tvbuff_t *tvb, packet_info* pinfo, unsigned offset, unsigned length _U_,
+format_amqp_1_0_float(tvbuff_t *tvb, unsigned offset, unsigned length _U_,
                       const char **value);
 
 static int
-format_amqp_1_0_double(tvbuff_t *tvb, packet_info* pinfo, unsigned offset, unsigned length _U_,
+format_amqp_1_0_double(tvbuff_t *tvb, unsigned offset, unsigned length _U_,
                        const char **value);
 
 static int
-format_amqp_1_0_decimal(tvbuff_t *tvb _U_, packet_info* pinfo, unsigned offset _U_, unsigned length,
+format_amqp_1_0_decimal(tvbuff_t *tvb _U_, unsigned offset _U_, unsigned length,
                         const char **value);
 
 static int
-format_amqp_1_0_char(tvbuff_t *tvb, packet_info* pinfo, unsigned offset, unsigned length _U_,
+format_amqp_1_0_char(tvbuff_t *tvb, unsigned offset, unsigned length _U_,
                      const char **value);
 
 static int
-format_amqp_1_0_timestamp(tvbuff_t *tvb, packet_info* pinfo, unsigned offset, unsigned length _U_,
+format_amqp_1_0_timestamp(tvbuff_t *tvb, unsigned offset, unsigned length _U_,
                           const char **value);
 
 static int
-format_amqp_1_0_uuid(tvbuff_t *tvb, packet_info* pinfo, unsigned offset, unsigned length _U_,
+format_amqp_1_0_uuid(tvbuff_t *tvb, unsigned offset, unsigned length _U_,
                      const char **value);
 
 static int
-format_amqp_1_0_bin(tvbuff_t *tvb, packet_info* pinfo, unsigned offset, unsigned length,
+format_amqp_1_0_bin(tvbuff_t *tvb, unsigned offset, unsigned length,
                     const char **value);
 
 static int
-format_amqp_1_0_str(tvbuff_t *tvb, packet_info* pinfo, unsigned offset, unsigned length,
+format_amqp_1_0_str(tvbuff_t *tvb, unsigned offset, unsigned length,
                     const char **value);
 
 static int
-format_amqp_1_0_symbol(tvbuff_t *tvb, packet_info* pinfo, unsigned offset, unsigned length,
+format_amqp_1_0_symbol(tvbuff_t *tvb, unsigned offset, unsigned length,
                        const char **value);
 
 static bool
-get_amqp_0_10_type_formatter(uint8_t code, packet_info* pinfo,
+get_amqp_0_10_type_formatter(uint8_t code,
                              const char **name,
                              type_formatter *decoder,
                              unsigned *length_size);
 
 static int
-format_amqp_0_10_bin(tvbuff_t *tvb, packet_info* pinfo,
+format_amqp_0_10_bin(tvbuff_t *tvb,
                      unsigned offset, unsigned length,
                      const char **value);
 
 static int
-format_amqp_0_10_int(tvbuff_t *tvb, packet_info* pinfo,
+format_amqp_0_10_int(tvbuff_t *tvb,
                      unsigned offset, unsigned length,
                      const char **value);
 
 static int
-format_amqp_0_10_uint(tvbuff_t *tvb, packet_info* pinfo,
+format_amqp_0_10_uint(tvbuff_t *tvb,
                       unsigned offset, unsigned length,
                       const char **value);
 
 static int
-format_amqp_0_10_char(tvbuff_t *tvb, packet_info* pinfo,
+format_amqp_0_10_char(tvbuff_t *tvb,
                       unsigned offset, unsigned length,
                       const char **value);
 
 static int
-format_amqp_0_10_boolean(tvbuff_t *tvb, packet_info* pinfo,
+format_amqp_0_10_boolean(tvbuff_t *tvb,
                          unsigned offset, unsigned length,
                          const char **value);
 
 static int
-format_amqp_0_10_vbin(tvbuff_t *tvb, packet_info* pinfo,
+format_amqp_0_10_vbin(tvbuff_t *tvb,
                       unsigned offset, unsigned length,
                       const char **value);
 
 static int
-format_amqp_0_10_str(tvbuff_t *tvb, packet_info* pinfo,
+format_amqp_0_10_str(tvbuff_t *tvb,
                      unsigned offset, unsigned length,
                      const char **value);
 
@@ -2396,12 +2394,12 @@ get_amqp_0_9_message_len(packet_info *pinfo _U_, tvbuff_t *tvb,
 
 static void
 // NOLINTNEXTLINE(misc-no-recursion)
-dissect_amqp_0_9_field_table(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, unsigned length, proto_item *item)
+dissect_amqp_0_9_field_table(tvbuff_t *tvb, packet_info *pinfo, int offset, unsigned length, proto_item *item)
 {
     proto_tree *field_table_tree, *field_item_tree;
     proto_item *field_item;
     unsigned    namelen, vallen;
-    const char *name;
+    const uint8_t *name;
     int         field_start;
 
     field_table_tree = proto_item_add_subtree(item, ett_amqp);
@@ -2416,7 +2414,7 @@ dissect_amqp_0_9_field_table(tvbuff_t *tvb, packet_info *pinfo, unsigned offset,
         if (length < namelen)
             goto too_short;
         field_item_tree = proto_item_add_subtree(field_item, ett_amqp_0_9_field);
-        proto_tree_add_item_ret_string(field_item_tree, hf_amqp_field_name, tvb, offset, namelen, ENC_UTF_8, pinfo->pool, (const uint8_t**)&name);
+        proto_tree_add_item_ret_string(field_item_tree, hf_amqp_field_name, tvb, offset, namelen, ENC_UTF_8, pinfo->pool, &name);
         proto_item_set_text(field_item, "%s", name);
         offset += namelen;
         length -= namelen;
@@ -2440,7 +2438,7 @@ too_short:
 
 static void
 // NOLINTNEXTLINE(misc-no-recursion)
-dissect_amqp_0_9_field_array(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, unsigned length, proto_item *item)
+dissect_amqp_0_9_field_array(tvbuff_t *tvb, packet_info *pinfo, int offset, unsigned length, proto_item *item)
 {
     proto_tree *field_table_tree, *field_item_tree;
     proto_item *field_item;
@@ -2531,7 +2529,7 @@ static const value_string amqp_0_9_field_type_vals[] = {
 
 static unsigned
 // NOLINTNEXTLINE(misc-no-recursion)
-dissect_amqp_0_9_field_value(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, unsigned length,
+dissect_amqp_0_9_field_value(tvbuff_t *tvb, packet_info *pinfo, int offset, unsigned length,
                              const char *name _U_, proto_tree *field_tree)
 {
     proto_item *field_item, *type_item, *ti = NULL;
@@ -2544,10 +2542,10 @@ dissect_amqp_0_9_field_value(tvbuff_t *tvb, packet_info *pinfo, unsigned offset,
     if (length < 1)
         return 0; /* too short */
     type = tvb_get_uint8(tvb, offset);
-    amqp_typename = val_to_str_const(type, amqp_0_9_field_type_vals, "unknown type");
+    amqp_typename = char_val_to_str(type, amqp_0_9_field_type_vals, "unknown type");
     field_item = proto_tree_get_parent(field_tree);
     proto_item_append_text(field_item, " (%s)", amqp_typename);
-    type_item = proto_tree_add_item(field_tree, hf_amqp_field_type, tvb, offset, 1, ENC_ASCII);
+    type_item = proto_tree_add_item(field_tree, hf_amqp_field_type, tvb, offset, 1, ENC_NA);
     offset += 1;
     length -= 1;
     switch (type) {
@@ -2697,13 +2695,13 @@ dissect_amqp_0_9_field_value(tvbuff_t *tvb, packet_info *pinfo, unsigned offset,
 
 #define AMQP_0_10_SIZE_MAX(s) (((unsigned)(s) < (1U << 16)) ? (unsigned)s : (1U << 16))
 static unsigned
-amqp_0_10_get_32bit_size(tvbuff_t *tvb, unsigned offset) {
+amqp_0_10_get_32bit_size(tvbuff_t *tvb, int offset) {
     unsigned size = tvb_get_ntohl(tvb, offset);
     return AMQP_0_10_SIZE_MAX(size);
 }
 
 static unsigned
-amqp_0_10_get_32bit_size_new(proto_tree* tree, packet_info* pinfo, tvbuff_t *tvb, int hf, unsigned offset) {
+amqp_0_10_get_32bit_size_new(proto_tree* tree, packet_info* pinfo, tvbuff_t *tvb, int hf, int offset) {
     unsigned size;
     proto_item* ti;
 
@@ -2720,7 +2718,7 @@ amqp_0_10_get_32bit_size_new(proto_tree* tree, packet_info* pinfo, tvbuff_t *tvb
 /*  Dissection routine for AMQP 0-10 maps  */
 
 static void
-dissect_amqp_0_10_map(tvbuff_t *tvb, packet_info* pinfo, proto_item *item)
+dissect_amqp_0_10_map(tvbuff_t *tvb, proto_item *item)
 {
     proto_item     *map_tree;
     unsigned        namelen, size;
@@ -2741,12 +2739,12 @@ dissect_amqp_0_10_map(tvbuff_t *tvb, packet_info* pinfo, proto_item *item)
         unsigned field_start = offset;
         namelen = tvb_get_uint8(tvb, offset);
         offset += 1;
-        name = (char*) tvb_get_string_enc(pinfo->pool, tvb, offset, namelen, ENC_UTF_8|ENC_NA);
+        name = (char*) tvb_get_string_enc(wmem_packet_scope(), tvb, offset, namelen, ENC_UTF_8|ENC_NA);
         offset += namelen;
         type = tvb_get_uint8(tvb, offset);
         offset += 1;
-        if (get_amqp_0_10_type_formatter(type, pinfo, &amqp_typename, &formatter, &size)) {
-            field_length = formatter(tvb, pinfo, offset, size, &value); /* includes var 'length' field if var field */
+        if (get_amqp_0_10_type_formatter(type, &amqp_typename, &formatter, &size)) {
+            field_length = formatter(tvb, offset, size, &value); /* includes var 'length' field if var field */
             field_length = AMQP_0_10_SIZE_MAX(field_length);
             proto_tree_add_none_format(map_tree,
                                        hf_amqp_field,
@@ -2939,7 +2937,7 @@ dissect_amqp_0_10_connection(tvbuff_t *tvb,
     uint32_t     arg_length;
     int          flags_offset;
     const char *method_name;
-    unsigned offset = 0;
+    int offset = 0;
     tvbuff_t *next_tvb;
 
     method = tvb_get_uint8(tvb, offset+1);
@@ -2987,7 +2985,7 @@ dissect_amqp_0_10_connection(tvbuff_t *tvb,
             {
                 next_tvb = tvb_new_subset_length(tvb, offset, arg_length);
             }
-            dissect_amqp_0_10_map (next_tvb, pinfo, ti);
+            dissect_amqp_0_10_map (next_tvb, ti);
             offset += arg_length;
         }
         if (flag1 & 0x02) {
@@ -3042,7 +3040,7 @@ dissect_amqp_0_10_connection(tvbuff_t *tvb,
             {
                 next_tvb = tvb_new_subset_length(tvb, offset, arg_length);
             }
-            dissect_amqp_0_10_map (next_tvb, pinfo, ti);
+            dissect_amqp_0_10_map (next_tvb, ti);
             offset += arg_length;
         }
         if (flag1 & 0x02) {
@@ -3279,7 +3277,7 @@ dissect_amqp_0_10_session(tvbuff_t *tvb,
     uint32_t     array_size;
     int          flags_offset;
     const char *method_name;
-    unsigned offset = 0;
+    int offset = 0;
 
     method = tvb_get_uint8(tvb, offset+1);
     method_name = val_to_str_const(method, amqp_0_10_session_methods,
@@ -3535,7 +3533,7 @@ dissect_amqp_0_10_execution(tvbuff_t *tvb,
     uint32_t     struct_size;
     int          class_hf;
     const char *method_name;
-    unsigned offset = 0;
+    int offset = 0;
     tvbuff_t *next_tvb;
 
     method = tvb_get_uint8(tvb, offset+1);
@@ -3710,7 +3708,7 @@ dissect_amqp_0_10_execution(tvbuff_t *tvb,
             {
                 next_tvb = tvb_new_subset_length(tvb, offset, struct_size);
             }
-            dissect_amqp_0_10_map (next_tvb, pinfo, ti);
+            dissect_amqp_0_10_map (next_tvb, ti);
             /* offset += struct_size; */
         }
         break;
@@ -3731,7 +3729,7 @@ dissect_amqp_0_10_message(tvbuff_t *tvb,
     uint32_t     map_size;
     int          flags_offset;
     const char *method_name;
-    unsigned offset = 0;
+    int offset = 0;
     tvbuff_t    *next_tvb;
 
     method = tvb_get_uint8(tvb, offset+1);
@@ -3959,7 +3957,7 @@ dissect_amqp_0_10_message(tvbuff_t *tvb,
             {
                 next_tvb = tvb_new_subset_length(tvb, offset, map_size);
             }
-            dissect_amqp_0_10_map (next_tvb, pinfo, ti);
+            dissect_amqp_0_10_map (next_tvb, ti);
             /* offset += (4 + map_size); */
         }
         break;
@@ -4097,7 +4095,7 @@ dissect_amqp_0_10_dtx(tvbuff_t *tvb,
     uint16_t     xid_length;
     int          flags_offset;
     const char *method_name;
-    unsigned offset = 0;
+    int offset = 0;
 
     method = tvb_get_uint8(tvb, offset+1);
     method_name = val_to_str_const(method, amqp_0_10_dtx_methods,
@@ -4284,7 +4282,7 @@ dissect_amqp_0_10_exchange(tvbuff_t *tvb,
     uint32_t     map_length;
     int          flags_offset;
     const char *method_name;
-    unsigned offset = 0;
+    int offset = 0;
     tvbuff_t *next_tvb;
 
     method = tvb_get_uint8(tvb, offset+1);
@@ -4376,7 +4374,7 @@ dissect_amqp_0_10_exchange(tvbuff_t *tvb,
             {
                 next_tvb = tvb_new_subset_length(tvb, offset, map_length);
             }
-            dissect_amqp_0_10_map (next_tvb, pinfo, ti);
+            dissect_amqp_0_10_map (next_tvb, ti);
             /* offset += map_length; */
         }
         break;
@@ -4446,7 +4444,7 @@ dissect_amqp_0_10_exchange(tvbuff_t *tvb,
             {
                 next_tvb = tvb_new_subset_length(tvb, offset, map_length);
             }
-            dissect_amqp_0_10_map (next_tvb, pinfo, ti);
+            dissect_amqp_0_10_map (next_tvb, ti);
             /* offset += map_length; */
         }
         break;
@@ -4511,7 +4509,7 @@ dissect_amqp_0_10_exchange(tvbuff_t *tvb,
             {
                 next_tvb = tvb_new_subset_length(tvb, offset, map_length);
             }
-            dissect_amqp_0_10_map (next_tvb, pinfo, ti);
+            dissect_amqp_0_10_map (next_tvb, ti);
             /* offset += map_length; */
         }
         break;
@@ -4531,7 +4529,7 @@ dissect_amqp_0_10_queue(tvbuff_t *tvb,
     uint32_t     map_length;
     int          flags_offset;
     const char *method_name;
-    unsigned offset = 0;
+    int offset = 0;
     tvbuff_t *next_tvb;
 
     method = tvb_get_uint8(tvb, offset+1);
@@ -4620,7 +4618,7 @@ dissect_amqp_0_10_queue(tvbuff_t *tvb,
             {
                 next_tvb = tvb_new_subset_length(tvb, offset, map_length);
             }
-            dissect_amqp_0_10_map (next_tvb, pinfo, ti);
+            dissect_amqp_0_10_map (next_tvb, ti);
             /* offset += map_length; */
         }
         break;
@@ -4682,7 +4680,7 @@ dissect_amqp_0_10_file(tvbuff_t *tvb,
     uint32_t     map_length;
     int          flags_offset;
     const char *method_name;
-    unsigned offset = 0;
+    int offset = 0;
     tvbuff_t    *next_tvb;
 
     method = tvb_get_uint8(tvb, offset+1);
@@ -4799,7 +4797,7 @@ dissect_amqp_0_10_file(tvbuff_t *tvb,
             {
                 next_tvb = tvb_new_subset_length(tvb, offset, map_length);
             }
-            dissect_amqp_0_10_map (next_tvb, pinfo, ti);
+            dissect_amqp_0_10_map (next_tvb, ti);
             /* offset += map_length; */
         }
         break;
@@ -4995,7 +4993,7 @@ dissect_amqp_0_10_stream(tvbuff_t *tvb,
     uint32_t     map_length;
     int          flags_offset;
     const char *method_name;
-    unsigned offset = 0;
+    int offset = 0;
     tvbuff_t *next_tvb;
 
     method = tvb_get_uint8(tvb, offset+1);
@@ -5114,7 +5112,7 @@ dissect_amqp_0_10_stream(tvbuff_t *tvb,
             {
                 next_tvb = tvb_new_subset_length(tvb, offset, map_length);
             }
-            dissect_amqp_0_10_map (next_tvb, pinfo, ti);
+            dissect_amqp_0_10_map (next_tvb, ti);
             /* offset += map_length; */
         }
         break;
@@ -5486,7 +5484,7 @@ dissect_amqp_0_10_struct_message_properties(tvbuff_t *tvb,
         {
             next_tvb = tvb_new_subset_length(tvb, offset, map_length);
         }
-        dissect_amqp_0_10_map (next_tvb, pinfo, ti);
+        dissect_amqp_0_10_map (next_tvb, ti);
         /* offset += map_length; */
     }
 }
@@ -5546,7 +5544,7 @@ dissect_amqp_0_10_struct_exchange_query_result(tvbuff_t *tvb,
         {
             next_tvb = tvb_new_subset_length(tvb, offset, map_length);
         }
-        dissect_amqp_0_10_map (next_tvb, pinfo, ti);
+        dissect_amqp_0_10_map (next_tvb, ti);
         /* offset += map_length; */
     }
 }
@@ -5618,7 +5616,7 @@ dissect_amqp_0_10_struct_queue_query_result(tvbuff_t *tvb,
         {
             next_tvb = tvb_new_subset_length(tvb, offset, map_length);
         }
-        dissect_amqp_0_10_map (next_tvb, pinfo, ti);
+        dissect_amqp_0_10_map (next_tvb, ti);
         offset += map_length;
     }
     if (flag1 & 0x40) {     /* message-count (uint32) */
@@ -5691,7 +5689,7 @@ dissect_amqp_0_10_struct_file_properties(tvbuff_t *tvb,
         {
             next_tvb = tvb_new_subset_length(tvb, offset, map_length);
         }
-        dissect_amqp_0_10_map (next_tvb, pinfo, ti);
+        dissect_amqp_0_10_map (next_tvb, ti);
         offset += map_length;
     }
     if (flag1 & 0x08) {
@@ -5797,7 +5795,7 @@ dissect_amqp_0_10_struct_stream_properties(tvbuff_t *tvb,
         {
             next_tvb = tvb_new_subset_length(tvb, offset, map_length);
         }
-        dissect_amqp_0_10_map (next_tvb, pinfo, ti);
+        dissect_amqp_0_10_map (next_tvb, ti);
         offset += map_length;
     }
     if (flag1 & 0x08) {
@@ -5830,7 +5828,7 @@ dissect_amqp_0_10_struct32(tvbuff_t *tvb,
     uint16_t    size;
     proto_item *ti2, *result;
     proto_tree *tree;
-    unsigned offset = 0;
+    int offset = 0;
 
     tree = proto_item_add_subtree(ti, ett_args);
 
@@ -6192,7 +6190,7 @@ dissect_amqp_1_0_map(tvbuff_t *tvb,
             element_type = decode_fixed_type(tvb_get_uint8(tvb, offset));
             if (element_type)
             {
-                decoded_element_size=element_type->formatter(tvb, pinfo, offset+1, element_type->known_size, &value);
+                decoded_element_size=element_type->formatter(tvb, offset+1, element_type->known_size, &value);
                 offset += (decoded_element_size+1);
             }
             else
@@ -6285,7 +6283,6 @@ dissect_amqp_1_0_array(tvbuff_t *tvb,
     }
 
     element_type = get_amqp_1_0_type_formatter(tvb,
-                                               pinfo,
                                                offset+count_len*2,
                                                &hf_amqp_type,
                                                &type_name_array,
@@ -6555,7 +6552,7 @@ dissect_amqp_1_0_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
     col_clear(pinfo->cinfo, COL_INFO);
 
     /*  Heuristic - protocol initialisation frame starts with 'AMQP' followed by 0x0  */
-    if (tvb_memeql(tvb, 0, (const uint8_t*)"AMQP", 4) == 0) {
+    if (tvb_memeql(tvb, 0, "AMQP", 4) == 0) {
         uint8_t        proto_major;
         uint8_t        proto_minor;
         uint8_t        proto_revision;
@@ -7090,7 +7087,7 @@ dissect_amqp_0_9_method_channel_flow_ok(tvbuff_t *tvb,
 
 static int
 dissect_amqp_0_9_method_channel_close(uint16_t channel_num, tvbuff_t *tvb,
-    packet_info *pinfo, unsigned offset, proto_tree *args_tree)
+    packet_info *pinfo, int offset, proto_tree *args_tree)
 {
     proto_item *tf_code;
     const uint8_t* reply;
@@ -7798,7 +7795,7 @@ dissect_amqp_0_9_method_basic_cancel_ok(tvbuff_t *tvb,
 
 static int
 dissect_amqp_0_9_method_basic_publish(uint16_t channel_num,
-    tvbuff_t *tvb, packet_info *pinfo, unsigned offset, proto_tree *args_tree)
+    tvbuff_t *tvb, packet_info *pinfo, int offset, proto_tree *args_tree)
 {
     amqp_delivery *delivery;
     proto_item *pi;
@@ -7890,7 +7887,7 @@ dissect_amqp_0_9_method_basic_return(tvbuff_t *tvb, packet_info *pinfo,
 
 static int
 dissect_amqp_0_9_method_basic_deliver(uint16_t channel_num,
-    tvbuff_t *tvb, packet_info *pinfo, unsigned offset, proto_tree *args_tree)
+    tvbuff_t *tvb, packet_info *pinfo, int offset, proto_tree *args_tree)
 {
     uint64_t delivery_tag;
     const uint8_t* str;
@@ -7901,8 +7898,9 @@ dissect_amqp_0_9_method_basic_deliver(uint16_t channel_num,
     offset += 1 + tvb_get_uint8(tvb, offset);
 
     /*  delivery-tag (longlong)  */
-    proto_tree_add_item_ret_uint64(args_tree, hf_amqp_method_basic_deliver_delivery_tag,
-        tvb, offset, 8, ENC_BIG_ENDIAN, &delivery_tag);
+    proto_tree_add_item(args_tree, hf_amqp_method_basic_deliver_delivery_tag,
+        tvb, offset, 8, ENC_BIG_ENDIAN);
+    delivery_tag = tvb_get_ntoh64(tvb, offset);
     offset += 8;
 
     /*  redelivered (bit)        */
@@ -7958,14 +7956,15 @@ dissect_amqp_0_9_method_basic_get(tvbuff_t *tvb, packet_info *pinfo,
 
 static int
 dissect_amqp_0_9_method_basic_get_ok(uint16_t channel_num,
-    tvbuff_t *tvb, packet_info *pinfo, unsigned offset, proto_tree *args_tree)
+    tvbuff_t *tvb, packet_info *pinfo, int offset, proto_tree *args_tree)
 {
     uint64_t delivery_tag;
     const uint8_t* str;
 
     /*  delivery-tag (longlong)  */
-    proto_tree_add_item_ret_uint64(args_tree, hf_amqp_method_basic_get_ok_delivery_tag,
-        tvb, offset, 8, ENC_BIG_ENDIAN, &delivery_tag);
+    proto_tree_add_item(args_tree, hf_amqp_method_basic_get_ok_delivery_tag,
+        tvb, offset, 8, ENC_BIG_ENDIAN);
+    delivery_tag = tvb_get_ntoh64(tvb, offset);
     offset += 8;
 
     /*  redelivered (bit)        */
@@ -8014,14 +8013,15 @@ dissect_amqp_0_9_method_basic_get_empty(tvbuff_t *tvb,
 
 static int
 dissect_amqp_0_9_method_basic_ack(uint16_t channel_num,
-    tvbuff_t *tvb, packet_info *pinfo, unsigned offset, proto_tree *args_tree)
+    tvbuff_t *tvb, packet_info *pinfo, int offset, proto_tree *args_tree)
 {
     uint64_t delivery_tag;
     int multiple;
 
     /*  delivery-tag (longlong)  */
-    proto_tree_add_item_ret_uint64(args_tree, hf_amqp_method_basic_ack_delivery_tag,
-        tvb, offset, 8, ENC_BIG_ENDIAN, &delivery_tag);
+    proto_tree_add_item(args_tree, hf_amqp_method_basic_ack_delivery_tag,
+        tvb, offset, 8, ENC_BIG_ENDIAN);
+    delivery_tag = tvb_get_ntoh64(tvb, offset);
     offset += 8;
 
     /*  multiple (bit)           */
@@ -8039,13 +8039,14 @@ dissect_amqp_0_9_method_basic_ack(uint16_t channel_num,
 
 static int
 dissect_amqp_0_9_method_basic_reject(uint16_t channel_num,
-    tvbuff_t *tvb, packet_info *pinfo, unsigned offset, proto_tree *args_tree)
+    tvbuff_t *tvb, packet_info *pinfo, int offset, proto_tree *args_tree)
 {
     uint64_t delivery_tag;
 
     /*  delivery-tag (longlong)  */
-    proto_tree_add_item_ret_uint64(args_tree, hf_amqp_method_basic_reject_delivery_tag,
-        tvb, offset, 8, ENC_BIG_ENDIAN, &delivery_tag);
+    proto_tree_add_item(args_tree, hf_amqp_method_basic_reject_delivery_tag,
+        tvb, offset, 8, ENC_BIG_ENDIAN);
+    delivery_tag = tvb_get_ntoh64(tvb, offset);
     offset += 8;
 
     /*  requeue (bit)            */
@@ -8097,14 +8098,15 @@ dissect_amqp_0_9_method_basic_recover_ok(tvbuff_t *tvb _U_,
 
 static int
 dissect_amqp_0_9_method_basic_nack(uint16_t channel_num,
-    tvbuff_t *tvb, packet_info *pinfo, unsigned offset, proto_tree *args_tree)
+    tvbuff_t *tvb, packet_info *pinfo, int offset, proto_tree *args_tree)
 {
     uint64_t delivery_tag;
     int multiple;
 
     /*  delivery-tag (longlong)  */
-    proto_tree_add_item_ret_uint64(args_tree, hf_amqp_method_basic_nack_delivery_tag,
-        tvb, offset, 8, ENC_BIG_ENDIAN, &delivery_tag);
+    proto_tree_add_item(args_tree, hf_amqp_method_basic_nack_delivery_tag,
+        tvb, offset, 8, ENC_BIG_ENDIAN);
+    delivery_tag = tvb_get_ntoh64(tvb, offset);
     offset += 8;
 
     /*  multiple (bit)           */
@@ -8783,7 +8785,7 @@ dissect_amqp_0_9_method_confirm_select(tvbuff_t *tvb,
 
 static int
 dissect_amqp_0_9_method_confirm_select_ok(uint16_t channel_num,
-    tvbuff_t *tvb _U_, packet_info *pinfo, unsigned offset, proto_tree *args_tree _U_)
+    tvbuff_t *tvb _U_, packet_info *pinfo, int offset, proto_tree *args_tree _U_)
 {
     if(!PINFO_FD_VISITED(pinfo))
     {
@@ -8828,7 +8830,7 @@ dissect_amqp_0_9_content_header_basic(tvbuff_t *tvb, packet_info *pinfo,
             tvb, offset + 1, tvb_get_uint8(tvb, offset), ENC_ASCII);
 
         eh_ptr->encoding = ascii_strdown_inplace(
-            (char*)tvb_get_string_enc(wmem_file_scope(), tvb, offset + 1, tvb_get_uint8(tvb, offset), ENC_ASCII));
+            tvb_get_string_enc(wmem_file_scope(), tvb, offset + 1, tvb_get_uint8(tvb, offset), ENC_ASCII));
 
         offset += 1 + tvb_get_uint8(tvb, offset);
     }
@@ -9206,7 +9208,7 @@ dissect_amqp_0_9_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
                                      tvb, 11, length - 4, ENC_NA);
             args_tree = proto_item_add_subtree(ti, ett_args);
             col_append_fstr(pinfo->cinfo, COL_INFO, "Connection.%s ",
-                            val_to_str(pinfo->pool, method_id, amqp_method_connection_methods, "Unknown (%u)"));
+                            val_to_str( method_id, amqp_method_connection_methods, "Unknown (%u)"));
             switch (method_id) {
             case AMQP_0_9_METHOD_CONNECTION_START:
                 dissect_amqp_0_9_method_connection_start(tvb,
@@ -9273,7 +9275,7 @@ dissect_amqp_0_9_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
             args_tree = proto_item_add_subtree(ti, ett_args);
 
             col_append_fstr(pinfo->cinfo, COL_INFO, "Channel.%s ",
-                            val_to_str(pinfo->pool, method_id, amqp_method_channel_methods, "Unknown (%u)"));
+                            val_to_str( method_id, amqp_method_channel_methods, "Unknown (%u)"));
 
             switch (method_id) {
             case AMQP_0_9_METHOD_CHANNEL_OPEN:
@@ -9352,7 +9354,7 @@ dissect_amqp_0_9_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
                                      tvb, 11, length - 4, ENC_NA);
             args_tree = proto_item_add_subtree(ti, ett_args);
             col_append_fstr(pinfo->cinfo, COL_INFO, "Exchange.%s ",
-                            val_to_str(pinfo->pool, method_id, amqp_method_exchange_methods, "Unknown (%u)"));
+                            val_to_str( method_id, amqp_method_exchange_methods, "Unknown (%u)"));
             switch (method_id) {
             case AMQP_0_9_METHOD_EXCHANGE_DECLARE:
                 dissect_amqp_0_9_method_exchange_declare(tvb,
@@ -9400,7 +9402,7 @@ dissect_amqp_0_9_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
                                      tvb, 11, length - 4, ENC_NA);
             args_tree = proto_item_add_subtree(ti, ett_args);
             col_append_fstr(pinfo->cinfo, COL_INFO, "Queue.%s ",
-                            val_to_str(pinfo->pool, method_id, amqp_method_queue_methods, "Unknown (%u)"));
+                            val_to_str( method_id, amqp_method_queue_methods, "Unknown (%u)"));
 
             switch (method_id) {
             case AMQP_0_9_METHOD_QUEUE_DECLARE:
@@ -9456,7 +9458,7 @@ dissect_amqp_0_9_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
             args_tree = proto_item_add_subtree(ti, ett_args);
 
             col_append_fstr(pinfo->cinfo, COL_INFO, "Basic.%s ",
-                            val_to_str(pinfo->pool, method_id, amqp_method_basic_methods, "Unknown (%u)"));
+                            val_to_str( method_id, amqp_method_basic_methods, "Unknown (%u)"));
 
             switch (method_id) {
             case AMQP_0_9_METHOD_BASIC_QOS:
@@ -9550,7 +9552,7 @@ dissect_amqp_0_9_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
             args_tree = proto_item_add_subtree(ti, ett_args);
 
             col_append_fstr(pinfo->cinfo, COL_INFO, "File.%s ",
-                            val_to_str(pinfo->pool, method_id, amqp_method_file_methods, "Unknown (%u)"));
+                            val_to_str( method_id, amqp_method_file_methods, "Unknown (%u)"));
 
             switch (method_id) {
             case AMQP_0_9_METHOD_FILE_QOS:
@@ -9622,7 +9624,7 @@ dissect_amqp_0_9_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
             args_tree = proto_item_add_subtree(ti, ett_args);
 
             col_append_fstr(pinfo->cinfo, COL_INFO, "Stream.%s ",
-                            val_to_str(pinfo->pool, method_id, amqp_method_stream_methods, "Unknown (%u)"));
+                            val_to_str( method_id, amqp_method_stream_methods, "Unknown (%u)"));
 
             switch (method_id) {
             case AMQP_0_9_METHOD_STREAM_QOS:
@@ -9674,7 +9676,7 @@ dissect_amqp_0_9_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
             args_tree = proto_item_add_subtree(ti, ett_args);
 
             col_append_fstr(pinfo->cinfo, COL_INFO, "Tx.%s ",
-                            val_to_str(pinfo->pool, method_id, amqp_method_tx_methods, "Unknown (%u)"));
+                            val_to_str( method_id, amqp_method_tx_methods, "Unknown (%u)"));
 
             switch (method_id) {
             case AMQP_0_9_METHOD_TX_SELECT:
@@ -9714,7 +9716,7 @@ dissect_amqp_0_9_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
             args_tree = proto_item_add_subtree(ti, ett_args);
 
             col_append_fstr(pinfo->cinfo, COL_INFO, "Dtx.%s ",
-                            val_to_str(pinfo->pool, method_id, amqp_method_dtx_methods, "Unknown (%u)"));
+                            val_to_str( method_id, amqp_method_dtx_methods, "Unknown (%u)"));
 
             switch (method_id) {
             case AMQP_0_9_METHOD_DTX_SELECT:
@@ -9838,7 +9840,7 @@ dissect_amqp_0_9_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 
         if (content_params != NULL && content_params->type != NULL) {
             body_tvb = tvb_new_subset_length(tvb, 7, length);
-            dissector_try_string_with_data(media_type_subdissector_table, content_params->type, body_tvb, pinfo, amqp_tree, true, NULL);
+            dissector_try_string(media_type_subdissector_table, content_params->type, body_tvb, pinfo, amqp_tree, NULL);
         }
         break;
     case AMQP_0_9_FRAME_TYPE_HEARTBEAT:
@@ -10091,8 +10093,8 @@ get_amqp_1_0_value_formatter(tvbuff_t *tvb,
         }
         else
         {
-            /* multi-type and custom fields must be converted to a string */
-            *length_size = element_type->formatter(tvb, pinfo, offset, element_type->known_size, &value);
+            /* multi-type and custom fileds must be converted to a string */
+            *length_size = element_type->formatter(tvb, offset, element_type->known_size, &value);
 
             if (code/16 > 0x9) /* variable width code is 0xa[0-9] or 0xb[0-9] */
                /* shift to right to skip the variable length indicator */
@@ -10164,7 +10166,6 @@ get_amqp_1_0_value_formatter(tvbuff_t *tvb,
  */
 static unsigned
 get_amqp_1_0_type_formatter(tvbuff_t *tvb,
-                            packet_info* pinfo,
                             int offset,
                             int *hf_amqp_type,
                             const char **name,
@@ -10213,10 +10214,10 @@ get_amqp_1_0_type_formatter(tvbuff_t *tvb,
             /* TODO: somehow set code = next_128_bytes */
             break;
         case 0xa: /* variable-one */
-            format_len = format_amqp_1_0_str(tvb, pinfo, offset, 1, name);
+            format_len = format_amqp_1_0_str(tvb, offset, 1, name);
             break;
         case 0xb: /* variable-four */
-            format_len = format_amqp_1_0_str(tvb, pinfo, offset, 4, name);
+            format_len = format_amqp_1_0_str(tvb, offset, 4, name);
             break;
         /* TODO: could be type compound? or array? */
         }
@@ -10259,7 +10260,6 @@ get_amqp_1_0_type_value_formatter(tvbuff_t *tvb,
     unsigned   type_length_size;
 
     code = get_amqp_1_0_type_formatter(tvb,
-                                       pinfo,
                                        offset,
                                        &hf_amqp_type,
                                        &type_name,
@@ -10501,7 +10501,7 @@ dissect_amqp_1_0_false(tvbuff_t *tvb, packet_info *pinfo _U_,
 }
 
 static int
-format_amqp_1_0_null(tvbuff_t *tvb _U_, packet_info* pinfo _U_,
+format_amqp_1_0_null(tvbuff_t *tvb _U_,
                       unsigned offset _U_, unsigned length _U_,
                       const char **value)
 {
@@ -10510,38 +10510,38 @@ format_amqp_1_0_null(tvbuff_t *tvb _U_, packet_info* pinfo _U_,
 }
 
 static int
-format_amqp_1_0_boolean_true(tvbuff_t *tvb _U_, packet_info* pinfo _U_,
+format_amqp_1_0_boolean_true(tvbuff_t *tvb _U_,
                         unsigned offset _U_, unsigned length _U_,
                         const char **value)
 {
-    *value = "true";
+    *value = wmem_strdup(wmem_packet_scope(), "true");
     return 0;
 }
 
 static int
-format_amqp_1_0_boolean_false(tvbuff_t *tvb _U_, packet_info* pinfo _U_,
+format_amqp_1_0_boolean_false(tvbuff_t *tvb _U_,
                         unsigned offset _U_, unsigned length _U_,
                         const char **value)
 {
-    *value = "false";
+    *value = wmem_strdup(wmem_packet_scope(), "false");
     return 0;
 }
 
 static int
-format_amqp_1_0_boolean(tvbuff_t *tvb, packet_info* pinfo _U_,
+format_amqp_1_0_boolean(tvbuff_t *tvb,
                         unsigned offset, unsigned length _U_,
                         const char **value)
 {
     uint8_t val;
 
     val = tvb_get_uint8(tvb, offset);
-    *value = val ? "true" : "false";
+    *value = wmem_strdup(wmem_packet_scope(), val ? "true" : "false");
     return 1;
 }
 
 /* this covers ubyte, ushort, uint and ulong */
 static int
-format_amqp_1_0_uint(tvbuff_t *tvb, packet_info* pinfo,
+format_amqp_1_0_uint(tvbuff_t *tvb,
                      unsigned offset, unsigned length,
                      const char **value)
 {
@@ -10558,16 +10558,16 @@ format_amqp_1_0_uint(tvbuff_t *tvb, packet_info* pinfo,
     else if (length == 8)
         val = tvb_get_ntoh64(tvb, offset);
     else {
-        *value = wmem_strdup_printf(pinfo->pool, "Invalid uint length %d!", length);
+        *value = wmem_strdup_printf(wmem_packet_scope(), "Invalid uint length %d!", length);
         return length;
     }
-    *value = wmem_strdup_printf(pinfo->pool, "%" PRIu64, val);
+    *value = wmem_strdup_printf(wmem_packet_scope(), "%" PRIu64, val);
     return length;
 }
 
 /* this covers byte, short, int and long */
 static int
-format_amqp_1_0_int(tvbuff_t *tvb, packet_info* pinfo,
+format_amqp_1_0_int(tvbuff_t *tvb,
                     unsigned offset, unsigned length,
                     const char **value)
 {
@@ -10582,76 +10582,76 @@ format_amqp_1_0_int(tvbuff_t *tvb, packet_info* pinfo,
     else if (length == 8)
         val = tvb_get_ntohi64(tvb, offset);
     else {
-        *value = wmem_strdup_printf(pinfo->pool, "Invalid int length %d!", length);
+        *value = wmem_strdup_printf(wmem_packet_scope(), "Invalid int length %d!", length);
         return length;
     }
-    *value = wmem_strdup_printf(pinfo->pool, "%" PRIi64, val);
+    *value = wmem_strdup_printf(wmem_packet_scope(), "%" PRIi64, val);
     return length;
 }
 
 static int
-format_amqp_1_0_float(tvbuff_t *tvb, packet_info* pinfo, unsigned offset, unsigned length _U_,
+format_amqp_1_0_float(tvbuff_t *tvb, unsigned offset, unsigned length _U_,
                       const char **value)
 {
     float floatval;
     floatval = tvb_get_ntohieee_float(tvb, offset);
-    *value = wmem_strdup_printf(pinfo->pool, "%f", floatval);
+    *value = wmem_strdup_printf(wmem_packet_scope(), "%f", floatval);
     return 4;
 }
 
 static int
-format_amqp_1_0_double(tvbuff_t *tvb, packet_info* pinfo, unsigned offset, unsigned length _U_,
+format_amqp_1_0_double(tvbuff_t *tvb, unsigned offset, unsigned length _U_,
                        const char **value)
 {
     double doubleval;
     doubleval = tvb_get_ntohieee_double(tvb, offset);
-    *value = wmem_strdup_printf(pinfo->pool, "%f", doubleval);
+    *value = wmem_strdup_printf(wmem_packet_scope(), "%f", doubleval);
     return 8;
 }
 
 static int
-format_amqp_1_0_decimal(tvbuff_t *tvb _U_, packet_info* pinfo _U_, unsigned offset _U_, unsigned length,
+format_amqp_1_0_decimal(tvbuff_t *tvb _U_, unsigned offset _U_, unsigned length,
                         const char **value)
 {
     /* TODO: this requires the _Decimal32 datatype from ISO/IEC TR 24732
      * and corresponding support in printf and glib
      */
-    *value = "(not supported)";
+    *value = wmem_strdup_printf(wmem_packet_scope(), "(not supported)");
     return length;
 }
 
 static int
-format_amqp_1_0_char(tvbuff_t *tvb, packet_info* pinfo, unsigned offset, unsigned length _U_,
+format_amqp_1_0_char(tvbuff_t *tvb, unsigned offset, unsigned length _U_,
                      const char **value)
 {
     /* one UTF-32BE encoded Unicode character */
-    *value = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, 4, ENC_UCS_4 | ENC_BIG_ENDIAN);
+    *value = tvb_get_string_enc(wmem_packet_scope(), tvb, offset, 4, ENC_UCS_4|ENC_BIG_ENDIAN);
     return 4;
 }
 
 static int
-format_amqp_1_0_timestamp(tvbuff_t *tvb, packet_info* pinfo, unsigned offset, unsigned length _U_,
+format_amqp_1_0_timestamp(tvbuff_t *tvb, unsigned offset, unsigned length _U_,
                           const char **value)
 {
     nstime_t nstime;
     get_amqp_timestamp(&nstime, tvb, offset);
 
-    *value = abs_time_to_str(pinfo->pool, &nstime, ABSOLUTE_TIME_UTC, false);
+    *value = abs_time_to_str(wmem_packet_scope(), &nstime, ABSOLUTE_TIME_UTC, false);
     return 8;
 }
 
 static int
-format_amqp_1_0_uuid(tvbuff_t *tvb, packet_info* pinfo, unsigned offset, unsigned length _U_,
+format_amqp_1_0_uuid(tvbuff_t *tvb, unsigned offset, unsigned length _U_,
                      const char **value)
 {
     e_guid_t uuid;
     tvb_get_guid(tvb, offset, &uuid, ENC_BIG_ENDIAN);
-    *value = guid_to_str(pinfo->pool, &uuid);
+    *value = guid_to_str(wmem_packet_scope(), &uuid);
     return 16;
 }
 
 static int
-format_amqp_1_0_bin(tvbuff_t *tvb, packet_info* pinfo,
+format_amqp_1_0_bin(tvbuff_t *tvb,
                     unsigned offset, unsigned length,
                     const char **value)
 {
@@ -10662,16 +10662,16 @@ format_amqp_1_0_bin(tvbuff_t *tvb, packet_info* pinfo,
     else if (length == 4)
         bin_length = tvb_get_ntohl(tvb, offset);
     else {
-        *value = wmem_strdup_printf(pinfo->pool, "Invalid binary length size %d!", length);
+        *value = wmem_strdup_printf(wmem_packet_scope(), "Invalid binary length size %d!", length);
         return length;
     }
     offset += length;
-    *value = tvb_bytes_to_str(pinfo->pool, tvb, offset, bin_length);
+    *value = tvb_bytes_to_str(wmem_packet_scope(), tvb, offset, bin_length);
     return (length+bin_length);
 }
 
 static int
-format_amqp_1_0_str(tvbuff_t *tvb, packet_info* pinfo,
+format_amqp_1_0_str(tvbuff_t *tvb,
                     unsigned offset, unsigned length,
                     const char **value)
 {
@@ -10682,17 +10682,17 @@ format_amqp_1_0_str(tvbuff_t *tvb, packet_info* pinfo,
     else if (length == 4)
         string_length = tvb_get_ntohl(tvb, offset);
     else {
-        *value = wmem_strdup_printf(pinfo->pool, "Invalid string length size %d!", length);
+        *value = wmem_strdup_printf(wmem_packet_scope(), "Invalid string length size %d!", length);
         return length;
     }
     offset += length;
-    *value = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, string_length, ENC_UTF_8|ENC_NA);
+    *value = tvb_get_string_enc(wmem_packet_scope(), tvb, offset, string_length, ENC_UTF_8|ENC_NA);
     /* offset += string_length; */
     return (string_length + length);
 }
 
 static int
-format_amqp_1_0_symbol(tvbuff_t *tvb, packet_info* pinfo,
+format_amqp_1_0_symbol(tvbuff_t *tvb,
                        unsigned offset, unsigned length,
                        const char **value)
 {
@@ -10702,11 +10702,11 @@ format_amqp_1_0_symbol(tvbuff_t *tvb, packet_info* pinfo,
     else if (length == 4)
         symbol_length = tvb_get_ntohl(tvb, offset);
     else {
-        *value = wmem_strdup_printf(pinfo->pool, "Invalid symbol length size %d!", length);
+        *value = wmem_strdup_printf(wmem_packet_scope(), "Invalid symbol length size %d!", length);
         return length;
     }
     offset += length;
-    *value = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, symbol_length, ENC_ASCII|ENC_NA);
+    *value = tvb_get_string_enc(wmem_packet_scope(), tvb, offset, symbol_length, ENC_ASCII|ENC_NA);
     /* offset += symbol_length; */
     return (symbol_length + length);
 }
@@ -10715,7 +10715,7 @@ format_amqp_1_0_symbol(tvbuff_t *tvb, packet_info* pinfo,
 /*  AMQP 0-10 Type Decoders  */
 
 static bool
-get_amqp_0_10_type_formatter(uint8_t code, packet_info* pinfo,
+get_amqp_0_10_type_formatter(uint8_t code,
                              const char **name,
                              type_formatter *formatter,
                              unsigned *length_size)
@@ -10729,7 +10729,7 @@ get_amqp_0_10_type_formatter(uint8_t code, packet_info* pinfo,
         table = amqp_0_10_fixed_types;
     for (i = 0; table[i].typecode != 0xff; ++i) {
         if (table[i].typecode == code) {
-            *name        = wmem_strdup(pinfo->pool, table[i].amqp_typename);
+            *name        = wmem_strdup(wmem_packet_scope(), table[i].amqp_typename);
             *formatter   = table[i].formatter;
             *length_size = table[i].known_size;
             return true;
@@ -10739,16 +10739,16 @@ get_amqp_0_10_type_formatter(uint8_t code, packet_info* pinfo,
 }
 
 static int
-format_amqp_0_10_bin(tvbuff_t *tvb, packet_info* pinfo,
+format_amqp_0_10_bin(tvbuff_t *tvb,
                      unsigned offset, unsigned length,
                      const char **value)
 {
-    *value = tvb_bytes_to_str(pinfo->pool, tvb, offset, length);
+    *value = tvb_bytes_to_str(wmem_packet_scope(), tvb, offset, length);
     return length;
 }
 
 static int
-format_amqp_0_10_int(tvbuff_t *tvb, packet_info* pinfo,
+format_amqp_0_10_int(tvbuff_t *tvb,
                      unsigned offset, unsigned length,
                      const char **value)
 {
@@ -10761,15 +10761,15 @@ format_amqp_0_10_int(tvbuff_t *tvb, packet_info* pinfo,
     else if (length == 4)
         val = tvb_get_ntohil(tvb, offset);
     else {
-        *value = wmem_strdup_printf(pinfo->pool, "Invalid int length %d!", length);
+        *value = wmem_strdup_printf(wmem_packet_scope(), "Invalid int length %d!", length);
         return length;
     }
-    *value = wmem_strdup_printf(pinfo->pool, "%d", val);
+    *value = wmem_strdup_printf(wmem_packet_scope(), "%d", val);
     return length;
 }
 
 static int
-format_amqp_0_10_uint(tvbuff_t *tvb, packet_info* pinfo,
+format_amqp_0_10_uint(tvbuff_t *tvb,
                       unsigned offset, unsigned length,
                       const char **value)
 {
@@ -10782,36 +10782,36 @@ format_amqp_0_10_uint(tvbuff_t *tvb, packet_info* pinfo,
     else if (length == 4)
         val = tvb_get_ntohl(tvb, offset);
     else {
-        *value = wmem_strdup_printf(pinfo->pool, "Invalid uint length %d!", length);
+        *value = wmem_strdup_printf(wmem_packet_scope(), "Invalid uint length %d!", length);
         return length;
     }
-    *value = wmem_strdup_printf(pinfo->pool, "%u", val);
+    *value = wmem_strdup_printf(wmem_packet_scope(), "%u", val);
     return length;
 }
 
 static int
-format_amqp_0_10_char(tvbuff_t *tvb, packet_info* pinfo,
+format_amqp_0_10_char(tvbuff_t *tvb,
                       unsigned offset, unsigned length _U_,
                       const char **value)
 {
-    *value = tvb_format_text(pinfo->pool, tvb, offset, 1);
+    *value = tvb_format_text(wmem_packet_scope(), tvb, offset, 1);
     return 1;
 }
 
 static int
-format_amqp_0_10_boolean(tvbuff_t *tvb, packet_info* pinfo,
+format_amqp_0_10_boolean(tvbuff_t *tvb,
                          unsigned offset, unsigned length _U_,
                          const char **value)
 {
     uint8_t val;
 
     val = tvb_get_uint8(tvb, offset);
-    *value = wmem_strdup(pinfo->pool, val ? "true" : "false");
+    *value = wmem_strdup(wmem_packet_scope(), val ? "true" : "false");
     return 1;
 }
 
 static int
-format_amqp_0_10_vbin(tvbuff_t *tvb, packet_info* pinfo,
+format_amqp_0_10_vbin(tvbuff_t *tvb,
                       unsigned offset, unsigned length,
                       const char **value)
 {
@@ -10824,17 +10824,17 @@ format_amqp_0_10_vbin(tvbuff_t *tvb, packet_info* pinfo,
     else if (length == 4)
         bin_length = amqp_0_10_get_32bit_size(tvb, offset);
     else {
-        *value = wmem_strdup_printf(pinfo->pool, "Invalid vbin length size %d!", length);
+        *value = wmem_strdup_printf(wmem_packet_scope(), "Invalid vbin length size %d!", length);
         return length;
     }
     offset += length;
-    *value = tvb_bytes_to_str(pinfo->pool, tvb, offset, bin_length);
+    *value = tvb_bytes_to_str(wmem_packet_scope(), tvb, offset, bin_length);
     /* offset += bin_length; */
     return (bin_length + length);
 }
 
 static int
-format_amqp_0_10_str(tvbuff_t *tvb, packet_info* pinfo,
+format_amqp_0_10_str(tvbuff_t *tvb,
                      unsigned offset, unsigned length,
                      const char **value)
 {
@@ -10847,11 +10847,11 @@ format_amqp_0_10_str(tvbuff_t *tvb, packet_info* pinfo,
     else if (length == 4)
         string_length = amqp_0_10_get_32bit_size(tvb, offset);
     else {
-        *value = wmem_strdup_printf(pinfo->pool, "Invalid string length size %d!", length);
+        *value = wmem_strdup_printf(wmem_packet_scope(), "Invalid string length size %d!", length);
         return length;
     }
     offset += length;
-    *value = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, string_length, ENC_UTF_8|ENC_NA);
+    *value = tvb_get_string_enc(wmem_packet_scope(), tvb, offset, string_length, ENC_UTF_8|ENC_NA);
     /* offset += string_length; */
     return (string_length + length);
 }
@@ -10881,6 +10881,7 @@ format_amqp_0_10_sequence_set(tvbuff_t *tvb, unsigned offset, unsigned length,
                                tvb_get_ntohl(tvb, offset + 4),
                                (i < (values - 2)) ? ", " : "");
         offset += 8;
+        length -= 8;
     }
     proto_item_append_text(item, "]");
 }
@@ -10960,7 +10961,7 @@ dissect_amqp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
      * tcp_dissect_pdus() to work as expected.
      */
     pinfo->can_desegment = pinfo->saved_can_desegment;
-    if (!dissector_try_uint_with_data(version_table, conn->version, tvb, pinfo, tree, false, data))
+    if (!dissector_try_uint_new(version_table, conn->version, tvb, pinfo, tree, false, data))
     {
         col_append_str(pinfo->cinfo, COL_INFO, "AMQP (unknown version)");
         col_set_fence(pinfo->cinfo, COL_INFO);
@@ -13681,7 +13682,7 @@ proto_register_amqp(void)
                                &amqp_message_decodes,
                                &num_amqp_message_decodes,
                                UAT_AFFECTS_DISSECTION, /* affects dissection of packets, but not set of named fields */
-                               NULL,
+                               "ChamqpMessageDecoding",
                                amqp_message_decode_copy_cb,
                                amqp_message_decode_update_cb,
                                amqp_message_decode_free_cb,
@@ -13697,7 +13698,7 @@ proto_register_amqp(void)
     static build_valid_func amqp_da_build_value[1] = {amqp_value};
     static decode_as_value_t amqp_da_values = {amqp_prompt, 1, amqp_da_build_value};
     static decode_as_t amqp_da = {"amqp", "amqp.version", 1, 0, &amqp_da_values, NULL, NULL,
-                                decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL, NULL, NULL };
+                                decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL};
 
     proto_amqp = proto_register_protocol("Advanced Message Queuing Protocol", "AMQP", "amqp");
 

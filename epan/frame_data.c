@@ -44,192 +44,52 @@
 
 #define COMPARE_TS(ts) COMPARE_TS_REAL(fdata1->ts, fdata2->ts)
 
-static bool
+void
 frame_delta_abs_time(const struct epan_session *epan, const frame_data *fdata, uint32_t prev_num, nstime_t *delta)
 {
-  const nstime_t* prev_abs_ts;
+  const nstime_t *prev_abs_ts = (prev_num) ? epan_get_frame_ts(epan, prev_num) : NULL;
 
-  if (!fdata->has_ts) {
-    /* We don't have a time stamp for this packet. Set the delta time
-       to zero, and return false. */
+  if (prev_abs_ts) {
+    nstime_delta(delta, &fdata->abs_ts, prev_abs_ts);
+  } else {
+    /* If we don't have the time stamp of the previous packet,
+       it's because we have no displayed/captured packets prior to this.
+       Set the delta time to zero. */
     nstime_set_zero(delta);
-    return false;
   }
-
-  if (prev_num == 0) {
-    /* The previous frame doesn't exist.  Set the delta time to zero,
-       and return false. */
-    nstime_set_zero(delta);
-    return false;
-  }
-
-  /* Ge the previous frame's time stamp, if it has one. */
-  prev_abs_ts = epan_get_frame_ts(epan, prev_num);
-  if (prev_abs_ts == NULL) {
-    /* The previous frame doesn't have a time stamp.  Set the delta
-       time to zero, and return false. */
-    nstime_set_zero(delta);
-    return false;
-  }
-
-  /* This frame has a time stamp, the previous frame exists and has a
-     time stamp; compute the delta between this frame's time stamp and
-     the previous frame's time stamp, and return true. */
-  nstime_delta(delta, &fdata->abs_ts, prev_abs_ts);
-  return true;
 }
 
 static int
-frame_compare_time_deltas(const frame_data *fdata1, bool have_ts1, const nstime_t *ts1,
-                          const frame_data *fdata2, bool have_ts2, const nstime_t *ts2)
-{
-  if (!have_ts1) {
-    if (!have_ts2) {
-      /* We don't have either delta time; sort them the same. */
-      return 0;
-    }
-
-    /*
-     * We don't have ts1 but do have ts2; treat the first
-     * as sorting lower than the second.
-     */
-    return -1;
-  }
-  if (!have_ts2) {
-    /*
-     * We have ts1 but don't have ts2; treat the first as
-     * sorting greater than the second.
-     */
-    return 1;
-  }
-
-  /*
-   * We have ts1 and ts2; compare them.
-   */
-  return COMPARE_TS_REAL(*ts1, *ts2);
-}
-
-bool
-frame_rel_first_frame_time(const struct epan_session *epan,
-                           const frame_data *fdata, nstime_t *delta)
-{
-    /*
-     * Time relative to the first frame in the capture.
-     */
-    return frame_delta_abs_time(epan, fdata, 1, delta);
-}
-
-bool
-frame_rel_time(const struct epan_session *epan, const frame_data *fdata,
-               nstime_t *delta)
-{
-    /*
-     * Time relative to the previous reference frame or, if there is no
-     * previous reference frame, the first frame in the capture.
-     */
-    return frame_delta_abs_time(epan, fdata,
-                                fdata->frame_ref_num == 0 ? 1 : fdata->frame_ref_num,
-                                delta);
-}
-
-bool
-frame_rel_start_time(const struct epan_session *epan, const frame_data *fdata,
-                     nstime_t *delta)
-{
-  if (!fdata->has_ts) {
-    /* We don't have a time stamp for this packet. Set the delta time
-       to zero, and return false. */
-    /* XXX - Would it make more sense to set the delta time to "unset"
-     * rather than zero here and in similar functions when returning
-     * false? */
-    nstime_set_zero(delta);
-    return false;
-  }
-
-  const nstime_t *start_ts = epan_get_start_ts(epan);
-
-  if (start_ts == NULL || nstime_is_unset(start_ts)) {
-    /* There isn't an explicit start time.  Set the delta
-       time to zero, and return false. */
-    nstime_set_zero(delta);
-    return false;
-  }
-
-  /* This frame has a time stamp and the start time stamp exists;
-     compute the delta between this frame's time stamp and
-     the start time stamp, and return true. */
-  nstime_delta(delta, &fdata->abs_ts, start_ts);
-  return true;
-}
-
-static int
-frame_compare_rel_times(const struct epan_session *epan,
-                        const frame_data *fdata1, const frame_data *fdata2)
-{
-  nstime_t del_rel_ts1, del_rel_ts2;
-  bool have_del_rel_ts1, have_del_rel_ts2;
-
-  have_del_rel_ts1 = frame_rel_time(epan, fdata1, &del_rel_ts1);
-  have_del_rel_ts2 = frame_rel_time(epan, fdata2, &del_rel_ts2);
-
-  return frame_compare_time_deltas(fdata1, have_del_rel_ts1, &del_rel_ts1,
-                                   fdata2, have_del_rel_ts2, &del_rel_ts2);
-}
-
-static int
-frame_compare_rel_start_times(const struct epan_session *epan,
-                        const frame_data *fdata1, const frame_data *fdata2)
-{
-  nstime_t del_rel_start_ts1, del_rel_start_ts2;
-  bool have_del_rel_start_ts1, have_del_rel_start_ts2;
-
-  have_del_rel_start_ts1 = frame_rel_start_time(epan, fdata1, &del_rel_start_ts1);
-  have_del_rel_start_ts2 = frame_rel_start_time(epan, fdata2, &del_rel_start_ts2);
-
-  return frame_compare_time_deltas(fdata1, have_del_rel_start_ts1, &del_rel_start_ts1,
-                                   fdata2, have_del_rel_start_ts2, &del_rel_start_ts2);
-}
-
-bool
-frame_delta_time_prev_captured(const struct epan_session *epan,
-                               const frame_data *fdata, nstime_t *delta)
-{
-    return frame_delta_abs_time(epan, fdata, fdata->num - 1, delta);
-}
-
-static int
-frame_compare_delta_times_prev_captured(const struct epan_session *epan,
-                                        const frame_data *fdata1,
-                                        const frame_data *fdata2)
+frame_data_time_delta_compare(const struct epan_session *epan, const frame_data *fdata1, const frame_data *fdata2)
 {
   nstime_t del_cap_ts1, del_cap_ts2;
-  bool have_del_cap_ts1, have_del_cap_ts2;
 
-  have_del_cap_ts1 = frame_delta_time_prev_captured(epan, fdata1, &del_cap_ts1);
-  have_del_cap_ts2 = frame_delta_time_prev_captured(epan, fdata2, &del_cap_ts2);
+  frame_delta_abs_time(epan, fdata1, fdata1->num - 1, &del_cap_ts1);
+  frame_delta_abs_time(epan, fdata2, fdata2->num - 1, &del_cap_ts2);
 
-  return frame_compare_time_deltas(fdata1, have_del_cap_ts1, &del_cap_ts1,
-                                   fdata2, have_del_cap_ts2, &del_cap_ts2);
-}
-
-bool
-frame_delta_time_prev_displayed(const struct epan_session *epan,
-                                const frame_data *fdata, nstime_t *delta)
-{
-    return frame_delta_abs_time(epan, fdata, fdata->prev_dis_num, delta);
+  return COMPARE_TS_REAL(del_cap_ts1, del_cap_ts2);
 }
 
 static int
-frame_compare_delta_times_prev_displayed(const struct epan_session *epan, const frame_data *fdata1, const frame_data *fdata2)
+frame_data_time_delta_rel_compare(const struct epan_session *epan, const frame_data *fdata1, const frame_data *fdata2)
+{
+  nstime_t del_rel_ts1, del_rel_ts2;
+
+  frame_delta_abs_time(epan, fdata1, fdata1->frame_ref_num, &del_rel_ts1);
+  frame_delta_abs_time(epan, fdata2, fdata2->frame_ref_num, &del_rel_ts2);
+
+  return COMPARE_TS_REAL(del_rel_ts1, del_rel_ts2);
+}
+
+static int
+frame_data_time_delta_dis_compare(const struct epan_session *epan, const frame_data *fdata1, const frame_data *fdata2)
 {
   nstime_t del_dis_ts1, del_dis_ts2;
-  bool have_del_dis_ts1, have_del_dis_ts2;
 
-  have_del_dis_ts1 = frame_delta_time_prev_displayed(epan, fdata1, &del_dis_ts1);
-  have_del_dis_ts2 = frame_delta_time_prev_displayed(epan, fdata2, &del_dis_ts2);
+  frame_delta_abs_time(epan, fdata1, fdata1->prev_dis_num, &del_dis_ts1);
+  frame_delta_abs_time(epan, fdata2, fdata2->prev_dis_num, &del_dis_ts2);
 
-  return frame_compare_time_deltas(fdata1, have_del_dis_ts1, &del_dis_ts1,
-                                   fdata2, have_del_dis_ts2, &del_dis_ts2);
+  return COMPARE_TS_REAL(del_dis_ts1, del_dis_ts2);
 }
 
 int
@@ -238,9 +98,6 @@ frame_data_compare(const struct epan_session *epan, const frame_data *fdata1, co
   switch (field) {
   case COL_NUMBER:
     return COMPARE_FRAME_NUM();
-
-  case COL_NUMBER_DIS:
-    return COMPARE_NUM(dis_num);
 
   case COL_CLS_TIME:
     switch (timestamp_get_type()) {
@@ -254,16 +111,13 @@ frame_data_compare(const struct epan_session *epan, const frame_data *fdata1, co
       return COMPARE_TS(abs_ts);
 
     case TS_RELATIVE:
-      return frame_compare_rel_times(epan, fdata1, fdata2);
-
-    case TS_RELATIVE_CAP:
-      return frame_compare_rel_start_times(epan, fdata1, fdata2);
+      return frame_data_time_delta_rel_compare(epan, fdata1, fdata2);
 
     case TS_DELTA:
-      return frame_compare_delta_times_prev_captured(epan, fdata1, fdata2);
+      return frame_data_time_delta_compare(epan, fdata1, fdata2);
 
     case TS_DELTA_DIS:
-      return frame_compare_delta_times_prev_displayed(epan, fdata1, fdata2);
+      return frame_data_time_delta_dis_compare(epan, fdata1, fdata2);
 
     case TS_NOT_SET:
       return 0;
@@ -279,22 +133,19 @@ frame_data_compare(const struct epan_session *epan, const frame_data *fdata1, co
     return COMPARE_TS(abs_ts);
 
   case COL_REL_TIME:
-    return frame_compare_rel_times(epan, fdata1, fdata2);
+    return frame_data_time_delta_rel_compare(epan, fdata1, fdata2);
 
   case COL_DELTA_TIME:
-    return frame_compare_delta_times_prev_captured(epan, fdata1, fdata2);
+    return frame_data_time_delta_compare(epan, fdata1, fdata2);
 
   case COL_DELTA_TIME_DIS:
-    return frame_compare_delta_times_prev_displayed(epan, fdata1, fdata2);
+    return frame_data_time_delta_dis_compare(epan, fdata1, fdata2);
 
   case COL_PACKET_LENGTH:
     return COMPARE_NUM(pkt_len);
 
   case COL_CUMULATIVE_BYTES:
     return COMPARE_NUM(cum_bytes);
-
-  case COL_TAG:
-    return 0; /* No meaningful sort order; treat all rows as equal */
 
   }
   g_return_val_if_reached(0);
@@ -306,7 +157,6 @@ frame_data_init(frame_data *fdata, uint32_t num, const wtap_rec *rec,
 {
   fdata->pfd = NULL;
   fdata->num = num;
-  fdata->dis_num = num;
   fdata->file_off = offset;
   fdata->passed_dfilter = 1;
   fdata->dependent_of_displayed = 0;
@@ -340,9 +190,9 @@ frame_data_init(frame_data *fdata, uint32_t num, const wtap_rec *rec,
     /*
      * XXX - is cum_bytes supposed to count non-packet bytes?
      */
-    fdata->pkt_len = rec->rec_header.syscall_header.event_data_len;
-    fdata->cum_bytes = cum_bytes + rec->rec_header.syscall_header.event_data_len;
-    fdata->cap_len = rec->rec_header.syscall_header.event_data_len;
+    fdata->pkt_len = rec->rec_header.syscall_header.event_len;
+    fdata->cum_bytes = cum_bytes + rec->rec_header.syscall_header.event_len;
+    fdata->cap_len = rec->rec_header.syscall_header.event_filelen;
     break;
 
   case REC_TYPE_SYSTEMD_JOURNAL_EXPORT:
@@ -358,9 +208,18 @@ frame_data_init(frame_data *fdata, uint32_t num, const wtap_rec *rec,
     /*
      * XXX - is cum_bytes supposed to count non-packet bytes?
      */
-    fdata->pkt_len = rec->rec_header.custom_block_header.length;
-    fdata->cum_bytes = cum_bytes + rec->rec_header.custom_block_header.length;
-    fdata->cap_len = rec->rec_header.custom_block_header.length;
+    switch (rec->rec_header.custom_block_header.pen) {
+    case PEN_NFLX:
+      fdata->pkt_len = rec->rec_header.custom_block_header.length - 4;
+      fdata->cum_bytes = cum_bytes + rec->rec_header.custom_block_header.length - 4;
+      fdata->cap_len = rec->rec_header.custom_block_header.length - 4;
+      break;
+    default:
+      fdata->pkt_len = rec->rec_header.custom_block_header.length;
+      fdata->cum_bytes = cum_bytes + rec->rec_header.custom_block_header.length;
+      fdata->cap_len = rec->rec_header.custom_block_header.length;
+      break;
+    }
     break;
 
   }
@@ -376,8 +235,6 @@ frame_data_init(frame_data *fdata, uint32_t num, const wtap_rec *rec,
   fdata->shift_offset.nsecs = 0;
   fdata->frame_ref_num = 0;
   fdata->prev_dis_num = 0;
-  fdata->aggregation_key = NULL;
-  fdata->aggregated = false;
 }
 
 void
@@ -423,7 +280,7 @@ frame_data_set_before_dissect(frame_data *fdata,
     *elapsed_time = rel_ts;
   }
 
-  fdata->frame_ref_num = (*frame_ref)->num;
+  fdata->frame_ref_num = (*frame_ref != fdata) ? (*frame_ref)->num : 0;
   fdata->prev_dis_num = (prev_dis) ? prev_dis->num : 0;
 }
 
@@ -450,14 +307,8 @@ frame_data_reset(frame_data *fdata)
 {
   fdata->visited = 0;
 
-  frame_data_destroy(fdata);
-}
-
-void
-frame_data_destroy(frame_data *fdata)
-{
   if (fdata->pfd) {
-    /* The file scope data has been freed already. */
+    g_slist_free(fdata->pfd);
     fdata->pfd = NULL;
   }
 
@@ -465,17 +316,20 @@ frame_data_destroy(frame_data *fdata)
     g_hash_table_destroy(fdata->dependent_frames);
     fdata->dependent_frames = NULL;
   }
-
-  frame_data_aggregation_free(fdata);
 }
 
-void frame_data_aggregation_free(frame_data* fdata)
+void
+frame_data_destroy(frame_data *fdata)
 {
-  if (fdata->aggregation_key) {
-    g_free(fdata->aggregation_key);
-    fdata->aggregation_key = NULL;
+  if (fdata->pfd) {
+    g_slist_free(fdata->pfd);
+    fdata->pfd = NULL;
   }
-  fdata->aggregated = false;
+
+  if (fdata->dependent_frames) {
+    g_hash_table_destroy(fdata->dependent_frames);
+    fdata->dependent_frames = NULL;
+  }
 }
 
 /*

@@ -23,11 +23,8 @@
 #include <epan/strutil.h>
 #include <epan/unit_strings.h>
 
-#include <wsutil/strtoi.h>
-
 #include "packet-btrfcomm.h"
 #include "packet-btsdp.h"
-#include "packet-etsi_card_app_toolkit.h"
 
 static int proto_bthfp;
 
@@ -171,7 +168,6 @@ static expert_field ei_cnum_itc;
 static expert_field ei_aplefm_out_of_range;
 static expert_field ei_aplsiri_out_of_range;
 static expert_field ei_iphoneaccev_key_out_of_range;
-static expert_field ei_xapl_info_format;
 static expert_field ei_xapl_features_reserved;
 static expert_field ei_parameter_blank;
 
@@ -207,13 +203,6 @@ enum reassemble_state_t {
     REASSEMBLE_DONE
 };
 
-/* Upper bound on the length of a reassembled message. V.250 and the
- * HSP/HFP specifications don't limit the length of an AT command or
- * response. This limit is arbitrary, well above any real command line;
- * it keeps the offsets from overflowing and stops an unterminated stream
- * from growing the same message without end. */
-#define MAX_REASSEMBLED_LENGTH  (64 * 1024)
-
 typedef struct _fragment_t {
     uint32_t                 interface_id;
     uint32_t                 adapter_id;
@@ -225,7 +214,6 @@ typedef struct _fragment_t {
     unsigned                 length;
     uint8_t                 *data;
     struct _fragment_t      *previous_fragment;
-    struct _fragment_t      *first_fragment;
 
     unsigned                 reassemble_start_offset;
     unsigned                 reassemble_end_offset;
@@ -522,25 +510,33 @@ static const value_string iphoneaccev_key_vals[] = {
 
 static const unit_name_string units_slash15 = { "/15", NULL };
 
+extern value_string_ext csd_data_rate_vals_ext;
+
 void proto_register_bthfp(void);
 void proto_reg_handoff_bthfp(void);
 
-static uint32_t get_uint_parameter(const uint8_t *parameter_stream, int parameter_length)
+static uint32_t get_uint_parameter(uint8_t *parameter_stream, int parameter_length)
 {
-    uint32_t       value;
-    const uint8_t *unused;
+    uint32_t     value;
+    char        *val;
 
-    ws_buftou32(parameter_stream, parameter_length, &unused, &value);
+    val = (char *) wmem_alloc(wmem_packet_scope(), parameter_length + 1);
+    memcpy(val, parameter_stream, parameter_length);
+    val[parameter_length] = '\0';
+    value = (uint32_t) g_ascii_strtoull(val, NULL, 10);
 
     return value;
 }
 
-static uint32_t get_uint_hex_parameter(const uint8_t *parameter_stream, int parameter_length)
+static uint32_t get_uint_hex_parameter(uint8_t *parameter_stream, int parameter_length)
 {
-    uint32_t       value;
-    const uint8_t *unused;
+    uint32_t     value;
+    char        *val;
 
-    ws_hexbuftou32(parameter_stream, parameter_length, &unused, &value);
+    val = (char *) wmem_alloc(wmem_packet_scope(), parameter_length + 1);
+    memcpy(val, parameter_stream, parameter_length);
+    val[parameter_length] = '\0';
+    value = (uint32_t) g_ascii_strtoull(val, NULL, 16);
 
     return value;
 }
@@ -1103,11 +1099,7 @@ dissect_xapl_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
     if (parameter_number == 0) {
         if (role == ROLE_HS) {
-            pitem = proto_tree_add_item(tree, hf_xapl_accessory_info, tvb, offset, parameter_length, ENC_ASCII);
-            if (parameter_length < 14) {
-                expert_add_info(pinfo, pitem, &ei_xapl_info_format);
-                return true;
-            }
+            pitem = proto_tree_add_item(tree, hf_xapl_accessory_info, tvb, offset, parameter_length, ENC_NA | ENC_ASCII);
             ptree = proto_item_add_subtree(pitem, ett_bthfp_xapl_accessory_info);
 
             value = get_uint_hex_parameter(parameter_stream + (4 + 1) * 0, 4);
@@ -1119,7 +1111,7 @@ dissect_xapl_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             value = get_uint_hex_parameter(parameter_stream + (4 + 1) * 2, 4);
             proto_tree_add_uint(ptree, hf_xapl_accessory_info_version, tvb, offset + (4 + 1) * 2, 4, value);
         } else {
-            proto_tree_add_item(tree, hf_xapl_host_info, tvb, offset, parameter_length, ENC_ASCII);
+            proto_tree_add_item(tree, hf_xapl_host_info, tvb, offset, parameter_length, ENC_NA | ENC_ASCII);
         }
     } else if (parameter_number == 1) {
         static int * const hfx[] = {
@@ -1260,7 +1252,7 @@ dissect_binp_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         } else return false;
     } else {
         proto_tree_add_item(tree, hf_binp_response, tvb, offset,
-                parameter_length, ENC_ASCII);
+                parameter_length, ENC_NA | ENC_ASCII);
     }
     return true;
 }
@@ -1316,9 +1308,9 @@ dissect_chld_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         if (parameter_length >= 2) {
             if (tvb_get_uint8(tvb, offset + 1) == 'x') {
                 if (value == 1)
-                    proto_tree_add_item(tree, hf_chld_mode_1x, tvb, offset, parameter_length, ENC_ASCII);
+                    proto_tree_add_item(tree, hf_chld_mode_1x, tvb, offset, parameter_length, ENC_NA | ENC_ASCII);
                 else if (value == 2)
-                    proto_tree_add_item(tree, hf_chld_mode_2x, tvb, offset, parameter_length, ENC_ASCII);
+                    proto_tree_add_item(tree, hf_chld_mode_2x, tvb, offset, parameter_length, ENC_NA | ENC_ASCII);
             }
 
             if (tvb_get_uint8(tvb, offset + 1) != 'x' || value > 4) {
@@ -1332,7 +1324,7 @@ dissect_chld_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
     /* Type == Test  */
     proto_tree_add_item(tree, hf_chld_supported_modes, tvb, offset,
-            parameter_length, ENC_ASCII);
+            parameter_length, ENC_NA | ENC_ASCII);
 
     return true;
 }
@@ -1368,7 +1360,7 @@ dissect_ccwa_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     /* If AT+CCWA = 1 */
     if (role == ROLE_AG) switch (parameter_number) {
         case 0:
-            proto_tree_add_item(tree, hf_at_number, tvb, offset, parameter_length, ENC_ASCII);
+            proto_tree_add_item(tree, hf_at_number, tvb, offset, parameter_length, ENC_NA | ENC_ASCII);
             break;
         case 1:
             value = get_uint_parameter(parameter_stream, parameter_length);
@@ -1381,14 +1373,14 @@ dissect_ccwa_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             proto_tree_add_uint(tree, hf_ccwa_class, tvb, offset, parameter_length, value);
             break;
         case 3:
-            proto_tree_add_item(tree, hf_at_alpha, tvb, offset, parameter_length, ENC_ASCII);
+            proto_tree_add_item(tree, hf_at_alpha, tvb, offset, parameter_length, ENC_NA | ENC_ASCII);
             break;
         case 4:
             value = get_uint_parameter(parameter_stream, parameter_length);
             proto_tree_add_uint(tree, hf_at_cli_validity, tvb, offset, parameter_length, value);
             break;
         case 5:
-            proto_tree_add_item(tree, hf_at_subaddress, tvb, offset, parameter_length, ENC_ASCII);
+            proto_tree_add_item(tree, hf_at_subaddress, tvb, offset, parameter_length, ENC_NA | ENC_ASCII);
             break;
         case 6:
             value = get_uint_parameter(parameter_stream, parameter_length);
@@ -1478,7 +1470,7 @@ dissect_clip_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     } else {
         switch (parameter_number) {
         case 0:
-            proto_tree_add_item(tree, hf_at_number, tvb, offset, parameter_length, ENC_ASCII);
+            proto_tree_add_item(tree, hf_at_number, tvb, offset, parameter_length, ENC_NA | ENC_ASCII);
             break;
         case 1:
             value = get_uint_parameter(parameter_stream, parameter_length);
@@ -1487,14 +1479,14 @@ dissect_clip_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                 expert_add_info(pinfo, pitem, &ei_at_type);
             break;
         case 2:
-            proto_tree_add_item(tree, hf_at_subaddress, tvb, offset, parameter_length, ENC_ASCII);
+            proto_tree_add_item(tree, hf_at_subaddress, tvb, offset, parameter_length, ENC_NA | ENC_ASCII);
             break;
         case 3:
             value = get_uint_parameter(parameter_stream, parameter_length);
             proto_tree_add_uint(tree, hf_at_subaddress_type, tvb, offset, parameter_length, value);
             break;
         case 4:
-            proto_tree_add_item(tree, hf_at_alpha, tvb, offset, parameter_length, ENC_ASCII);
+            proto_tree_add_item(tree, hf_at_alpha, tvb, offset, parameter_length, ENC_NA | ENC_ASCII);
             break;
         case 5:
             value = get_uint_parameter(parameter_stream, parameter_length);
@@ -1549,7 +1541,7 @@ dissect_cops_parameter(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
         proto_tree_add_uint(tree, hf_cops_format, tvb, offset, parameter_length, value);
         break;
     case 2:
-        proto_tree_add_item(tree, hf_cops_operator, tvb, offset, parameter_length, ENC_ASCII);
+        proto_tree_add_item(tree, hf_cops_operator, tvb, offset, parameter_length, ENC_NA | ENC_ASCII);
         break;
     case 3:
         value = get_uint_parameter(parameter_stream, parameter_length);
@@ -1597,7 +1589,7 @@ dissect_clcc_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         proto_tree_add_uint(tree, hf_clcc_mpty, tvb, offset, parameter_length, value);
         break;
     case 5:
-        proto_tree_add_item(tree, hf_at_number, tvb, offset, parameter_length, ENC_ASCII);
+        proto_tree_add_item(tree, hf_at_number, tvb, offset, parameter_length, ENC_NA | ENC_ASCII);
         break;
     case 6:
         value = get_uint_parameter(parameter_stream, parameter_length);
@@ -1606,7 +1598,7 @@ dissect_clcc_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             expert_add_info(pinfo, pitem, &ei_at_type);
         break;
     case 7:
-        proto_tree_add_item(tree, hf_at_alpha, tvb, offset, parameter_length, ENC_ASCII);
+        proto_tree_add_item(tree, hf_at_alpha, tvb, offset, parameter_length, ENC_NA | ENC_ASCII);
         break;
     case 8:
         value = get_uint_parameter(parameter_stream, parameter_length);
@@ -1650,12 +1642,12 @@ dissect_cnum_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
     switch (parameter_number) {
     case 0:
-        pitem = proto_tree_add_item(tree, hf_at_alpha, tvb, offset, parameter_length, ENC_ASCII);
+        pitem = proto_tree_add_item(tree, hf_at_alpha, tvb, offset, parameter_length, ENC_NA | ENC_ASCII);
         if (parameter_length > 0)
             expert_add_info(pinfo, pitem, &ei_parameter_blank);
         break;
     case 1:
-        proto_tree_add_item(tree, hf_at_number, tvb, offset, parameter_length, ENC_ASCII);
+        proto_tree_add_item(tree, hf_at_number, tvb, offset, parameter_length, ENC_NA | ENC_ASCII);
         break;
     case 2:
         value = get_uint_parameter(parameter_stream, parameter_length);
@@ -1699,7 +1691,7 @@ dissect_vts_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
     switch (parameter_number) {
     case 0:
-        pitem = proto_tree_add_item(tree, hf_vts_dtmf, tvb, offset, parameter_length, ENC_ASCII);
+        pitem = proto_tree_add_item(tree, hf_vts_dtmf, tvb, offset, parameter_length, ENC_NA | ENC_ASCII);
         if (parameter_length != 1)
             expert_add_info(pinfo, pitem, &ei_vts_dtmf);
         break;
@@ -1745,7 +1737,7 @@ dissect_ciev_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
 /* TODO: Some commands need to save request command type (request with TYPE_READ vs TYPE_TEST, etc.)
          to properly dissect response parameters.
-         Some commands can use TYPE_TEST response to properly dissect parameters,
+         Some commands can use TYPE_TEST respose to properly dissect parameters,
          for example: AT+CIND=?, AT+CIND? */
 static const at_cmd_t at_cmds[] = {
     /* Vendor specific: Apple */
@@ -1802,8 +1794,8 @@ dissect_at_command(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     proto_tree      *parameters_item = NULL;
     proto_item      *parameters_tree = NULL;
     uint8_t         *col_str = NULL;
-    char            *at_stream;
-    char            *at_command = NULL;
+    uint8_t         *at_stream;
+    uint8_t         *at_command = NULL;
     int              i_char = 0;
     unsigned         i_char_fix = 0;
     int              length;
@@ -1823,14 +1815,14 @@ dissect_at_command(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         return tvb_reported_length(tvb);
 
     if (!command_number) {
-        proto_tree_add_item(tree, hf_data, tvb, offset, length, ENC_ASCII);
+        proto_tree_add_item(tree, hf_data, tvb, offset, length, ENC_NA | ENC_ASCII);
         col_str = (uint8_t *) wmem_alloc(pinfo->pool, length + 1);
         tvb_memcpy(tvb, col_str, offset, length);
         col_str[length] = '\0';
     }
 
-    at_stream = (char *) wmem_alloc(pinfo->pool, length + 1);
-    tvb_memcpy(tvb, (uint8_t*)at_stream, offset, length);
+    at_stream = (uint8_t *) wmem_alloc(pinfo->pool, length + 1);
+    tvb_memcpy(tvb, at_stream, offset, length);
     at_stream[length] = '\0';
 
     while (at_stream[i_char]) {
@@ -1842,7 +1834,7 @@ dissect_at_command(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         i_char += 1;
     }
 
-    if (!command_number) col_append_str(pinfo->cinfo, COL_INFO, (const char*)col_str);
+    if (!command_number) col_append_str(pinfo->cinfo, COL_INFO, col_str);
 
     if (role == ROLE_HS) {
         if (command_number) {
@@ -1858,12 +1850,12 @@ dissect_at_command(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                 i_char = (unsigned) (at_command - at_stream);
                 if (i_char) {
                     proto_tree_add_item(command_tree, hf_at_ignored, tvb, offset,
-                        i_char, ENC_NA);
+                        i_char, ENC_NA | ENC_ASCII);
                     offset += i_char;
                 }
 
                 proto_tree_add_item(command_tree, hf_at_command_line_prefix,
-                        tvb, offset, 2, ENC_ASCII);
+                        tvb, offset, 2, ENC_NA | ENC_ASCII);
                 offset += 2;
                 i_char += 2;
                 at_command = at_stream;
@@ -1906,14 +1898,14 @@ dissect_at_command(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         i_at_cmd = at_cmds;
         if (at_command[0] == '\r') {
             pitem = proto_tree_add_item(command_tree, hf_at_cmd, tvb, offset - 2,
-                    2, ENC_ASCII);
+                    2, ENC_NA | ENC_ASCII);
             i_at_cmd = NULL;
         } else {
             pitem = NULL;
             while (i_at_cmd->name) {
                 if (g_str_has_prefix(&at_command[0], i_at_cmd->name)) {
                     pitem = proto_tree_add_item(command_tree, hf_at_cmd, tvb, offset,
-                            (int) strlen(i_at_cmd->name), ENC_ASCII);
+                            (int) strlen(i_at_cmd->name), ENC_NA | ENC_ASCII);
                     proto_item_append_text(pitem, " (%s)", i_at_cmd->long_name);
                     break;
                 }
@@ -1922,7 +1914,7 @@ dissect_at_command(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
             if (!pitem) {
                 pitem = proto_tree_add_item(command_tree, hf_at_cmd, tvb, offset,
-                        i_char, ENC_ASCII);
+                        i_char, ENC_NA | ENC_ASCII);
             }
         }
 
@@ -2022,14 +2014,14 @@ dissect_at_command(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                 if (type == TYPE_ACTION || type == TYPE_RESPONSE) {
                     if (i_at_cmd && (i_at_cmd->dissect_parameter != NULL &&
                             !i_at_cmd->dissect_parameter(tvb, pinfo, parameters_tree, offset, role,
-                            type, (uint8_t*)&at_command[i_char], parameter_number, parameter_length, &data) )) {
+                            type, &at_command[i_char], parameter_number, parameter_length, &data) )) {
                         pitem = proto_tree_add_item(parameters_tree,
                                 hf_unknown_parameter, tvb, offset,
-                                parameter_length, ENC_ASCII);
+                                parameter_length, ENC_NA | ENC_ASCII);
                         expert_add_info(pinfo, pitem, &ei_unknown_parameter);
                     } else if (i_at_cmd && i_at_cmd->dissect_parameter == NULL) {
                         proto_tree_add_item(parameters_tree, hf_parameter, tvb, offset,
-                                parameter_length, ENC_ASCII);
+                                parameter_length, ENC_NA | ENC_ASCII);
                     }
                 }
             }
@@ -2219,7 +2211,7 @@ dissect_bthfp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     if (role == ROLE_UNKNOWN) {
         col_append_fstr(pinfo->cinfo, COL_INFO, "Data: %s",
                 tvb_format_text(pinfo->pool, tvb, 0, tvb_reported_length(tvb)));
-        proto_tree_add_item(main_tree, hf_data, tvb, 0, tvb_captured_length(tvb), ENC_ASCII);
+        proto_tree_add_item(main_tree, hf_data, tvb, 0, tvb_captured_length(tvb), ENC_NA | ENC_ASCII);
         return tvb_reported_length(tvb);
     }
 
@@ -2252,12 +2244,6 @@ dissect_bthfp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
             previous_fragment = NULL;
         }
 
-        if (previous_fragment &&
-                (uint64_t)previous_fragment->idx + previous_fragment->length + tvb_reported_length(tvb) > MAX_REASSEMBLED_LENGTH) {
-            /* Too long; give up on the previous message and start a new one */
-            previous_fragment = NULL;
-        }
-
         frame_number = pinfo->num;
 
         key[0].length = 1;
@@ -2286,7 +2272,6 @@ dissect_bthfp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         fragment->length            = tvb_reported_length(tvb);
         fragment->data              = (uint8_t *) wmem_alloc(wmem_file_scope(), fragment->length);
         fragment->previous_fragment = previous_fragment;
-        fragment->first_fragment    = (fragment->idx > 0) ? previous_fragment->first_fragment : fragment;
         tvb_memcpy(tvb, fragment->data, offset, fragment->length);
 
         wmem_tree_insert32_array(fragments, key, fragment);
@@ -2335,7 +2320,10 @@ dissect_bthfp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
                     fragment->chandle == chandle &&
                     fragment->dlci == dlci &&
                     fragment->role == role) {
-                i_fragment = fragment->first_fragment;
+                i_fragment = fragment;
+                while (i_fragment && i_fragment->idx > 0) {
+                    i_fragment = i_fragment->previous_fragment;
+                }
 
                 if (i_length + 1 == length &&
                         role == ROLE_HS &&
@@ -2428,7 +2416,7 @@ dissect_bthfp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
         if (fragment->idx > 0 && fragment->length > 0) {
             proto_tree_add_item(main_tree, hf_fragment, tvb, offset,
-                    tvb_captured_length_remaining(tvb, offset), ENC_ASCII);
+                    tvb_captured_length_remaining(tvb, offset), ENC_ASCII | ENC_NA);
             reassembled_tvb = tvb_new_child_real_data(tvb, at_data,
                     fragment->idx + fragment->length, fragment->idx + fragment->length);
             add_new_data_source(pinfo, reassembled_tvb, "Reassembled HFP");
@@ -3211,8 +3199,8 @@ proto_register_bthfp(void)
         { &ei_vgs_gain,              { "bthfp.expert.vgs", PI_PROTOCOL, PI_WARN, "Gain of speaker exceeds range 0-15", EXPFILL }},
         { &ei_nrec,                  { "bthfp.expert.nrec", PI_PROTOCOL, PI_WARN, "Only 0 is valid", EXPFILL }},
         { &ei_bvra,                  { "bthfp.expert.bvra", PI_PROTOCOL, PI_WARN, "Only 0-1 is valid", EXPFILL }},
-        { &ei_bcs,                   { "bthfp.expert.bcs", PI_PROTOCOL, PI_NOTE, "BCS codec may only be 1-2", EXPFILL }},
-        { &ei_bac,                   { "bthfp.expert.bac", PI_PROTOCOL, PI_NOTE, "BAC codec may only be 1-2", EXPFILL }},
+        { &ei_bcs,                   { "bthfp.expert.bcs", PI_PROTOCOL, PI_NOTE, "Reserved value", EXPFILL }},
+        { &ei_bac,                   { "bthfp.expert.bac", PI_PROTOCOL, PI_NOTE, "Reserved value", EXPFILL }},
         { &ei_bsir,                  { "bthfp.expert.bsir", PI_PROTOCOL, PI_WARN, "Only 0-1 is valid", EXPFILL }},
         { &ei_btrh,                  { "bthfp.expert.btrh", PI_PROTOCOL, PI_WARN, "Only 0-2 is valid", EXPFILL }},
         { &ei_binp,                  { "bthfp.expert.binp", PI_PROTOCOL, PI_WARN, "Only 1 is valid", EXPFILL }},
@@ -3234,7 +3222,6 @@ proto_register_bthfp(void)
         { &ei_aplefm_out_of_range,   { "bthfp.expert.aplefm.out_of_range", PI_PROTOCOL, PI_WARN, "Only 0-1 is valid", EXPFILL }},
         { &ei_aplsiri_out_of_range,  { "bthfp.expert.aplsiri.out_of_range", PI_PROTOCOL, PI_WARN, "Only 1-2 is valid", EXPFILL }},
         { &ei_iphoneaccev_key_out_of_range,  { "bthfp.expert.iphoneaccev.out_of_range", PI_PROTOCOL, PI_WARN, "Only 1-2 is valid", EXPFILL }},
-        { &ei_xapl_info_format,      { "bthfp.expert.xapl.short", PI_PROTOCOL, PI_WARN, "The first parameter must have the format XXXX-XXXX-XXXX", EXPFILL }},
         { &ei_xapl_features_reserved, { "bthfp.expert.xapl.reserved", PI_PROTOCOL, PI_WARN, "The reserved bits [6-31] shall be initialized to Zero", EXPFILL }}
     };
 

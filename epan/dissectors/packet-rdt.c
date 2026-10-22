@@ -422,13 +422,15 @@ unsigned dissect_rdt_data_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
     offset++;
 
     /* Sequence number */
-    proto_tree_add_item_ret_uint16(tree, hf_rdt_sequence_number, tvb, offset, 2, ENC_BIG_ENDIAN, &sequence_number);
+    sequence_number = tvb_get_ntohs(tvb, offset);
+    proto_tree_add_item(tree, hf_rdt_sequence_number, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
     /* Length field is optional */
     if (length_included_flag)
     {
-        proto_tree_add_item_ret_uint16(tree, hf_rdt_packet_length, tvb, offset, 2, ENC_BIG_ENDIAN, &packet_length);
+        packet_length = tvb_get_ntohs(tvb, offset);
+        proto_tree_add_item(tree, hf_rdt_packet_length, tvb, offset, 2, ENC_BIG_ENDIAN);
         offset += 2;
 
         /* Check that there are as many bytes as reported */
@@ -463,7 +465,8 @@ unsigned dissect_rdt_data_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
     offset++;
 
     /* Timestamp */
-    proto_tree_add_item_ret_uint(tree, hf_rdt_timestamp, tvb, offset, 4, ENC_BIG_ENDIAN, &timestamp);
+    timestamp = tvb_get_ntohl(tvb, offset);
+    proto_tree_add_item(tree, hf_rdt_timestamp, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
 
     /* Stream ID expansion */
@@ -541,13 +544,15 @@ unsigned dissect_rdt_asm_action_packet(tvbuff_t *tvb, packet_info *pinfo, proto_
     proto_tree_add_item(tree, hf_rdt_packet_type, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
-    proto_tree_add_item_ret_uint16(tree, hf_rdt_aact_reliable_seqno, tvb, offset, 2, ENC_BIG_ENDIAN, &rel_seqno);
+    rel_seqno = tvb_get_ntohs(tvb, offset);
+    proto_tree_add_item(tree, hf_rdt_aact_reliable_seqno, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
     /* Length field is optional */
     if (length_included_flag)
     {
-        proto_tree_add_item_ret_uint16(tree, hf_rdt_packet_length, tvb, offset, 2, ENC_BIG_ENDIAN, &packet_length);
+        packet_length = tvb_get_ntohs(tvb, offset);
+        proto_tree_add_item(tree, hf_rdt_packet_length, tvb, offset, 2, ENC_BIG_ENDIAN);
         offset += 2;
 
         /* Check that there are as many bytes as reported */
@@ -614,7 +619,8 @@ unsigned dissect_rdt_bandwidth_report_packet(tvbuff_t *tvb, packet_info *pinfo, 
     /* Length field is optional */
     if (length_included_flag)
     {
-        proto_tree_add_item_ret_uint16(tree, hf_rdt_packet_length, tvb, offset, 2, ENC_BIG_ENDIAN, &packet_length);
+        packet_length = tvb_get_ntohs(tvb, offset);
+        proto_tree_add_item(tree, hf_rdt_packet_length, tvb, offset, 2, ENC_BIG_ENDIAN);
         offset += 2;
 
         /* Check that there are as many bytes as reported */
@@ -679,7 +685,8 @@ unsigned dissect_rdt_ack_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
     /* Length field is optional */
     if (length_included_flag)
     {
-        proto_tree_add_item_ret_uint16(tree, hf_rdt_packet_length, tvb, offset, 2, ENC_BIG_ENDIAN, &packet_length);
+        packet_length = tvb_get_ntohs(tvb, offset);
+        proto_tree_add_item(tree, hf_rdt_packet_length, tvb, offset, 2, ENC_BIG_ENDIAN);
         offset += 2;
 
         /* Check that there are as many bytes as reported */
@@ -866,7 +873,8 @@ unsigned dissect_rdt_report_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree
     /* Length field is optional */
     if (length_included_flag)
     {
-        proto_tree_add_item_ret_uint16(tree, hf_rdt_packet_length, tvb, offset, 2, ENC_BIG_ENDIAN, &packet_length);
+        packet_length = tvb_get_ntohs(tvb, offset);
+        proto_tree_add_item(tree, hf_rdt_packet_length, tvb, offset, 2, ENC_BIG_ENDIAN);
         offset += 2;
 
         /* Check that there are as many bytes as reported */
@@ -924,7 +932,8 @@ unsigned dissect_rdt_latency_report_packet(tvbuff_t *tvb, packet_info *pinfo, pr
     /* Length field is optional */
     if (length_included_flag)
     {
-        proto_tree_add_item_ret_uint16(tree, hf_rdt_packet_length, tvb, offset, 2, ENC_BIG_ENDIAN, &packet_length);
+        packet_length = tvb_get_ntohs(tvb, offset);
+        proto_tree_add_item(tree, hf_rdt_packet_length, tvb, offset, 2, ENC_BIG_ENDIAN);
         offset += 2;
 
         /* Check that there are as many bytes as reported */
@@ -935,7 +944,8 @@ unsigned dissect_rdt_latency_report_packet(tvbuff_t *tvb, packet_info *pinfo, pr
         packet_length = tvb_captured_length_remaining(tvb, start_offset);
     }
 
-    proto_tree_add_item_ret_uint(tree, hf_rdt_lrpt_server_out_time, tvb, offset, 4, ENC_BIG_ENDIAN, &server_out_time);
+    server_out_time = tvb_get_ntohl(tvb, offset);
+    proto_tree_add_item(tree, hf_rdt_lrpt_server_out_time, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
 
     col_append_fstr(pinfo->cinfo, COL_INFO, "LATENCY-REPORT: t=%u  ", server_out_time);
@@ -1111,7 +1121,8 @@ unsigned dissect_rdt_bw_probing_packet(tvbuff_t *tvb, packet_info *pinfo, proto_
     /* Length field is optional */
     if (length_included_flag)
     {
-        proto_tree_add_item_ret_uint16(tree, hf_rdt_packet_length, tvb, offset, 2, ENC_BIG_ENDIAN, &packet_length);
+        packet_length = tvb_get_ntohs(tvb, offset);
+        proto_tree_add_item(tree, hf_rdt_packet_length, tvb, offset, 2, ENC_BIG_ENDIAN);
         offset += 2;
 
         /* Check that there are as many bytes as reported */

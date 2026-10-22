@@ -123,11 +123,12 @@ void proto_register_btamp(void);
 void proto_reg_handoff_btamp(void);
 
 static int
-dissect_comrej(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_, proto_tree *tree)
+dissect_comrej(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree)
 {
     uint16_t reason;
 
-    proto_tree_add_item_ret_uint16(tree, hf_btamp_rej_reason, tvb, offset, 2, ENC_LITTLE_ENDIAN, &reason);
+    reason = tvb_get_letohs(tvb, offset);
+    proto_tree_add_item(tree, hf_btamp_rej_reason, tvb, offset, 2, ENC_LITTLE_ENDIAN);
     offset += 2;
 
     switch (reason) {
@@ -142,7 +143,7 @@ dissect_comrej(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_, proto_tre
 }
 
 static int
-dissect_discoverrequest(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_, proto_tree *tree)
+dissect_discoverrequest(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree)
 {
     proto_tree_add_item(tree, hf_btamp_mtu, tvb, offset, 2, ENC_LITTLE_ENDIAN);
     offset += 2;
@@ -154,7 +155,7 @@ dissect_discoverrequest(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_, 
 }
 
 static int
-dissect_controller_entry(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_, proto_tree *tree, uint16_t idx)
+dissect_controller_entry(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree, uint16_t idx)
 {
     proto_item *ti_controller_entry;
     proto_tree *btamp_controller_entry_tree;
@@ -178,7 +179,7 @@ dissect_controller_entry(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_,
 }
 
 static int
-dissect_discoverresponse(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree)
+dissect_discoverresponse(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree)
 {
     uint16_t    length;
     uint16_t    idx = 1;
@@ -207,7 +208,7 @@ dissect_discoverresponse(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, pro
 }
 
 static int
-dissect_changenotify(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree)
+dissect_changenotify(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree)
 {
     uint16_t    length;
     uint16_t    idx = 1;
@@ -230,13 +231,13 @@ dissect_changenotify(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_t
 }
 
 static int
-dissect_changeresponse(tvbuff_t *tvb _U_, unsigned offset, packet_info *pinfo _U_, proto_tree *tree _U_)
+dissect_changeresponse(tvbuff_t *tvb _U_, int offset, packet_info *pinfo _U_, proto_tree *tree _U_)
 {
     return offset;
 }
 
 static int
-dissect_getinforequest(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_, proto_tree *tree)
+dissect_getinforequest(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree)
 {
     proto_tree_add_item(tree, hf_btamp_controller_id, tvb, offset, 1, ENC_LITTLE_ENDIAN);
     offset += 1;
@@ -245,7 +246,7 @@ dissect_getinforequest(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_, p
 }
 
 static int
-dissect_getinforesponse(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_, proto_tree *tree)
+dissect_getinforesponse(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree)
 {
     proto_item *ti_controller;
     proto_tree *btamp_controller_tree;
@@ -280,7 +281,7 @@ dissect_getinforesponse(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_, 
 }
 
 static int
-dissect_getampassocrequest(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_, proto_tree *tree)
+dissect_getampassocrequest(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree)
 {
     proto_tree_add_item(tree, hf_btamp_controller_id, tvb, offset, 1, ENC_LITTLE_ENDIAN);
     offset += 1;
@@ -289,14 +290,14 @@ dissect_getampassocrequest(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U
 }
 
 static int
-dissect_ampassoc(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_, proto_tree *tree)
+dissect_ampassoc(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree)
 {
     proto_tree_add_item(tree, hf_btamp_amp_assoc, tvb, offset, tvb_reported_length_remaining(tvb, offset), ENC_NA);
     return tvb_reported_length(tvb);
 }
 
 static int
-dissect_getampassocresponse(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree)
+dissect_getampassocresponse(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree)
 {
     proto_tree_add_item(tree, hf_btamp_controller_id, tvb, offset, 1, ENC_LITTLE_ENDIAN);
     offset += 1;
@@ -310,7 +311,7 @@ dissect_getampassocresponse(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, 
 }
 
 static int
-dissect_createphysicalrequest(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree)
+dissect_createphysicalrequest(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree)
 {
     proto_tree_add_item(tree, hf_btamp_lcontroller_id, tvb, offset, 1, ENC_LITTLE_ENDIAN);
     offset += 1;
@@ -324,7 +325,7 @@ dissect_createphysicalrequest(tvbuff_t *tvb, unsigned offset, packet_info *pinfo
 }
 
 static int
-dissect_createphysicalresponse(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_, proto_tree *tree)
+dissect_createphysicalresponse(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree)
 {
     proto_tree_add_item(tree, hf_btamp_lcontroller_id, tvb, offset, 1, ENC_LITTLE_ENDIAN);
     offset += 1;
@@ -339,7 +340,7 @@ dissect_createphysicalresponse(tvbuff_t *tvb, unsigned offset, packet_info *pinf
 }
 
 static int
-dissect_discphysicalchanrequest(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_, proto_tree *tree)
+dissect_discphysicalchanrequest(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree)
 {
     proto_tree_add_item(tree, hf_btamp_lcontroller_id, tvb, offset, 1, ENC_LITTLE_ENDIAN);
     offset += 1;
@@ -351,7 +352,7 @@ dissect_discphysicalchanrequest(tvbuff_t *tvb, unsigned offset, packet_info *pin
 }
 
 static int
-dissect_discphysicalchanresponse(tvbuff_t *tvb, unsigned offset, packet_info *pinfo _U_, proto_tree *tree)
+dissect_discphysicalchanresponse(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree)
 {
     proto_tree_add_item(tree, hf_btamp_lcontroller_id, tvb, offset, 1, ENC_LITTLE_ENDIAN);
     offset += 1;
@@ -375,7 +376,6 @@ dissect_btamp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
     proto_item *ti_command;
     proto_tree *btamp_cmd_tree;
     uint8_t     cmd_code;
-    char       *str_cmd_code;
     uint16_t    cmd_length;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "AMP");
@@ -402,13 +402,15 @@ dissect_btamp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
             "Command: ");
     btamp_cmd_tree = proto_item_add_subtree(ti_command, ett_btamp_cmd);
 
-    proto_tree_add_item_ret_uint8(btamp_cmd_tree, hf_btamp_cmd_code,   tvb, offset, 1, ENC_LITTLE_ENDIAN, &cmd_code);
+    cmd_code = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item(btamp_cmd_tree, hf_btamp_cmd_code,   tvb, offset, 1, ENC_LITTLE_ENDIAN);
     offset += 1;
 
     proto_tree_add_item(btamp_cmd_tree, hf_btamp_cmd_ident,  tvb, offset, 1, ENC_LITTLE_ENDIAN);
     offset += 1;
 
-    proto_tree_add_item_ret_uint16(btamp_cmd_tree, hf_btamp_cmd_length, tvb, offset, 2, ENC_LITTLE_ENDIAN, &cmd_length);
+    cmd_length = tvb_get_letohs(tvb, offset);
+    proto_tree_add_item(btamp_cmd_tree, hf_btamp_cmd_length, tvb, offset, 2, ENC_LITTLE_ENDIAN);
     proto_item_set_len(ti_command, cmd_length+4);
     offset += 2;
 
@@ -471,9 +473,8 @@ dissect_btamp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
         break;
     }
 
-    str_cmd_code = val_to_str(pinfo->pool, cmd_code, command_code_vals, "Unknown PDU (%u)");
-    proto_item_append_text(ti_command, "%s", str_cmd_code);
-    col_append_str(pinfo->cinfo, COL_INFO, str_cmd_code);
+    proto_item_append_text(ti_command, "%s", val_to_str(cmd_code, command_code_vals, "Unknown PDU (%u)"));
+    col_append_str(pinfo->cinfo, COL_INFO, val_to_str(cmd_code, command_code_vals, "Unknown PDU (%u)"));
 
     return offset;
 }

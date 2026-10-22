@@ -70,7 +70,6 @@
 #include <wsutil/ws_assert.h>
 #include <wsutil/filesystem.h>
 #include <wsutil/report_message.h>
-#include "conversation.h"
 #include "packet-tcp.h"
 #include "packet-x509af.h"
 #include "packet-tls.h"
@@ -88,10 +87,6 @@ static bool tls_desegment          = true;
 static bool tls_desegment_app_data = true;
 static bool tls_ignore_mac_failed;
 
-#define PORT_HEUR_DEFAULT "443"
-/* Try heuristic dissectors before dissectors assigned to a port.
- * Dissectors assigned via ALPN always take precedence. */
-static range_t *tls_try_heuristic_first;
 
 /*********************************************************************
  *
@@ -103,13 +98,11 @@ static range_t *tls_try_heuristic_first;
 static int tls_follow_tap                    = -1;
 static int exported_pdu_tap                  = -1;
 static int proto_tls;
-static int hf_tls_stream;
 static int hf_tls_record;
 static int hf_tls_record_content_type;
 static int hf_tls_record_opaque_type;
 static int hf_tls_record_version;
 static int hf_tls_record_length;
-static int hf_tls_record_sequence_number;
 static int hf_tls_record_appdata;
 static int hf_tls_record_appdata_proto;
 static int hf_ssl2_record;
@@ -244,7 +237,7 @@ ssl_proto_tree_add_segment_data(
         NULL,
         "%sTLS segment data (%u %s)",
         prefix != NULL ? prefix : "",
-        length,
+        length == -1 ? tvb_reported_length_remaining(tvb, offset) : length,
         plurality(length, "byte", "bytes"));
 }
 
@@ -255,13 +248,13 @@ static ssl_master_key_map_t       ssl_master_key_map;
 static GHashTable         *ssl_key_hash;
 static wmem_stack_t       *key_list_stack;
 static uat_t              *ssldecrypt_uat;
+static const char         *ssl_keys_list;
 #endif
 static dissector_table_t   ssl_associations;
 static dissector_handle_t  tls_handle;
-static dissector_handle_t  tls13_handshake_handle;
 static StringInfo          ssl_compressed_data;
 static StringInfo          ssl_decrypted_data;
-static unsigned            ssl_decrypted_data_avail;
+static int                 ssl_decrypted_data_avail;
 static FILE               *ssl_keylog_file;
 static ssl_common_options_t ssl_options;
 
@@ -270,7 +263,6 @@ static heur_dissector_list_t ssl_heur_subdissector_list;
 
 static const char *ssl_debug_file_name;
 
-static uint32_t tls_stream_count;
 
 /* Forward declaration we need below */
 void proto_reg_handoff_ssl(void);
@@ -340,28 +332,27 @@ tls_hs_reassembly_table_functions = {
         tls_hs_fragment_free_temporary_key,
 };
 
-static uint32_t get_tls_stream_count(void)
-{
-    return tls_stream_count;
-}
-
-uint32_t tls_increment_stream_count(void)
-{
-    return tls_stream_count++;
-}
-
 /* initialize/reset per capture state data (ssl sessions cache) */
 static void
 ssl_init(void)
 {
+    module_t *ssl_module = prefs_find_module("tls");
+    pref_t   *keys_list_pref;
+
     ssl_common_init(&ssl_master_key_map,
                     &ssl_decrypted_data, &ssl_compressed_data);
     ssl_debug_flush();
 
+    /* We should have loaded "keys_list" by now. Mark it obsolete */
+    if (ssl_module) {
+        keys_list_pref = prefs_find_preference(ssl_module, "keys_list");
+        if (! prefs_get_preference_obsolete(keys_list_pref)) {
+            prefs_set_preference_obsolete(keys_list_pref);
+        }
+    }
+
     /* Reset the identifier for a group of handshake fragments. */
     hs_reassembly_id_count = 0;
-
-    tls_stream_count = 0;
 }
 
 static void
@@ -375,168 +366,6 @@ ssl_cleanup(void)
 #endif
     ssl_common_cleanup(&ssl_master_key_map, &ssl_keylog_file,
                        &ssl_decrypted_data, &ssl_compressed_data);
-}
-
-static unsigned
-ssl_session_key_count(void)
-{
-    unsigned count = 0;
-    ssl_master_key_map_t* mk_map = tls_get_master_key_map(false);
-    if (!mk_map || !mk_map->used_crandom)
-        return count;
-
-    GHashTableIter iter;
-    void* key;
-
-    g_hash_table_iter_init(&iter, mk_map->used_crandom);
-    while (g_hash_table_iter_next(&iter, &key, NULL)) {
-        if (g_hash_table_contains(mk_map->crandom, key)) {
-            count++;
-        }
-        if (g_hash_table_contains(mk_map->tls13_client_early, key)) {
-            count++;
-        }
-        if (g_hash_table_contains(mk_map->tls13_client_handshake, key)) {
-            count++;
-        }
-        if (g_hash_table_contains(mk_map->tls13_server_handshake, key)) {
-            count++;
-        }
-        if (g_hash_table_contains(mk_map->tls13_client_appdata, key)) {
-            count++;
-        }
-        if (g_hash_table_contains(mk_map->tls13_server_appdata, key)) {
-            count++;
-        }
-        if (g_hash_table_contains(mk_map->ech_secret, key)) {
-            count++;
-        }
-        if (g_hash_table_contains(mk_map->ech_config, key)) {
-            count++;
-        }
-    }
-    return count;
-}
-
-static void
-tls_export_client_randoms_func(void* key, void* value, void* user_data, const char* label)
-{
-    unsigned i;
-    StringInfo* client_random = (StringInfo*)key;
-    StringInfo* master_secret = (StringInfo*)value;
-    GString* keylist = (GString*)user_data;
-
-    g_string_append(keylist, label);
-
-    for (i = 0; i < client_random->data_len; i++) {
-        g_string_append_printf(keylist, "%.2x", client_random->data[i]);
-    }
-
-    g_string_append_c(keylist, ' ');
-
-    for (i = 0; i < master_secret->data_len; i++) {
-        g_string_append_printf(keylist, "%.2x", master_secret->data[i]);
-    }
-
-    g_string_append_c(keylist, '\n');
-}
-
-static char*
-ssl_export_sessions(size_t* length)
-{
-    /* Output format is:
-     * "CLIENT_RANDOM zzzz yyyy\n"
-     * Where zzzz is the client random (always 64 chars)
-     * Where yyyy is same as above
-     * So length will always be 13+1+64+1+96+2 = 177 chars
-     *
-     * Wireshark can read CLIENT_RANDOM since v1.8.0.
-     * Both values are exported in case you use the Session-ID for resuming a
-     * session in a different capture.
-     *
-     * TLS 1.3 derived secrets are similar to the CLIENT_RANDOM master secret
-     * export, but with a (longer) label indicating the type of derived secret
-     * to which the client random maps, e.g.
-     * "CLIENT_HANDSHAKE_TRAFFIC_SECRET zzzz yyyy\n"
-     *
-     * The TLS 1.3 values are obtained from an existing key log, but exporting
-     * them is useful in order to filter actually used secrets or add a DSB.
-     */
-    ssl_master_key_map_t* mk_map = tls_get_master_key_map(false);
-
-    if (!mk_map) {
-        *length = 0;
-        return g_strdup("");
-    }
-
-    size_t len = 177 * (size_t)ssl_session_key_count();
-    GString* keylist = g_string_sized_new(len);
-
-    GHashTableIter iter;
-    void* key, * value;
-
-    g_hash_table_iter_init(&iter, mk_map->used_crandom);
-    while (g_hash_table_iter_next(&iter, &key, NULL)) {
-        if ((value = g_hash_table_lookup(mk_map->crandom, key))) {
-            tls_export_client_randoms_func(key, value, (void*)keylist, "CLIENT_RANDOM ");
-        }
-        if ((value = g_hash_table_lookup(mk_map->tls13_client_early, key))) {
-            tls_export_client_randoms_func(key, value, (void*)keylist, "CLIENT_EARLY_TRAFFIC_SECRET ");
-        }
-        if ((value = g_hash_table_lookup(mk_map->tls13_client_handshake, key))) {
-            tls_export_client_randoms_func(key, value, (void*)keylist, "CLIENT_HANDSHAKE_TRAFFIC_SECRET ");
-        }
-        if ((value = g_hash_table_lookup(mk_map->tls13_server_handshake, key))) {
-            tls_export_client_randoms_func(key, value, (void*)keylist, "SERVER_HANDSHAKE_TRAFFIC_SECRET ");
-        }
-        if ((value = g_hash_table_lookup(mk_map->tls13_server_appdata, key))) {
-            tls_export_client_randoms_func(key, value, (void*)keylist, "SERVER_TRAFFIC_SECRET_0 ");
-        }
-        if ((value = g_hash_table_lookup(mk_map->tls13_client_appdata, key))) {
-            tls_export_client_randoms_func(key, value, (void*)keylist, "CLIENT_TRAFFIC_SECRET_0 ");
-        }
-        if ((value = g_hash_table_lookup(mk_map->tls13_early_exporter, key))) {
-            tls_export_client_randoms_func(key, value, (void*)keylist, "EARLY_EXPORTER_SECRET ");
-        }
-        if ((value = g_hash_table_lookup(mk_map->tls13_exporter, key))) {
-            tls_export_client_randoms_func(key, value, (void*)keylist, "EXPORTER_SECRET ");
-        }
-        if ((value = g_hash_table_lookup(mk_map->ech_secret, key))) {
-            tls_export_client_randoms_func(key, value, (void*)keylist, "ECH_SECRET ");
-        }
-        if ((value = g_hash_table_lookup(mk_map->ech_config, key))) {
-            tls_export_client_randoms_func(key, value, (void*)keylist, "ECH_CONFIG ");
-        }
-    }
-
-    *length = keylist->len;
-    return g_string_free(keylist, FALSE);
-}
-
-/** Add a DSB with the used TLS secrets to a capture file.
- *
- * @param wth Wiretap data
- */
-static bool
-tls_export_dsb(wtap* wth)
-{
-    wtap_block_t block;
-    wtapng_dsb_mandatory_t* dsb;
-    size_t secrets_len;
-    char* secrets = ssl_export_sessions(&secrets_len);
-
-    block = wtap_block_create(WTAP_BLOCK_DECRYPTION_SECRETS);
-    dsb = (wtapng_dsb_mandatory_t*)wtap_block_get_mandatory_data(block);
-
-    dsb->secrets_type = SECRETS_TYPE_TLS;
-    dsb->secrets_data = g_memdup2(secrets, secrets_len);
-    dsb->secrets_len = (unsigned)secrets_len;
-    g_free(secrets);
-
-    /* XXX - support replacing the DSB of the same type instead of adding? */
-    wtap_file_add_decryption_secrets(wth, block);
-
-    return true;
 }
 
 ssl_master_key_map_t *
@@ -598,52 +427,41 @@ ssl_reset_uat(void)
     g_hash_table_destroy(ssl_key_hash);
     ssl_key_hash = NULL;
 }
+
+static void
+ssl_parse_old_keys(void)
+{
+    char **old_keys, **parts, *err;
+    char   *uat_entry;
+    unsigned   i;
+
+    /* Import old-style keys */
+    if (ssldecrypt_uat && ssl_keys_list && ssl_keys_list[0]) {
+        old_keys = g_strsplit(ssl_keys_list, ";", 0);
+        for (i = 0; old_keys[i] != NULL; i++) {
+            parts = g_strsplit(old_keys[i], ",", 5);
+            if (parts[0] && parts[1] && parts[2] && parts[3]) {
+                char *path = uat_esc(parts[3], (unsigned)strlen(parts[3]));
+                const char *password = parts[4] ? parts[4] : "";
+                uat_entry = wmem_strdup_printf(NULL, "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"",
+                                parts[0], parts[1], parts[2], path, password);
+                g_free(path);
+                if (!uat_load_str(ssldecrypt_uat, uat_entry, &err)) {
+                    ssl_debug_printf("ssl_parse_old_keys: Can't load UAT string %s: %s\n",
+                                     uat_entry, err);
+                    g_free(err);
+                }
+                wmem_free(NULL, uat_entry);
+            }
+            g_strfreev(parts);
+        }
+        g_strfreev(old_keys);
+    }
+}
 #endif  /* HAVE_LIBGNUTLS */
 
-/*********************************************************************
- *
- * Follow Stream support
- *
- *********************************************************************/
 
-static char *
-tls_follow_conv_filter(epan_dissect_t *edt _U_, packet_info *pinfo, unsigned *stream, unsigned *sub_stream _U_)
-{
-    /* This function wants to return "the" TLS stream for the frame.
-     * If there are multiple, we prefer the inner one. While edt should
-     * be non-NULL, because the pinfo lifetime is tied to the epan_dissect_t,
-     * edt->tree can be NULL (e.g., when called by sharkd), which makes
-     * it impossible to use anything in the tree as opposed to pinfo. */
-
-    char *filter = NULL;
-    const SslPacketInfo *pi = NULL;
-    uint8_t max_layer_num = proto_get_layer_num(pinfo, proto_tls);
-
-    /* The result from proto_get_layer_num is 1-indexed, and
-     * includes times that the TLS dissector is called for times
-     * that represent multiple PDUs in a frame (e.g., due to TCP
-     * segmentation) in addition to times that represent nesting.
-     */
-    for (uint8_t curr_layer_num = max_layer_num; curr_layer_num; --curr_layer_num) {
-        /* The (nesting) layer number in p_get_proto_data is 0-indexed. */
-        pi = p_get_proto_data(wmem_file_scope(), pinfo, proto_tls, curr_layer_num - 1);
-        if (pi) {
-            *stream = pi->stream;
-            filter = ws_strdup_printf("tls.stream eq %u", *stream);
-            break;
-        }
-    }
-
-    return filter;
-}
-
-static char *
-tls_follow_index_filter(unsigned stream, unsigned sub_stream _U_)
-{
-    return ws_strdup_printf("tls.stream eq %u", stream);
-}
-
-tap_packet_status
+static tap_packet_status
 ssl_follow_tap_listener(void *tapdata, packet_info *pinfo, epan_dissect_t *edt _U_, const void *ssl, tap_flags_t flags _U_)
 {
     follow_info_t *      follow_info = (follow_info_t*) tapdata;
@@ -655,17 +473,15 @@ ssl_follow_tap_listener(void *tapdata, packet_info *pinfo, epan_dissect_t *edt _
     /* Skip packets without decrypted payload data. */
     if (!pi || !pi->records) return TAP_PACKET_DONT_REDRAW;
 
-    if (follow_info->stream_id != pi->stream) return TAP_PACKET_DONT_REDRAW;
-
     /* Compute the packet's sender. */
     if (follow_info->client_port == 0) {
-        follow_info->client_port = PINFO_SRCPORT(pinfo);
-        copy_address(&follow_info->client_ip, PINFO_SRC(pinfo));
-        follow_info->server_port = PINFO_DESTPORT(pinfo);
-        copy_address(&follow_info->server_ip, PINFO_DST(pinfo));
+        follow_info->client_port = pinfo->srcport;
+        copy_address(&follow_info->client_ip, &pinfo->src);
+        follow_info->server_port = pinfo->destport;
+        copy_address(&follow_info->server_ip, &pinfo->dst);
     }
-    if (addresses_equal(&follow_info->client_ip, PINFO_SRC(pinfo)) &&
-            follow_info->client_port == PINFO_SRCPORT(pinfo)) {
+    if (addresses_equal(&follow_info->client_ip, &pinfo->src) &&
+            follow_info->client_port == pinfo->srcport) {
         from = FROM_CLIENT;
     } else {
         from = FROM_SERVER;
@@ -684,16 +500,6 @@ ssl_follow_tap_listener(void *tapdata, packet_info *pinfo, epan_dissect_t *edt _
            follow_info->bytes_written[] values as the next expected
            appl_data->seq. Any appl_data instances that fall below that have
            already been processed and must be skipped. */
-        /* XXX - If instead of tapping at the end of the entire frame,
-         * the TLS (and DTLS) dissector tapped after each SSL_ID_APP_DATA
-         * record (i.e., in dissect_dtls_appdata and process_ssl_payload,
-         * as is done for the export PDU tap), we could skip the for loop
-         * and these checks.
-         *
-         * Alternatively, instead of using the byte sequence here, we could
-         * track record number instead, which might allow performing record
-         * replay detection on DTLS and should still work on TLS.
-         */
         if (appl_data->seq < follow_info->bytes_written[from]) continue;
 
         /* Allocate a follow_record_t to hold the current appl_data
@@ -710,14 +516,14 @@ ssl_follow_tap_listener(void *tapdata, packet_info *pinfo, epan_dissect_t *edt _
         follow_record->packet_num = pinfo->num;
         follow_record->abs_ts = pinfo->abs_ts;
 
-        follow_record->data = g_byte_array_sized_new(appl_data->content_len);
+        follow_record->data = g_byte_array_sized_new(appl_data->data_len);
         follow_record->data = g_byte_array_append(follow_record->data,
                                               appl_data->plain_data,
-                                              appl_data->content_len);
+                                              appl_data->data_len);
 
         /* Add the record to the follow_info structure. */
         follow_info->payload = g_list_prepend(follow_info->payload, follow_record);
-        follow_info->bytes_written[from] += appl_data->content_len;
+        follow_info->bytes_written[from] += appl_data->data_len;
     }
 
     return TAP_PACKET_DONT_REDRAW;
@@ -835,7 +641,7 @@ print_tls_fragment_tree(fragment_head *ipfd_head, proto_tree *tree, proto_tree *
  * Code to actually dissect the packets
  */
 static int
-dissect_ssl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
+dissect_ssl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
 
     conversation_t    *conversation;
@@ -848,7 +654,6 @@ dissect_ssl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     int                is_from_server;
     struct tcpinfo    *tcpinfo;
     struct tlsinfo     tlsinfo;
-
     /*
      * A single packet may contain multiple TLS records. Two possible scenarios:
      *
@@ -858,7 +663,7 @@ dissect_ssl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
      * To support the second case, 'curr_layer_num_ssl' is used as identifier
      * for the current TLS layer.
      */
-    uint8_t            curr_layer_num_ssl = p_get_proto_depth(pinfo, proto_tls);
+    uint8_t            curr_layer_num_ssl = pinfo->curr_proto_layer_num;
 
     ti = NULL;
     ssl_tree   = NULL;
@@ -902,9 +707,15 @@ dissect_ssl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     /* Get the conversation with the deinterlacing strategy,
      * assuming it does exist, as created by an underlying proto.
      */
-    conversation = find_or_create_conversation_strat(pinfo);
+    conversation = find_conversation_strat(pinfo, conversation_pt_to_conversation_type(pinfo->ptype), 0);
+    if(conversation == NULL) {
+        conversation = conversation_new(pinfo->num, &pinfo->src,
+            &pinfo->dst, conversation_pt_to_conversation_type(pinfo->ptype),
+            pinfo->srcport, pinfo->destport, 0);
+    }
 
-    ssl_session_save = ssl_session = ssl_get_session(conversation, tls_handle, curr_layer_num_ssl);
+
+    ssl_session_save = ssl_session = ssl_get_session(conversation, tls_handle);
     session = &ssl_session->session;
     is_from_server = ssl_packet_from_server(session, ssl_associations, pinfo);
 
@@ -921,11 +732,6 @@ dissect_ssl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
          ssl_session = NULL;
 
     ssl_debug_printf("  conversation = %p, ssl_session = %p\n", (void *)conversation, (void *)ssl_session);
-
-    /* Increment the proto depth, so any nested TLS gets the new depth.
-     * Make sure to decrement this when leaving the function.
-     * (XXX - Do we need a TRY...FINALLY or CLEANUP_CB_PUSH?) */
-    p_set_proto_depth(pinfo, proto_tls, curr_layer_num_ssl + 1);
 
     /* Initialize the protocol column; we'll override it later when we
      * detect a different version or flavor of TLS (assuming we don't
@@ -954,9 +760,6 @@ dissect_ssl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     {
         ti = proto_tree_add_item(tree, proto_tls, tvb, 0, -1, ENC_NA);
         ssl_tree = proto_item_add_subtree(ti, ett_tls);
-
-        ti = proto_tree_add_uint(ssl_tree, hf_tls_stream, tvb, 0, 0, session->stream);
-        proto_item_set_generated(ti);
     }
     /* iterate through the records in this tvbuff */
     while (tvb_reported_length_remaining(tvb, offset) > 0)
@@ -1071,12 +874,11 @@ dissect_ssl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
         /* Desegmentation return check */
         if (need_desegmentation) {
-            ssl_debug_printf("  need_desegmentation: offset = %d, reported_length_remaining = %d\n",
+          ssl_debug_printf("  need_desegmentation: offset = %d, reported_length_remaining = %d\n",
                            offset, tvb_reported_length_remaining(tvb, offset));
-            /* Make data available to ssl_follow_tap_listener */
-            tap_queue_packet(tls_follow_tap, pinfo, p_get_proto_data(wmem_file_scope(), pinfo, proto_tls, curr_layer_num_ssl));
-            p_set_proto_depth(pinfo, proto_tls, curr_layer_num_ssl);
-            return tvb_captured_length(tvb);
+          /* Make data available to ssl_follow_tap_listener */
+          tap_queue_packet(tls_follow_tap, pinfo, p_get_proto_data(wmem_file_scope(), pinfo, proto_tls, curr_layer_num_ssl));
+          return tvb_captured_length(tvb);
         }
     }
 
@@ -1121,20 +923,6 @@ dissect_ssl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
                  * later and trying to decrypt the records again.
                  * (XXX: An alternative would be checking for already decrypted
                  * records before trying to decrypt on the first pass.)
-                 *
-                 * XXX - TLS says that parties MUST send a close_notify before
-                 * closing its write side of the connection (RFC 5246 7.2.1,
-                 * RFC 8446 6.1), so we could do nothing here and assume that
-                 * the TCP dissector will call us on the close_notify Alert.
-                 * There may be implementations that don't and only close the
-                 * connection with a TCP FIN, though. Setting this means that
-                 * the TCP dissection won't call the TLS dissector again until
-                 * TCP FIN. The TCP dissector doesn't support "continue calling
-                 * the payload dissector normally, but also call it at FIN in
-                 * case a TLS close_notify wasn't received."
-                 *
-                 * The effect here is that the desegmentation is done on the
-                 * TCP FIN instead of the frame with the close_notify.
                  */
                 pinfo->desegment_offset = tvb_captured_length(tvb);
                 pinfo->desegment_len = DESEGMENT_UNTIL_FIN;
@@ -1199,7 +987,6 @@ dissect_ssl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     /* Make data available to ssl_follow_tap_listener */
     tap_queue_packet(tls_follow_tap, pinfo, p_get_proto_data(wmem_file_scope(), pinfo, proto_tls, curr_layer_num_ssl));
 
-    p_set_proto_depth(pinfo, proto_tls, curr_layer_num_ssl);
     return ret;
 }
 
@@ -1233,12 +1020,10 @@ dissect_tls13_handshake(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
      */
     unsigned           record_id = GPOINTER_TO_UINT(data);
 
-    uint8_t curr_layer_num_ssl = p_get_proto_depth(pinfo, proto_tls);
-
     ssl_debug_printf("\n%s enter frame #%u (%s)\n", G_STRFUNC, pinfo->num, (pinfo->fd->visited)?"already visited":"first time");
 
     conversation = find_or_create_conversation(pinfo);
-    ssl_session = ssl_get_session(conversation, tls13_handshake_handle, curr_layer_num_ssl);
+    ssl_session = ssl_get_session(conversation, tls_handle);
     session = &ssl_session->session;
     is_from_server = ssl_packet_from_server(session, ssl_associations, pinfo);
     if (session->version == SSL_VER_UNKNOWN) {
@@ -1394,27 +1179,27 @@ tls_save_decrypted_record(packet_info *pinfo, int record_id, SslDecryptSession *
                           SslDecoder *decoder, bool allow_fragments, uint8_t curr_layer_num_ssl)
 {
     const unsigned char *data = ssl_decrypted_data.data;
-    unsigned content_len = ssl_decrypted_data_avail;
+    unsigned datalen = ssl_decrypted_data_avail;
 
-    if (content_len == 0) {
+    if (datalen == 0) {
         return;
     }
 
     if (ssl->session.version == TLSV1DOT3_VERSION) {
         /*
-         * The content is followed by the content type and then zero or
+         * The actual data is followed by the content type and then zero or
          * more padding. Scan backwards for content type, skipping padding.
          */
-        while (content_len > 0 && data[content_len - 1] == 0) {
-            content_len--;
+        while (datalen > 0 && data[datalen - 1] == 0) {
+            datalen--;
         }
-        ssl_debug_printf("%s found %d padding bytes\n", G_STRFUNC, ssl_decrypted_data_avail - content_len);
-        if (content_len == 0) {
+        ssl_debug_printf("%s found %d padding bytes\n", G_STRFUNC, ssl_decrypted_data_avail - datalen);
+        if (datalen == 0) {
             ssl_debug_printf("%s there is no room for content type!\n", G_STRFUNC);
             return;
         }
-        content_type = data[--content_len];
-        if (content_len == 0) {
+        content_type = data[--datalen];
+        if (datalen == 0) {
             /*
              * XXX zero-length Handshake fragments are forbidden by RFC 8446,
              * Section 5.1. Empty Application Data fragments are allowed though.
@@ -1426,9 +1211,8 @@ tls_save_decrypted_record(packet_info *pinfo, int record_id, SslDecryptSession *
     /* In TLS 1.3 only Handshake and Application Data can be fragmented.
      * Alert messages MUST NOT be fragmented across records, so do not
      * bother maintaining a flow for those. */
-    ssl_add_record_info(proto_tls, pinfo, data, ssl_decrypted_data_avail, content_len, record_id,
-            allow_fragments ? decoder->flow : NULL, (ContentType)content_type,
-            curr_layer_num_ssl, decoder->seq - 1); // decoder->seq has already been incremented
+    ssl_add_record_info(proto_tls, pinfo, data, datalen, record_id,
+            allow_fragments ? decoder->flow : NULL, (ContentType)content_type, curr_layer_num_ssl);
 }
 
 /**
@@ -1481,7 +1265,7 @@ decrypt_ssl3_record(tvbuff_t *tvb, packet_info *pinfo, uint32_t offset, SslDecry
     /* run decryption and add decrypted payload to protocol data, if decryption
      * is successful*/
     ssl_decrypted_data_avail = ssl_decrypted_data.data_len;
-    success = ssl_decrypt_record(pinfo->pool, ssl, decoder, content_type, record_version, tls_ignore_mac_failed,
+    success = ssl_decrypt_record(ssl, decoder, content_type, record_version, tls_ignore_mac_failed,
                            tvb_get_ptr(tvb, offset, record_length), record_length, NULL, 0,
                            &ssl_compressed_data, &ssl_decrypted_data, &ssl_decrypted_data_avail) == 0;
     /*  */
@@ -1519,7 +1303,7 @@ decrypt_tls13_early_data(tvbuff_t *tvb, packet_info *pinfo, uint32_t offset,
         }
 
         ssl_decrypted_data_avail = ssl_decrypted_data.data_len;
-        success = ssl_decrypt_record(pinfo->pool, ssl, ssl->client, SSL_ID_APP_DATA, 0x303, false,
+        success = ssl_decrypt_record(ssl, ssl->client, SSL_ID_APP_DATA, 0x303, false,
                                      tvb_get_ptr(tvb, offset, record_length), record_length, NULL, 0,
                                      &ssl_compressed_data, &ssl_decrypted_data, &ssl_decrypted_data_avail) == 0;
         if (success) {
@@ -1532,9 +1316,6 @@ decrypt_tls13_early_data(tvbuff_t *tvb, packet_info *pinfo, uint32_t offset,
     ssl->state |= SSL_SEEN_0RTT_APPDATA;
 
     ssl_load_keyfile(ssl_options.keylog_filename, &ssl_keylog_file, &ssl_master_key_map);
-    // Early data can only be used with a PSK. (The early secret is computed w/o
-    // input from the (EC)DHE even if psk_dhe_ke is used.)
-    tls_load_psk(ssl, ssl_options.psk);
     StringInfo *secret = tls13_load_secret(ssl, &ssl_master_key_map, false, TLS_SECRET_0RTT_APP);
     if (!secret) {
         ssl_debug_printf("Missing secrets, early data decryption not possible!\n");
@@ -1562,7 +1343,7 @@ decrypt_tls13_early_data(tvbuff_t *tvb, packet_info *pinfo, uint32_t offset,
         }
 
         ssl_decrypted_data_avail = ssl_decrypted_data.data_len;
-        success = ssl_decrypt_record(pinfo->pool, ssl, ssl->client, SSL_ID_APP_DATA, 0x303, false, record, record_length, NULL, 0,
+        success = ssl_decrypt_record(ssl, ssl->client, SSL_ID_APP_DATA, 0x303, false, record, record_length, NULL, 0,
                                      &ssl_compressed_data, &ssl_decrypted_data, &ssl_decrypted_data_avail) == 0;
         if (success) {
             ssl_debug_printf("Early data decryption succeeded, cipher = %#x\n", cipher);
@@ -1630,7 +1411,7 @@ desegment_ssl(tvbuff_t *tvb, packet_info *pinfo, int offset,
     fragment_head *ipfd_head;
     bool           must_desegment;
     bool           called_dissector;
-    unsigned       another_pdu_follows;
+    int            another_pdu_follows;
     bool           another_segment_in_frame = false;
     int            deseg_offset;
     uint32_t       deseg_seq;
@@ -1703,7 +1484,7 @@ again:
     /* Else, find the most previous PDU starting before this sequence number */
     msp = (struct tcp_multisegment_pdu *)wmem_tree_lookup32_le(flow->multisegment_pdus, seq-1);
     if (msp && msp->seq <= seq && msp->nxtpdu > seq) {
-        unsigned len;
+        int len;
 
         if (!PINFO_FD_VISITED(pinfo)) {
             msp->last_frame = pinfo->num;
@@ -1715,7 +1496,7 @@ again:
          */
         if (msp->flags & MSP_FLAGS_REASSEMBLE_ENTIRE_SEGMENT) {
             /* The dissector asked for the entire segment */
-            len = tvb_reported_length_remaining(tvb, offset);
+            len = MAX(0, tvb_reported_length_remaining(tvb, offset));
         } else {
             len = MIN(nxtseq, msp->nxtpdu) - seq;
         }
@@ -1763,10 +1544,13 @@ again:
 
         /* Did the subdissector ask us to desegment some more data
          * before it could handle the packet?
-         * If so we'll have to handle that later.
+         * If so we have to create some structures in our table but
+         * this is something we only do the first time we see this
+         * packet.
          */
         if (pinfo->desegment_len) {
-            must_desegment = true;
+            if (!PINFO_FD_VISITED(pinfo))
+                must_desegment = true;
 
             /*
              * Set "deseg_offset" to the offset in "tvb"
@@ -1920,9 +1704,14 @@ again:
                  * a higher-level PDU, but the data at the
                  * end of this segment started a higher-level
                  * PDU but didn't complete it.
+                 *
+                 * If so, we have to create some structures
+                 * in our table, but this is something we
+                 * only do the first time we see this packet.
                  */
                 if (pinfo->desegment_len) {
-                    must_desegment = true;
+                    if (!PINFO_FD_VISITED(pinfo))
+                        must_desegment = true;
 
                     /* The stuff we couldn't dissect
                      * must have come from this segment,
@@ -1966,6 +1755,15 @@ again:
     }
 
     if (must_desegment) {
+        /* If the dissector requested "reassemble until FIN"
+         * just set this flag for the flow and let reassembly
+         * proceed at normal.  We will check/pick up these
+         * reassembled PDUs later down in dissect_tcp() when checking
+         * for the FIN flag.
+         */
+        if (pinfo->desegment_len == DESEGMENT_UNTIL_FIN) {
+            flow->flags |= TCP_FLOW_REASSEMBLE_UNTIL_FIN;
+        }
         /*
          * The sequence number at which the stuff to be desegmented
          * starts is the sequence number of the byte at an offset
@@ -1978,53 +1776,35 @@ again:
          */
         deseg_seq = seq + (deseg_offset - offset);
 
-        /* We have to create some structures the first time. */
-        if (!PINFO_FD_VISITED(pinfo)) {
-            /* If the dissector requested "reassemble until FIN"
-             * just set this flag for the flow and let reassembly
-             * proceed at normal.  We will check/pick up these
-             * reassembled PDUs later down in dissect_tcp() when checking
-             * for the FIN flag.
-             */
-            if (pinfo->desegment_len == DESEGMENT_UNTIL_FIN) {
-                flow->flags |= TCP_FLOW_REASSEMBLE_UNTIL_FIN;
+        if (((nxtseq - deseg_seq) <= 1024*1024)
+            &&  (!PINFO_FD_VISITED(pinfo))) {
+            if (pinfo->desegment_len == DESEGMENT_ONE_MORE_SEGMENT) {
+                /* The subdissector asked to reassemble using the
+                 * entire next segment.
+                 * Just ask reassembly for one more byte
+                 * but set this msp flag so we can pick it up
+                 * above.
+                 */
+                msp = pdu_store_sequencenumber_of_next_pdu(pinfo,
+                    deseg_seq, nxtseq+1, flow->multisegment_pdus);
+                msp->flags |= MSP_FLAGS_REASSEMBLE_ENTIRE_SEGMENT;
+            } else if (pinfo->desegment_len == DESEGMENT_UNTIL_FIN) {
+                /* Set nxtseq very large so that reassembly won't happen
+                 * until we force it at the end of the stream in dissect_ssl()
+                 * outside this function.
+                 */
+                msp = pdu_store_sequencenumber_of_next_pdu(pinfo,
+                    deseg_seq, nxtseq+0x40000000, flow->multisegment_pdus);
+            } else {
+                msp = pdu_store_sequencenumber_of_next_pdu(pinfo,
+                    deseg_seq, nxtseq+pinfo->desegment_len, flow->multisegment_pdus);
             }
-            if ((nxtseq - deseg_seq) <= 1024*1024) {
-                if (pinfo->desegment_len == DESEGMENT_ONE_MORE_SEGMENT) {
-                    /* The subdissector asked to reassemble using the
-                     * entire next segment.
-                     * Just ask reassembly for one more byte
-                     * but set this msp flag so we can pick it up
-                     * above.
-                     */
-                    msp = pdu_store_sequencenumber_of_next_pdu(pinfo,
-                        deseg_seq, nxtseq+1, flow->multisegment_pdus);
-                    msp->flags |= MSP_FLAGS_REASSEMBLE_ENTIRE_SEGMENT;
-                } else if (pinfo->desegment_len == DESEGMENT_UNTIL_FIN) {
-                    /* Set nxtseq very large so that reassembly won't happen
-                     * until we force it at the end of the stream in dissect_ssl()
-                     * outside this function.
-                     */
-                    msp = pdu_store_sequencenumber_of_next_pdu(pinfo,
-                        deseg_seq, nxtseq+0x40000000, flow->multisegment_pdus);
-                } else {
-                    msp = pdu_store_sequencenumber_of_next_pdu(pinfo,
-                        deseg_seq, nxtseq+pinfo->desegment_len, flow->multisegment_pdus);
-                }
 
-                /* add this segment as the first one for this new pdu */
-                fragment_add(&ssl_reassembly_table, tvb, deseg_offset,
-                             pinfo, tls_msp_fragment_id(msp), msp,
-                             0, nxtseq - deseg_seq,
-                             LT_SEQ(nxtseq, msp->nxtpdu));
-            }
-        } else {
-            /* If this is not the first pass, then the MSP should already be
-             * created. Retrieve it to see if we know what later frame the
-             * last segment was reassembled in. */
-            if ((msp = (struct tcp_multisegment_pdu *)wmem_tree_lookup32(flow->multisegment_pdus, deseg_seq))) {
-                ipfd_head = fragment_get(&ssl_reassembly_table, pinfo, msp->first_frame, msp);
-            }
+            /* add this segment as the first one for this new pdu */
+            fragment_add(&ssl_reassembly_table, tvb, deseg_offset,
+                         pinfo, tls_msp_fragment_id(msp), msp,
+                         0, nxtseq - deseg_seq,
+                         LT_SEQ(nxtseq, msp->nxtpdu));
         }
     }
 
@@ -2080,7 +1860,7 @@ again:
         /* there was another pdu following this one. */
         pinfo->can_desegment=2;
         /* we also have to prevent the dissector from changing the
-         * PROTOCOL and INFO columns since what follows may be an
+         * PROTOCOL and INFO colums since what follows may be an
          * incomplete PDU and we don't want it be changed back from
          *  <Protocol>   to <TCP>
          */
@@ -2092,33 +1872,9 @@ again:
     }
 }
 
-static tvbuff_t*
-handle_export_pdu_check_desegmentation(packet_info *pinfo, tvbuff_t *tvb)
-{
-    /* Check to see if the tvb we're planning on exporting PDUs from was
-     * dissected fully, or whether it requested further desegmentation.
-     */
-    if (pinfo->can_desegment > 0 && pinfo->desegment_len != 0) {
-        /* Desegmentation was requested. How much did we desegment here?
-         * The rest, presumably, will be handled in another frame.
-         */
-        if (pinfo->desegment_offset == 0) {
-            /* We couldn't, in fact, dissect any of it. */
-            return NULL;
-        }
-        tvb = tvb_new_subset_length(tvb, 0, pinfo->desegment_offset);
-    }
-    return tvb;
-}
-
 static void
 export_pdu_packet(tvbuff_t *tvb, packet_info *pinfo, uint8_t tag, const char *name)
 {
-    tvb = handle_export_pdu_check_desegmentation(pinfo, tvb);
-    if (tvb == NULL) {
-        return;
-    }
-
     exp_pdu_data_t *exp_pdu_data = export_pdu_create_common_tags(pinfo, name, tag);
 
     exp_pdu_data->tvb_captured_length = tvb_captured_length(tvb);
@@ -2136,27 +1892,19 @@ process_ssl_payload(tvbuff_t *tvb, int offset, packet_info *pinfo,
 {
     tvbuff_t *next_tvb;
     heur_dtbl_entry_t *hdtbl_entry;
-    uint16_t saved_match_port, app_port;
-    const char *saved_match_string;
-    bool heur_first;
+    uint16_t saved_match_port;
 
     tlsinfo->app_handle = &session->app_handle;
 
     next_tvb = tvb_new_subset_remaining(tvb, offset);
 
-    if (ssl_packet_from_server(session, ssl_associations, pinfo)) {
-        app_port = PINFO_SRCPORT(pinfo);
-    } else {
-        app_port = PINFO_DESTPORT(pinfo);
-    }
-    /* If the appdata proto is not yet known (no STARTTLS or ALPN), try
-     * heuristics and ports-based dissectors, order depending on preference. */
+    /* If the appdata proto is not yet known (no STARTTLS), try heuristics
+     * first, then ports-based dissectors. Port 443 is too overloaded... */
     if (!session->app_handle) {
-        heur_first = value_is_in_range(tls_try_heuristic_first, app_port);
         /* The heuristics dissector should set the app_handle via tlsinfo
          * if it wants to be called in the future. */
-        if (heur_first && dissector_try_heuristic(ssl_heur_subdissector_list,
-                                    next_tvb, pinfo, proto_tree_get_root(tree), &hdtbl_entry,
+        if (dissector_try_heuristic(ssl_heur_subdissector_list, next_tvb,
+                                    pinfo, proto_tree_get_root(tree), &hdtbl_entry,
                                     tlsinfo)) {
             ssl_debug_printf("%s: found heuristics dissector %s, app_handle is %p (%s)\n",
                              G_STRFUNC, hdtbl_entry->short_name,
@@ -2174,25 +1922,10 @@ process_ssl_payload(tvbuff_t *tvb, int offset, packet_info *pinfo,
                              (void *)app_handle_port,
                              dissector_handle_get_dissector_name(app_handle_port));
             session->app_handle = app_handle_port;
-        } else if (!heur_first && dissector_try_heuristic(ssl_heur_subdissector_list,
-                                    next_tvb, pinfo, proto_tree_get_root(tree), &hdtbl_entry,
-                                    tlsinfo)) {
-            ssl_debug_printf("%s: found heuristics dissector %s, app_handle is %p (%s)\n",
-                             G_STRFUNC, hdtbl_entry->short_name,
-                             (void *)session->app_handle,
-                             dissector_handle_get_dissector_name(session->app_handle));
-            if (have_tap_listener(exported_pdu_tap)) {
-                export_pdu_packet(next_tvb, pinfo, EXP_PDU_TAG_HEUR_DISSECTOR_NAME, hdtbl_entry->short_name);
-            }
-            return;
         } else {
             /* No heuristics, no port-based proto, unknown protocol. */
             ssl_debug_printf("%s: no appdata dissector found\n", G_STRFUNC);
             call_data_dissector(next_tvb, pinfo, proto_tree_get_root(tree));
-            if (have_tap_listener(exported_pdu_tap)) {
-                export_pdu_packet(next_tvb, pinfo, EXP_PDU_TAG_DISSECTOR_NAME,
-                                  "data");
-            }
             return;
         }
     }
@@ -2201,24 +1934,18 @@ process_ssl_payload(tvbuff_t *tvb, int offset, packet_info *pinfo,
                      (void *)session->app_handle,
                      dissector_handle_get_dissector_name(session->app_handle));
 
-    saved_match_port = pinfo->match_uint;
-    saved_match_string = pinfo->match_string; // probably unneeded
-    pinfo->match_uint = app_port;
-    pinfo->match_string = session->alpn_name;
-    call_dissector_with_data(session->app_handle, next_tvb, pinfo, proto_tree_get_root(tree), tlsinfo);
-    /* The app dissector might not fully dissect next_tvb and request
-     * desegmentation. This is especially true on the first pass, but
-     * can also occur on the second pass if it dissects part of next_tvb
-     * but not all of it. So we can't export until after calling the
-     * app handle. (XXX - What if it throws an exception? Should we catch
-     * it and try to export it anyway? That should be fairly rare with
-     * TLS since decryption succeeded.) */
     if (have_tap_listener(exported_pdu_tap)) {
         export_pdu_packet(next_tvb, pinfo, EXP_PDU_TAG_DISSECTOR_NAME,
                           dissector_handle_get_dissector_name(session->app_handle));
     }
+    saved_match_port = pinfo->match_uint;
+    if (ssl_packet_from_server(session, ssl_associations, pinfo)) {
+        pinfo->match_uint = pinfo->srcport;
+    } else {
+        pinfo->match_uint = pinfo->destport;
+    }
+    call_dissector_with_data(session->app_handle, next_tvb, pinfo, proto_tree_get_root(tree), tlsinfo);
     pinfo->match_uint = saved_match_port;
-    pinfo->match_string = saved_match_string;
 }
 
 static void
@@ -2238,14 +1965,14 @@ dissect_ssl_payload(tvbuff_t *decrypted, packet_info *pinfo,
     save_can_desegment = pinfo->can_desegment;
 
     /* try to dissect decrypted data*/
-    ssl_debug_printf("%s decrypted len %d\n", G_STRFUNC, record->content_len);
-    ssl_print_data("decrypted app data fragment", record->plain_data, record->content_len);
+    ssl_debug_printf("%s decrypted len %d\n", G_STRFUNC, record->data_len);
+    ssl_print_data("decrypted app data fragment", record->plain_data, record->data_len);
 
     /* Can we desegment this segment? */
     if (tls_desegment_app_data) {
         /* Yes. */
         pinfo->can_desegment = 2;
-        desegment_ssl(decrypted, pinfo, 0, record->seq, record->seq + record->content_len,
+        desegment_ssl(decrypted, pinfo, 0, record->seq, record->seq + record->data_len,
                       session, proto_tree_get_root(tree), tree,
                       record->flow, app_handle_port, tlsinfo);
     } else if (session->app_handle || app_handle_port) {
@@ -2304,6 +2031,7 @@ dissect_ssl3_record(tvbuff_t *tvb, packet_info *pinfo,
     proto_tree     *ti;
     proto_tree     *ssl_record_tree;
     proto_item     *length_pi, *ct_pi;
+    unsigned        content_type_offset;
     uint32_t        available_bytes;
     tvbuff_t       *decrypted;
     SslRecordInfo  *record = NULL;
@@ -2331,7 +2059,7 @@ dissect_ssl3_record(tvbuff_t *tvb, packet_info *pinfo,
         /*
          * Yes - can we do reassembly?
          */
-        ssl_proto_tree_add_segment_data(tree, tvb, offset, available_bytes, NULL);
+        ssl_proto_tree_add_segment_data(tree, tvb, offset, -1, NULL);
         if (tls_desegment && pinfo->can_desegment) {
             /*
              * Yes.  Tell the TCP dissector where the data for this
@@ -2367,7 +2095,7 @@ dissect_ssl3_record(tvbuff_t *tvb, packet_info *pinfo,
             /*
              * Yes - can we do reassembly?
              */
-            ssl_proto_tree_add_segment_data(tree, tvb, offset, available_bytes, NULL);
+            ssl_proto_tree_add_segment_data(tree, tvb, offset, -1, NULL);
             if (tls_desegment && pinfo->can_desegment) {
                 /*
                  * Yes.  Tell the TCP dissector where the data for this
@@ -2414,6 +2142,7 @@ dissect_ssl3_record(tvbuff_t *tvb, packet_info *pinfo,
         ct_pi = proto_tree_add_item(ssl_record_tree, hf_tls_record_content_type,
                             tvb, offset, 1, ENC_BIG_ENDIAN);
     }
+    content_type_offset = offset;
     offset++;
 
     /* add the version */
@@ -2488,13 +2217,10 @@ dissect_ssl3_record(tvbuff_t *tvb, packet_info *pinfo,
         add_new_data_source(pinfo, decrypted, "Decrypted TLS");
         if (session->version == TLSV1DOT3_VERSION) {
             content_type = record->type;
-            proto_tree_add_uint(ssl_record_tree, hf_tls_record_content_type,
-                                decrypted, record->content_len, 1, record->type);
-            decrypted = tvb_new_subset_length(decrypted, 0, record->content_len);
+            ti = proto_tree_add_uint(ssl_record_tree, hf_tls_record_content_type,
+                                     tvb, content_type_offset, 1, record->type);
+            proto_item_set_generated(ti);
         }
-        ti = proto_tree_add_uint64(ssl_record_tree, hf_tls_record_sequence_number,
-                                     tvb, 0, 0, record->record_seq);
-        proto_item_set_generated(ti);
     }
     ssl_check_record_length(&dissect_ssl3_hf, pinfo, (ContentType)content_type, record_length, length_pi, version, decrypted);
 
@@ -2564,8 +2290,8 @@ dissect_ssl3_record(tvbuff_t *tvb, packet_info *pinfo,
             /* Unknown protocol handle, ssl_starttls_ack was not called before.
              * Try to find a port-based protocol and use it if there is no
              * heuristics dissector (see process_ssl_payload). */
-            app_handle = dissector_get_uint_handle(ssl_associations, PINFO_SRCPORT(pinfo));
-            if (!app_handle) app_handle = dissector_get_uint_handle(ssl_associations, PINFO_DESTPORT(pinfo));
+            app_handle = dissector_get_uint_handle(ssl_associations, pinfo->srcport);
+            if (!app_handle) app_handle = dissector_get_uint_handle(ssl_associations, pinfo->destport);
         }
 
         proto_item_set_text(ssl_record_tree,
@@ -2708,7 +2434,7 @@ dissect_ssl3_alert(tvbuff_t *tvb, packet_info *pinfo,
  */
 static bool
 is_encrypted_handshake_message(tvbuff_t *tvb, packet_info *pinfo, uint32_t offset, uint32_t offset_end,
-                               SslSession *session, bool is_from_server)
+                               bool maybe_encrypted, SslSession *session, bool is_from_server)
 {
     unsigned record_length = offset_end - offset;
     unsigned msg_length;
@@ -2736,11 +2462,13 @@ is_encrypted_handshake_message(tvbuff_t *tvb, packet_info *pinfo, uint32_t offse
      * occurs, then we have possibly found the explicit nonce preceding the
      * encrypted contents for GCM/CCM cipher suites as used in TLS 1.2.
      */
-    bool maybe_encrypted = tvb_get_ntoh40(tvb, offset) == 0;
-    /*
-     * TODO handle Finished message after CCS in the same frame and remove the
-     * above nonce-based heuristic.
-     */
+    if (maybe_encrypted) {
+        maybe_encrypted = tvb_get_ntoh40(tvb, offset) == 0;
+        /*
+         * TODO handle Finished message after CCS in the same frame and remove the
+         * above nonce-based heuristic.
+         */
+    }
 
     if (!maybe_encrypted) {
         /*
@@ -3035,8 +2763,7 @@ dissect_tls_handshake(tvbuff_t *tvb, packet_info *pinfo,
             if (frag_info && frag_info->record_id != record_id) {
                 frag_info = NULL;
             }
-        }
-        else {
+        } else if (frag_info->offset != 0) {
             // The full TVB is in the middle of a handshake message and needs more data.
             tls_show_handshake_details(pinfo, tree, version, frag_info->type, false, is_first_msg, false,
                     tvb, offset, offset_end - offset);
@@ -3048,7 +2775,7 @@ dissect_tls_handshake(tvbuff_t *tvb, packet_info *pinfo,
     } else if (!frag_info) {
         // 3. Not part of a reassembly, so this is a new handshake message. Does it
         //    look like encrypted data?
-        if (maybe_encrypted && is_encrypted_handshake_message(tvb, pinfo, offset, offset_end, session, is_from_server)) {
+        if (is_encrypted_handshake_message(tvb, pinfo, offset, offset_end, maybe_encrypted, session, is_from_server)) {
             // Update Info column and record tree.
             tls_show_handshake_details(pinfo, tree, version, 0, true, true, true,
                     tvb, offset, offset_end - offset);
@@ -3187,9 +2914,15 @@ dissect_tls_handshake_full(tvbuff_t *tvb, packet_info *pinfo,
 
         /*
          * Add handshake message (including type, length, etc.) to hash (for
-         * Extended Master Secret or TLS 1.3 secrets when using psk_ke).
+         * Extended Master Secret).
+         * Hash ClientHello up to and including ClientKeyExchange. As the
+         * premaster secret is looked up during ChangeCipherSpec processing (an
+         * implementation detail), we must skip the CertificateVerify message
+         * which can appear between CKE and CCS when mutual auth is enabled.
          */
-        ssl_calculate_handshake_hash(ssl, tvb, hs_offset, 4 + length, msg_type, is_from_server);
+        if (msg_type != SSL_HND_CERT_VERIFY) {
+            ssl_calculate_handshake_hash(ssl, tvb, hs_offset, 4 + length);
+        }
 
         /* now dissect the handshake message, if necessary */
         switch ((HandshakeType) msg_type) {
@@ -3200,21 +2933,15 @@ dissect_tls_handshake_full(tvbuff_t *tvb, packet_info *pinfo,
             case SSL_HND_CLIENT_HELLO:
                 if (ssl) {
                     /* ClientHello is first packet so set direction */
-                    ssl_set_server(session, PINFO_DST(pinfo), pinfo->ptype, PINFO_DESTPORT(pinfo));
-                    ssl_load_keyfile(ssl_options.keylog_filename, &ssl_keylog_file, &ssl_master_key_map);
+                    ssl_set_server(session, &pinfo->dst, pinfo->ptype, pinfo->destport);
                 }
                 ssl_dissect_hnd_cli_hello(&dissect_ssl3_hf, tvb, pinfo,
                         ssl_hand_tree, offset, offset + length, session, ssl,
-                        NULL, &ssl_master_key_map);
+                        NULL);
                 /*
                  * Cannot call tls13_change_key here with TLS_SECRET_HANDSHAKE
                  * since the server may not agree on using TLS 1.3. If
                  * early_data is advertised, it must be TLS 1.3 though.
-                 *
-                 * XXX - If we want to calculate the key from a PSK, it might
-                 * be better to do it now. There's a rare possibility that the
-                 * Server Hello could be received before the first 0RTT-APPDATA,
-                 * which would throw off the handshake transcript hash.
                  */
                 if (ssl) {
                     tls_save_crandom(ssl, &ssl_master_key_map);
@@ -3231,10 +2958,6 @@ dissect_tls_handshake_full(tvbuff_t *tvb, packet_info *pinfo,
                         offset, offset + length, session, ssl, false, is_hrr);
                 if (ssl) {
                     ssl_load_keyfile(ssl_options.keylog_filename, &ssl_keylog_file, &ssl_master_key_map);
-                    if (ssl->has_psk && !ssl->has_key_share) {
-                        // Server negotiated psk_ke; load the PSK if have one.
-                        tls_load_psk(ssl, ssl_options.psk);
-                    }
                     /* Create client and server decoders for TLS 1.3.
                      * Create client decoder based on HS secret only if there is
                      * no early data, or if there is no decryptable early data. */
@@ -3374,8 +3097,6 @@ dissect_tls_handshake_full(tvbuff_t *tvb, packet_info *pinfo,
 
             case SSL_HND_ENCRYPTED_EXTS:
                 dissect_ssl3_hnd_encrypted_exts(tvb, ssl_hand_tree, offset);
-                break;
-            case SSL_HND_MESSAGE_HASH:
                 break;
         }
     }
@@ -3549,7 +3270,7 @@ dissect_ssl2_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         /*
          * Yes - can we do reassembly?
          */
-        ssl_proto_tree_add_segment_data(tree, tvb, offset, available_bytes, NULL);
+        ssl_proto_tree_add_segment_data(tree, tvb, offset, -1, NULL);
         if (tls_desegment && pinfo->can_desegment) {
             /*
              * Yes.  Tell the TCP dissector where the data for this
@@ -3591,7 +3312,7 @@ dissect_ssl2_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         /*
          * Yes - Can we do reassembly?
          */
-        ssl_proto_tree_add_segment_data(tree, tvb, offset, available_bytes, NULL);
+        ssl_proto_tree_add_segment_data(tree, tvb, offset, -1, NULL);
         if (tls_desegment && pinfo->can_desegment) {
             /*
              * Yes.  Tell the TCP dissector where the data for this
@@ -3794,7 +3515,7 @@ dissect_ssl2_hnd_client_hello(tvbuff_t *tvb, packet_info *pinfo,
     }
 
     if (ssl) {
-      ssl_set_server(&ssl->session, PINFO_DST(pinfo), pinfo->ptype, PINFO_DESTPORT(pinfo));
+      ssl_set_server(&ssl->session, &pinfo->dst, pinfo->ptype, pinfo->destport);
     }
 
     /* show the version */
@@ -4104,10 +3825,7 @@ void ssl_set_master_secret(uint32_t frame_num, address *addr_srv, address *addr_
         conversation = conversation_new(frame_num, addr_srv, addr_cli, conversation_pt_to_conversation_type(ptype), port_srv, port_cli, 0);
         ssl_debug_printf("  new conversation = %p created\n", (void *)conversation);
     }
-    /* XXX - This need to be updated to handle tunneling. This API call was
-     * only ever used by external dissectors and plugins. For now just support
-     * the outer TLS layer. */
-    ssl = ssl_get_session(conversation, tls_handle, 0);
+    ssl = ssl_get_session(conversation, tls_handle);
 
     ssl_debug_printf("  conversation = %p, ssl_session = %p\n", (void *)conversation, (void *)ssl);
 
@@ -4371,40 +4089,21 @@ ssl_looks_like_valid_v2_handshake(tvbuff_t *tvb, const uint32_t offset,
     return ret;
 }
 
-SslDecryptSession *
-tls_get_current_session(packet_info *pinfo)
-{
-    conversation_t *conv = find_conversation_pinfo(pinfo, 0);
-    if (!conv) {
-        return NULL;
-    }
-
-    return tls_get_session(conv, proto_tls, p_get_proto_depth(pinfo, proto_tls));
-}
-
-SslDecryptSession *
-tls_get_parent_session(packet_info *pinfo)
-{
-    conversation_t *conv = find_conversation_pinfo(pinfo, 0);
-    if (!conv) {
-        return NULL;
-    }
-
-    int tls_depth = p_get_proto_depth(pinfo, proto_tls);
-    if (tls_depth == 0) {
-        return NULL;
-    }
-
-    return tls_get_session(conv, proto_tls, tls_depth - 1);
-}
-
 bool
-tls_get_cipher_info(SslDecryptSession *ssl_session, uint16_t cipher_suite, int *cipher_algo, int *cipher_mode, int *hash_algo)
+tls_get_cipher_info(packet_info *pinfo, uint16_t cipher_suite, int *cipher_algo, int *cipher_mode, int *hash_algo)
 {
     if (cipher_suite == 0) {
-        if (ssl_session == NULL) {
+        conversation_t *conv = find_conversation_pinfo(pinfo, 0);
+        if (!conv) {
             return false;
         }
+
+        void *conv_data = conversation_get_proto_data(conv, proto_tls);
+        if (conv_data == NULL) {
+            return false;
+        }
+
+        SslDecryptSession *ssl_session = (SslDecryptSession *)conv_data;
         cipher_suite = ssl_session->session.cipher;
     }
     const SslCipherSuite *suite = ssl_find_cipher(cipher_suite);
@@ -4458,8 +4157,12 @@ tls13_get_quic_secret(packet_info *pinfo, bool is_from_server, int type, unsigne
 {
     GHashTable *key_map;
     const char *label;
+    conversation_t *conv = find_conversation_pinfo(pinfo, 0);
+    if (!conv) {
+        return 0;
+    }
 
-    SslDecryptSession *ssl = tls_get_current_session(pinfo);
+    SslDecryptSession *ssl = (SslDecryptSession *)conversation_get_proto_data(conv, proto_tls);
     if (ssl == NULL) {
         return 0;
     }
@@ -4523,8 +4226,14 @@ tls13_get_quic_secret(packet_info *pinfo, bool is_from_server, int type, unsigne
 }
 
 const char *
-tls_get_alpn(SslDecryptSession *session)
+tls_get_alpn(packet_info *pinfo)
 {
+    conversation_t *conv = find_conversation_pinfo(pinfo, 0);
+    if (!conv) {
+        return NULL;
+    }
+
+    SslDecryptSession *session = (SslDecryptSession *)conversation_get_proto_data(conv, proto_tls);
     if (session == NULL) {
         return NULL;
     }
@@ -4533,8 +4242,14 @@ tls_get_alpn(SslDecryptSession *session)
 }
 
 const char *
-tls_get_client_alpn(SslDecryptSession *session)
+tls_get_client_alpn(packet_info *pinfo)
 {
+    conversation_t *conv = find_conversation_pinfo(pinfo, 0);
+    if (!conv) {
+        return NULL;
+    }
+
+    SslDecryptSession *session = (SslDecryptSession *)conversation_get_proto_data(conv, proto_tls);
     if (session == NULL) {
         return NULL;
     }
@@ -4563,7 +4278,7 @@ tls13_exporter_common(int algo, const StringInfo *secret, const char *label, uin
      */
     gcry_error_t    err;
     gcry_md_hd_t    hd;
-    const uint8_t  *hash_value;
+    const char     *hash_value;
     StringInfo      derived_secret = { NULL, 0 };
     // QUIC -09 currently uses draft 23, so no need to support older TLS drafts
     const char *label_prefix = "tls13 ";
@@ -4583,7 +4298,6 @@ tls13_exporter_common(int algo, const StringInfo *secret, const char *label, uin
     }
 
     /* HKDF-Expand-Label(..., "exporter", Hash(context_value), key_length) */
-    gcry_md_reset(hd);
     gcry_md_write(hd, context, context_length);
     hash_value = gcry_md_read(hd, 0);
     tls13_hkdf_expand_label_context(algo, &derived_secret, label_prefix, "exporter", hash_value, hash_len, key_length, out);
@@ -4598,7 +4312,7 @@ tls13_exporter_common(int algo, const StringInfo *secret, const char *label, uin
  * tls13_exporter_common for more details.
  */
 bool
-tls13_exporter(SslDecryptSession *ssl_session, bool is_early,
+tls13_exporter(packet_info *pinfo, bool is_early,
                const char *label, uint8_t *context,
                unsigned context_length, unsigned key_length, unsigned char **out)
 {
@@ -4606,15 +4320,22 @@ tls13_exporter(SslDecryptSession *ssl_session, bool is_early,
     GHashTable *key_map;
     const StringInfo *secret;
 
-    if (ssl_session == NULL) {
-        return false;
-    }
-
-    if (!tls_get_cipher_info(ssl_session, 0, NULL, NULL, &hash_algo)) {
+    if (!tls_get_cipher_info(pinfo, 0, NULL, NULL, &hash_algo)) {
         return false;
     }
 
     /* Lookup EXPORTER_SECRET based on client_random from conversation */
+    conversation_t *conv = find_conversation_strat(pinfo, conversation_pt_to_conversation_type(pinfo->ptype), 0);
+    if (!conv) {
+        return false;
+    }
+
+    void *conv_data = conversation_get_proto_data(conv, proto_tls);
+    if (conv_data == NULL) {
+        return false;
+    }
+
+    SslDecryptSession *ssl_session = (SslDecryptSession *)conv_data;
     ssl_load_keyfile(ssl_options.keylog_filename, &ssl_keylog_file, &ssl_master_key_map);
     key_map = is_early ? ssl_master_key_map.tls13_early_exporter
                        : ssl_master_key_map.tls13_exporter;
@@ -4674,15 +4395,11 @@ ssldecrypt_uat_fld_protocol_chk_cb(void* r _U_, const char* p, unsigned len _U_,
     }
 
     if (!ssl_find_appdata_dissector(p)) {
-        if (find_dissector(p)) {
-            // ssl_find_appdata_dissector accepts any valid dissector name so
-            // this path cannot happen
-            *err = ws_strdup_printf("While '%s' is a valid dissector name, that dissector is not configured"
+        if (proto_get_id_by_filter_name(p) != -1) {
+            *err = ws_strdup_printf("While '%s' is a valid dissector filter name, that dissector is not configured"
                                    " to support TLS decryption.\n\n"
                                    "If you need to decrypt '%s' over TLS, please contact the Wireshark development team.", p, p);
         } else {
-            // The GUI validates dissector names now so this path shouldn't
-            // occur either. (Perhaps if the UAT is hand-edited it might?)
             char* ssl_str = ssl_association_info("tls.port", "TCP");
             *err = ws_strdup_printf("Could not find dissector for: '%s'\nCommonly used TLS dissectors include:\n%s", p, ssl_str);
             g_free(ssl_str);
@@ -4699,7 +4416,7 @@ static void
 ssl_src_prompt(packet_info *pinfo, char *result)
 {
     SslPacketInfo* pi;
-    uint32_t srcport = PINFO_SRCPORT(pinfo);
+    uint32_t srcport = pinfo->srcport;
 
     pi = (SslPacketInfo *)p_get_proto_data(wmem_file_scope(), pinfo, proto_tls, pinfo->curr_layer_num);
     if (pi != NULL)
@@ -4715,7 +4432,7 @@ ssl_src_value(packet_info *pinfo)
 
     pi = (SslPacketInfo *)p_get_proto_data(wmem_file_scope(), pinfo, proto_tls, pinfo->curr_layer_num);
     if (pi == NULL)
-        return GUINT_TO_POINTER(PINFO_SRCPORT(pinfo));
+        return GUINT_TO_POINTER(pinfo->srcport);
 
     return GUINT_TO_POINTER(pi->srcport);
 }
@@ -4724,7 +4441,7 @@ static void
 ssl_dst_prompt(packet_info *pinfo, char *result)
 {
     SslPacketInfo* pi;
-    uint32_t destport = PINFO_DESTPORT(pinfo);
+    uint32_t destport = pinfo->destport;
 
     pi = (SslPacketInfo *)p_get_proto_data(wmem_file_scope(), pinfo, proto_tls, pinfo->curr_layer_num);
     if (pi != NULL)
@@ -4740,7 +4457,7 @@ ssl_dst_value(packet_info *pinfo)
 
     pi = (SslPacketInfo *)p_get_proto_data(wmem_file_scope(), pinfo, proto_tls, pinfo->curr_layer_num);
     if (pi == NULL)
-        return GUINT_TO_POINTER(PINFO_DESTPORT(pinfo));
+        return GUINT_TO_POINTER(pinfo->destport);
 
     return GUINT_TO_POINTER(pi->destport);
 }
@@ -4749,8 +4466,8 @@ static void
 ssl_both_prompt(packet_info *pinfo, char *result)
 {
     SslPacketInfo* pi;
-    uint32_t srcport = PINFO_SRCPORT(pinfo),
-            destport = PINFO_DESTPORT(pinfo);
+    uint32_t srcport = pinfo->srcport,
+            destport = pinfo->destport;
 
     pi = (SslPacketInfo *)p_get_proto_data(wmem_file_scope(), pinfo, proto_tls, pinfo->curr_layer_num);
     if (pi != NULL)
@@ -4779,11 +4496,6 @@ proto_register_tls(void)
 
     /* Setup list of header fields See Section 1.6.1 for details*/
     static hf_register_info hf[] = {
-        { &hf_tls_stream,
-          { "Stream index", "tls.stream",
-            FT_UINT32, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
         { &hf_tls_record,
           { "Record Layer", "tls.record",
             FT_NONE, BASE_NONE, NULL, 0x0,
@@ -4813,11 +4525,6 @@ proto_register_tls(void)
           { "Length", "tls.record.length",
             FT_UINT16, BASE_DEC, NULL, 0x0,
             "Length of TLS record data", HFILL }
-        },
-        { &hf_tls_record_sequence_number,
-          { "Sequence Number", "tls.record.sequence_number",
-            FT_UINT64, BASE_DEC, NULL, 0x0,
-            NULL, HFILL}
         },
         { &hf_tls_record_appdata,
           { "Encrypted Application Data", "tls.app_data",
@@ -5117,7 +4824,7 @@ proto_register_tls(void)
     static build_valid_func ssl_da_both_values[2] = {ssl_src_value, ssl_dst_value};
     static decode_as_value_t ssl_da_values[3] = {{ssl_src_prompt, 1, ssl_da_src_values}, {ssl_dst_prompt, 1, ssl_da_dst_values}, {ssl_both_prompt, 2, ssl_da_both_values}};
     static decode_as_t ssl_da = {"tls", "tls.port", 3, 2, ssl_da_values, "TCP", "port(s) as",
-                                 decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL, NULL, NULL };
+                                 decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL};
 
     expert_module_t* expert_ssl;
 
@@ -5143,7 +4850,7 @@ proto_register_tls(void)
         static uat_field_t sslkeylist_uats_flds[] = {
             UAT_FLD_CSTRING_OTHER(sslkeylist_uats, ipaddr, "IP address", ssldecrypt_uat_fld_ip_chk_cb, "IPv4 or IPv6 address (unused)"),
             UAT_FLD_CSTRING_OTHER(sslkeylist_uats, port, "Port", ssldecrypt_uat_fld_port_chk_cb, "Port Number (optional)"),
-            UAT_FLD_DISSECTOR_OTHER(sslkeylist_uats, protocol, "Protocol", ssldecrypt_uat_fld_protocol_chk_cb, "Application Layer Protocol (optional)"),
+            UAT_FLD_CSTRING_OTHER(sslkeylist_uats, protocol, "Protocol", ssldecrypt_uat_fld_protocol_chk_cb, "Application Layer Protocol (optional)"),
             UAT_FLD_FILENAME_OTHER(sslkeylist_uats, keyfile, "Key File", ssldecrypt_uat_fld_fileopen_chk_cb, "Private keyfile."),
             UAT_FLD_CSTRING_OTHER(sslkeylist_uats, password,"Password", ssldecrypt_uat_fld_password_chk_cb, "Password (for PCKS#12 keyfile)"),
             UAT_END_FIELDS
@@ -5169,7 +4876,10 @@ proto_register_tls(void)
             "A table of RSA keys for TLS decryption",
             ssldecrypt_uat);
 
-        prefs_register_obsolete_preference(ssl_module, "keys_list");
+        prefs_register_string_preference(ssl_module, "keys_list", "RSA keys list (deprecated)",
+             "Semicolon-separated list of private RSA keys used for TLS decryption. "
+             "Used by versions of Wireshark prior to 1.6",
+             &ssl_keys_list);
 #endif  /* HAVE_LIBGNUTLS */
 
         prefs_register_filename_preference(ssl_module, "debug_file", "TLS debug file",
@@ -5193,14 +4903,6 @@ proto_register_tls(void)
              "Message Authentication Code (MAC), ignore \"mac failed\"",
              "For troubleshooting ignore the mac check result and decrypt also if the Message Authentication Code (MAC) fails.",
              &tls_ignore_mac_failed);
-
-        /* Port 443 is too overloaded... */
-        range_convert_str(wmem_epan_scope(), &tls_try_heuristic_first, PORT_HEUR_DEFAULT, 65535);
-        prefs_register_range_preference(ssl_module,
-             "try_heuristic_first",
-             "Try heuristic sub-dissectors first on ports",
-             "Try to decode a packet using an heuristic sub-dissector before using a sub-dissector registered to a specific port for these ports, e.g. the overloaded port 443. An ALPN for a connection always has precedence.",
-             &tls_try_heuristic_first, 65535);
         ssl_common_register_options(ssl_module, &ssl_options, false);
     }
 
@@ -5212,7 +4914,7 @@ proto_register_tls(void)
         proto_tls);
 
     tls_handle = register_dissector("tls", dissect_ssl, proto_tls);
-    tls13_handshake_handle = register_dissector("tls13-handshake", dissect_tls13_handshake, proto_tls);
+    register_dissector("tls13-handshake", dissect_tls13_handshake, proto_tls);
     register_dissector("tls-echconfig", dissect_tls_echconfig, proto_tls);
 
     register_init_routine(ssl_init);
@@ -5228,10 +4930,9 @@ proto_register_tls(void)
     ssl_debug_printf("proto_register_ssl: registered tap %s:%d\n",
         "tls_follow", tls_follow_tap);
 
-    register_follow_stream(proto_tls, "tls_follow", tls_follow_conv_filter, tls_follow_index_filter, tcp_follow_address_filter,
-                            tcp_port_to_display, ssl_follow_tap_listener, get_tls_stream_count, NULL);
+    register_follow_stream(proto_tls, "tls_follow", tcp_follow_conv_filter, tcp_follow_index_filter, tcp_follow_address_filter,
+                            tcp_port_to_display, ssl_follow_tap_listener, get_tcp_stream_count, NULL);
     secrets_register_type(SECRETS_TYPE_TLS, tls_secrets_block_callback);
-    secrets_register_inject_type("TLS", ssl_session_key_count, tls_export_dsb, ssl_export_sessions);
 }
 
 static int dissect_tls_sct_ber(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
@@ -5242,7 +4943,7 @@ static int dissect_tls_sct_ber(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
     offset = dissect_ber_length(pinfo, tree, tvb, offset, NULL, NULL);
     /*
      * RFC 6962 (Certificate Transparency) refers to RFC 5246 (TLS 1.2) for the
-     * DigitallySigned format, so assume that version.
+     * DigitallySigned format, so asssume that version.
      */
     return tls_dissect_sct_list(&dissect_ssl3_hf, tvb, pinfo, tree, offset, tvb_captured_length(tvb), TLSV1DOT2_VERSION);
 }
@@ -5275,8 +4976,14 @@ proto_reg_handoff_ssl(void)
 #ifdef HAVE_LIBGNUTLS
     /* parse key list */
     ssl_parse_uat();
+    ssl_parse_old_keys();
 #endif
 
+    /*
+     * XXX the port preferences should probably be removed in favor of Decode
+     * As. Then proto_reg_handoff_ssl can be removed from
+     * prefs_register_protocol.
+     */
     static bool initialized = false;
     if (initialized) {
         return;
@@ -5291,15 +4998,6 @@ proto_reg_handoff_ssl(void)
 
     heur_dissector_add("tcp", dissect_ssl_heur, "SSL/TLS over TCP", "tls_tcp", proto_tls, HEURISTIC_ENABLE);
     dissector_add_string("http.upgrade", "tls", tls_handle);
-    dissector_add_string("http.upgrade", "TLS/1.0", tls_handle);
-    dissector_add_string("http.upgrade", "TLS/1.1", tls_handle);
-    dissector_add_string("http.upgrade", "TLS/1.2", tls_handle);
-    dissector_add_string("http.upgrade", "TLS/1.3", tls_handle);
-    /* Ivanti VPNs (unregistered with IANA) */
-    dissector_add_string("http.upgrade", "IF-T/TLS", tls_handle);
-
-    /* RFC 9934 */
-    dissector_add_string("rfc7468.preeb_label", "ECHCONFIG", create_dissector_handle(dissect_tls_echconfig, proto_tls));
 }
 
 void

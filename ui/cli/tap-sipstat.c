@@ -21,7 +21,7 @@
 #include <epan/packet_info.h>
 #include <epan/tap.h>
 #include <epan/stat_tap_ui.h>
-#include <wsutil/value_string.h>
+#include <epan/value_string.h>
 #include <epan/dissectors/packet-sip.h>
 
 #include <wsutil/wslog.h>
@@ -30,7 +30,7 @@
 
 void register_tap_listener_sipstat(void);
 
-/* used to keep track of the statistics for an entire program interface */
+/* used to keep track of the statictics for an entire program interface */
 typedef struct _sip_stats_t {
 	char	    *filter;
 	uint32_t	     packets;	 /* number of sip packets, including continuations */
@@ -67,30 +67,25 @@ static void
 sip_init_hash(sipstat_t *sp)
 {
 	int i;
-	value_string* response_codes = get_external_value_string("sip_response_code_vals");
 
 	/* Create responses table */
-	sp->hash_responses = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, g_free);
+	sp->hash_responses = g_hash_table_new(g_int_hash, g_int_equal);
 
 	/* Add all response codes */
-	for (i=0; response_codes[i].strptr; i++)
+	for (i=0; sip_response_code_vals[i].strptr; i++)
 	{
 		int *key = g_new (int, 1);
 		sip_response_code_t *sc = g_new (sip_response_code_t, 1);
-		*key = response_codes[i].value;
+		*key = sip_response_code_vals[i].value;
 		sc->packets = 0;
 		sc->response_code =  *key;
-		sc->name = response_codes[i].strptr;
+		sc->name = sip_response_code_vals[i].strptr;
 		sc->sp = sp;
 		g_hash_table_insert(sc->sp->hash_responses, key, sc);
 	}
 
-	/* Create empty requests table
-	 * NB. the sip_request_method_t value is created in sipstat_packet()
-	 * with its response member pointing at the same string as was allocated for the key.
-	 * Thus it needs no special memory handling, it's freed when GLib frees the key.
-	 */
-	sp->hash_requests = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+	/* Create empty requests table */
+	sp->hash_requests = g_hash_table_new(g_str_hash, g_str_equal);
 }
 
 static void
@@ -104,7 +99,11 @@ sip_draw_hash_requests( char *key _U_, sip_request_method_t *data, char *format)
 static void
 sip_draw_hash_responses( int *key _U_ , sip_response_code_t *data, char *format)
 {
-	if ((data == NULL) || (data->packets == 0))
+	if (data == NULL) {
+		ws_warning("C'est quoi ce borderl key=%d\n", *key);
+		exit(EXIT_FAILURE);
+	}
+	if (data->packets == 0)
 		return;
 	printf(format,  data->response_code, data->name, data->packets );
 }
@@ -131,7 +130,7 @@ sip_reset_hash_requests(char *key _U_ , sip_request_method_t *data, void *ptr _U
 }
 
 static void
-sipstat_reset(void *psp)
+sipstat_reset(void *psp  )
 {
 	sipstat_t *sp = (sipstat_t *)psp;
 	if (sp) {
@@ -148,15 +147,6 @@ sipstat_reset(void *psp)
 	}
 }
 
-static void
-sipstat_finish(void *psp)
-{
-	sipstat_t *sp = (sipstat_t *)psp;
-	g_free(sp->filter);
-	g_hash_table_destroy(sp->hash_responses);
-	g_hash_table_destroy(sp->hash_requests);
-	g_free(sp);
-}
 
 /* Main entry point to SIP tap */
 static tap_packet_status
@@ -264,7 +254,7 @@ sipstat_packet(void *psp, packet_info *pinfo _U_, epan_dissect_t *edt _U_, const
 		{
 			/* First of this type. Create structure and initialise */
 			sc = g_new(sip_request_method_t, 1);
-			sc->response = g_strdup((const char*)value->request_method);
+			sc->response = g_strdup(value->request_method);
 			sc->packets = 1;
 			sc->sp = sp;
 			/* Insert it into request table */
@@ -309,7 +299,7 @@ sipstat_draw(void *psp  )
 	printf("===================================================================\n");
 }
 
-static bool
+static void
 sipstat_init(const char *opt_arg, void *userdata _U_)
 {
 	sipstat_t  *sp;
@@ -331,11 +321,11 @@ sipstat_init(const char *opt_arg, void *userdata _U_)
 			"sip",
 			sp,
 			filter,
-			TL_REQUIRES_NOTHING,
+			0,
 			sipstat_reset,
 			sipstat_packet,
 			sipstat_draw,
-			sipstat_finish);
+			NULL);
 	if (error_string) {
 		/* error, we failed to attach to the tap. clean up */
 		g_free(sp->filter);
@@ -343,13 +333,12 @@ sipstat_init(const char *opt_arg, void *userdata _U_)
 		cmdarg_err("Couldn't register sip,stat tap: %s",
 			 error_string->str);
 		g_string_free(error_string, TRUE);
-		return false;
+		exit(1);
 	}
 
 	sp->packets = 0;
 	sp->resent_packets = 0;
 	sip_init_hash(sp);
-	return true;
 }
 
 static stat_tap_ui sipstat_ui = {

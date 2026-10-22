@@ -4,7 +4,7 @@
 /* asn2wrs.py -b -q -L -p disp -c ./disp.cnf -s ./packet-disp-template -D . -O ../.. disp.asn */
 
 /* packet-disp.c
- * Routines for X.525 (X.500 Directory Shadow Abstract Service) and X.519 DISP packet dissection
+ * Routines for X.525 (X.500 Directory Shadow Asbtract Service) and X.519 DISP packet dissection
  * Graeme Lunt 2005
  *
  * Wireshark - Network traffic analyzer
@@ -38,6 +38,13 @@
 #include "packet-dap.h"
 #include "packet-dsp.h"
 #include "packet-disp.h"
+
+
+/* we don't have a separate dissector for X519 -
+   and most of DISP is defined in X525 */
+#define PNAME  "X.519 Directory Information Shadowing Protocol"
+#define PSNAME "DISP"
+#define PFNAME "disp"
 
 void proto_register_disp(void);
 void proto_reg_handoff_disp(void);
@@ -220,16 +227,16 @@ static dissector_handle_t disp_handle;
 /*--- Cyclic dependencies ---*/
 
 /* Subtree -> Subtree/subtree -> Subtree */
-static unsigned dissect_disp_Subtree(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+static int dissect_disp_Subtree(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
 
 /* IncrementalStepRefresh -> IncrementalStepRefresh/subordinateUpdates -> SubordinateChanges -> IncrementalStepRefresh */
-static unsigned dissect_disp_IncrementalStepRefresh(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+static int dissect_disp_IncrementalStepRefresh(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
 
 
 
 
-static unsigned
-dissect_disp_DSAShadowBindArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_DSAShadowBindArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_dap_DirectoryBindArgument(implicit_tag, tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -237,8 +244,8 @@ dissect_disp_DSAShadowBindArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, uns
 
 
 
-static unsigned
-dissect_disp_DSAShadowBindResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_DSAShadowBindResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_dap_DirectoryBindArgument(implicit_tag, tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -246,8 +253,8 @@ dissect_disp_DSAShadowBindResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsig
 
 
 
-static unsigned
-dissect_disp_DSAShadowBindError(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_DSAShadowBindError(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_dap_DirectoryBindError(implicit_tag, tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -255,8 +262,8 @@ dissect_disp_DSAShadowBindError(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsign
 
 
 
-static unsigned
-dissect_disp_EstablishParameter(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_EstablishParameter(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_null(implicit_tag, actx, tree, tvb, offset, hf_index);
 
   return offset;
@@ -267,8 +274,8 @@ static const ber_sequence_t SET_OF_SupplierAndConsumers_set_of[1] = {
   { &hf_disp_modifiedSecondaryShadows_item, BER_CLASS_UNI, BER_UNI_TAG_SET, BER_FLAGS_NOOWNTAG, dissect_dop_SupplierAndConsumers },
 };
 
-static unsigned
-dissect_disp_SET_OF_SupplierAndConsumers(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_SET_OF_SupplierAndConsumers(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set_of(implicit_tag, actx, tree, tvb, offset,
                                  SET_OF_SupplierAndConsumers_set_of, hf_index, ett_disp_SET_OF_SupplierAndConsumers);
 
@@ -281,8 +288,8 @@ static const ber_sequence_t ModificationParameter_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_ModificationParameter(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_ModificationParameter(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ModificationParameter_sequence, hf_index, ett_disp_ModificationParameter);
 
@@ -291,8 +298,8 @@ dissect_disp_ModificationParameter(bool implicit_tag _U_, tvbuff_t *tvb _U_, uns
 
 
 
-unsigned
-dissect_disp_AgreementID(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+int
+dissect_disp_AgreementID(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_dop_OperationalBindingID(implicit_tag, tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -305,8 +312,8 @@ static const ber_sequence_t AreaSpecification_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_AreaSpecification(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_AreaSpecification(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    AreaSpecification_sequence, hf_index, ett_disp_AreaSpecification);
 
@@ -315,8 +322,8 @@ dissect_disp_AreaSpecification(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigne
 
 
 
-static unsigned
-dissect_disp_OBJECT_IDENTIFIER(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_OBJECT_IDENTIFIER(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_object_identifier(implicit_tag, actx, tree, tvb, offset, hf_index, NULL);
 
   return offset;
@@ -324,8 +331,8 @@ dissect_disp_OBJECT_IDENTIFIER(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigne
 
 
 
-static unsigned
-dissect_disp_NULL(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_NULL(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_null(implicit_tag, actx, tree, tvb, offset, hf_index);
 
   return offset;
@@ -336,8 +343,8 @@ static const ber_sequence_t AttributeTypes_set_of[1] = {
   { &hf_disp_AttributeTypes_item, BER_CLASS_UNI, BER_UNI_TAG_OID, BER_FLAGS_NOOWNTAG, dissect_x509if_AttributeType },
 };
 
-static unsigned
-dissect_disp_AttributeTypes(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_AttributeTypes(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set_of(implicit_tag, actx, tree, tvb, offset,
                                  AttributeTypes_set_of, hf_index, ett_disp_AttributeTypes);
 
@@ -359,8 +366,8 @@ static const ber_choice_t ClassAttributes_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_ClassAttributes(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_ClassAttributes(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  ClassAttributes_choice, hf_index, ett_disp_ClassAttributes,
                                  NULL);
@@ -375,8 +382,8 @@ static const ber_sequence_t ClassAttributeSelection_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_ClassAttributeSelection(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_ClassAttributeSelection(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ClassAttributeSelection_sequence, hf_index, ett_disp_ClassAttributeSelection);
 
@@ -388,8 +395,8 @@ static const ber_sequence_t AttributeSelection_set_of[1] = {
   { &hf_disp_AttributeSelection_item, BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_disp_ClassAttributeSelection },
 };
 
-static unsigned
-dissect_disp_AttributeSelection(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_AttributeSelection(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set_of(implicit_tag, actx, tree, tvb, offset,
                                  AttributeSelection_set_of, hf_index, ett_disp_AttributeSelection);
 
@@ -405,8 +412,8 @@ static const value_string disp_T_knowledgeType_vals[] = {
 };
 
 
-static unsigned
-dissect_disp_T_knowledgeType(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_T_knowledgeType(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                   NULL);
 
@@ -415,8 +422,8 @@ dissect_disp_T_knowledgeType(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned 
 
 
 
-static unsigned
-dissect_disp_BOOLEAN(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_BOOLEAN(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_boolean(implicit_tag, actx, tree, tvb, offset, hf_index, NULL);
 
   return offset;
@@ -429,8 +436,8 @@ static const ber_sequence_t Knowledge_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_Knowledge(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_Knowledge(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    Knowledge_sequence, hf_index, ett_disp_Knowledge);
 
@@ -442,8 +449,8 @@ static const ber_sequence_t T_selectedContexts_set_of[1] = {
   { &hf_disp_selectedContexts_item, BER_CLASS_UNI, BER_UNI_TAG_OID, BER_FLAGS_NOOWNTAG, dissect_disp_OBJECT_IDENTIFIER },
 };
 
-static unsigned
-dissect_disp_T_selectedContexts(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_T_selectedContexts(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set_of(implicit_tag, actx, tree, tvb, offset,
                                  T_selectedContexts_set_of, hf_index, ett_disp_T_selectedContexts);
 
@@ -463,8 +470,8 @@ static const ber_choice_t T_supplyContexts_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_T_supplyContexts(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_T_supplyContexts(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  T_supplyContexts_choice, hf_index, ett_disp_T_supplyContexts,
                                  NULL);
@@ -483,8 +490,8 @@ static const ber_sequence_t UnitOfReplication_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_UnitOfReplication(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_UnitOfReplication(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    UnitOfReplication_sequence, hf_index, ett_disp_UnitOfReplication);
 
@@ -493,8 +500,8 @@ dissect_disp_UnitOfReplication(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigne
 
 
 
-static unsigned
-dissect_disp_Time(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_Time(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_GeneralizedTime(implicit_tag, actx, tree, tvb, offset, hf_index);
 
   return offset;
@@ -502,8 +509,8 @@ dissect_disp_Time(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_,
 
 
 
-static unsigned
-dissect_disp_INTEGER(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_INTEGER(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 NULL);
 
@@ -518,8 +525,8 @@ static const ber_sequence_t PeriodicStrategy_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_PeriodicStrategy(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_PeriodicStrategy(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    PeriodicStrategy_sequence, hf_index, ett_disp_PeriodicStrategy);
 
@@ -533,8 +540,8 @@ static const ber_sequence_t SchedulingParameters_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_SchedulingParameters(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_SchedulingParameters(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    SchedulingParameters_sequence, hf_index, ett_disp_SchedulingParameters);
 
@@ -554,8 +561,8 @@ static const ber_choice_t SupplierUpdateMode_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_SupplierUpdateMode(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_SupplierUpdateMode(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  SupplierUpdateMode_choice, hf_index, ett_disp_SupplierUpdateMode,
                                  NULL);
@@ -565,8 +572,8 @@ dissect_disp_SupplierUpdateMode(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsign
 
 
 
-static unsigned
-dissect_disp_ConsumerUpdateMode(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_ConsumerUpdateMode(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_disp_SchedulingParameters(implicit_tag, tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -585,8 +592,8 @@ static const ber_choice_t UpdateMode_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_UpdateMode(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_UpdateMode(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  UpdateMode_choice, hf_index, ett_disp_UpdateMode,
                                  NULL);
@@ -603,8 +610,8 @@ static const ber_sequence_t ShadowingAgreementInfo_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_ShadowingAgreementInfo(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_ShadowingAgreementInfo(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ShadowingAgreementInfo_sequence, hf_index, ett_disp_ShadowingAgreementInfo);
 
@@ -620,15 +627,15 @@ static const value_string disp_StandardUpdate_vals[] = {
 };
 
 
-static unsigned
-dissect_disp_StandardUpdate(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_StandardUpdate(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   uint32_t update;
 
     offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                   &update);
 
 
-  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", val_to_str(actx->pinfo->pool, update, disp_StandardUpdate_vals, "unknown(%d)"));
+  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", val_to_str(update, disp_StandardUpdate_vals, "unknown(%d)"));
 
 
   return offset;
@@ -636,8 +643,8 @@ dissect_disp_StandardUpdate(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned o
 
 
 
-static unsigned
-dissect_disp_EXTERNAL(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_EXTERNAL(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_external_type(implicit_tag, tree, tvb, offset, actx, hf_index, NULL);
 
   return offset;
@@ -656,8 +663,8 @@ static const ber_choice_t T_updateStrategy_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_T_updateStrategy(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_T_updateStrategy(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  T_updateStrategy_choice, hf_index, ett_disp_T_updateStrategy,
                                  NULL);
@@ -674,8 +681,8 @@ static const ber_sequence_t CoordinateShadowUpdateArgumentData_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_CoordinateShadowUpdateArgumentData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_CoordinateShadowUpdateArgumentData(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    CoordinateShadowUpdateArgumentData_sequence, hf_index, ett_disp_CoordinateShadowUpdateArgumentData);
 
@@ -684,8 +691,8 @@ dissect_disp_CoordinateShadowUpdateArgumentData(bool implicit_tag _U_, tvbuff_t 
 
 
 
-static unsigned
-dissect_disp_BIT_STRING(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_BIT_STRING(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_bitstring(implicit_tag, actx, tree, tvb, offset,
                                     NULL, 0, hf_index, -1,
                                     NULL);
@@ -701,8 +708,8 @@ static const ber_sequence_t T_signedCoordinateShadowUpdateArgument_sequence[] = 
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_T_signedCoordinateShadowUpdateArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_T_signedCoordinateShadowUpdateArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    T_signedCoordinateShadowUpdateArgument_sequence, hf_index, ett_disp_T_signedCoordinateShadowUpdateArgument);
 
@@ -716,8 +723,8 @@ static const ber_choice_t CoordinateShadowUpdateArgument_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_CoordinateShadowUpdateArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_CoordinateShadowUpdateArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  CoordinateShadowUpdateArgument_choice, hf_index, ett_disp_CoordinateShadowUpdateArgument,
                                  NULL);
@@ -730,8 +737,8 @@ static const ber_sequence_t SEQUENCE_OF_Attribute_sequence_of[1] = {
   { &hf_disp_notification_item, BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_x509if_Attribute },
 };
 
-static unsigned
-dissect_disp_SEQUENCE_OF_Attribute(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_SEQUENCE_OF_Attribute(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       SEQUENCE_OF_Attribute_sequence_of, hf_index, ett_disp_SEQUENCE_OF_Attribute);
 
@@ -749,8 +756,8 @@ static const ber_sequence_t InformationData_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_InformationData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_InformationData(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    InformationData_sequence, hf_index, ett_disp_InformationData);
 
@@ -765,8 +772,8 @@ static const ber_sequence_t T_signedInformation_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_T_signedInformation(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_T_signedInformation(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    T_signedInformation_sequence, hf_index, ett_disp_T_signedInformation);
 
@@ -786,8 +793,8 @@ static const ber_choice_t Information_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_Information(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_Information(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  Information_choice, hf_index, ett_disp_Information,
                                  NULL);
@@ -808,18 +815,16 @@ static const ber_choice_t CoordinateShadowUpdateResult_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_CoordinateShadowUpdateResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  int32_t update;
+static int
+dissect_disp_CoordinateShadowUpdateResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  uint32_t update;
 
     offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  CoordinateShadowUpdateResult_choice, hf_index, ett_disp_CoordinateShadowUpdateResult,
                                  &update);
 
 
-  if (update >= 0) {
-    col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", val_to_str(actx->pinfo->pool, CoordinateShadowUpdateResult_choice[update].value, disp_CoordinateShadowUpdateResult_vals, "unknown(%d)"));
-  }
+  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", val_to_str(update, disp_CoordinateShadowUpdateResult_vals, "unknown(%d)"));
 
 
   return offset;
@@ -833,15 +838,15 @@ static const value_string disp_T_standard_vals[] = {
 };
 
 
-static unsigned
-dissect_disp_T_standard(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_T_standard(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   uint32_t update;
 
     offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                   &update);
 
 
-  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", val_to_str(actx->pinfo->pool, update, disp_T_standard_vals, "standard(%d"));
+  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", val_to_str(update, disp_T_standard_vals, "standard(%d"));
 
 
   return offset;
@@ -860,8 +865,8 @@ static const ber_choice_t T_requestedStrategy_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_T_requestedStrategy(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_T_requestedStrategy(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  T_requestedStrategy_choice, hf_index, ett_disp_T_requestedStrategy,
                                  NULL);
@@ -878,8 +883,8 @@ static const ber_sequence_t RequestShadowUpdateArgumentData_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_RequestShadowUpdateArgumentData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_RequestShadowUpdateArgumentData(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    RequestShadowUpdateArgumentData_sequence, hf_index, ett_disp_RequestShadowUpdateArgumentData);
 
@@ -894,8 +899,8 @@ static const ber_sequence_t T_signedRequestShadowUpdateArgument_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_T_signedRequestShadowUpdateArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_T_signedRequestShadowUpdateArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    T_signedRequestShadowUpdateArgument_sequence, hf_index, ett_disp_T_signedRequestShadowUpdateArgument);
 
@@ -909,8 +914,8 @@ static const ber_choice_t RequestShadowUpdateArgument_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_RequestShadowUpdateArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_RequestShadowUpdateArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  RequestShadowUpdateArgument_choice, hf_index, ett_disp_RequestShadowUpdateArgument,
                                  NULL);
@@ -931,18 +936,16 @@ static const ber_choice_t RequestShadowUpdateResult_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_RequestShadowUpdateResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  int32_t update;
+static int
+dissect_disp_RequestShadowUpdateResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  uint32_t update;
 
     offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  RequestShadowUpdateResult_choice, hf_index, ett_disp_RequestShadowUpdateResult,
                                  &update);
 
 
-  if (update >= 0) {
-    col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", val_to_str(actx->pinfo->pool, RequestShadowUpdateResult_choice[update].value, disp_RequestShadowUpdateResult_vals, "unknown(%d)"));
-  }
+  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", val_to_str(update, disp_RequestShadowUpdateResult_vals, "unknown(%d)"));
 
 
   return offset;
@@ -955,8 +958,8 @@ static const ber_sequence_t UpdateWindow_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_UpdateWindow(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_UpdateWindow(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    UpdateWindow_sequence, hf_index, ett_disp_UpdateWindow);
 
@@ -965,8 +968,8 @@ dissect_disp_UpdateWindow(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned off
 
 
 
-static unsigned
-dissect_disp_SDSEType(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_SDSEType(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_dop_DSEType(implicit_tag, tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -977,8 +980,8 @@ static const ber_sequence_t SET_OF_Attribute_set_of[1] = {
   { &hf_disp_attributes_item, BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_x509if_Attribute },
 };
 
-static unsigned
-dissect_disp_SET_OF_Attribute(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_SET_OF_Attribute(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set_of(implicit_tag, actx, tree, tvb, offset,
                                  SET_OF_Attribute_set_of, hf_index, ett_disp_SET_OF_Attribute);
 
@@ -990,8 +993,8 @@ static const ber_sequence_t SET_OF_AttributeType_set_of[1] = {
   { &hf_disp_attValIncomplete_item, BER_CLASS_UNI, BER_UNI_TAG_OID, BER_FLAGS_NOOWNTAG, dissect_x509if_AttributeType },
 };
 
-static unsigned
-dissect_disp_SET_OF_AttributeType(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_SET_OF_AttributeType(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set_of(implicit_tag, actx, tree, tvb, offset,
                                  SET_OF_AttributeType_set_of, hf_index, ett_disp_SET_OF_AttributeType);
 
@@ -1008,8 +1011,8 @@ static const ber_sequence_t SDSEContent_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_SDSEContent(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_SDSEContent(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    SDSEContent_sequence, hf_index, ett_disp_SDSEContent);
 
@@ -1021,8 +1024,8 @@ static const ber_sequence_t SET_OF_Subtree_set_of[1] = {
   { &hf_disp_subtree_item   , BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_disp_Subtree },
 };
 
-static unsigned
-dissect_disp_SET_OF_Subtree(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_SET_OF_Subtree(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set_of(implicit_tag, actx, tree, tvb, offset,
                                  SET_OF_Subtree_set_of, hf_index, ett_disp_SET_OF_Subtree);
 
@@ -1037,14 +1040,16 @@ static const ber_sequence_t Subtree_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_Subtree(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_Subtree(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   // Subtree -> Subtree/subtree -> Subtree
-  increment_dissection_depth_by_n(actx->pinfo, 2);
+  actx->pinfo->dissection_depth += 2;
+  increment_dissection_depth(actx->pinfo);
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    Subtree_sequence, hf_index, ett_disp_Subtree);
 
-  decrement_dissection_depth_by_n(actx->pinfo, 2);
+  actx->pinfo->dissection_depth -= 2;
+  decrement_dissection_depth(actx->pinfo);
   return offset;
 }
 
@@ -1055,8 +1060,8 @@ static const ber_sequence_t TotalRefresh_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_TotalRefresh(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_TotalRefresh(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    TotalRefresh_sequence, hf_index, ett_disp_TotalRefresh);
 
@@ -1076,8 +1081,8 @@ static const ber_choice_t T_rename_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_T_rename(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_T_rename(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  T_rename_choice, hf_index, ett_disp_T_rename,
                                  NULL);
@@ -1090,8 +1095,8 @@ static const ber_sequence_t SEQUENCE_OF_EntryModification_sequence_of[1] = {
   { &hf_disp_changes_item   , BER_CLASS_ANY/*choice*/, -1/*choice*/, BER_FLAGS_NOOWNTAG, dissect_dap_EntryModification },
 };
 
-static unsigned
-dissect_disp_SEQUENCE_OF_EntryModification(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_SEQUENCE_OF_EntryModification(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       SEQUENCE_OF_EntryModification_sequence_of, hf_index, ett_disp_SEQUENCE_OF_EntryModification);
 
@@ -1111,8 +1116,8 @@ static const ber_choice_t T_attributeChanges_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_T_attributeChanges(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_T_attributeChanges(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  T_attributeChanges_choice, hf_index, ett_disp_T_attributeChanges,
                                  NULL);
@@ -1131,8 +1136,8 @@ static const ber_sequence_t ContentChange_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_ContentChange(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_ContentChange(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ContentChange_sequence, hf_index, ett_disp_ContentChange);
 
@@ -1154,8 +1159,8 @@ static const ber_choice_t T_sDSEChanges_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_T_sDSEChanges(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_T_sDSEChanges(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  T_sDSEChanges_choice, hf_index, ett_disp_T_sDSEChanges,
                                  NULL);
@@ -1170,8 +1175,8 @@ static const ber_sequence_t SubordinateChanges_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_SubordinateChanges(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_SubordinateChanges(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    SubordinateChanges_sequence, hf_index, ett_disp_SubordinateChanges);
 
@@ -1183,8 +1188,8 @@ static const ber_sequence_t SEQUENCE_OF_SubordinateChanges_sequence_of[1] = {
   { &hf_disp_subordinateUpdates_item, BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_disp_SubordinateChanges },
 };
 
-static unsigned
-dissect_disp_SEQUENCE_OF_SubordinateChanges(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_SEQUENCE_OF_SubordinateChanges(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       SEQUENCE_OF_SubordinateChanges_sequence_of, hf_index, ett_disp_SEQUENCE_OF_SubordinateChanges);
 
@@ -1198,14 +1203,16 @@ static const ber_sequence_t IncrementalStepRefresh_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_IncrementalStepRefresh(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_IncrementalStepRefresh(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   // IncrementalStepRefresh -> IncrementalStepRefresh/subordinateUpdates -> SubordinateChanges -> IncrementalStepRefresh
-  increment_dissection_depth_by_n(actx->pinfo, 3);
+  actx->pinfo->dissection_depth += 3;
+  increment_dissection_depth(actx->pinfo);
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    IncrementalStepRefresh_sequence, hf_index, ett_disp_IncrementalStepRefresh);
 
-  decrement_dissection_depth_by_n(actx->pinfo, 3);
+  actx->pinfo->dissection_depth -= 3;
+  decrement_dissection_depth(actx->pinfo);
   return offset;
 }
 
@@ -1214,8 +1221,8 @@ static const ber_sequence_t IncrementalRefresh_sequence_of[1] = {
   { &hf_disp_IncrementalRefresh_item, BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_disp_IncrementalStepRefresh },
 };
 
-static unsigned
-dissect_disp_IncrementalRefresh(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_IncrementalRefresh(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       IncrementalRefresh_sequence_of, hf_index, ett_disp_IncrementalRefresh);
 
@@ -1239,18 +1246,16 @@ static const ber_choice_t RefreshInformation_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_RefreshInformation(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  int32_t update;
+static int
+dissect_disp_RefreshInformation(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  uint32_t update;
 
     offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  RefreshInformation_choice, hf_index, ett_disp_RefreshInformation,
                                  &update);
 
 
-  if (update >= 0) {
-    col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", val_to_str(actx->pinfo->pool, RefreshInformation_choice[update].value, disp_RefreshInformation_vals, "unknown(%d)"));
-  }
+  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", val_to_str(update, disp_RefreshInformation_vals, "unknown(%d)"));
 
 
   return offset;
@@ -1266,8 +1271,8 @@ static const ber_sequence_t UpdateShadowArgumentData_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_UpdateShadowArgumentData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_UpdateShadowArgumentData(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    UpdateShadowArgumentData_sequence, hf_index, ett_disp_UpdateShadowArgumentData);
 
@@ -1282,8 +1287,8 @@ static const ber_sequence_t T_signedUpdateShadowArgument_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_T_signedUpdateShadowArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_T_signedUpdateShadowArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    T_signedUpdateShadowArgument_sequence, hf_index, ett_disp_T_signedUpdateShadowArgument);
 
@@ -1297,8 +1302,8 @@ static const ber_choice_t UpdateShadowArgument_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_UpdateShadowArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_UpdateShadowArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  UpdateShadowArgument_choice, hf_index, ett_disp_UpdateShadowArgument,
                                  NULL);
@@ -1319,18 +1324,16 @@ static const ber_choice_t UpdateShadowResult_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_UpdateShadowResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  int32_t update;
+static int
+dissect_disp_UpdateShadowResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  uint32_t update;
 
     offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  UpdateShadowResult_choice, hf_index, ett_disp_UpdateShadowResult,
                                  &update);
 
 
-  if (update >= 0) {
-    col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", val_to_str(actx->pinfo->pool, UpdateShadowResult_choice[update].value, disp_UpdateShadowResult_vals, "unknown(%d)"));
-  }
+  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", val_to_str(update, disp_UpdateShadowResult_vals, "unknown(%d)"));
 
 
   return offset;
@@ -1353,15 +1356,15 @@ static const value_string disp_ShadowProblem_vals[] = {
 };
 
 
-static unsigned
-dissect_disp_ShadowProblem(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_ShadowProblem(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   uint32_t problem;
 
     offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &problem);
 
 
-  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", val_to_str(actx->pinfo->pool, problem, disp_ShadowProblem_vals, "ShadowProblem(%d)"));
+  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", val_to_str(problem, disp_ShadowProblem_vals, "ShadowProblem(%d)"));
 
   return offset;
 }
@@ -1378,8 +1381,8 @@ static const ber_sequence_t ShadowErrorData_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_ShadowErrorData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_ShadowErrorData(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ShadowErrorData_sequence, hf_index, ett_disp_ShadowErrorData);
 
@@ -1394,8 +1397,8 @@ static const ber_sequence_t T_signedShadowError_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_T_signedShadowError(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_T_signedShadowError(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    T_signedShadowError_sequence, hf_index, ett_disp_T_signedShadowError);
 
@@ -1409,8 +1412,8 @@ static const ber_choice_t ShadowError_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_disp_ShadowError(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_disp_ShadowError(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  ShadowError_choice, hf_index, ett_disp_ShadowError,
                                  NULL);
@@ -1421,21 +1424,21 @@ dissect_disp_ShadowError(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offs
 /*--- PDUs ---*/
 
 static int dissect_EstablishParameter_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_disp_EstablishParameter(false, tvb, offset, &asn1_ctx, tree, hf_disp_EstablishParameter_PDU);
   return offset;
 }
 static int dissect_ModificationParameter_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_disp_ModificationParameter(false, tvb, offset, &asn1_ctx, tree, hf_disp_ModificationParameter_PDU);
   return offset;
 }
 static int dissect_ShadowingAgreementInfo_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_disp_ShadowingAgreementInfo(false, tvb, offset, &asn1_ctx, tree, hf_disp_ShadowingAgreementInfo_PDU);
@@ -1449,12 +1452,12 @@ static int dissect_ShadowingAgreementInfo_PDU(tvbuff_t *tvb _U_, packet_info *pi
 static int
 dissect_disp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* data)
 {
-    unsigned offset = 0;
-    unsigned old_offset;
+	int offset = 0;
+	int old_offset;
 	proto_item *item;
 	proto_tree *tree;
 	struct SESSION_DATA_STRUCTURE* session;
-	unsigned (*disp_dissector)(bool implicit_tag _U_, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_) = NULL;
+	int (*disp_dissector)(bool implicit_tag _U_, tvbuff_t *tvb, int offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_) = NULL;
 	const char *disp_op_name;
 	asn1_ctx_t asn1_ctx;
 
@@ -1501,7 +1504,7 @@ dissect_disp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* d
 	    disp_op_name = "Coordinate-Shadow-Update-Argument";
 	    break;
 	  default:
-	    proto_tree_add_expert_format_remaining(tree, pinfo, &ei_disp_unsupported_opcode, tvb, offset,
+	    proto_tree_add_expert_format(tree, pinfo, &ei_disp_unsupported_opcode, tvb, offset, -1,
 	        "Unsupported DISP opcode (%d)", session->ros_op & ROS_OP_OPCODE_MASK);
 	    break;
 	  }
@@ -1521,7 +1524,7 @@ dissect_disp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* d
 	    disp_op_name = "Coordinate-Shadow-Update-Result";
 	    break;
 	  default:
-	    proto_tree_add_expert_format_remaining(tree, pinfo, &ei_disp_unsupported_opcode, tvb, offset,
+	    proto_tree_add_expert_format(tree, pinfo, &ei_disp_unsupported_opcode, tvb, offset, -1,
 	        "Unsupported DISP opcode (%d)", session->ros_op & ROS_OP_OPCODE_MASK);
 	    break;
 	  }
@@ -1533,13 +1536,13 @@ dissect_disp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* d
 	    disp_op_name = "Shadow-Error";
 	    break;
 	  default:
-	    proto_tree_add_expert_format_remaining(tree, pinfo, &ei_disp_unsupported_errcode, tvb, offset,
+	    proto_tree_add_expert_format(tree, pinfo, &ei_disp_unsupported_errcode, tvb, offset, -1,
 	            "Unsupported DISP errcode (%d)", session->ros_op & ROS_OP_OPCODE_MASK);
 	    break;
 	  }
 	  break;
 	default:
-	  proto_tree_add_expert_remaining(tree, pinfo, &ei_disp_unsupported_pdu, tvb, offset);
+	  proto_tree_add_expert(tree, pinfo, &ei_disp_unsupported_pdu, tvb, offset, -1);
 	  return tvb_captured_length(tvb);
 	}
 
@@ -1550,7 +1553,7 @@ dissect_disp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* d
 	    old_offset=offset;
 	    offset=(*disp_dissector)(false, tvb, offset, &asn1_ctx, tree, -1);
 	    if(offset == old_offset){
-	      proto_tree_add_expert_remaining(tree, pinfo, &ei_disp_zero_pdu, tvb, offset);
+	      proto_tree_add_expert(tree, pinfo, &ei_disp_zero_pdu, tvb, offset, -1);
 	      break;
 	    }
 	  }
@@ -1607,7 +1610,7 @@ void proto_register_disp(void) {
         FT_NONE, BASE_NONE, NULL, 0,
         "AreaSpecification", HFILL }},
     { &hf_disp_replication_attributes,
-      { "attributes", "disp.replication_attributes",
+      { "attributes", "disp.attributes",
         FT_UINT32, BASE_DEC, NULL, 0,
         "AttributeSelection", HFILL }},
     { &hf_disp_knowledge,
@@ -1731,7 +1734,7 @@ void proto_register_disp(void) {
         FT_UINT32, BASE_DEC, VALS(disp_T_updateStrategy_vals), 0,
         NULL, HFILL }},
     { &hf_disp_standardUpdate,
-      { "standard", "disp.standardUpdate",
+      { "standard", "disp.standard",
         FT_UINT32, BASE_DEC, VALS(disp_StandardUpdate_vals), 0,
         "StandardUpdate", HFILL }},
     { &hf_disp_other,
@@ -1795,7 +1798,7 @@ void proto_register_disp(void) {
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_disp_information_data,
-      { "information", "disp.information_data_element",
+      { "information", "disp.information_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "InformationData", HFILL }},
     { &hf_disp_requestedStrategy,
@@ -1975,7 +1978,7 @@ void proto_register_disp(void) {
         FT_UINT32, BASE_DEC, NULL, 0,
         "RelativeDistinguishedName", HFILL }},
     { &hf_disp_subordinate_changes,
-      { "changes", "disp.subordinate_changes_element",
+      { "changes", "disp.changes_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "IncrementalStepRefresh", HFILL }},
     { &hf_disp_problem,
@@ -2066,7 +2069,7 @@ void proto_register_disp(void) {
   expert_module_t* expert_disp;
 
   /* Register protocol */
-  proto_disp = proto_register_protocol("X.519 Directory Information Shadowing Protocol", "DISP", "disp");
+  proto_disp = proto_register_protocol(PNAME, PSNAME, PFNAME);
   disp_handle = register_dissector("disp", dissect_disp, proto_disp);
 
   /* Register fields and subtrees */

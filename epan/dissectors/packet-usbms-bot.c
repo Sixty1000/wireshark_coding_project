@@ -153,7 +153,7 @@ dissect_usbms_bot_control(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_
     tree = proto_item_add_subtree(ti, ett_usbms_bot);
 
     col_add_fstr(pinfo->cinfo, COL_INFO, "%s %s",
-        val_to_str(pinfo->pool, usb_trans_info->setup.request, setup_request_names_vals, "Unknown type %x"),
+        val_to_str(usb_trans_info->setup.request, setup_request_names_vals, "Unknown type %x"),
         is_request?"Request":"Response");
 
     if(is_request){
@@ -183,7 +183,7 @@ dissect_usbms_bot_cbw(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree
     proto_tree *tree = create_usbms_bot_protocol_tree(tvb, parent_tree);
     tvbuff_t *cdb_tvb;
     int offset=0;
-    int cdbrlen;
+    int cdbrlen, cdblen;
     uint8_t lun, flags;
     uint32_t datalen;
     itl_nexus_t *itl;
@@ -252,8 +252,12 @@ dissect_usbms_bot_cbw(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree
     cdbrlen=tvb_get_uint8(tvb, offset)&0x1f;
     offset+=1;
 
-    if(cdbrlen){
-        cdb_tvb=tvb_new_subset_length(tvb, offset, cdbrlen);
+    cdblen=cdbrlen;
+    if(cdblen>tvb_captured_length_remaining(tvb, offset)){
+        cdblen=tvb_captured_length_remaining(tvb, offset);
+    }
+    if(cdblen){
+        cdb_tvb=tvb_new_subset_length_caplen(tvb, offset, cdblen, cdbrlen);
         dissect_scsi_cdb(cdb_tvb, pinfo, parent_tree, SCSI_DEV_UNKNOWN, itlq, itl);
     }
     return tvb_captured_length(tvb);
@@ -499,14 +503,14 @@ proto_register_usbms_bot(void)
 
     };
 
-    static int *usbms_bot_ett[] = {
+    static int *usbms_bot_subtrees[] = {
             &ett_usbms_bot,
     };
 
 
     proto_usbms_bot = proto_register_protocol("USB Mass Storage", "USBMS", "usbms");
     proto_register_field_array(proto_usbms_bot, hf, array_length(hf));
-    proto_register_subtree_array(usbms_bot_ett, array_length(usbms_bot_ett));
+    proto_register_subtree_array(usbms_bot_subtrees, array_length(usbms_bot_subtrees));
 
     usbms_bot_bulk_handle = register_dissector("usbms", dissect_usbms_bot_bulk, proto_usbms_bot);
     usbms_bot_control_handle = register_dissector("usbms.control", dissect_usbms_bot_control, proto_usbms_bot);

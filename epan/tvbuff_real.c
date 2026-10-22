@@ -55,10 +55,12 @@ static const struct tvb_ops tvb_real_ops = {
 };
 
 tvbuff_t *
-tvb_new_real_data(const uint8_t* data, const unsigned length, const unsigned reported_length)
+tvb_new_real_data(const uint8_t* data, const unsigned length, const int reported_length)
 {
 	tvbuff_t *tvb;
 	struct tvb_real *real_tvb;
+
+	THROW_ON(reported_length < -1, ReportedBoundsError);
 
 	tvb = tvb_new(&tvb_real_ops);
 
@@ -101,7 +103,7 @@ tvb_set_child_real_data_tvbuff(tvbuff_t *parent, tvbuff_t *child)
 }
 
 tvbuff_t *
-tvb_new_child_real_data(tvbuff_t *parent, const uint8_t* data, const unsigned length, const unsigned reported_length)
+tvb_new_child_real_data(tvbuff_t *parent, const uint8_t* data, const unsigned length, const int reported_length)
 {
 	tvbuff_t *tvb = tvb_new_real_data(data, length, reported_length);
 

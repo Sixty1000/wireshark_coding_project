@@ -52,10 +52,10 @@ call_plugin_register_codec_module(void * data, void * user_data _U_)
  * For all codec plugins, call their register routines.
  */
 void
-codecs_init(const char* app_env_var_prefix _U_)
+codecs_init(void)
 {
 #ifdef HAVE_PLUGINS
-    libwscodecs_plugins = plugins_init(WS_PLUGIN_CODEC, app_env_var_prefix);
+    libwscodecs_plugins = plugins_init(WS_PLUGIN_CODEC);
 #endif
     g_slist_foreach(codecs_plugins, call_plugin_register_codec_module, NULL);
 }

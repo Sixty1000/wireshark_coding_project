@@ -10,10 +10,7 @@
 
 #include <string.h>
 
-#include <wsutil/exported_pdu_tlvs.h>
-#include <wsutil/pint.h>
-
-#include "wtap_module.h"
+#include "wtap-int.h"
 #include "file_wrappers.h"
 
 static int logcat_file_type_subtype = -1;
@@ -22,7 +19,7 @@ void register_logcat(void);
 
 /* Returns '?' for invalid priorities */
 static char get_priority(const uint8_t priority) {
-    static const char priorities[] = "??VDIWEFS";
+    static char priorities[] = "??VDIWEFS";
 
     if (priority >= (uint8_t) sizeof(priorities))
         return '?';
@@ -66,7 +63,7 @@ static int detect_version(FILE_T fh, int *err, char **err_info)
             return -1;
         return 0;
     }
-    payload_length = pletohu16(&tmp);
+    payload_length = pletoh16(&tmp);
 
     /* must contain at least priority and two nulls as separator */
     if (payload_length < 3)
@@ -81,7 +78,7 @@ static int detect_version(FILE_T fh, int *err, char **err_info)
             return -1;
         return 0;
     }
-    hdr_size = pletohu16(&tmp);
+    hdr_size = pletoh16(&tmp);
     read_sofar = 4;
 
     /* ensure buffer is large enough for all versions */
@@ -139,70 +136,67 @@ static int detect_version(FILE_T fh, int *err, char **err_info)
     return 0;
 }
 
-bool logcat_exported_pdu_length(const uint8_t *pd, unsigned caplen, unsigned *length) {
-    /* XXX - There's nothing logcat specific here; make this a generic fxn? */
-    const uint8_t * const pd_end = pd + caplen;
-    uint16_t    tag_length;
+int logcat_exported_pdu_length(const uint8_t *pd) {
+    const uint16_t *tag;
+    const uint16_t *tag_length;
+    int             length = 0;
 
-    *length = 0;
-    /* The last tag must be a EXP_PDU_TAG_END_OF_OPT (0) and have length 0.
-     * If we reach the end of the length first, that's bogus. */
-    while(pd + 4 < pd_end) {
-        if (pntohu16(pd) == EXP_PDU_TAG_END_OF_OPT) {
-            /* OTOH, we do not bother verifying that the length of the
-             * END_OF_OPT TLV is 0, even though it should be. */
-            *length += 2 + 2;
-            return true;
-        }
-        tag_length = pntohu16(pd + 2);
-        if (ckd_add(length, *length, 4 + tag_length))
-            return false;
-        pd += 2 + 2 + tag_length;
+    tag = (const uint16_t *)(const void *) pd;
+
+    while(GINT16_FROM_BE(*tag)) {
+        tag_length = (const uint16_t *)(const void *) (pd + 2);
+        length += 2 + 2 + GINT16_FROM_BE(*tag_length);
+
+        pd += 2 + 2 + GINT16_FROM_BE(*tag_length);
+        tag = (const uint16_t *)(const void *) pd;
     }
 
-    return false;
+    length += 2 + 2;
+
+    return length;
 }
 
-static bool logcat_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
-    int *err, char **err_info)
+static bool logcat_read_packet(struct logcat_phdr *logcat, FILE_T fh,
+    wtap_rec *rec, Buffer *buf, int *err, char **err_info)
 {
-    struct logcat_phdr  *logcat = (struct logcat_phdr *) wth->priv;
-    unsigned             packet_size;
+    int                  packet_size;
     uint16_t             payload_length;
-    uint8_t              tmp[2];
-    const struct logger_entry *log_entry;
+    unsigned             tmp[2];
+    uint8_t             *pd;
+    struct logger_entry *log_entry;
 
     if (!wtap_read_bytes_or_eof(fh, &tmp, 2, err, err_info)) {
         return false;
     }
-    payload_length = pletohu16(tmp);
+    payload_length = pletoh16(tmp);
 
     if (logcat->version == 1) {
-        packet_size = (unsigned)sizeof(struct logger_entry) + payload_length;
+        packet_size = (int)sizeof(struct logger_entry) + payload_length;
     } else if (logcat->version == 2) {
-        packet_size = (unsigned)sizeof(struct logger_entry_v2) + payload_length;
+        packet_size = (int)sizeof(struct logger_entry_v2) + payload_length;
     } else {
         return false;
     }
     /*
      * The maximum value of payload_length is 65535, which, even after
      * the size of the logger entry structure is added to it, is less
-     * than WTAP_MAX_PACKET_SIZE_STANDARD will ever be, so we don't need to
-     * check it.
+     * than WTAP_MAX_PACKET_SIZE_STANDARD will ever be, so we don't need to check
+     * it.
      */
 
-    ws_buffer_assure_space(&rec->data, packet_size);
-    log_entry = (const struct logger_entry *)(void *) ws_buffer_start_ptr(&rec->data);
+    ws_buffer_assure_space(buf, packet_size);
+    pd = ws_buffer_start_ptr(buf);
+    log_entry = (struct logger_entry *)(void *) pd;
 
     /* Copy the first two bytes of the packet. */
-    ws_buffer_append(&rec->data, tmp, 2);
+    memcpy(pd, tmp, 2);
 
     /* Read the rest of the packet. */
-    if (!wtap_read_bytes_buffer(fh, &rec->data, packet_size - 2, err, err_info)) {
+    if (!wtap_read_bytes(fh, pd + 2, packet_size - 2, err, err_info)) {
         return false;
     }
 
-    wtap_setup_packet_rec(rec, wth->file_encap);
+    rec->rec_type = REC_TYPE_PACKET;
     rec->block = wtap_block_create(WTAP_BLOCK_PACKET);
     rec->presence_flags = WTAP_HAS_TS;
     rec->ts.secs = (time_t) GINT32_FROM_LE(log_entry->sec);
@@ -215,21 +209,24 @@ static bool logcat_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
     return true;
 }
 
-static bool logcat_read(wtap *wth, wtap_rec *rec,
+static bool logcat_read(wtap *wth, wtap_rec *rec, Buffer *buf,
     int *err, char **err_info, int64_t *data_offset)
 {
     *data_offset = file_tell(wth->fh);
 
-    return logcat_read_packet(wth, wth->fh, rec, err, err_info);
+    return logcat_read_packet((struct logcat_phdr *) wth->priv, wth->fh,
+        rec, buf, err, err_info);
 }
 
-static bool logcat_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
+static bool logcat_seek_read(wtap *wth, int64_t seek_off,
+    wtap_rec *rec, Buffer *buf,
     int *err, char **err_info)
 {
     if (file_seek(wth->random_fh, seek_off, SEEK_SET, err) == -1)
         return false;
 
-    if (!logcat_read_packet(wth, wth->random_fh, rec, err, err_info)) {
+    if (!logcat_read_packet((struct logcat_phdr *) wth->priv, wth->random_fh,
+         rec, buf, err, err_info)) {
         if (*err == 0)
             *err = WTAP_ERR_SHORT_READ;
         return false;
@@ -265,7 +262,7 @@ wtap_open_return_val logcat_open(wtap *wth, int *err, char **err_info)
         }
 
         tmp_version = detect_version(wth->fh, err, err_info); /* third packet */
-        if (tmp_version == -1)
+        if (tmp_version < 0)
             return WTAP_OPEN_ERROR; /* I/O error */
         if (tmp_version == 0)
             return WTAP_OPEN_NOT_MINE;  /* not a logcat file */
@@ -273,9 +270,8 @@ wtap_open_return_val logcat_open(wtap *wth, int *err, char **err_info)
         /*
          * we've read three packets and the first two have the same
          * version; does the third have the same version?
-         * (If we got an EOF, there are only two packets, which is fine.)
          */
-        if (tmp_version != -2 && tmp_version != version) {
+        if (tmp_version != version) {
             /* no, so this is presumably not a logcat file */
             return WTAP_OPEN_NOT_MINE;
         }
@@ -319,15 +315,15 @@ static int logcat_dump_can_write_encap(int encap)
     return 0;
 }
 
-static bool logcat_binary_dump(wtap_dumper *wdh, const wtap_rec *rec,
-    int *err, char **err_info _U_)
+static bool logcat_binary_dump(wtap_dumper *wdh,
+    const wtap_rec *rec,
+    const uint8_t *pd, int *err, char **err_info _U_)
 {
-    uint32_t caplen;
+    int caplen;
 
     /* We can only write packet records. */
     if (rec->rec_type != REC_TYPE_PACKET) {
         *err = WTAP_ERR_UNWRITABLE_REC_TYPE;
-        *err_info = wtap_unwritable_rec_type_err_string(rec);
         return false;
     }
 
@@ -342,18 +338,13 @@ static bool logcat_binary_dump(wtap_dumper *wdh, const wtap_rec *rec,
 
     caplen = rec->rec_header.packet_header.caplen;
 
-    const uint8_t *pd = ws_buffer_start_ptr(&rec->data);
-
     /* Skip EXPORTED_PDU*/
     if (wdh->file_encap == WTAP_ENCAP_WIRESHARK_UPPER_PDU) {
-        unsigned skipped_length;
+        int skipped_length;
 
-        if (!logcat_exported_pdu_length(pd, caplen, &skipped_length) ||
-            ckd_sub(&caplen, caplen, skipped_length)) {
-            *err = WTAP_ERR_BAD_FILE;
-            return false;
-        }
+        skipped_length = logcat_exported_pdu_length(pd);
         pd += skipped_length;
+        caplen -= skipped_length;
     }
 
     if (!wtap_dump_file_write(wdh, pd, caplen, err))

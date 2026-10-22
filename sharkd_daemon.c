@@ -9,7 +9,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "config.h"
+#include <config.h>
 #define WS_LOG_DOMAIN LOG_DOMAIN_MAIN
 
 #include <glib.h>
@@ -31,11 +31,9 @@
 #include <wsutil/please_report_bug.h>
 #include <wsutil/wslog.h>
 #include <wsutil/ws_getopt.h>
-#include <app/application_flavor.h>
 
 #ifndef _WIN32
 #include <sys/un.h>
-#include <sys/wait.h>
 #include <netinet/tcp.h>
 #endif
 
@@ -45,27 +43,15 @@
 #include "sharkd.h"
 
 #ifdef _WIN32
-/*
- * TCP sockets can work on Linux and other systems, but are disabled by default
- * because we do not want to encourage insecure setups. Unfiltered access to
- * sharkd could potentially result in arbitrary command execution.
- * We enable them on Windows because Unix sockets are not traditionally
- * supported, but all currently-supported Windows versions support them,
- * so we might disable them by default whenever Unix sockets are supported.
- */
+/* for windows support TCP sockets */
 # define SHARKD_TCP_SUPPORT
-#endif
-
-#ifdef HAVE_AF_UNIX
-# ifdef _WIN32
-#  include <afunix.h>
-# endif
+#else
+/* for other system support only local sockets */
 # define SHARKD_UNIX_SUPPORT
 #endif
 
 static int mode;
 static socket_handle_t _server_fd = INVALID_SOCKET;
-static bool abstract_socket;
 
 static socket_handle_t
 socket_init(char *path)
@@ -81,24 +67,20 @@ socket_init(char *path)
         return fd;
     }
 
+#ifdef SHARKD_UNIX_SUPPORT
     if (!strncmp(path, "unix:", 5))
     {
-#ifdef SHARKD_UNIX_SUPPORT
         struct sockaddr_un s_un;
         socklen_t s_un_len;
 
         path += 5;
 
-        if (strlen(path) + 1 > sizeof(s_un.sun_path)) {
-            fputs("Socket path too long.\n", stderr);
+        if (strlen(path) + 1 > sizeof(s_un.sun_path))
             return INVALID_SOCKET;
-        }
 
         fd = socket(AF_UNIX, SOCK_STREAM, 0);
-        if (fd == INVALID_SOCKET) {
-            fprintf(stderr, "Failed to create socket: %s\n", g_strerror(errno));
+        if (fd == INVALID_SOCKET)
             return INVALID_SOCKET;
-        }
 
         memset(&s_un, 0, sizeof(s_un));
         s_un.sun_family = AF_UNIX;
@@ -106,108 +88,68 @@ socket_init(char *path)
 
         s_un_len = (socklen_t)(offsetof(struct sockaddr_un, sun_path) + strlen(s_un.sun_path));
 
-        if (s_un.sun_path[0] == '@') {
-            // Linux-only, but just let bind fail on other OSes.
+        if (s_un.sun_path[0] == '@')
             s_un.sun_path[0] = '\0';
-            abstract_socket = true;
-        }
 
         if (bind(fd, (struct sockaddr *) &s_un, s_un_len))
         {
-            fprintf(stderr, "Failed to bind socket: %s\n", g_strerror(errno));
             closesocket(fd);
             return INVALID_SOCKET;
         }
-#else
-        fputs("Unix sockets are not available on Windows, use tcp instead.\n", stderr);
-        return INVALID_SOCKET;
+    }
+    else
 #endif
-    } else if (!strncmp(path, "tcp:", 4)) {
+
 #ifdef SHARKD_TCP_SUPPORT
-        struct sockaddr_storage s_in;
-        struct sockaddr_in  *s_in4;
-        struct sockaddr_in6 *s_in6;
+    if (!strncmp(path, "tcp:", 4))
+    {
+        struct sockaddr_in s_in;
         int one = 1;
-        socklen_t addrlen;
+        char *port_sep;
         uint16_t port;
-        uint32_t host_ip;
-        bool is_loopback;
 
         path += 4;
 
-        if (ws_socket_ptoa(&s_in, path, 0) != 0) {
-            fprintf(stderr, "Invalid socket address and port: \"%s\"\n", path);
+        port_sep = strchr(path, ':');
+        if (!port_sep)
             return INVALID_SOCKET;
-        }
 
-        switch(s_in.ss_family) {
-        case AF_INET:
-            s_in4 = (struct sockaddr_in *)&s_in;
-            port = s_in4->sin_port;
-            addrlen = sizeof(struct sockaddr_in);
-            host_ip = g_ntohl(s_in4->sin_addr.s_addr);
-            is_loopback = ((host_ip >> 24) & 0xFF) == 0x7f;
-            break;
-        case AF_INET6:
-            s_in6 = (struct sockaddr_in6 *)&s_in;
-            port = s_in6->sin6_port;
-            addrlen = sizeof(struct sockaddr_in6);
-            is_loopback = IN6_IS_ADDR_LOOPBACK(&s_in6->sin6_addr);
-            break;
-        default:
-            ws_assert_not_reached();
-        }
+        *port_sep = '\0';
 
-        if (port == 0) {
-            fputs("Missing or invalid port number.\n", stderr);
+        if (ws_strtou16(port_sep + 1, NULL, &port) == false)
             return INVALID_SOCKET;
-        }
-
-        if (!is_loopback) {
-            fputs("For security reasons, only loopback addresses are supported.\n", stderr);
-            return INVALID_SOCKET;
-        }
 
 #ifdef _WIN32
         /* Need to use WSASocket() to disable overlapped I/O operations,
             this way on windows SOCKET can be used as HANDLE for stdin/stdout */
-        fd = WSASocket(s_in.ss_family, SOCK_STREAM, 0, NULL, 0, 0);
+        fd = WSASocket(AF_INET, SOCK_STREAM, 0, NULL, 0, 0);
 #else
-        fd = socket(s_in.ss_family, SOCK_STREAM, 0);
+        fd = socket(AF_INET, SOCK_STREAM, 0);
 #endif
-        if (fd == INVALID_SOCKET) {
-            fprintf(stderr, "Failed to open socket: %s\n",
-#ifdef _WIN32
-                    win32strerror(WSAGetLastError())
-#else
-                    g_strerror(errno)
-#endif
-                   );
+        if (fd == INVALID_SOCKET)
             return INVALID_SOCKET;
-        }
+
+        s_in.sin_family = AF_INET;
+        ws_inet_pton4(path, (ws_in4_addr *)&(s_in.sin_addr.s_addr));
+        s_in.sin_port = g_htons(port);
+        *port_sep = ':';
 
         setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (void *) &one, sizeof(one));
 
-        if (bind(fd, (struct sockaddr *) &s_in, addrlen))
+        if (bind(fd, (struct sockaddr *) &s_in, sizeof(struct sockaddr_in)))
         {
-            fprintf(stderr, "Failed to bind socket: %s\n", g_strerror(errno));
             closesocket(fd);
             return INVALID_SOCKET;
         }
-#else
-        fputs("TCP sockets are not available for security reasons, use Unix sockets instead.\n", stderr);
-        return INVALID_SOCKET;
-#endif
     }
     else
+#endif
     {
-        fprintf(stderr, "Unsupported socket path '%s', try unix:... for Unix sockets\n", path);
         return INVALID_SOCKET;
     }
 
     if (listen(fd, SOMAXCONN))
     {
-        fprintf(stderr, "Failed to listen on socket: %s\n", g_strerror(errno));
         closesocket(fd);
         return INVALID_SOCKET;
     }
@@ -219,66 +161,81 @@ static void
 print_usage(FILE* output)
 {
     fprintf(output, "\n");
-    fprintf(output, "Usage: sharkd [options]\n");
-    fprintf(output, "  or   sharkd -\n");
+    fprintf(output, "Usage: sharkd [<classic_options>|<gold_options>]\n");
 
     fprintf(output, "\n");
-    fprintf(output, "Options:\n");
+    fprintf(output, "Classic (classic_options):\n");
+    fprintf(output, "  [-|<socket>]\n");
+    fprintf(output, "\n");
+    fprintf(output, "  <socket> examples:\n");
+#ifdef SHARKD_UNIX_SUPPORT
+    fprintf(output, "  - unix:/tmp/sharkd.sock - listen on unix file /tmp/sharkd.sock\n");
+#endif
+#ifdef SHARKD_TCP_SUPPORT
+    fprintf(output, "  - tcp:127.0.0.1:4446 - listen on TCP port 4446\n");
+#endif
+
+    fprintf(output, "\n");
+    fprintf(output, "Gold (gold_options):\n");
     fprintf(output, "  -a <socket>, --api <socket>\n");
-    fprintf(output, "                           listen on this socket instead of the console\n");
-    fprintf(output, "  --foreground             do not detach from console\n");
+    fprintf(output, "                           listen on this socket\n");
     fprintf(output, "  -h, --help               show this help information\n");
     fprintf(output, "  -v, --version            show version information\n");
     fprintf(output, "  -C <config profile>, --config-profile <config profile>\n");
     fprintf(output, "                           start with specified configuration profile\n");
 
     fprintf(output, "\n");
-    fprintf(output, "Supported socket types:\n");
-#ifdef SHARKD_UNIX_SUPPORT
-    fprintf(output, "    unix:/tmp/sharkd.sock - listen on Unix domain socket file /tmp/sharkd.sock\n");
-    fprintf(output, "    unix:@sharkd          - listen on abstract Unix socket 'sharkd' (Linux-only)\n");
-#else
-    fprintf(output, "    (Unix domain sockets are unavailable on this platform.)\n");
-#endif
-#ifdef SHARKD_TCP_SUPPORT
-    fprintf(output, "    tcp:127.0.0.1:4446    - listen on TCP IPv4 loopback port 4446\n");
-    fprintf(output, "    tcp:[::1]:5678        - listen on TCP IPv6 loopback port 5678\n");
-#else
-    fprintf(output, "    (TCP sockets are disabled in this build)\n");
-#endif
-
-    fprintf(output, "\n");
-    fprintf(output, "If no socket option is provided, or if 'sharkd -' is used,\n");
-    fprintf(output, "sharkd will accept commands via console (standard input).\n");
-
-    fprintf(output, "\n");
-    fprintf(output, "Examples:\n");
-    fprintf(output, "    sharkd -\n");
+    fprintf(output, "  Examples:\n");
     fprintf(output, "    sharkd -C myprofile\n");
-#ifdef SHARKD_UNIX_SUPPORT
-    fprintf(output, "    sharkd -a unix:/tmp/sharkd.sock -C myprofile\n");
-#elif defined(SHARKD_TCP_SUPPORT)
     fprintf(output, "    sharkd -a tcp:127.0.0.1:4446 -C myprofile\n");
-#endif
 
     fprintf(output, "\n");
-    fprintf(output, "For security reasons, do not directly expose sharkd to the public Internet.\n");
-    fprintf(output, "Instead, have a separate backend service to interact with sharkd.\n");
-    fprintf(output, "\n");
-    fprintf(output, "For full details, see https://wiki.wireshark.org/Development/sharkd\n");
+    fprintf(output, "See the sharkd page of the Wireshark wiki for full details.\n");
     fprintf(output, "\n");
 }
 
 int
 sharkd_init(int argc, char **argv)
 {
+    /*
+     * The leading + ensures that getopt_long() does not permute the argv[]
+     * entries.
+     *
+     * We have to make sure that the first getopt_long() preserves the content
+     * of argv[] for the subsequent getopt_long() call.
+     *
+     * We use getopt_long() in both cases to ensure that we're using a routine
+     * whose permutation behavior we can control in the same fashion on all
+     * platforms, and so that, if we ever need to process a long argument before
+     * doing further initialization, we can do so.
+     *
+     * Glibc and Solaris libc document that a leading + disables permutation
+     * of options, regardless of whether POSIXLY_CORRECT is set or not; *BSD
+     * and macOS don't document it, but do so anyway.
+     *
+     * We do *not* use a leading - because the behavior of a leading - is
+     * platform-dependent.
+     */
+
+#define OPTSTRING "+" "a:hmvC:"
+
+    static const char    optstring[] = OPTSTRING;
+
+    // right now we don't have any long options
+    static const struct ws_option long_options[] = {
+        {"api", ws_required_argument, NULL, 'a'},
+        {"help", ws_no_argument, NULL, 'h'},
+        {"version", ws_no_argument, NULL, 'v'},
+        {"config-profile", ws_required_argument, NULL, 'C'},
+        {0, 0, 0, 0 }
+    };
+
     int opt;
 
 #ifndef _WIN32
     pid_t pid;
 #endif
     socket_handle_t fd;
-    bool foreground = false;
 
     if (argc < 2)
     {
@@ -326,25 +283,15 @@ sharkd_init(int argc, char **argv)
            where we repeatedly spawn a new session process.
            */
 
-        /*
-         * To reset the options parser, set ws_optreset to 1 and set ws_optind to 1.
-         *
-         * Also reset ws_opterr to 1, so that error messages are printed by
-         * getopt_long().
-         */
-        ws_optreset = 1;
-        ws_optind = 1;
-        ws_opterr = 1;
-
         do {
             if (ws_optind > (argc - 1))
                 break;
 
-            opt = ws_getopt_long(argc, argv, sharkd_optstring(), sharkd_long_options(), NULL);
+            opt = ws_getopt_long(argc, argv, optstring, long_options, NULL);
 
             switch (opt) {
                 case 'C':        /* Configuration Profile */
-                    if (profile_exists(application_configuration_environment_prefix(), ws_optarg, false)) {
+                    if (profile_exists(ws_optarg, false)) {
                         set_profile_name(ws_optarg);  // In Daemon Mode, we may need to do this again in the child process
                     }
                     else {
@@ -366,7 +313,7 @@ sharkd_init(int argc, char **argv)
 
                 case 'h':
                     show_help_header("Daemon variant of Wireshark");
-                    print_usage(stdout);
+                    print_usage(stderr);
                     exit(0);
                     break;
 
@@ -380,15 +327,7 @@ sharkd_init(int argc, char **argv)
                     exit(0);
                     break;
 
-                case LONGOPT_FOREGROUND:
-                    foreground = true;
-                    break;
-
                 default:
-                    /* wslog arguments are okay */
-                    if (ws_log_is_wslog_arg(opt))
-                        break;
-
                     if (!ws_optopt)
                         fprintf(stderr, "This option isn't supported: %s\n", argv[ws_optind]);
                     fprintf(stderr, "Use sharkd -h for details of supported options\n");
@@ -398,7 +337,7 @@ sharkd_init(int argc, char **argv)
         } while (opt != -1);
     }
 
-    if (!foreground && (mode == SHARKD_MODE_CLASSIC_DAEMON || mode == SHARKD_MODE_GOLD_DAEMON))
+    if (mode == SHARKD_MODE_CLASSIC_DAEMON || mode == SHARKD_MODE_GOLD_DAEMON)
     {
         /* all good - try to daemonize */
 #ifndef _WIN32
@@ -450,30 +389,8 @@ sharkd_loop(int argc _U_, char* argv[])
             continue;
         }
 
-        if (abstract_socket)
-        {
-            if (!ws_verify_peercred(fd)) {
-                fprintf(stderr, "Unauthorized access. Terminating connection.\n");
-                closesocket(fd);
-                continue;
-            }
-        }
-
         /* wireshark is not ready for handling multiple capture files in single process, so fork(), and handle it in separate process */
 #ifndef _WIN32
-        /* wait for completed child processes to avoid zombie processes consuming slots in the kernel process table */
-        while (1)
-        {
-            pid_t current_pid;
-            current_pid = waitpid(-1, NULL, WNOHANG);
-            /* if a child was successfully waited for, current_pid will be a positive value indicated the pid of the child process */
-            /* other values indicate either an error, or that no child is available to be waited for */
-            if (current_pid < 1)
-            {
-                break;
-            }
-        }
-
         pid = fork();
         if (pid == 0)
         {

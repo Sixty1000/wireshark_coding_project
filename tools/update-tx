@@ -1,12 +1,7 @@
 #!/bin/bash
 # Copyright 2015, Alexis La Goutte (See AUTHORS file)
 #
-# Resync translation between Wireshark's git repository and Transifex
-
-# We keep translation files in the following locations:
-# ui/qt/*.ts (Qt)
-# ui/stratoshark/*.ts (Qt)
-# packaging/debian/po/ (Gettext)
+# Resync translation between Gerrit repo and Transifex
 
 NO_PUSH="False"
 while getopts "n" OPTCHAR ; do
@@ -22,13 +17,6 @@ if ! cd "$TOP_LEVEL" ; then
     echo "Can't change to the top-level source directory."
     exit 1
 fi
-
-if ! command -v lupdate &> /dev/null; then
-    echo "Can't find lupdate."
-    exit 1
-fi
-
-lupdate -version
 
 LUPDATE_INCLUDES=(-I .)
 while read -r ; do
@@ -63,6 +51,12 @@ fi
 for i in ui/qt/*.ts ; do
     lupdate -locations none -no-ui-lines "${LUPDATE_INCLUDES[@]}" "${LUPDATE_FILES[@]}" -ts "$i"
 done
+
+#Add new commit with last translation update
+#git commit -a -m "TX: Update Translations (sync)"
+
+#Push update translation on Gerrit
+#git push origin HEAD:refs/for/master/tx
 
 #
 #  Editor modelines

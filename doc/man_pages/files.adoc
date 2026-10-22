@@ -144,8 +144,8 @@ IP address and name, separated by whitespace. The personal __hosts__
 file, if present, overrides the one in the global directory.
 
 Capture filter name resolution is handled by libpcap on UNIX-compatible
-systems, such as Linux, macOS, \*BSD, Solaris, and AIX, and Npcap
-on Windows.  As such the Wireshark personal __hosts__ file will
+systems, such as Linux, macOS, \*BSD, Solaris, and AIX, and Npcap or
+WinPcap on Windows.  As such the Wireshark personal __hosts__ file will
 not be consulted for capture filter name resolution.
 --
 
@@ -177,26 +177,19 @@ printed address would be "ws_test_network.0.1".
 Name Resolution (ethers)::
 +
 --
-The __ethers__ files are consulted to correlate 6-byte EUI-48 and 8-byte EUI-64
-hardware addresses to names.  First the personal __ethers__ file is tried and
-if an address is not found there the global __ethers__ file is tried next.
+The __ethers__ files are consulted to correlate 6-byte hardware addresses to
+names.  First the personal __ethers__ file is tried and if an address is not
+found there the global __ethers__ file is tried next.
 
-The file has a similar format to that defined by ethers(5) on some UNIX-like
-systems.  Each line contains one hardware address and name, separated by
-whitespace (tabs or spaces).  The hexadecimal digits of the hardware address
-are separated by colons (:), dashes (-) or periods (.).  The same separator
-character must be used consistently in an address.  A `#` indicates a comment
-that extends to the rest of the line. Both 6-byte MAC and 8-byte EUI-64
-addresses are supported.  The following four lines are valid lines of an
-__ethers__ file:
+Each line contains one hardware address and name, separated by
+whitespace.  The digits of the hardware address are separated by colons
+(:), dashes (-) or periods (.).  The same separator character must be
+used consistently in an address.  The following three lines are valid
+lines of an __ethers__ file:
 
   ff:ff:ff:ff:ff:ff          Broadcast
   c0-00-ff-ff-ff-ff          TR_broadcast
   00.00.00.00.00.00          Zero_broadcast
-  00:00:00:00:00:00:00:00    EUI64_zero_broadcast
-
-Note that this accepts a greater variety of formats than the file
-defined by ethers(5) on most UN*X systems.
 
 The global __ethers__ file is looked for in the __/etc__ directory on
 UNIX-compatible systems, such as Linux, macOS, \*BSD, Solaris, and AIX,
@@ -207,7 +200,7 @@ The personal __ethers__ file is looked for in the same directory as the personal
 preferences file.
 
 Capture filter name resolution is handled by libpcap on UNIX-compatible
-systems and Npcap on Windows.  As such the Wireshark personal
+systems and Npcap or WinPcap on Windows.  As such the Wireshark personal
 __ethers__ file will not be consulted for capture filter name
 resolution.
 --
@@ -245,7 +238,7 @@ with *tshark -G manuf*.
 
 In addition to the __manuf__ file, another file with the same format,
 __wka__, is looked for in the global directory. This file is distributed
-with Wireshark, and contains data about well-known MAC addresses and
+with Wireshark, and contains data about well-known MAC adddresses and
 address ranges assembled from various non IEEE but respected sources.
 --
 
@@ -400,29 +393,10 @@ not found and used to migrate to the new format.
 --
 // end::gui[]
 
-Coloring Rules (Color Filters)::
+Color Filters (Coloring Rules)::
 +
 --
-The __coloring_rules.jsonc__ file contains system-wide and personal coloring rules.
-It contains an array of named JSON objects with the following key:value pairs:
-
-    [
-        { "Filter name": {
-            "filter": "<display filter string>",
-            "foreground": "#rrggbb or rrggbb",
-            "background": "#rrggbb or rrggbb",
-            "enabled": "<boolean value>"
-            }
-        }
-    ]
-
-The global __coloring_rules.jsonc__ file uses the same directory as the global preferences file.
-The personal __coloring_rules.jsonc__ file uses the same directory as the personal preferences file.
-It is written through the menu:View[Coloring Rules...] dialog.
-
-If the global __coloring_rules.jsonc__ file exists, it is used only if the personal __coloring_rules.jsonc__ file does not exist; global and personal color filters are not merged.
-
-There is also a legacy __colorfilters__ file which was the default name and format prior to Wireshark 5.0 and Stratoshark 1.0.
+The __colorfilters__ files contain system-wide and personal color filters.
 Each line contains one filter, starting with the string displayed in the
 dialog box, followed by the corresponding display filter.  Then the
 background and foreground colors are appended:
@@ -431,31 +405,16 @@ background and foreground colors are appended:
   @tcp@tcp@[59345,58980,65534][0,0,0]
   @udp@udp@[28834,57427,65533][0,0,0]
 
-Wireshark will read the personal legacy __colorfilters__ file only if the personal __coloring_rules.jsonc__ file does not exist; it is then used on its own, without the global coloring rules.
-If the personal __coloring_rules.jsonc__ file exists but cannot be parsed, an error is reported and none of its rules are used; neither the legacy __colorfilters__ file nor the global coloring rules are read in its place.
-Wireshark will write the legacy __colorfilters__ file only if it exists.
---
+The global __colorfilters__ file uses the same directory as the
+global preferences file.
 
-Tagging Rules::
-+
---
-The personal __tagrules.jsonc__ file contains the tagging rules of the current configuration profile.
-It contains an array of named JSON objects with the following key:value pairs:
+The personal __colorfilters__ file uses the same directory as the
+personal preferences file.  It is written through the View:Coloring Rules
+dialog.
 
-    [
-        { "Rule name": {
-            "filter": "<display filter string>",
-            "tag": "<emoji or short text>",
-            "url": "<optional URL>",
-            "comment": "<optional comment>",
-            "enabled": "<boolean value>"
-            }
-        }
-    ]
-
-An optional object named __prefs_for_tagging_rules__ holds the tag display preferences.
-The file uses the same directory as the personal preferences file.
-It is written through the menu:View[Tagging Rules...] dialog.
+If the global __colorfilters__ file exists, it is used only if the personal
+__colorfilters__ file does not exist; global and personal color filters are
+not merged.
 --
 
 Plugins::

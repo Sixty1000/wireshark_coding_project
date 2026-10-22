@@ -7,14 +7,14 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-#pragma once
+#ifndef  __COLOR_FILTERS_H__
+#define  __COLOR_FILTERS_H__
+
 #include <glib.h>
-#include <string.h>
 
 #include "ws_symbol_export.h"
 
 #include <wsutil/color.h>
-#include <wsutil/wmem/wmem_list.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,24 +22,20 @@ extern "C" {
 
 struct epan_dissect;
 
-#define COLORING_RULES_FILE_NAME "coloring_rules.jsonc"
-/* Legacy name */
-#define COLORFILTERS_FILE_NAME "colorfilters"
+#define COLORFILTERS_FILE_NAME          "colorfilters"
 
 #define CONVERSATION_COLOR_PREFIX       "___conversation_color_filter___"
 /** @file
  *  Color filters.
  */
 
-/**
- * @brief Data for a color filter.
- */
+/* Data for a color filter. */
 typedef struct _color_filter {
     char      *filter_name;         /* name of the filter */
     char      *filter_text;         /* text of the filter expression */
     color_t    bg_color;            /* background color for packets that match */
     color_t    fg_color;            /* foreground color for packets that match */
-    bool       enabled;             /* set if the filter is enabled */
+    bool       disabled;            /* set if the filter is disabled */
 
                                     /* only used inside of color_filters.c */
     struct epan_dfilter *c_colorfilter;  /* compiled filter expression */
@@ -47,19 +43,7 @@ typedef struct _color_filter {
                                     /* only used outside of color_filters.c (beside init) */
 } color_filter_t;
 
-/**
- * @brief Tells whether a rule is a conversation (temporary) coloring rule.
- * @param colorf the rule
- * @return true if the rule name starts with CONVERSATION_COLOR_PREFIX
- */
-static inline bool
-color_filter_is_tmp(const color_filter_t *colorf)
-{
-    return strncmp(colorf->filter_name, CONVERSATION_COLOR_PREFIX,
-                   strlen(CONVERSATION_COLOR_PREFIX)) == 0;
-}
-
-/** @brief A color filter was added (while importing).
+/** A color filter was added (while importing).
  * (color_filters.c calls this for every filter coming in)
  *
  * @param colorf the new color filter
@@ -67,45 +51,28 @@ color_filter_is_tmp(const color_filter_t *colorf)
  */
 typedef void (*color_filter_add_cb_func)(color_filter_t *colorf, void *user_data);
 
-/**
- * @brief Init the color filters (incl. initial read from file).
- * @param err_msg Pointer to a string that will receive an error message if the initialization fails.
- * @param add_cb Callback function to be called when a color filter is added.
- * @param app_env_var_prefix Prefix for application environment variables.
- * @return true if the initialization was successful, false otherwise.
- */
-WS_DLL_PUBLIC bool color_filters_init(char** err_msg, color_filter_add_cb_func add_cb, const char* app_env_var_prefix);
+/** Init the color filters (incl. initial read from file). */
+WS_DLL_PUBLIC bool color_filters_init(char** err_msg, color_filter_add_cb_func add_cb);
 
-/**
- * @brief Reload the color filters
- * @param err_msg Pointer to a string that will receive an error message if the reload fails.
- * @param add_cb Callback function to be called when a color filter is added.
- * @param app_env_var_prefix Prefix for application environment variables.
- * @return true if the reload was successful, false otherwise.
- */
-WS_DLL_PUBLIC bool color_filters_reload(char** err_msg, color_filter_add_cb_func add_cb, const char* app_env_var_prefix);
+/** Reload the color filters */
+WS_DLL_PUBLIC bool color_filters_reload(char** err_msg, color_filter_add_cb_func add_cb);
 
-/**
- * @brief Cleanup remaining color filter zombies
- */
+/** Cleanup remaining color filter zombies */
 WS_DLL_PUBLIC void color_filters_cleanup(void);
 
-/**
- * @brief Check if color filters are currently used.
+/** Color filters currently used?
  *
  * @return true, if filters are used
  */
 WS_DLL_PUBLIC bool color_filters_used(void);
 
-/**
- * @brief Are there any temporary coloring filters used?
+/** Are there any temporary coloring filters used?
  *
  * @return true, if temporary coloring filters are used
  */
 WS_DLL_PUBLIC bool tmp_color_filters_used(void);
 
-/**
- * @brief Get the filter string of a temporary color filter
+/** Get the filter string of a temporary color filter
  *
  * @param filt_nr a number 1-10 pointing to a temporary color
  * @return the current filter string which is assigned to the specified slot, or NULL if not available.
@@ -113,8 +80,7 @@ WS_DLL_PUBLIC bool tmp_color_filters_used(void);
 WS_DLL_PUBLIC char*
 color_filters_get_tmp(uint8_t filt_nr);
 
-/**
- * @brief Set the filter string of a temporary color filter
+/** Set the filter string of a temporary color filter
  *
  * @param filt_nr a number 1-10 pointing to a temporary color
  * @param filter the new filter-string
@@ -124,8 +90,7 @@ color_filters_get_tmp(uint8_t filt_nr);
 WS_DLL_PUBLIC bool
 color_filters_set_tmp(uint8_t filt_nr, const char *filter, bool disabled, char **err_msg);
 
-/**
- * @brief Get a temporary color filter.
+/** Get a temporary color filter.
  *
  * @param filter_num A number from 1 to 10 specifying the color to fetch.
  * @return The corresponding color or NULL.
@@ -133,32 +98,21 @@ color_filters_set_tmp(uint8_t filt_nr, const char *filter, bool disabled, char *
 WS_DLL_PUBLIC const color_filter_t *
 color_filters_tmp_color(uint8_t filter_num);
 
-/**
- * @brief Reset the temporary color filters
+/** Reset the temporary color filters
  *
- * @param err_msg a string with error message
- * @return true if successful, false otherwise
  */
 WS_DLL_PUBLIC bool
 color_filters_reset_tmp(char **err_msg);
 
-/**
- * @brief Prime the epan_dissect_t with all the compiled
+/* Prime the epan_dissect_t with all the compiled
  * color filters of the current filter list.
  *
- * Disabled filters count only when gui.coloring_rules_include_disabled
- * is set.
- *
- * @param edt the epan dissector details
+ * @param the epan dissector details
  */
 WS_DLL_PUBLIC void color_filters_prime_edt(struct epan_dissect *edt);
 
-/**
- * @brief Check if any of the enabled compiled color filters of the current
+/** Check if any of the enabled compiled color filters of the current
  * filter list depend on a given header field.
- *
- * Disabled filters count only when gui.coloring_rules_include_disabled
- * is set.
  *
  * @param hfid The header field ID to check
  * @return true if the color filter contains the header field.
@@ -166,12 +120,8 @@ WS_DLL_PUBLIC void color_filters_prime_edt(struct epan_dissect *edt);
 WS_DLL_PUBLIC bool
 color_filters_use_hfid(int hfid);
 
-/**
- * @brief Check if any of the enabled compiled color filters of the current
+/** Check if any of the enabled compiled color filters of the current
  * filter list depend on any field in a given protocol.
- *
- * Disabled filters count only when gui.coloring_rules_include_disabled
- * is set.
  *
  * @param proto_id The protocol ID to check
  * @return true if the color filter contains a field from the protocol
@@ -179,30 +129,22 @@ color_filters_use_hfid(int hfid);
 WS_DLL_PUBLIC bool
 color_filters_use_proto(int proto_id);
 
-/**
- * @brief Colorize a packet with ALL matching filters.
+/** Colorize a specific packet.
  *
  * @param edt the dissected packet
- * @param scope wmem allocator to use for the returned list (e.g. wmem_file_scope())
- * @param matches output parameter: wmem_list_t of matching color_filter_t* (can be NULL)
- * @param include_disabled also match disabled, non-conversation filters; they
- * are added to matches but are never returned
- * @return the first matching enabled color filter or NULL
+ * @return the matching color filter or NULL
  */
 WS_DLL_PUBLIC const color_filter_t *
-color_filters_colorize_packet_all(struct epan_dissect *edt,
-        wmem_allocator_t *scope, wmem_list_t **matches, bool include_disabled);
+color_filters_colorize_packet(struct epan_dissect *edt);
 
-/**
- * @brief Clone the currently active filter list.
+/** Clone the currently active filter list.
  *
  * @param user_data will be returned by each call to color_filter_add_cb()
  * @param add_cb the callback function to add color filter
  */
 WS_DLL_PUBLIC void color_filters_clone(void *user_data, color_filter_add_cb_func add_cb);
 
-/**
- * @brief Load filters (import) from some other filter file.
+/** Load filters (import) from some other filter file.
  *
  * @param path the path to the import file
  * @param user_data will be returned by each call to color_filter_add_cb()
@@ -212,20 +154,17 @@ WS_DLL_PUBLIC void color_filters_clone(void *user_data, color_filter_add_cb_func
  */
 WS_DLL_PUBLIC bool color_filters_import(const char *path, void *user_data, char **err_msg, color_filter_add_cb_func add_cb);
 
-/**
- * @brief Read filters from the global filter file (not the users file).
+/** Read filters from the global filter file (not the users file).
  *
  * @param user_data will be returned by each call to color_filter_add_cb()
  * @param err_msg a string with error message
  * @param add_cb the callback function to add color filter
- * @param app_env_var_prefix The prefix for the application environment variable used to get the global configuration directory.
  * @return true, if read succeeded
  */
-WS_DLL_PUBLIC bool color_filters_read_globals(void *user_data, char** err_msg, color_filter_add_cb_func add_cb, const char* app_env_var_prefix);
+WS_DLL_PUBLIC bool color_filters_read_globals(void *user_data, char** err_msg, color_filter_add_cb_func add_cb);
 
 
-/**
- * @brief Apply a changed filter list.
+/** Apply a changed filter list.
  *
  * @param tmp_cfl the temporary color filter list to apply
  * @param edit_cfl the edited permanent color filter list to apply
@@ -233,52 +172,44 @@ WS_DLL_PUBLIC bool color_filters_read_globals(void *user_data, char** err_msg, c
  */
 WS_DLL_PUBLIC bool color_filters_apply(GSList *tmp_cfl, GSList *edit_cfl, char** err_msg);
 
-/**
- * @brief Save filters in users filter file.
+/** Save filters in users filter file.
  *
  * @param cfl the filter list to write
  * @param err_msg a string with error message
- * @param app_name Proper name of the application (used in comment strings)
- * @param app_env_var_prefix The prefix for the application environment variable used to get the global configuration directory.
  * @return true if write succeeded
  */
-WS_DLL_PUBLIC bool color_filters_write(GSList *cfl, const char* app_name, const char* app_env_var_prefix, char** err_msg);
+WS_DLL_PUBLIC bool color_filters_write(GSList *cfl, char** err_msg);
 
-/**
- * @brief Save filters (export) to some other filter file.
+/** Save filters (export) to some other filter file.
  *
  * @param path the path to the filter file
  * @param cfl the filter list to write
  * @param only_selected true if only the selected filters should be saved
  * @param err_msg a string with error message
- * @param app_name Proper name of the application (used in comment strings)
  * @return true, if write succeeded
  */
-WS_DLL_PUBLIC bool color_filters_export(const char *path, GSList *cfl, bool only_selected, const char* app_name, char** err_msg);
+WS_DLL_PUBLIC bool color_filters_export(const char *path, GSList *cfl, bool only_selected, char** err_msg);
 
-/**
- * @brief Create a new color filter (g_malloc'ed).
+/** Create a new color filter (g_malloc'ed).
  *
  * @param name the name of the filter
  * @param filter_string the filter string
  * @param bg_color background color
  * @param fg_color foreground color
- * @param enabled bool
+ * @param disabled bool
  * @return the new color filter
  */
 WS_DLL_PUBLIC color_filter_t *color_filter_new(
     const char *name, const char *filter_string,
-    color_t *bg_color, color_t *fg_color, bool enabled);
+    color_t *bg_color, color_t *fg_color, bool disabled);
 
-/**
- * @brief Delete a single color filter (g_free'ed).
+/** Delete a single color filter (g_free'ed).
  *
  * @param colorf the color filter to be removed
  */
 WS_DLL_PUBLIC void color_filter_delete(color_filter_t *colorf);
 
-/**
- * @brief Delete a filter list including all entries.
+/** Delete a filter list including all entries.
  *
  * @param cfl the filter list to delete
  */
@@ -287,6 +218,8 @@ WS_DLL_PUBLIC void color_filter_list_delete(GSList **cfl);
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
+
+#endif
 
 /*
  * Editor modelines  -  https://www.wireshark.org/tools/modelines.html

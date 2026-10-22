@@ -14,10 +14,6 @@
 ** Author: Gerhard Gappmeier <gerhard.gappmeier@ascolab.com>
 ******************************************************************************/
 
-#include "config.h"
-#define WS_LOG_DOMAIN "opcua"
-#include <wireshark.h>
-
 #include <epan/dissectors/packet-tcp.h>
 #include <epan/packet.h>
 #include <epan/prefs.h>
@@ -29,22 +25,22 @@
 #include <wiretap/secrets-types.h>
 #include <wsutil/file_util.h>
 
-#include "opcua.h"
+#include "config.h"
 #include "opcua_application_layer.h"
 #include "opcua_complextypeparser.h"
 #include "opcua_enumparser.h"
 #include "opcua_hfindeces.h"
-#include "opcua_infomodel.h"
 #include "opcua_keyset.h"
 #include "opcua_security_layer.h"
 #include "opcua_serviceparser.h"
 #include "opcua_serviceids.h"
-#include "opcua_servicetable.h"
 #include "opcua_simpletypes.h"
 #include "opcua_transport_layer.h"
 
 void proto_register_opcua(void);
 
+extern const value_string g_requesttypes[];
+extern const int g_NumServices;
 static const char *g_opcua_debug_file_name;
 int g_opcua_default_sig_len;
 
@@ -57,6 +53,13 @@ int proto_opcua;
 static dissector_handle_t opcua_handle;
 static module_t *opcua_module;
 
+/* #define OPCUA_DEBUG */
+#ifdef OPCUA_DEBUG
+# define debugprintf(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__);
+#else
+# define debugprintf(fmt, ...)
+#endif
+
 /** Official IANA registered port for OPC UA Binary Protocol. */
 #define OPCUA_DEFAULT_PORT 4840
 /* default port range for preferences */
@@ -67,6 +70,10 @@ static module_t *opcua_module;
 #define FRAME_HEADER_LEN 8
 /* AES block size: for both AES128 and AES256 the block size is 128 bits */
 #define AES_BLOCK_SIZE 16
+
+/** subtree types used in opcua_transport_layer.c */
+int ett_opcua_extensionobject;
+int ett_opcua_nodeid;
 
 /** subtree types used locally */
 static int ett_opcua_transport;
@@ -213,7 +220,7 @@ static void opcua_keylog_process_line(struct opcua_keylog_parser_ctx *ctx, const
     n = sscanf(line, "%32[^:]: %64s\n", key, value);
     if (n != 2) return;
 
-    ws_debug("%s = %s", key, value);
+    debugprintf("%s = %s\n", key, value);
 
     /* split key into parts */
     num_parts = 0;
@@ -226,14 +233,14 @@ static void opcua_keylog_process_line(struct opcua_keylog_parser_ctx *ctx, const
     channel_id = (uint32_t)strtoul(parts[2], NULL, 10);
     token_id = (uint32_t)strtoul(parts[3], NULL, 10);
 
-    ws_debug("channel_id = %u", channel_id);
-    ws_debug("token_id = %u", token_id);
+    debugprintf("channel_id = %u\n", channel_id);
+    debugprintf("token_id = %u\n", token_id);
 
     /* create unique keyset id */
     id = ua_keyset_id(channel_id, token_id);
 
     if (ctx->keyset == NULL || id != ctx->last_id) {
-        ws_debug("Adding new keyset for id %" PRIu64 "u...", id);
+        debugprintf("Adding new keyset for id %lu...\n", id);
         /* create new keyset for new id */
         ctx->keyset = ua_keysets_add();
         ctx->last_id = id;
@@ -289,10 +296,10 @@ static void opcua_load_keylog_file(const char *filename)
     struct opcua_keylog_parser_ctx ctx = { NULL, 0 };
     char line[256];
 
-    ws_debug("Loading key file '%s'...", filename);
+    debugprintf("Loading key file '%s'...\n", filename);
     FILE *f = ws_fopen(filename, "r");
     if (f == NULL) {
-        ws_debug("error: '%s' not found", filename);
+        debugprintf("error: '%s' not found\n", filename);
         return;
     }
 
@@ -307,7 +314,7 @@ static void opcua_load_keylog_file(const char *filename)
 }
 
 /**
- * Checks the padding of a symmetric signed message.
+ * Checks the padding of a symetric signed message.
  * A message always contains a padding_len byte, which tells us the length of
  * the padding. All following padding bytes contain the same value. This makes it
  * possible the padding from the end of the message.
@@ -316,19 +323,14 @@ static void opcua_load_keylog_file(const char *filename)
  * - 01 01
  * - 02 02 02
  * @param padding Pointer to last padding byte.
- * @return padding length on success, -1 if the padding is invalid.
+ * @return padding length on success, -1 if the paddding is invalid.
  */
-static int verify_padding(const uint8_t *padding, unsigned available)
+static int verify_padding(const uint8_t *padding)
 {
     uint8_t pad_len;
     uint8_t i;
 
     pad_len = *padding;
-
-    if (pad_len > available) {
-        ws_debug("padding length %u exceeds available space %u", pad_len, available);
-        return -1;
-    }
 
     for (i = 0; i < pad_len; ++i) {
         if (padding[-pad_len + i] != pad_len) return -1;
@@ -366,8 +368,8 @@ static int opcua_get_footer_info(uint32_t channel_id, uint32_t token_id, uint8_t
         }
     }
 
-    ws_debug("no keyset found for channel_id=%u and token_id=%u", channel_id, token_id);
-    /* we use sig_len set from OpenSecureChannel Policy in this case.
+    debugprintf("no keyset found for channel_id=%u and token_id=%u\n", channel_id, token_id);
+    /* we use sig_len set from OpenSecurehChannel Policy in this case.
      * this requires to have the OPN in the capture file, otherwise we are out of luck.
      */
 
@@ -408,11 +410,11 @@ static int decrypt_opcua(
 
     keyset = ua_keysets_lookup(id);
     if (keyset == NULL) {
-        ws_debug("no keyset found for channel_id=%u and token_id=%u", channel_id, token_id);
+        debugprintf("no keyset found for channel_id=%u and token_id=%u\n", channel_id, token_id);
         /* col_append_fstr(pinfo->cinfo, COL_INFO, " (encrypted)"); */
         return -1;
     }
-    ws_debug("found keyset for channel_id=%u and token_id=%u", channel_id, token_id);
+    debugprintf("found keyset for channel_id=%u and token_id=%u\n", channel_id, token_id);
 
     /* The Client keys are used to secure Messages sent by the Client. The Server keys are used to
      * secure Messages sent by the Server.
@@ -433,51 +435,37 @@ static int decrypt_opcua(
     /* derive AES mode from key length */
     switch (keylen) {
     case 16:
-        ws_debug("using AES-128-CBC");
+        debugprintf("using AES-128-CBC\n");
         cipher_mode = GCRY_CIPHER_AES128;
         break;
     case 32:
-        ws_debug("using AES-256-CBC");
+        debugprintf("using AES-256-CBC\n");
         cipher_mode = GCRY_CIPHER_AES256;
         break;
     default:
-        ws_debug("invalid AES key length: %u bytes", keylen);
+        debugprintf("invalid AES key length: %u bytes\n", keylen);
         /* col_append_fstr(pinfo->cinfo, COL_INFO, " (encrypted)"); */
         return -1;
     }
 
-    ws_debug("cipher_len=%u", cipher_len);
+    debugprintf("cipher_len=%u\n", cipher_len);
     if (cipher_len % 16 != 0) {
-        ws_debug("warning: cipher_len not a multiple of 16.");
+        debugprintf("warning: cipher_len not a multiple of 16.\n");
     }
 
     gcry_cipher_hd_t handle;
-    res = gcry_cipher_open(&handle, cipher_mode, GCRY_CIPHER_MODE_CBC, GCRY_CIPHER_CBC_CTS);
-    if (res) {
-        ws_debug("opening cipher failed: %s %s.", gcry_strsource(res), gcry_strerror(res));
-        return -1;
-    }
-    res = gcry_cipher_setkey(handle, keydata, keylen);
-    if (res) {
-        ws_debug("setkey failed: %s %s.", gcry_strsource(res), gcry_strerror(res));
-        gcry_cipher_close(handle);
-        return -1;
-    }
-    res = gcry_cipher_setiv(handle, ivdata, ivlen);
-    if (res) {
-        ws_debug("setiv failed: %s %s.", gcry_strsource(res), gcry_strerror(res));
-        gcry_cipher_close(handle);
-        return -1;
-    }
+    gcry_cipher_open(&handle, cipher_mode, GCRY_CIPHER_MODE_CBC, GCRY_CIPHER_CBC_CTS);
+    gcry_cipher_setkey(handle, keydata, keylen);
+    gcry_cipher_setiv(handle, ivdata, ivlen);
 
     /* Decrypt the data in-place */
     res = gcry_cipher_decrypt(handle, plaintext, plaintext_len, cipher, cipher_len);
     if (res == 0) {
         /* col_append_fstr(pinfo->cinfo, COL_INFO, " (decrypted)"); */
-        ws_debug("decryption succeeded.");
+        debugprintf("decryption succeeded.\n");
     } else {
         /* col_append_fstr(pinfo->cinfo, COL_INFO, " (encrypted)"); */
-        ws_debug("decryption failed %s %s.", gcry_strsource(res), gcry_strerror(res));
+        debugprintf("decryption failed.\n");
         ret = -1;
     }
     gcry_cipher_close(handle);
@@ -486,23 +474,15 @@ static int decrypt_opcua(
         return ret;
     }
 
-    /* guard: need at least sig_len + 1 bytes for the padding-length byte */
-    if (plaintext_len < (unsigned)*sig_len + 1) {
-        ws_debug("plaintext too short for signature and padding");
-        return -1;
-    }
-
-    unsigned pad_offset = plaintext_len - *sig_len - 1;
-    ret = verify_padding(&plaintext[pad_offset], pad_offset);
+    ret = verify_padding(&plaintext[plaintext_len - *sig_len - 1]);
     if (ret < 0) {
-        ws_debug("padding is invalid.");
-        return -1;
+        debugprintf("padding is invalid.\n");
     }
 
     /* return padding length */
-    *padding_len = plaintext[pad_offset];
-    ws_debug("sig_len=%u", *sig_len);
-    ws_debug("pad_len=%u", *padding_len);
+    *padding_len = plaintext[plaintext_len - *sig_len - 1];
+    debugprintf("sig_len=%u\n", *sig_len);
+    debugprintf("pad_len=%u\n", *padding_len);
 
     return 0;
 }
@@ -597,7 +577,7 @@ static int dissect_opcua_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
     if (pfctParse)
     {
         int offset = 0;
-        int iServiceId;
+        int iServiceId = -1;
         bool bParseService = false; /* Only MSG, OPN and CLO have a service payload */
         bool bIsFinalChunk = false;
         unsigned payload_len = 0;
@@ -633,7 +613,7 @@ static int dissect_opcua_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
             if (mode == UA_MessageMode_MaybeEncrypted) {
                 /* try to parse ServiceId */
                 iServiceId = getServiceNodeId(tvb, offset + 8); /* skip 4 byte SeqNo and 4 byte RequestId */
-                const char *szServiceName = val_to_str_const((uint32_t)iServiceId, g_requesttypes, "not found");
+                const char *szServiceName = val_to_str((uint32_t)iServiceId, g_requesttypes, "not found");
                 if (strcmp(szServiceName, "not found") == 0) {
                     mode = UA_MessageMode_SignAndEncrypt;
                 } else {
@@ -669,10 +649,10 @@ static int dissect_opcua_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
                 if (ret == 0) {
                     /* decrypted */
                     /* to get the payload length we need to subtract the sequence header (8) byte,
-                     * the padding (pad_len+1), and the signature from the plaintext */
+                     * the padding (paddin_len+1), and the signature from the plaintext */
                     payload_len = plaintext_len - pad_len - sig_len - 9; /* pad_len 2 = 02 02 02 */
                     /* Now re-setup the tvb buffer to have the new data */
-                    decrypted_tvb = tvb_new_child_real_data(tvb, plaintext, (unsigned)plaintext_len, (unsigned)plaintext_len);
+                    decrypted_tvb = tvb_new_child_real_data(tvb, plaintext, (unsigned)plaintext_len, (int)plaintext_len);
                     add_new_data_source(pinfo, decrypted_tvb, "Decrypted Data");
                     /* process decrypted_tvb from here */
                     tvb = decrypted_tvb;
@@ -689,7 +669,7 @@ static int dissect_opcua_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 
                 ret = opcua_get_footer_info(channel_id, token_id, &sig_len, from_server);
                 if (ret != 0) {
-                    ws_debug("Processing security footer of signed message failed.");
+                    debugprintf("Processing security footer of signed message failed.\n");
                 } else {
                     /* signed only messages have no padding, so the payload is the message size
                      * without 24 byte header and without signature */
@@ -718,6 +698,8 @@ static int dissect_opcua_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
                 col_clear_fence(pinfo->cinfo, COL_INFO);
                 col_set_str(pinfo->cinfo, COL_INFO, "Abort message");
 
+                offset = 0;
+                (*pfctParse)(transport_tree, tvb, pinfo, &offset, &metadata);
                 parseAbort(transport_tree, tvb, pinfo, &offset, &metadata);
 
                 return tvb_reported_length(tvb);
@@ -815,7 +797,7 @@ static int dissect_opcua_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
                 } else if (iServiceId == OpcUaId_CloseSecureChannelResponse_Encoding_DefaultBinary) {
                     col_append_str(pinfo->cinfo, COL_INFO, ": CloseSecureChannelResponse");
                 } else {
-                    const char *szServiceName = val_to_str(pinfo->pool, (uint32_t)iServiceId, g_requesttypes, "ServiceId %d");
+                    const char *szServiceName = val_to_str((uint32_t)iServiceId, g_requesttypes, "ServiceId %d");
                     col_append_fstr(pinfo->cinfo, COL_INFO, ": %s (Wrong ServiceId)", szServiceName);
                 }
             } else if (msgtype == MSG_MESSAGE) {
@@ -825,7 +807,7 @@ static int dissect_opcua_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
                 /* display the service type in addition to the message type */
                 if (iServiceId != -1)
                 {
-                    const char *szServiceName = val_to_str(pinfo->pool, (uint32_t)iServiceId, g_requesttypes, "ServiceId %d");
+                    const char *szServiceName = val_to_str((uint32_t)iServiceId, g_requesttypes, "ServiceId %d");
 
                     if (bIsFinalChunk == false)
                     {
@@ -871,7 +853,7 @@ static int dissect_opcua(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 /** Init plugin resources */
 void proto_init_opcua(void)
 {
-    ws_debug("proto_init_opcua called.");
+    debugprintf("proto_init_opcua called.\n");
     ua_keysets_init();
     opcua_load_keylog_file(g_opcua_debug_file_name);
 }
@@ -879,17 +861,20 @@ void proto_init_opcua(void)
 /** Cleanup plugin resources */
 void proto_cleanup_opcua(void)
 {
-    ws_debug("proto_cleanup_opcua called.");
+    debugprintf("proto_cleanup_opcua called.\n");
     ua_keysets_clear();
 }
 
 /** secrets callback called from Wireshark when loading a capture file with OPC UA Keylog File. */
 static void opcua_secrets_block_callback(const void *secrets, unsigned size)
 {
-    char *tmp = g_malloc0(size + 1);
-    memcpy(tmp, secrets, size);
-    ws_debug("Loading secrets block '%s'...", (const char*)secrets);
-    ws_debug("size = %u", size);
+    char *tmp = g_memdup2(secrets, size + 1);
+    if (tmp == NULL) return; /* OOM */
+
+    debugprintf("Loading secrets block '%s'...\n", (const char*)secrets);
+    debugprintf("size = %u\n", size);
+    /* ensure data is zero terminated */
+    tmp[size] = 0;
     /* parse data */
     opcua_keylog_process_lines(tmp);
     g_free(tmp);
@@ -918,6 +903,8 @@ void proto_register_opcua(void)
     /** Setup protocol subtree array */
     static int *ett[] =
         {
+            &ett_opcua_extensionobject,
+            &ett_opcua_nodeid,
             &ett_opcua_transport,
             &ett_opcua_fragment,
             &ett_opcua_fragments
@@ -947,7 +934,6 @@ void proto_register_opcua(void)
     registerComplexTypes();
     registerServiceTypes();
     registerFieldTypes(proto_opcua);
-    opcua_infomodel_register(proto_opcua, opcua_module);
 
     proto_register_subtree_array(ett, array_length(ett));
     proto_register_field_array(proto_opcua, hf, array_length(hf));
@@ -960,7 +946,6 @@ void proto_register_opcua(void)
 void proto_reg_handoff_opcua(void)
 {
     dissector_add_uint_range_with_preference("tcp.port", OPCUA_PORT_RANGE, opcua_handle);
-    opcua_infomodel_apply();
 }
 
 /*

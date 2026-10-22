@@ -56,7 +56,7 @@ dissect_at_rl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
     proto_item *ti = proto_tree_add_item(tree, proto_at_rl, tvb, 0, AT_RL_FRAME_LEN, ENC_NA);
     proto_tree *at_rl_tree = proto_item_add_subtree(ti, ett_at_rl);
 
-    unsigned offset = 0;
+    int offset = 0;
     proto_tree_add_item(at_rl_tree, hf_at_rl_sequence, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
 
@@ -69,7 +69,7 @@ dissect_at_rl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
     proto_tree_add_item(at_rl_tree, hf_at_rl_vcsid, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
-    proto_tree_add_item(at_rl_tree, hf_at_rl_role_change, tvb, offset, 4, ENC_TIME_SECS|ENC_BIG_ENDIAN);
+    proto_tree_add_item(at_rl_tree, hf_at_rl_role_change, tvb, offset, 4, ENC_TIME_SECS);
 
     return AT_RL_FRAME_LEN;
 }

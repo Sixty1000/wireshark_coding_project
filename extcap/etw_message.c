@@ -15,15 +15,78 @@
 #include <wsutil/wslog.h>
 ULONGLONG g_num_events;
 
+VOID format_message(WCHAR* lpszMessage, PROPERTY_KEY_VALUE* propArray, DWORD dwPropertyCount, WCHAR* lpszOutBuffer, DWORD dwOutBufferCount)
+{
+    DWORD startLoc = 0;
+    int percent_loc = 0;
+
+    for (int i = 0; lpszMessage[i] != L'\0';)
+    {
+        if (lpszMessage[i] != L'%')
+        {
+            i++;
+            continue;
+        }
+        if (lpszMessage[i + 1] == '%')
+        {
+            i += 2;
+            continue;
+        }
+
+        percent_loc = i;
+        i++;
+
+        if (iswdigit(lpszMessage[i]))
+        {
+            DWORD dwDigitalCount = 0;
+            WCHAR smallBuffer[MAX_SMALL_BUFFER] = { 0 };
+            while (iswdigit(lpszMessage[i]))
+            {
+                if (dwDigitalCount < (MAX_SMALL_BUFFER - 1))
+                {
+                    smallBuffer[dwDigitalCount] = lpszMessage[i];
+                }
+                dwDigitalCount++;
+                i++;
+            }
+
+            /* We are not parsing this */
+            if (dwDigitalCount >= (MAX_SMALL_BUFFER - 1))
+            {
+                continue;
+            }
+            DWORD num = _wtoi(smallBuffer);
+            /* We are not parsing this */
+            if (num == 0 || num > dwPropertyCount || propArray[num - 1].value[0] == L'\0')
+            {
+                continue;
+            }
+
+            if (lpszMessage[i] == L'!' && lpszMessage[i + 1] == L'S' && lpszMessage[i + 2] == L'!')
+            {
+                i += 3;
+            }
+
+            /* We have everything */
+            lpszMessage[percent_loc] = L'\0';
+            StringCbCat(lpszOutBuffer, dwOutBufferCount, lpszMessage + startLoc);
+            StringCbCat(lpszOutBuffer, dwOutBufferCount, propArray[num - 1].value);
+            startLoc = i;
+            continue; // for
+        }
+    }
+    StringCbCat(lpszOutBuffer, dwOutBufferCount, lpszMessage + startLoc);
+}
+
 /*
 * Get the length of the property data. For MOF-based events, the size is inferred from the data type
 * of the property. For manifest-based events, the property can specify the size of the property value
-* using the length attribute. The length attribute can specify the size directly or specify the name
+* using the length attribute. The length attribue can specify the size directly or specify the name
 * of another property in the event data that contains the size. If the property does not include the
 * length attribute, the size is inferred from the data type. The length will be zero for variable
 * length, null-terminated strings and structures.
 */
-static DWORD GetPropertyLength(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo, USHORT i, PUSHORT PropertyLength)
+DWORD GetPropertyLength(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo, USHORT i, PUSHORT PropertyLength)
 {
     DWORD status = ERROR_SUCCESS;
     PROPERTY_DATA_DESCRIPTOR DataDescriptor = { 0 };
@@ -36,22 +99,11 @@ static DWORD GetPropertyLength(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo, US
     */
     if ((pInfo->EventPropertyInfoArray[i].Flags & PropertyParamLength) == PropertyParamLength)
     {
-        /* Expects the length to be defined by a UINT16 or UINT32 */
-        DWORD Length = 0;
+        DWORD Length = 0;  // Expects the length to be defined by a UINT16 or UINT32
         DWORD j = pInfo->EventPropertyInfoArray[i].lengthPropertyIndex;
-
-        if (j >= pInfo->PropertyCount)
-            return ERROR_EVT_INVALID_EVENT_DATA;
-
         DataDescriptor.PropertyName = ((ULONGLONG)(pInfo)+(ULONGLONG)pInfo->EventPropertyInfoArray[j].NameOffset);
         DataDescriptor.ArrayIndex = ULONG_MAX;
         status = TdhGetPropertySize(pEvent, 0, NULL, 1, &DataDescriptor, &PropertySize);
-        if (status != ERROR_SUCCESS)
-            return status;
-
-        if (PropertySize != sizeof(USHORT) && PropertySize != sizeof(DWORD))
-            return ERROR_EVT_INVALID_EVENT_DATA;
-
         status = TdhGetProperty(pEvent, 0, NULL, 1, &DataDescriptor, PropertySize, (PBYTE)&Length);
         *PropertyLength = (USHORT)Length;
     }
@@ -95,7 +147,7 @@ cleanup:
     return status;
 }
 
-static DWORD GetArraySize(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo, USHORT i, PUSHORT ArraySize)
+DWORD GetArraySize(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo, USHORT i, PUSHORT ArraySize)
 {
     DWORD status = ERROR_SUCCESS;
     PROPERTY_DATA_DESCRIPTOR DataDescriptor = { 0 };
@@ -106,19 +158,9 @@ static DWORD GetArraySize(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo, USHORT 
         /* Expects the count to be defined by a UINT16 or UINT32 */
         DWORD Count = 0;
         DWORD j = pInfo->EventPropertyInfoArray[i].countPropertyIndex;
-
-        if (j >= pInfo->PropertyCount)
-            return ERROR_EVT_INVALID_EVENT_DATA;
-
         DataDescriptor.PropertyName = ((ULONGLONG)(pInfo)+(ULONGLONG)(pInfo->EventPropertyInfoArray[j].NameOffset));
         DataDescriptor.ArrayIndex = ULONG_MAX;
         status = TdhGetPropertySize(pEvent, 0, NULL, 1, &DataDescriptor, &PropertySize);
-        if (status != ERROR_SUCCESS)
-            return status;
-
-        if (PropertySize != sizeof(USHORT) && PropertySize != sizeof(DWORD))
-            return ERROR_EVT_INVALID_EVENT_DATA;
-
         status = TdhGetProperty(pEvent, 0, NULL, 1, &DataDescriptor, PropertySize, (PBYTE)&Count);
         *ArraySize = (USHORT)Count;
     }
@@ -129,7 +171,7 @@ static DWORD GetArraySize(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo, USHORT 
     return status;
 }
 
-static DWORD GetMapInfo(PEVENT_RECORD pEvent, LPWSTR pMapName, PEVENT_MAP_INFO* pMapInfo)
+DWORD GetMapInfo(PEVENT_RECORD pEvent, LPWSTR pMapName, PEVENT_MAP_INFO* pMapInfo)
 {
     DWORD status = ERROR_SUCCESS;
     DWORD MapSize = 0;
@@ -151,7 +193,7 @@ static DWORD GetMapInfo(PEVENT_RECORD pEvent, LPWSTR pMapName, PEVENT_MAP_INFO* 
     if (ERROR_NOT_FOUND == status)
     {
         /* This case is okay. */
-        status = ERROR_SUCCESS;
+        status = ERROR_SUCCESS; 
     }
 
 cleanup:
@@ -160,31 +202,22 @@ cleanup:
 }
 
 
-PBYTE extract_property(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo, DWORD PointerSize, USHORT i, PBYTE pUserData, PBYTE pEndOfUserData, PROPERTY_KEY_VALUE* pExtract)
+PBYTE extract_properties(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo, DWORD PointerSize, USHORT i, PBYTE pUserData, PBYTE pEndOfUserData, PROPERTY_KEY_VALUE* pExtract)
 {
     TDHSTATUS status = ERROR_SUCCESS;
     USHORT PropertyLength = 0;
     USHORT UserDataConsumed = 0;
     /* Last member of a structure */
-    DWORD LastMember;
+    DWORD LastMember = 0;
     USHORT ArraySize = 0;
     PEVENT_MAP_INFO pMapInfo = NULL;
-    WCHAR formatted_data[MAX_LOG_LINE_LENGTH + 1];
-    const DWORD formatted_data_size = sizeof(formatted_data);
+    WCHAR formatted_data[MAX_LOG_LINE_LENGTH];
+    DWORD formatted_data_size = sizeof(formatted_data);
     LPWSTR oversize_formatted_data = NULL;
 
     do
     {
-        /* Set the property key */
         StringCbCopy(pExtract->key, sizeof(pExtract->key), (PWCHAR)((PBYTE)(pInfo)+pInfo->EventPropertyInfoArray[i].NameOffset));
-
-        /* If pUserData is NULL, it means a previous property has failed to resolve. Skip */
-        if (pUserData == NULL)
-        {
-            StringCbPrintf(pExtract->value, sizeof(pExtract->value), L"%s: UNKNOWN", pExtract->key);
-            break;
-        }
-
         /* Get the length of the property. */
         status = GetPropertyLength(pEvent, pInfo, i, &PropertyLength);
         if (ERROR_SUCCESS != status)
@@ -229,10 +262,10 @@ PBYTE extract_property(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo, DWORD Poin
 
                 for (USHORT j = pInfo->EventPropertyInfoArray[i].structType.StructStartIndex; j < LastMember; j++)
                 {
-                    pUserData = extract_property(pEvent, pInfo, PointerSize, j, pUserData, pEndOfUserData, pExtract);
+                    pUserData = extract_properties(pEvent, pInfo, PointerSize, j, pUserData, pEndOfUserData, pExtract);
                     if (NULL == pUserData)
                     {
-                        StringCbPrintf(pExtract->value, sizeof(pExtract->value), L"%s: extract_property of member %d failed 0x%x", pExtract->key, j, status);
+                        StringCbPrintf(pExtract->value, sizeof(pExtract->value), L"%s: extract_properties of member %d failed 0x%x", pExtract->key, j, status);
                         break;
                     }
                 }
@@ -256,8 +289,6 @@ PBYTE extract_property(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo, DWORD Poin
 
                 /* Get the size of the buffer required for the formatted data. */
 
-                DWORD oversize_formatted_data_size = formatted_data_size;
-
                 status = TdhFormatProperty(
                     pInfo,
                     pMapInfo,
@@ -267,7 +298,7 @@ PBYTE extract_property(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo, DWORD Poin
                     PropertyLength,
                     (USHORT)(pEndOfUserData - pUserData),
                     pUserData,
-                    &oversize_formatted_data_size,
+                    &formatted_data_size,
                     formatted_data,
                     &UserDataConsumed);
 
@@ -279,7 +310,7 @@ PBYTE extract_property(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo, DWORD Poin
                         oversize_formatted_data = NULL;
                     }
 
-                    oversize_formatted_data = (LPWSTR)g_malloc(oversize_formatted_data_size);
+                    oversize_formatted_data = (LPWSTR)g_malloc(formatted_data_size);
                     if (oversize_formatted_data == NULL)
                     {
                         status = ERROR_OUTOFMEMORY;
@@ -297,14 +328,14 @@ PBYTE extract_property(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo, DWORD Poin
                         PropertyLength,
                         (USHORT)(pEndOfUserData - pUserData),
                         pUserData,
-                        &oversize_formatted_data_size,
+                        &formatted_data_size,
                         oversize_formatted_data,
                         &UserDataConsumed);
                 }
 
                 if (ERROR_SUCCESS == status)
                 {
-                    if (oversize_formatted_data_size > formatted_data_size && oversize_formatted_data != NULL)
+                    if (formatted_data_size > sizeof(formatted_data) && oversize_formatted_data != NULL)
                     {
                         /* Any oversize FormattedData will be truncated */
                         StringCbCat(pExtract->value, sizeof(pExtract->value), oversize_formatted_data);
@@ -329,12 +360,10 @@ PBYTE extract_property(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo, DWORD Poin
         }
     } while (false);
 
-    pExtract->key_length = (USHORT)((wcslen(pExtract->key) + 1) * sizeof(WCHAR));
-    pExtract->value_length = (USHORT)((wcslen(pExtract->value) + 1) * sizeof(WCHAR));
-
     if (oversize_formatted_data)
     {
         g_free(oversize_formatted_data);
+        oversize_formatted_data = NULL;
     }
     if (pMapInfo)
     {

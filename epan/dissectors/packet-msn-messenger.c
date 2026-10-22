@@ -54,10 +54,10 @@ dissect_msnms(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
 {
     proto_tree   *msnms_tree;
     proto_item   *ti;
-    unsigned      offset = 0;
+    int           offset = 0;
     const unsigned char *line;
-    unsigned      next_offset;
-    unsigned      linelen;
+    int           next_offset;
+    int           linelen;
     /* int              tokenlen; */
     /* const unsigned char     *next_token; */
 
@@ -66,11 +66,11 @@ dissect_msnms(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
     /*
      * Find the end of the first line.
      *
-     * Note that "tvb_find_line_end_remaining()" will return a value that is
+     * Note that "tvb_find_line_end()" will return a value that is
      * not longer than what's in the buffer, so the "tvb_get_ptr()"
      * call won't throw an exception.
      */
-    (void) tvb_find_line_end_remaining(tvb, offset, &linelen, &next_offset);
+    linelen = tvb_find_line_end(tvb, offset, -1, &next_offset, false);
     line = tvb_get_ptr(tvb, offset, linelen);
 
 
@@ -78,7 +78,7 @@ dissect_msnms(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
      * Put the first line from the buffer into the summary.
      */
     col_add_str(pinfo->cinfo, COL_INFO,
-                format_text(pinfo->pool, (const char*)line, linelen));
+                format_text(pinfo->pool, line, linelen));
 
     if (tree) {
         ti = proto_tree_add_item(tree, proto_msnms, tvb, offset, -1,
@@ -93,7 +93,8 @@ dissect_msnms(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
             /*
              * Find the end of the line.
              */
-            (void) tvb_find_line_end_remaining(tvb, offset, NULL, &next_offset);
+            tvb_find_line_end(tvb, offset, -1,
+                              &next_offset, false);
 
             /*
              * Put this line.

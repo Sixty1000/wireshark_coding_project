@@ -16,7 +16,39 @@ set(CODEC_SRC
 	G711decode.c
 )
 
-add_wireshark_codec_plugin_library(g711)
+set(PLUGIN_FILES
+	plugin.c
+	${CODEC_SRC}
+)
+
+set_source_files_properties(
+	${PLUGIN_FILES}
+	PROPERTIES
+	COMPILE_FLAGS "${WERROR_COMMON_FLAGS}"
+)
+
+register_plugin_files(plugin.c
+	plugin_codec
+	${CODEC_SRC}
+)
+
+add_wireshark_plugin_library(g711 codecs)
+
+target_include_directories(g711 PRIVATE ${CMAKE_SOURCE_DIR}/codecs)
+
+target_link_libraries(g711 wsutil)
+
+install_plugin(g711 codecs)
+
+file(GLOB CODEC_HEADERS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" "*.h")
+CHECKAPI(
+	NAME
+	  g711
+	SWITCHES
+	SOURCES
+	  ${CODEC_SRC}
+	  ${CODEC_HEADERS}
+)
 
 #
 # Editor modelines  -  https://www.wireshark.org/tools/modelines.html

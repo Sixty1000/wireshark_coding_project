@@ -23,12 +23,10 @@
 #include <epan/color_filters.h>
 #include <wiretap/wtap.h>
 #include <wsutil/str_util.h>
-#include <wsutil/array.h>
 
 #include "file-file.h"
 
 void proto_register_file(void);
-void event_register_file(void);
 
 static int proto_file;
 static int hf_file_record_number;
@@ -46,7 +44,7 @@ static int ett_file;
 
 static int file_tap;
 
-static dissector_table_t file_encap_dissector_table;
+dissector_table_t file_encap_dissector_table;
 
 /*
  * Routine used to register record end routine.  The routine should only
@@ -121,17 +119,16 @@ dissect_file_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, 
 		ti = proto_tree_add_boolean(fh_tree, hf_file_ignored, tvb, 0, 0,pinfo->fd->ignored);
 		proto_item_set_generated(ti);
 
-		GPtrArray *ppd_array = p_get_proto_names_and_keys(wmem_file_scope(), pinfo);
-		if(ppd_array){
+		if(pinfo->fd->pfd != 0){
 			proto_item *ppd_item;
-			unsigned num_entries = ppd_array->len;
+			unsigned num_entries = g_slist_length(pinfo->fd->pfd);
+			unsigned i;
 			ppd_item = proto_tree_add_uint(fh_tree, hf_file_num_p_prot_data, tvb, 0, 0, num_entries);
 			proto_item_set_generated(ppd_item);
-			for(unsigned i=0; i<num_entries; i++){
-				char* str = ppd_array->pdata[i];
+			for(i=0; i<num_entries; i++){
+				char* str = p_get_proto_name_and_key(wmem_file_scope(), pinfo, i);
 				proto_tree_add_string_format(fh_tree, hf_file_proto_name_and_key, tvb, 0, 0, str, "%s", str);
 			}
-			g_ptr_array_unref(ppd_array);
 		}
 
 #if 0
@@ -147,7 +144,7 @@ dissect_file_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, 
 	if (pinfo->fd->ignored) {
 		/* Ignored package, stop handling here */
 		col_set_str(pinfo->cinfo, COL_INFO, "<Ignored>");
-		proto_tree_add_boolean_format(tree, hf_file_ignored, tvb, 0, 0, true, "This record is marked as ignored");
+		proto_tree_add_boolean_format(tree, hf_file_ignored, tvb, 0, -1, true, "This record is marked as ignored");
 		return tvb_captured_length(tvb);
 	}
 
@@ -271,52 +268,13 @@ dissect_file_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, 
 
 	/* Attempt to (re-)calculate color filters (if any). */
 	if (pinfo->fd->need_colorize) {
-		wmem_list_t *matches = NULL;
-
-		/* Get ALL matching color filters (not just first).
-		 * Store matches in proto_data so the display code below can show
-		 * multiple matching rules in the frame tree. This enables multi-color
-		 * support in TShark when --color flag is used. */
-		color_filter = color_filters_colorize_packet_all(file_data->color_edt, wmem_file_scope(), &matches, false);
+		color_filter = color_filters_colorize_packet(file_data->color_edt);
 		pinfo->fd->color_filter = color_filter;
 		pinfo->fd->need_colorize = 0;
-
-		/* Store matches in proto_data for display code below to access.
-		 * free any previously stored list (from a prior dissect pass) first. */
-		if (matches) {
-			wmem_list_t *old_matches = (wmem_list_t *)p_get_proto_data(wmem_file_scope(), pinfo, proto_file, 0);
-			if (old_matches) {
-				wmem_destroy_list(old_matches);
-				p_remove_proto_data(wmem_file_scope(), pinfo, proto_file, 0);
-			}
-			p_add_proto_data(wmem_file_scope(), pinfo, proto_file, 0, matches);
-		}
 	} else {
 		color_filter = pinfo->fd->color_filter;
 	}
-	/* Retrieve all matching filters from proto_data (stored during colorization above).
-	 * This enables multi-color display for both GUI and TShark. */
-	wmem_list_t *matches = NULL;
-	if (fh_tree) {
-		matches = (wmem_list_t *)p_get_proto_data(wmem_file_scope(), pinfo, proto_file, 0);
-	}
-
-	/* Show all matching color filters if packet details multi-color is enabled.
-	 * This is controlled independently from packet list and scrollbar display. */
-	if (matches && prefs.gui_packet_list_multi_color_details) {
-		/* Show all matching color filters from stored list */
-		for (wmem_list_frame_t *lf = wmem_list_head(matches); lf != NULL; lf = wmem_list_frame_next(lf)) {
-			const color_filter_t *colorf = (const color_filter_t *)wmem_list_frame_data(lf);
-
-			item = proto_tree_add_string(fh_tree, hf_file_color_filter_name, tvb,
-						     0, 0, colorf->filter_name);
-			proto_item_set_generated(item);
-			item = proto_tree_add_string(fh_tree, hf_file_color_filter_text, tvb,
-						     0, 0, colorf->filter_text);
-			proto_item_set_generated(item);
-		}
-	} else if (color_filter) {
-		/* Fallback to single filter if no stored matches */
+	if (color_filter) {
 		pinfo->fd->color_filter = color_filter;
 		item = proto_tree_add_string(fh_tree, hf_file_color_filter_name, tvb,
 					     0, 0, color_filter->filter_name);
@@ -338,8 +296,8 @@ dissect_file_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, 
 	return tvb_captured_length(tvb);
 }
 
-static void
-common_register_file(void)
+void
+proto_register_file(void)
 {
 	static hf_register_info hf[] = {
 		{ &hf_file_record_number,
@@ -426,18 +384,6 @@ common_register_file(void)
 #endif
 
 	file_tap=register_tap("file");
-}
-
-void
-proto_register_file(void)
-{
-	common_register_file();
-}
-
-void
-event_register_file(void)
-{
-	common_register_file();
 }
 
 /*

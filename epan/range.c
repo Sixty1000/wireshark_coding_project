@@ -92,7 +92,7 @@ range_convert_str_work(wmem_allocator_t *scope, range_t **rangep, const char *es
    uint32_t      tmp;
    uint32_t      val;
 
-   if (rangep == NULL)
+   if ( (rangep == NULL) || (es == NULL) )
       return CVT_SYNTAX_ERROR;
 
    /* Allocate a range; this has room for one subrange. */
@@ -107,7 +107,8 @@ range_convert_str_work(wmem_allocator_t *scope, range_t **rangep, const char *es
     * were found. The number of individual ranges is limited to 'MaxRanges'
     */
 
-   for (p = es; p; range->nranges++) {
+   p = es;
+   for (;;) {
       /* Skip white space. */
       while ((c = *p) == ' ' || c == '\t')
          p++;
@@ -221,6 +222,7 @@ range_convert_str_work(wmem_allocator_t *scope, range_t **rangep, const char *es
          wmem_free(scope, range);
          return CVT_SYNTAX_ERROR;
       }
+      range->nranges++;
 
       if (c == ',') {
          /* Subrange is followed by a comma; skip it. */
@@ -410,7 +412,7 @@ range_convert_range(wmem_allocator_t *scope, const range_t *range)
    bool prepend_comma = false;
    wmem_strbuf_t *strbuf;
 
-   strbuf=wmem_strbuf_new(scope, NULL);
+   strbuf=wmem_strbuf_new(scope, "");
 
    if (range) {
       for (i=0; i < range->nranges; i++) {

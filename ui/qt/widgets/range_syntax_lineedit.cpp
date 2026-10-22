@@ -1,5 +1,5 @@
 /* range_syntax_lineedit.cpp
- * Delegates for editing preferences.
+ * Delegates for editing prefereneces.
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>

@@ -10,15 +10,6 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-/*
- * What happened to Yahoo Messenger?
- * Original service discontinued: The original Yahoo Messenger service was shut down in phases.
- *  The legacy version was discontinued in 2016, and the new version was shut down entirely in July 2018.
- * Alternative introduced: Yahoo directed users to its group messaging app, Squirrel, as an alternative at the time of the shutdown.
- * Yahoo! Squirrel was a group messaging app launched in 2018, intended to replace Yahoo! Messenger.
- *  It was an invite-only application for iOS and Android that focused on private group chats,
- *  but it was discontinued in April 2019.
- */
 #include "config.h"
 
 #include <epan/packet.h>
@@ -237,7 +228,7 @@ enum yahoo_command {
     YAHOO_CMD_WIDGET_BUDDY_LIST          = 0xfc,
     YAHOO_CMD_WIDGET_BUDDY_INFO          = 0xfd,
     YAHOO_CMD_WIDGET_ACTION              = 0xfe,
-    YAHOO_CMD_NEWS_ALERTS                = 0x12c,
+    YAHOO_CMD_NEWS_ALERTS                = 0xff,
     YAHOO_CMD_CORP_USER_LOGIN            = 0x1c2,
     YAHOO_CMD_MSG_RE_LOGIN               = 0x1c3,
     YAHOO_CMD_CORP_ID_COPR_P2P_INIT      = 0x1c4,
@@ -248,12 +239,12 @@ enum yahoo_command {
     YAHOO_CMD_SECURE_CHAT_SAY_MSG        = 0x1cf,
     YAHOO_CMD_SECURE_GAMES_USER_HAS_MSG  = 0x1d0,
     YAHOO_CMD_SYMANTEC_MSGS              = 0x1f4,
-    YAHOO_CMD_MOBILE_SEND_SMS_MESSAGE    = 0x2ea,
+    YAHOO_CMD_MOBILE_SEND_SMS_MESSAGE    = 0x1f5,
     YAHOO_CMD_MOBILE_SMS_LOGIN           = 0x2ec,
     YAHOO_CMD_MOBILE_SMS_NUMBER          = 0x2ed,
     YAHOO_CMD_ANON_LOGOFF                = 0x322,
     YAHOO_CMD_ANON_HAS_MSG               = 0x326,
-    YAHOO_CMD_CLIENT_NETSTAT             = 0x3e8,
+    YAHOO_CMD_CLIENT_NETSTAT             = 0x327,
     YAHOO_CMD_P2P_USER                   = 0x3e9,
     YAHOO_CMD_P2P_STATE                  = 0x3ea,
     YAHOO_CMD_LWM_LOGIN                  = 0x44c,
@@ -299,7 +290,7 @@ enum yahoo_status {
     YAHOO_STATUS_PRE_LOGIN_SUCCEEDED    = 0x64,
     YAHOO_STATUS_SERVER_CONNECTED       = 0x65,
     YAHOO_STATUS_FD_CONNECT_SUCCESS     = 0x66,
-    YAHOO_STATUS_CMD_SENT_ACK           = 0x3e8,
+    YAHOO_STATUS_CMD_SENT_ACK           = 0x67,
     YAHOO_STATUS_UNKNOWN_USER           = 0x5a55aa55,
     YAHOO_STATUS_KNOWN_USER             = 0x5a55aa56,
 };
@@ -836,18 +827,25 @@ static const value_string ymsg_field_vals[] = {
     {YAHOO_FLD_CUSTOM_DND_STATUS,             "CustomDndStatus"},
     {YAHOO_FLD_CONTAINS_TAGS,                 "ContainsTags"},
     {YAHOO_FLD_APP_NAME,                      "AppName"},
-    {YAHOO_FLD_INVITOR_NAME,                  "InvitorName|Net2PhoneCallLen"},
-    {YAHOO_FLD_INVITEE_NAME,                  "InviteeName|AdSpaceId"},
-    {YAHOO_FLD_INVITED_USER,                  "InvitedUser|UsesIMIPClient"},
-    {YAHOO_FLD_JOINED_USER,                   "JoinedUser|Shortcut"},
-    {YAHOO_FLD_DECLINED_USER,                 "DeclinedUser|FeedVer"},
+    {YAHOO_FLD_INVITOR_NAME,                  "InvitorName"},
+    {YAHOO_FLD_NET2PHONE_CALL_LEN,            "Net2PhoneCallLen"},
+    {YAHOO_FLD_INVITEE_NAME,                  "InviteeName"},
+    {YAHOO_FLD_AD_SPACE_ID,                   "AdSpaceId"},
+    {YAHOO_FLD_INVITED_USER,                  "InvitedUser"},
+    {YAHOO_FLD_USES_IMIP_CLIENT,              "UsesIMIPClient"},
+    {YAHOO_FLD_JOINED_USER,                   "JoinedUser"},
+    {YAHOO_FLD_SHORTCUT,                      "Shortcut"},
+    {YAHOO_FLD_DECLINED_USER,                 "DeclinedUser"},
+    {YAHOO_FLD_FEED_VER,                      "FeedVer"},
     {YAHOO_FLD_UNAVAILABLE_USER,              "UnavailableUser"},
     {YAHOO_FLD_LEFT_USER,                     "LeftUser"},
     {YAHOO_FLD_ROOM_NAME,                     "RoomName"},
     {YAHOO_FLD_CONF_TOPIC,                    "ConfTopic"},
     {YAHOO_FLD_COOKIE,                        "Cookie"},
-    {YAHOO_FLD_USER_TYPE,                     "UserType|DeviceType"},
-    {YAHOO_FLD_WEBCAM_TOKEN,                  "WebcamToken|TimedP2PConnFlg"},
+    {YAHOO_FLD_DEVICE_TYPE,                   "DeviceType"},
+    {YAHOO_FLD_USER_TYPE,                     "UserType"},
+    {YAHOO_FLD_WEBCAM_TOKEN,                  "WebcamToken"},
+    {YAHOO_FLD_TIMED_P2P_CONN_FLG,            "TimedP2PConnFlg"},
     {YAHOO_FLD_WEBCAM_STATUS,                 "WebcamStatus"},
     {YAHOO_FLD_IMV_ID,                        "IMVId"},
     {YAHOO_FLD_IMV_FLAG,                      "IMVFlag"},
@@ -856,7 +854,8 @@ static const value_string ymsg_field_vals[] = {
     {YAHOO_FLD_NEW_BUDDY_GRP_NAME,            "NewBuddyGrpName"},
     {YAHOO_FLD_PHONE_CARRIER_CODE,            "PhoneCarrierCode"},
     {YAHOO_FLD_SCREEN_NAME,                   "ScreenName"},
-    {YAHOO_FLD_SMS_PHONE,                     "SmsPhone|ConverseCommand"},
+    {YAHOO_FLD_CONVERSE_COMMAND,              "ConverseCommand"},
+    {YAHOO_FLD_SMS_PHONE,                     "SmsPhone"},
     {YAHOO_FLD_CONVERSE_IDENTITY,             "ConverseIdentity"},
     {YAHOO_FLD_CONVERSE_OTHER_GUY,            "ConverseOtherGuy"},
     {YAHOO_FLD_CONVERSE_TOPIC,                "ConverseTopic"},
@@ -876,7 +875,8 @@ static const value_string ymsg_field_vals[] = {
     {YAHOO_FLD_BUDDY_LIST,                    "BuddyList"},
     {YAHOO_FLD_IGNORE_LIST,                   "IgnoreList"},
     {YAHOO_FLD_IDENTITY_LIST,                 "IdentityList"},
-    {YAHOO_FLD_HAS_MAIL,                      "HasMail|ConverseCmdDecText"},
+    {YAHOO_FLD_HAS_MAIL,                      "HasMail"},
+    {YAHOO_FLD_CONVERSE_CMD_DEC_TEXT,         "ConverseCmdDecText"},
     {YAHOO_FLD_ANON_NAME,                     "AnonName"},
     {YAHOO_FLD_ANON_ID,                       "AnonId"},
     {YAHOO_FLD_T_COOKIE_EXPIRE,               "TCookieExpire"},
@@ -1137,9 +1137,9 @@ dissect_ymsg_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
 
     col_add_fstr(pinfo->cinfo, COL_INFO,
             "%s (status=%s)   ",
-            val_to_str(pinfo->pool, tvb_get_ntohs(tvb, offset + 10),
+            val_to_str(tvb_get_ntohs(tvb, offset + 10),
                  ymsg_command_vals, "Unknown Command: %u"),
-            val_to_str(pinfo->pool, tvb_get_ntohl(tvb, offset + 12),
+            val_to_str(tvb_get_ntohl(tvb, offset + 12),
                  ymsg_status_vals, "Unknown Status: %u")
         );
 
@@ -1206,7 +1206,7 @@ dissect_ymsg_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
                 /* Get the length of the key */
                 key_len = get_content_item_length(tvb, offset);
                 /* Extract the key */
-                key_valid = tvb_get_string_int(tvb, offset, key_len, ENC_STR_DEC, &key, NULL);
+                key_valid = ws_strtoi32(tvb_format_text(pinfo->pool, tvb, offset, key_len), NULL, &key);
                 if (!key_valid) {
                     key = -1;
                 }
@@ -1218,13 +1218,13 @@ dissect_ymsg_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
 
                 /* If the key is a field with field values, convert the value to an int and get its field name */
                 if (is_field_with_field_value(key) && ws_strtoi32(val_buf, NULL, &val_key)) {
-                    val_buf = val_to_str(pinfo->pool, val_key, ymsg_field_vals, "Unknown(%u)");
+                    val_buf = val_to_str(val_key, ymsg_field_vals, "Unknown(%u)");
                 }
 
                 /* Add a text item with the key... */
                 ti_2 =  proto_tree_add_string_format(content_tree, hf_ymsg_content_line, tvb,
                                                      offset, key_len + 2 + val_len + 2,
-                                                     "", "%s: %s", val_to_str(pinfo->pool, key, ymsg_field_vals, "Unknown(%u)"),
+                                                     "", "%s: %s", val_to_str(key, ymsg_field_vals, "Unknown(%u)"),
                                                      val_buf);
                 content_line_tree = proto_item_add_subtree(ti_2, ett_ymsg_content_line);
 
@@ -1319,8 +1319,6 @@ proto_register_ymsg(void)
                        "To use this option, you must also enable"
                        " \"Allow subdissectors to reassemble TCP streams\" in the TCP protocol settings.",
                        &ymsg_desegment);
-
-    proto_disable_by_default(proto_ymsg);
 }
 
 void
@@ -1336,7 +1334,7 @@ proto_reg_handoff_ymsg(void)
      * Just register as a heuristic TCP dissector, and reject stuff
      * that doesn't begin with a YMSG signature.
      */
-    heur_dissector_add("tcp", dissect_ymsg, "Yahoo YMSG Messenger over TCP", "ymsg_tcp", proto_ymsg, HEURISTIC_DISABLE);
+    heur_dissector_add("tcp", dissect_ymsg, "Yahoo YMSG Messenger over TCP", "ymsg_tcp", proto_ymsg, HEURISTIC_ENABLE);
 }
 
 /*

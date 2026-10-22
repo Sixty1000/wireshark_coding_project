@@ -10,7 +10,6 @@
 #include "config.h"
 
 #include <epan/filter_expressions.h>
-#include <epan/uat-int.h>
 
 #include "uat_frame.h"
 #include <ui_uat_frame.h>
@@ -20,7 +19,6 @@
 #include <ui/qt/widgets/copy_from_profile_button.h>
 #include <ui/qt/utils/qt_ui_utils.h>
 #include <wsutil/report_message.h>
-#include <app/application_flavor.h>
 
 #include <QLineEdit>
 #include <QKeyEvent>
@@ -38,14 +36,14 @@ UatFrame::UatFrame(QWidget *parent) :
 {
     ui->setupUi(this);
 
-    ui->newToolButton->setIconByName("list-add");
-    ui->deleteToolButton->setIconByName("list-remove");
-    ui->copyToolButton->setIconByName("list-copy");
-    ui->moveUpToolButton->setIconByName("list-move-up");
-    ui->moveDownToolButton->setIconByName("list-move-down");
-    ui->clearToolButton->setIconByName("list-clear");
+    ui->newToolButton->setStockIcon("list-add");
+    ui->deleteToolButton->setStockIcon("list-remove");
+    ui->copyToolButton->setStockIcon("list-copy");
+    ui->moveUpToolButton->setStockIcon("list-move-up");
+    ui->moveDownToolButton->setStockIcon("list-move-down");
+    ui->clearToolButton->setStockIcon("list-clear");
 
-#ifdef Q_OS_MACOS
+#ifdef Q_OS_MAC
     ui->newToolButton->setAttribute(Qt::WA_MacSmallSize, true);
     ui->deleteToolButton->setAttribute(Qt::WA_MacSmallSize, true);
     ui->copyToolButton->setAttribute(Qt::WA_MacSmallSize, true);
@@ -93,7 +91,7 @@ void UatFrame::setUat(epan_uat *uat)
             connect(ui->copyFromProfileButton, &CopyFromProfileButton::copyProfile, this, &UatFrame::copyFromProfile);
         }
 
-        QString abs_path = gchar_free_to_qstring(uat_get_actual_filename(uat_, false, application_configuration_environment_prefix()));
+        QString abs_path = gchar_free_to_qstring(uat_get_actual_filename(uat_, false));
         if (abs_path.length() > 0) {
             ui->pathLabel->setText(abs_path);
             ui->pathLabel->setUrl(QUrl::fromLocalFile(abs_path).toString());
@@ -111,9 +109,11 @@ void UatFrame::setUat(epan_uat *uat)
         resizeColumns();
         ui->clearToolButton->setEnabled(uat_model_->rowCount() != 0);
 
-        connect(uat_model_, &UatModel::dataChanged, this, &UatFrame::modelDataChanged);
-        connect(uat_model_, &UatModel::rowsRemoved,this, &UatFrame::modelRowsRemoved);
-        connect(uat_model_, &UatModel::modelReset, this, &UatFrame::modelRowsReset);
+        connect(uat_model_, SIGNAL(dataChanged(QModelIndex,QModelIndex)),
+                this, SLOT(modelDataChanged(QModelIndex)));
+        connect(uat_model_, SIGNAL(rowsRemoved(QModelIndex, int, int)),
+                this, SLOT(modelRowsRemoved()));
+        connect(uat_model_, SIGNAL(modelReset()), this, SLOT(modelRowsReset()));
 
         connect(ui->uatTreeView->selectionModel(), &QItemSelectionModel::selectionChanged,
                 this, &UatFrame::uatTreeViewSelectionChanged);
@@ -125,7 +125,7 @@ void UatFrame::setUat(epan_uat *uat)
 void UatFrame::copyFromProfile(QString filename)
 {
     char *err = NULL;
-    if (uat_load(uat_, filename.toUtf8().constData(), application_configuration_environment_prefix(), &err)) {
+    if (uat_load(uat_, filename.toUtf8().constData(), &err)) {
         uat_->changed = true;
         uat_model_->reloadUat();
     } else {
@@ -136,7 +136,7 @@ void UatFrame::copyFromProfile(QString filename)
 
 void UatFrame::showEvent(QShowEvent *)
 {
-#ifndef Q_OS_MACOS
+#ifndef Q_OS_MAC
     ui->copyFromProfileButton->setFixedHeight(ui->copyToolButton->geometry().height());
 #endif
 }

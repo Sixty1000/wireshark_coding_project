@@ -319,6 +319,8 @@ dissect_netanalyzer_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
     }
     else
     {
+      unsigned char *szTemp;
+
       /* check consistency */
       if ( (tvb_get_uint8(tvb, 10) == 0x00) &&
            (tvb_get_uint8(tvb, 11) == 0x02) &&
@@ -330,7 +332,8 @@ dissect_netanalyzer_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
            (tvb_get_uint8(tvb, 17) == 0xff) &&
            (tvb_get_uint8(tvb, INFO_TYPE_OFFSET) == 0x00) )
       {
-        char *szTemp;
+#define MAX_BUFFER 255
+        szTemp=(unsigned char *)wmem_alloc(wmem_epan_scope(), MAX_BUFFER);
 
         /* everything ok */
         col_set_str(pinfo->cinfo, COL_PROTOCOL, "netANALYZER");
@@ -345,9 +348,11 @@ dissect_netanalyzer_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 
         /* GPIO edge */
         offset++;
-        ti = proto_tree_add_item_ret_uint (netanalyzer_header_tree, hf_netanalyzer_gpio_edge, tvb, offset, 1, ENC_LITTLE_ENDIAN, &gpio_edge);
+        ti = proto_tree_add_item (netanalyzer_header_tree, hf_netanalyzer_gpio_edge, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+        gpio_edge = (tvb_get_uint8(tvb, offset) & 0x01);
 
-        szTemp = wmem_strdup_printf(pinfo->pool, "GPIO event on GPIO %d (%sing edge)", gpio_num, (gpio_edge == 0x00) ? "ris" : "fall");
+        snprintf(szTemp, MAX_BUFFER,
+                   "GPIO event on GPIO %d (%sing edge)", gpio_num, (gpio_edge == 0x00) ? "ris" : "fall");
 
         col_add_str(pinfo->cinfo, COL_INFO, szTemp);
         proto_item_append_text(ti, " %s", szTemp);
@@ -383,7 +388,7 @@ dissect_netanalyzer(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
   else
   {
     /* something is wrong */
-    proto_tree_add_expert_format_remaining(tree, pinfo, &ei_netanalyzer_header_none, tvb, 4,
+    proto_tree_add_expert_format(tree, pinfo, &ei_netanalyzer_header_none, tvb, 4, -1,
         "netANALYZER - No netANALYZER header found");
   }
   return tvb_captured_length(tvb);
@@ -418,7 +423,7 @@ dissect_netanalyzer_transparent(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
   else
   {
     /* something is wrong */
-    proto_tree_add_expert_format_remaining(tree, pinfo, &ei_netanalyzer_header_none, tvb, 4,
+    proto_tree_add_expert_format(tree, pinfo, &ei_netanalyzer_header_none, tvb, 4, -1,
         "netANALYZER transparent mode - No netANALYZER header found");
   }
   return tvb_captured_length(tvb);
@@ -544,7 +549,10 @@ void proto_register_netanalyzer(void)
 
   expert_module_t* expert_netanalyzer;
 
-  proto_netanalyzer = proto_register_protocol ("netANALYZER", "netANALYZER", "netanalyzer");
+  proto_netanalyzer = proto_register_protocol (
+    "netANALYZER",            /* name */
+    "netANALYZER",            /* short name */
+    "netanalyzer" );          /* abbrev */
 
   proto_register_field_array(proto_netanalyzer, hf, array_length(hf));
   proto_register_subtree_array(ett, array_length(ett));

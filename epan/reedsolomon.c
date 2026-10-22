@@ -18,6 +18,7 @@
  */
 
 #include "config.h"
+
 #define WS_LOG_DOMAIN LOG_DOMAIN_EPAN
 
 #include <stdio.h>
@@ -26,7 +27,7 @@
 
 #ifdef CCSDS
 /* CCSDS field generator polynomial: 1+x+x^2+x^7+x^8 */
-static const int Pp[MM+1] = { 1, 1, 1, 0, 0, 0, 0, 1, 1 };
+int Pp[MM+1] = { 1, 1, 1, 0, 0, 0, 0, 1, 1 };
 
 #else /* not CCSDS */
 /* MM, KK, B0, PRIM are user-defined in rs.h */
@@ -35,63 +36,63 @@ static const int Pp[MM+1] = { 1, 1, 1, 0, 0, 0, 0, 1, 1 };
  * and  Lee & Messerschmitt, p. 453.
  */
 #if(MM == 2)/* Admittedly silly */
-static const int Pp[MM+1] = { 1, 1, 1 };
+int Pp[MM+1] = { 1, 1, 1 };
 
 #elif(MM == 3)
 /* 1 + x + x^3 */
-static const int Pp[MM+1] = { 1, 1, 0, 1 };
+int Pp[MM+1] = { 1, 1, 0, 1 };
 
 #elif(MM == 4)
 /* 1 + x + x^4 */
-static const int Pp[MM+1] = { 1, 1, 0, 0, 1 };
+int Pp[MM+1] = { 1, 1, 0, 0, 1 };
 
 #elif(MM == 5)
 /* 1 + x^2 + x^5 */
-static const int Pp[MM+1] = { 1, 0, 1, 0, 0, 1 };
+int Pp[MM+1] = { 1, 0, 1, 0, 0, 1 };
 
 #elif(MM == 6)
 /* 1 + x + x^6 */
-static const int Pp[MM+1] = { 1, 1, 0, 0, 0, 0, 1 };
+int Pp[MM+1] = { 1, 1, 0, 0, 0, 0, 1 };
 
 #elif(MM == 7)
 /* 1 + x^3 + x^7 */
-static const int Pp[MM+1] = { 1, 0, 0, 1, 0, 0, 0, 1 };
+int Pp[MM+1] = { 1, 0, 0, 1, 0, 0, 0, 1 };
 
 #elif(MM == 8)
 /* 1+x^2+x^3+x^4+x^8 */
-static const int Pp[MM+1] = { 1, 0, 1, 1, 1, 0, 0, 0, 1 };
+int Pp[MM+1] = { 1, 0, 1, 1, 1, 0, 0, 0, 1 };
 
 #elif(MM == 9)
 /* 1+x^4+x^9 */
-static const int Pp[MM+1] = { 1, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
+int Pp[MM+1] = { 1, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
 
 #elif(MM == 10)
 /* 1+x^3+x^10 */
-static const int Pp[MM+1] = { 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1 };
+int Pp[MM+1] = { 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1 };
 
 #elif(MM == 11)
 /* 1+x^2+x^11 */
-static const int Pp[MM+1] = { 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1 };
+int Pp[MM+1] = { 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1 };
 
 #elif(MM == 12)
 /* 1+x+x^4+x^6+x^12 */
-static const int Pp[MM+1] = { 1, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1 };
+int Pp[MM+1] = { 1, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1 };
 
 #elif(MM == 13)
 /* 1+x+x^3+x^4+x^13 */
-static const int Pp[MM+1] = { 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1 };
+int Pp[MM+1] = { 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1 };
 
 #elif(MM == 14)
 /* 1+x+x^6+x^10+x^14 */
-static const int Pp[MM+1] = { 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+int Pp[MM+1] = { 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1 };
 
 #elif(MM == 15)
 /* 1+x+x^15 */
-static const int Pp[MM+1] = { 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 };
+int Pp[MM+1] = { 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 };
 
 #elif(MM == 16)
 /* 1+x+x^3+x^12+x^16 */
-static const int Pp[MM+1] = { 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1 };
+int Pp[MM+1] = { 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1 };
 
 #else
 #error "Either CCSDS must be defined, or MM must be set in range 2-16"

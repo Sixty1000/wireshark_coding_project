@@ -15,15 +15,11 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include "wtap_module.h"
+#include "wtap-int.h"
 #include "file_wrappers.h"
 #include "atm.h"
 #include "erf_record.h"
 #include "pcap-encap.h"
-
-#include <wsutil/array.h>
-#include <wsutil/ws_roundup.h>
-#include <wsutil/pint.h>
 
 /*
  * On some systems, the FDDI MAC addresses are bit-swapped.
@@ -376,8 +372,6 @@ static const struct {
 	{ 214,		WTAP_ENCAP_X2E_XORAYA },
 	/* IEEE 802.15.4 Wireless PAN non-ASK PHY */
 	{ 215,		WTAP_ENCAP_IEEE802_15_4_NONASK_PHY },
-	/* "gsmtap" header followed by GSM Um interface packets */
-	{ 217,		WTAP_ENCAP_GSMTAP_UM },
 	/* USB packets with padded Linux-specified header */
 	{ 220,		WTAP_ENCAP_USB_LINUX_MMAPPED },
 	/* Fibre Channel FC-2 frame */
@@ -504,9 +498,6 @@ static const struct {
 	/* Auerswald log file captured from any supported Auerswald device */
 	{ 296,		WTAP_ENCAP_AUERSWALD_LOG },
 
-	/* Z-Wave Tap */
-	{ 297,		WTAP_ENCAP_ZWAVE_TAP },
-
 	/* Silicon Labs debug channel */
 	{ 298,		WTAP_ENCAP_SILABS_DEBUG_CHANNEL },
 
@@ -518,9 +509,6 @@ static const struct {
 
 	/* DECT_NR (DECT-2020 New Radio (NR) MAC layer) */
 	{ 301,		WTAP_ENCAP_DECT_NR },
-
-	/* DECT_NR TAP (DECT-2020 New Radio (NR) TAP header) */
-	{ 304,		WTAP_ENCAP_DECT_NR_TAP },
 
 	/*
 	 * To repeat:
@@ -802,9 +790,6 @@ wtap_max_snaplen_for_encap(int wtap_encap)
 	case WTAP_ENCAP_EBHSCR:
 		return WTAP_MAX_PACKET_SIZE_EBHSCR;
 
-	case WTAP_ENCAP_DEKTEC_SDI:
-		return WTAP_MAX_PACKET_SIZE_DEKTEC_SDI;
-
 	case WTAP_ENCAP_USBPCAP:
 	case WTAP_ENCAP_USB_LINUX:
 	case WTAP_ENCAP_USB_LINUX_MMAPPED:
@@ -856,7 +841,7 @@ pcap_read_nokiaatm_pseudoheader(FILE_T fh,
 		return -1;
 
 	vpi = atm_phdr[NOKIAATM_VPI];
-	vci = pntohu16(&atm_phdr[NOKIAATM_VCI]);
+	vci = pntoh16(&atm_phdr[NOKIAATM_VCI]);
 
 	pseudo_header->atm.vpi = vpi;
 	pseudo_header->atm.vci = vci;
@@ -903,7 +888,7 @@ pcap_read_sunatm_pseudoheader(FILE_T fh,
 		return -1;
 
 	vpi = atm_phdr[SUNATM_VPI];
-	vci = pntohu16(&atm_phdr[SUNATM_VCI]);
+	vci = pntoh16(&atm_phdr[SUNATM_VCI]);
 
 	switch (atm_phdr[SUNATM_FLAGS] & 0x0F) {
 
@@ -1011,7 +996,7 @@ pcap_write_sunatm_pseudoheader(wtap_dumper *wdh,
 		break;
 	}
 	atm_hdr[SUNATM_VPI] = (uint8_t)pseudo_header->atm.vpi;
-	phtonu16(&atm_hdr[SUNATM_VCI], pseudo_header->atm.vci);
+	phtons(&atm_hdr[SUNATM_VCI], pseudo_header->atm.vci);
 	if (!wtap_dump_file_write(wdh, atm_hdr, sizeof(atm_hdr), err))
 		return false;
 	return true;
@@ -1045,14 +1030,14 @@ pcap_read_irda_pseudoheader(FILE_T fh, union wtap_pseudo_header *pseudo_header,
 	if (!wtap_read_bytes(fh, irda_phdr, IRDA_SLL_LEN, err, err_info))
 		return -1;
 
-	if (pntohu16(&irda_phdr[IRDA_SLL_PROTOCOL_OFFSET]) != 0x0017) {
+	if (pntoh16(&irda_phdr[IRDA_SLL_PROTOCOL_OFFSET]) != 0x0017) {
 		*err = WTAP_ERR_BAD_FILE;
 		if (err_info != NULL)
 			*err_info = g_strdup("pcap/pcapng: IrDA capture has a packet with an invalid sll_protocol field");
 		return -1;
 	}
 
-	pseudo_header->irda.pkttype = pntohu16(&irda_phdr[IRDA_SLL_PKTTYPE_OFFSET]);
+	pseudo_header->irda.pkttype = pntoh16(&irda_phdr[IRDA_SLL_PKTTYPE_OFFSET]);
 
 	return IRDA_SLL_LEN;
 }
@@ -1067,8 +1052,8 @@ pcap_write_irda_pseudoheader(wtap_dumper *wdh,
 	 * Write the IrDA header.
 	 */
 	memset(irda_hdr, 0, sizeof(irda_hdr));
-	phtonu16(&irda_hdr[IRDA_SLL_PKTTYPE_OFFSET], pseudo_header->irda.pkttype);
-	phtonu16(&irda_hdr[IRDA_SLL_PROTOCOL_OFFSET], 0x0017);
+	phtons(&irda_hdr[IRDA_SLL_PKTTYPE_OFFSET], pseudo_header->irda.pkttype);
+	phtons(&irda_hdr[IRDA_SLL_PROTOCOL_OFFSET], 0x0017);
 	if (!wtap_dump_file_write(wdh, irda_hdr, sizeof(irda_hdr), err))
 		return false;
 	return true;
@@ -1103,7 +1088,7 @@ pcap_read_mtp2_pseudoheader(FILE_T fh, union wtap_pseudo_header *pseudo_header,
 
 	pseudo_header->mtp2.sent         = mtp2_hdr[MTP2_SENT_OFFSET];
 	pseudo_header->mtp2.annex_a_used = mtp2_hdr[MTP2_ANNEX_A_USED_OFFSET];
-	pseudo_header->mtp2.link_number  = pntohu16(&mtp2_hdr[MTP2_LINK_NUMBER_OFFSET]);
+	pseudo_header->mtp2.link_number  = pntoh16(&mtp2_hdr[MTP2_LINK_NUMBER_OFFSET]);
 
 	return MTP2_HDR_LEN;
 }
@@ -1120,7 +1105,7 @@ pcap_write_mtp2_pseudoheader(wtap_dumper *wdh,
 	memset(&mtp2_hdr, 0, sizeof(mtp2_hdr));
 	mtp2_hdr[MTP2_SENT_OFFSET] = pseudo_header->mtp2.sent;
 	mtp2_hdr[MTP2_ANNEX_A_USED_OFFSET] = pseudo_header->mtp2.annex_a_used;
-	phtonu16(&mtp2_hdr[MTP2_LINK_NUMBER_OFFSET],
+	phtons(&mtp2_hdr[MTP2_LINK_NUMBER_OFFSET],
 	    pseudo_header->mtp2.link_number);
 	if (!wtap_dump_file_write(wdh, mtp2_hdr, sizeof(mtp2_hdr), err))
 		return false;
@@ -1160,14 +1145,14 @@ pcap_read_lapd_pseudoheader(FILE_T fh, union wtap_pseudo_header *pseudo_header,
 	if (!wtap_read_bytes(fh, lapd_phdr, LAPD_SLL_LEN, err, err_info))
 		return -1;
 
-	if (pntohu16(&lapd_phdr[LAPD_SLL_PROTOCOL_OFFSET]) != ETH_P_LAPD) {
+	if (pntoh16(&lapd_phdr[LAPD_SLL_PROTOCOL_OFFSET]) != ETH_P_LAPD) {
 		*err = WTAP_ERR_BAD_FILE;
 		if (err_info != NULL)
 			*err_info = g_strdup("pcap/pcapng: LAPD capture has a packet with an invalid sll_protocol field");
 		return -1;
 	}
 
-	pseudo_header->lapd.pkttype = pntohu16(&lapd_phdr[LAPD_SLL_PKTTYPE_OFFSET]);
+	pseudo_header->lapd.pkttype = pntoh16(&lapd_phdr[LAPD_SLL_PKTTYPE_OFFSET]);
 	pseudo_header->lapd.we_network = !!lapd_phdr[LAPD_SLL_ADDR_OFFSET+0];
 
 	return LAPD_SLL_LEN;
@@ -1183,8 +1168,8 @@ pcap_write_lapd_pseudoheader(wtap_dumper *wdh,
 	 * Write the LAPD header.
 	 */
 	memset(&lapd_hdr, 0, sizeof(lapd_hdr));
-	phtonu16(&lapd_hdr[LAPD_SLL_PKTTYPE_OFFSET], pseudo_header->lapd.pkttype);
-	phtonu16(&lapd_hdr[LAPD_SLL_PROTOCOL_OFFSET], ETH_P_LAPD);
+	phtons(&lapd_hdr[LAPD_SLL_PKTTYPE_OFFSET], pseudo_header->lapd.pkttype);
+	phtons(&lapd_hdr[LAPD_SLL_PROTOCOL_OFFSET], ETH_P_LAPD);
 	lapd_hdr[LAPD_SLL_ADDR_OFFSET + 0] =
 	    pseudo_header->lapd.we_network?0x01:0x00;
 	if (!wtap_dump_file_write(wdh, lapd_hdr, sizeof(lapd_hdr), err))
@@ -1456,12 +1441,12 @@ pcap_read_erf_pseudoheader(FILE_T fh, wtap_rec *rec,
 	if (!wtap_read_bytes(fh, erf_hdr, sizeof(struct erf_phdr), err, err_info))
 		return -1;
 	phdr_len = (int)sizeof(struct erf_phdr);
-	pseudo_header->erf.phdr.ts = pletohu64(&erf_hdr[0]); /* timestamp */
+	pseudo_header->erf.phdr.ts = pletoh64(&erf_hdr[0]); /* timestamp */
 	pseudo_header->erf.phdr.type = erf_hdr[8];
 	pseudo_header->erf.phdr.flags = erf_hdr[9];
-	pseudo_header->erf.phdr.rlen = pntohu16(&erf_hdr[10]);
-	pseudo_header->erf.phdr.lctr = pntohu16(&erf_hdr[12]);
-	pseudo_header->erf.phdr.wlen = pntohu16(&erf_hdr[14]);
+	pseudo_header->erf.phdr.rlen = pntoh16(&erf_hdr[10]);
+	pseudo_header->erf.phdr.lctr = pntoh16(&erf_hdr[12]);
+	pseudo_header->erf.phdr.wlen = pntoh16(&erf_hdr[14]);
 
 	/* The high 32 bits of the timestamp contain the integer number of seconds
 	 * while the lower 32 bits contain the binary fraction of the second.
@@ -1516,7 +1501,7 @@ pcap_read_erf_pseudoheader(FILE_T fh, wtap_rec *rec,
 			if (i < max) {
 				uint64_t erf_exhdr_sw;
 
-				erf_exhdr_sw = pntohu64(erf_exhdr);
+				erf_exhdr_sw = pntoh64(erf_exhdr);
 				memcpy(&pseudo_header->erf.ehdr_list[i].ehdr, &erf_exhdr_sw, sizeof(erf_exhdr_sw));
 			}
 			phdr_len += 8;
@@ -1548,7 +1533,7 @@ pcap_read_erf_pseudoheader(FILE_T fh, wtap_rec *rec,
 		}
 		if (!wtap_read_bytes(fh, erf_subhdr, sizeof(erf_mc_header_t), err, err_info))
 			return -1;
-		pseudo_header->erf.subhdr.mc_hdr = pntohu32(&erf_subhdr[0]);
+		pseudo_header->erf.subhdr.mc_hdr = pntoh32(&erf_subhdr[0]);
 		phdr_len += sizeof(erf_mc_header_t);
 		break;
 	case ERF_TYPE_AAL2:
@@ -1567,7 +1552,7 @@ pcap_read_erf_pseudoheader(FILE_T fh, wtap_rec *rec,
 		}
 		if (!wtap_read_bytes(fh, erf_subhdr, sizeof(erf_aal2_header_t), err, err_info))
 			return -1;
-		pseudo_header->erf.subhdr.aal2_hdr = pntohu32(&erf_subhdr[0]);
+		pseudo_header->erf.subhdr.aal2_hdr = pntoh32(&erf_subhdr[0]);
 		phdr_len += sizeof(erf_aal2_header_t);
 		break;
 	case ERF_TYPE_ETH:
@@ -1610,7 +1595,7 @@ pcap_write_erf_pseudoheader(wtap_dumper *wdh,
 	 * Write the ERF header.
 	 */
 	memset(&erf_hdr, 0, sizeof(erf_hdr));
-	phtoleu64(&erf_hdr[0], pseudo_header->erf.phdr.ts);
+	phtolell(&erf_hdr[0], pseudo_header->erf.phdr.ts);
 	erf_hdr[8] = pseudo_header->erf.phdr.type;
 	erf_hdr[9] = pseudo_header->erf.phdr.flags;
 
@@ -1622,11 +1607,11 @@ pcap_write_erf_pseudoheader(wtap_dumper *wdh,
 	 * here, assume caplen was calculated correctly and
 	 * recalculate from wlen.
 	 */
-	phtonu16(&erf_hdr[10],
+	phtons(&erf_hdr[10],
 	    MIN(pseudo_header->erf.phdr.rlen, pseudo_header->erf.phdr.wlen + pcap_get_phdr_size(WTAP_ENCAP_ERF, pseudo_header)));
 
-	phtonu16(&erf_hdr[12], pseudo_header->erf.phdr.lctr);
-	phtonu16(&erf_hdr[14], pseudo_header->erf.phdr.wlen);
+	phtons(&erf_hdr[12], pseudo_header->erf.phdr.lctr);
+	phtons(&erf_hdr[14], pseudo_header->erf.phdr.wlen);
 	if (!wtap_dump_file_write(wdh, erf_hdr,  sizeof(struct erf_phdr), err))
 		return false;
 
@@ -1639,7 +1624,7 @@ pcap_write_erf_pseudoheader(wtap_dumper *wdh,
 		uint8_t type;
 
 		do {
-			phtonu64(erf_exhdr, pseudo_header->erf.ehdr_list[i].ehdr);
+			phtonll(erf_exhdr, pseudo_header->erf.ehdr_list[i].ehdr);
 			type = erf_exhdr[0];
 			/* Clear more extension headers bit if > 8 */
 			if(i == max-1)
@@ -1661,13 +1646,13 @@ pcap_write_erf_pseudoheader(wtap_dumper *wdh,
 	case ERF_TYPE_MC_AAL5:
 	case ERF_TYPE_MC_AAL2:
 	case ERF_TYPE_COLOR_MC_HDLC_POS:
-		phtonu32(&erf_subhdr[0], pseudo_header->erf.subhdr.mc_hdr);
+		phtonl(&erf_subhdr[0], pseudo_header->erf.subhdr.mc_hdr);
 		if (!wtap_dump_file_write(wdh, erf_subhdr,
 		    sizeof(struct erf_mc_hdr), err))
 			return false;
 		break;
 	case ERF_TYPE_AAL2:
-		phtonu32(&erf_subhdr[0], pseudo_header->erf.subhdr.aal2_hdr);
+		phtonl(&erf_subhdr[0], pseudo_header->erf.subhdr.aal2_hdr);
 		if (!wtap_dump_file_write(wdh, erf_subhdr,
 		    sizeof(struct erf_aal2_hdr), err))
 			return false;
@@ -1717,7 +1702,7 @@ pcap_read_i2c_linux_pseudoheader(FILE_T fh, union wtap_pseudo_header *pseudo_hea
 
 	pseudo_header->i2c.is_event = i2c_linux_hdr.bus & 0x80 ? 1 : 0;
 	pseudo_header->i2c.bus = i2c_linux_hdr.bus & 0x7f;
-	pseudo_header->i2c.flags = pntohu32(&i2c_linux_hdr.flags);
+	pseudo_header->i2c.flags = pntoh32(&i2c_linux_hdr.flags);
 
 	return (int)sizeof (struct i2c_linux_file_hdr);
 }
@@ -1734,7 +1719,7 @@ pcap_write_i2c_linux_pseudoheader(wtap_dumper *wdh,
 	memset(&i2c_linux_hdr, 0, sizeof(i2c_linux_hdr));
 	i2c_linux_hdr.bus = pseudo_header->i2c.bus |
 			(pseudo_header->i2c.is_event ? 0x80 : 0x00);
-	phtonu32((uint8_t *)&i2c_linux_hdr.flags, pseudo_header->i2c.flags);
+	phtonl((uint8_t *)&i2c_linux_hdr.flags, pseudo_header->i2c.flags);
 	if (!wtap_dump_file_write(wdh, &i2c_linux_hdr, sizeof(i2c_linux_hdr), err))
 		return false;
 	return true;
@@ -2037,13 +2022,10 @@ pcap_byteswap_can_socketcan_pseudoheader(unsigned packet_size, uint16_t protocol
 }
 
 static void
-pcap_byteswap_linux_sll_pseudoheader(wtap_rec *rec)
+pcap_byteswap_linux_sll_pseudoheader(wtap_rec *rec, uint8_t *pd)
 {
-	uint8_t *pd;
 	unsigned packet_size;
 	uint16_t protocol;
-
-	pd = ws_buffer_start_ptr(&rec->data);
 
 	/*
 	 * Minimum of captured and actual length (just in case the
@@ -2062,19 +2044,16 @@ pcap_byteswap_linux_sll_pseudoheader(wtap_rec *rec)
 	/*
 	 * Byte-swap the SocketCAN pseudoheader, if we have one.
 	 */
-	protocol = pntohu16(&pd[LINUX_SLL_PROTOCOL_OFFSET]);
+	protocol = pntoh16(&pd[LINUX_SLL_PROTOCOL_OFFSET]);
 	pcap_byteswap_can_socketcan_pseudoheader(packet_size - LINUX_SLL_LEN,
 	    protocol, pd + LINUX_SLL_LEN);
 }
 
 static void
-pcap_byteswap_linux_sll2_pseudoheader(wtap_rec *rec)
+pcap_byteswap_linux_sll2_pseudoheader(wtap_rec *rec, uint8_t *pd)
 {
-	uint8_t *pd;
 	unsigned packet_size;
 	uint16_t protocol;
-
-	pd = ws_buffer_start_ptr(&rec->data);
 
 	/*
 	 * Minimum of captured and actual length (just in case the
@@ -2093,21 +2072,19 @@ pcap_byteswap_linux_sll2_pseudoheader(wtap_rec *rec)
 	/*
 	 * Byte-swap the SocketCAN pseudoheader, if we have one.
 	 */
-	protocol = pntohu16(&pd[LINUX_SLL2_PROTOCOL_OFFSET]);
+	protocol = pntoh16(&pd[LINUX_SLL2_PROTOCOL_OFFSET]);
 	pcap_byteswap_can_socketcan_pseudoheader(packet_size - LINUX_SLL2_LEN,
 	    protocol, pd + LINUX_SLL2_LEN);
 }
 
 static void
-pcap_byteswap_linux_usb_pseudoheader(wtap_rec *rec, bool header_len_64_bytes)
+pcap_byteswap_linux_usb_pseudoheader(wtap_rec *rec, uint8_t *pd,
+    bool header_len_64_bytes)
 {
-	uint8_t *pd;
 	unsigned packet_size;
 	struct linux_usb_phdr *usb_phdr;
 	struct linux_usb_isodesc *pisodesc;
 	int32_t iso_numdesc, i;
-
-	pd = ws_buffer_start_ptr(&rec->data);
 
 	/*
 	 * Minimum of captured and actual length (just in case the
@@ -2195,16 +2172,13 @@ struct nflog_tlv {
 };
 
 static void
-pcap_byteswap_nflog_pseudoheader(wtap_rec *rec)
+pcap_byteswap_nflog_pseudoheader(wtap_rec *rec, uint8_t *pd)
 {
-	uint8_t *pd;
 	unsigned packet_size;
 	uint8_t *p;
 	struct nflog_hdr *nfhdr;
 	struct nflog_tlv *tlv;
 	unsigned size;
-
-	pd = ws_buffer_start_ptr(&rec->data);
 
 	/*
 	 * Minimum of captured and actual length (just in case the
@@ -2239,7 +2213,8 @@ pcap_byteswap_nflog_pseudoheader(wtap_rec *rec)
 
 		/* Get the length of the TLV. */
 		size = tlv->tlv_length;
-		size = WS_ROUNDUP_4(size);
+		if (size % 4 != 0)
+			size += 4 - size % 4;
 
 		/* Is the TLV's length less than the minimum? */
 		if (size < sizeof(struct nflog_tlv)) {
@@ -2283,13 +2258,10 @@ struct pfloghdr {
 };
 
 static void
-pcap_byteswap_pflog_pseudoheader(wtap_rec *rec)
+pcap_byteswap_pflog_pseudoheader(wtap_rec *rec, uint8_t *pd)
 {
-	uint8_t *pd;
 	unsigned packet_size;
 	struct pfloghdr *pflhdr;
-
-	pd = ws_buffer_start_ptr(&rec->data);
 
 	/*
 	 * Minimum of captured and actual length (just in case the
@@ -2478,10 +2450,10 @@ pcap_process_pseudo_header(FILE_T fh, bool is_nokia, int wtap_encap,
  * Set the "unsliced length" field of the packet header to that value.
  */
 static void
-fix_linux_usb_mmapped_length(wtap_rec *rec, const uint8_t *bp)
+fix_linux_usb_mmapped_length(wtap_rec *rec, const u_char *bp)
 {
 	const struct linux_usb_phdr *hdr;
-	unsigned bytes_left;
+	u_int bytes_left;
 
 	/*
 	 * All callers of this routine must ensure that pkth->caplen is
@@ -2497,7 +2469,7 @@ fix_linux_usb_mmapped_length(wtap_rec *rec, const uint8_t *bp)
 	    rec->rec_header.packet_header.len == sizeof(struct linux_usb_phdr) +
 	                 (hdr->ndesc * sizeof (struct linux_usb_isodesc)) + hdr->urb_len) {
 		struct linux_usb_isodesc *descs;
-		unsigned pre_truncation_data_len, pre_truncation_len;
+		u_int pre_truncation_data_len, pre_truncation_len;
 
 		descs = (struct linux_usb_isodesc *) (bp + sizeof(struct linux_usb_phdr));
 
@@ -2508,7 +2480,7 @@ fix_linux_usb_mmapped_length(wtap_rec *rec, const uint8_t *bp)
 		 * on the URB length.
 		 *
 		 * That's not correct, because the data isn't contiguous,
-		 * and the isochronous descriptors show how it's scattered.
+		 * and the isochronous descriptos show how it's scattered.
 		 *
 		 * Find the end of the last chunk of data in the buffer
 		 * referred to by the isochronous descriptors; that indicates
@@ -2521,7 +2493,7 @@ fix_linux_usb_mmapped_length(wtap_rec *rec, const uint8_t *bp)
 		for (uint32_t desc = 0;
 		    desc < hdr->ndesc && bytes_left >= sizeof (struct linux_usb_isodesc);
 		    desc++, bytes_left -= sizeof (struct linux_usb_isodesc)) {
-			unsigned desc_end;
+			u_int desc_end;
 
 			if (descs[desc].iso_len != 0) {
 				desc_end = descs[desc].iso_off + descs[desc].iso_len;
@@ -2572,12 +2544,9 @@ fix_linux_usb_mmapped_length(wtap_rec *rec, const uint8_t *bp)
 }
 
 static void
-pcap_fixup_len(wtap_rec *rec)
+pcap_fixup_len(wtap_rec *rec, const uint8_t *pd)
 {
-	const uint8_t *pd;
 	struct linux_usb_phdr *usb_phdr;
-
-	pd = ws_buffer_start_ptr(&rec->data);
 
 	/*
 	 * Greasy hack, but we never directly dereference any of
@@ -2618,7 +2587,7 @@ pcap_fixup_len(wtap_rec *rec)
 
 void
 pcap_read_post_process(bool is_nokia, int wtap_encap,
-    wtap_rec *rec, bool bytes_swapped, int fcs_len)
+    wtap_rec *rec, uint8_t *pd, bool bytes_swapped, int fcs_len)
 {
 	switch (wtap_encap) {
 
@@ -2630,7 +2599,7 @@ pcap_read_post_process(bool is_nokia, int wtap_encap,
 			 * Guess the traffic type based on the packet
 			 * contents.
 			 */
-			atm_guess_traffic_type(rec);
+			atm_guess_traffic_type(rec, pd);
 		} else {
 			/*
 			 * SunATM.
@@ -2640,7 +2609,7 @@ pcap_read_post_process(bool is_nokia, int wtap_encap,
 			 * contents.
 			 */
 			if (rec->rec_header.packet_header.pseudo_header.atm.type == TRAF_LANE)
-				atm_guess_lane_type(rec);
+				atm_guess_lane_type(rec, pd);
 		}
 		break;
 
@@ -2658,27 +2627,27 @@ pcap_read_post_process(bool is_nokia, int wtap_encap,
 
 	case WTAP_ENCAP_SLL:
 		if (bytes_swapped)
-			pcap_byteswap_linux_sll_pseudoheader(rec);
+			pcap_byteswap_linux_sll_pseudoheader(rec, pd);
 		break;
 
 	case WTAP_ENCAP_SLL2:
 		if (bytes_swapped)
-			pcap_byteswap_linux_sll2_pseudoheader(rec);
+			pcap_byteswap_linux_sll2_pseudoheader(rec, pd);
 		break;
 
 	case WTAP_ENCAP_USB_LINUX:
 		if (bytes_swapped)
-			pcap_byteswap_linux_usb_pseudoheader(rec, false);
+			pcap_byteswap_linux_usb_pseudoheader(rec, pd, false);
 		break;
 
 	case WTAP_ENCAP_USB_LINUX_MMAPPED:
 		if (bytes_swapped)
-			pcap_byteswap_linux_usb_pseudoheader(rec, true);
+			pcap_byteswap_linux_usb_pseudoheader(rec, pd, true);
 
 		/*
 		 * Fix up the on-the-network length if necessary.
 		 */
-		pcap_fixup_len(rec);
+		pcap_fixup_len(rec, pd);
 		break;
 
 	case WTAP_ENCAP_NETANALYZER:
@@ -2692,7 +2661,7 @@ pcap_read_post_process(bool is_nokia, int wtap_encap,
 
 	case WTAP_ENCAP_NFLOG:
 		if (bytes_swapped)
-			pcap_byteswap_nflog_pseudoheader(rec);
+			pcap_byteswap_nflog_pseudoheader(rec, pd);
 		break;
 
 	case WTAP_ENCAP_ERF:
@@ -2707,7 +2676,7 @@ pcap_read_post_process(bool is_nokia, int wtap_encap,
 
 	case WTAP_ENCAP_PFLOG:
 		if (bytes_swapped)
-			pcap_byteswap_pflog_pseudoheader(rec);
+			pcap_byteswap_pflog_pseudoheader(rec, pd);
 		break;
 
 	default:
@@ -2736,10 +2705,10 @@ wtap_encap_requires_phdr(int wtap_encap)
 	return false;
 }
 
-unsigned
+int
 pcap_get_phdr_size(int encap, const union wtap_pseudo_header *pseudo_header)
 {
-	unsigned hdrsize;
+	int hdrsize;
 
 	switch (encap) {
 
@@ -2764,11 +2733,11 @@ pcap_get_phdr_size(int encap, const union wtap_pseudo_header *pseudo_header)
 		break;
 
 	case WTAP_ENCAP_BLUETOOTH_H4_WITH_PHDR:
-		hdrsize = (unsigned)sizeof (struct pcap_bt_phdr);
+		hdrsize = (int)sizeof (struct pcap_bt_phdr);
 		break;
 
 	case WTAP_ENCAP_BLUETOOTH_LINUX_MONITOR:
-		hdrsize = (unsigned)sizeof (struct pcap_bt_monitor_phdr);
+		hdrsize = (int)sizeof (struct pcap_bt_monitor_phdr);
 		break;
 
 	case WTAP_ENCAP_NFC_LLCP:
@@ -2776,11 +2745,11 @@ pcap_get_phdr_size(int encap, const union wtap_pseudo_header *pseudo_header)
 		break;
 
 	case WTAP_ENCAP_PPP_WITH_PHDR:
-		hdrsize = (unsigned)sizeof (struct pcap_ppp_phdr);
+		hdrsize = (int)sizeof (struct pcap_ppp_phdr);
 		break;
 
 	case WTAP_ENCAP_ERF:
-		hdrsize = (unsigned)sizeof (struct erf_phdr);
+		hdrsize = (int)sizeof (struct erf_phdr);
 
 		/*
 		 * If the type of record given in the pseudo header
@@ -2793,7 +2762,7 @@ pcap_get_phdr_size(int encap, const union wtap_pseudo_header *pseudo_header)
 			uint8_t type;
 
 			do {
-				phtonu64(erf_exhdr, pseudo_header->erf.ehdr_list[i].ehdr);
+				phtonll(erf_exhdr, pseudo_header->erf.ehdr_list[i].ehdr);
 				type = erf_exhdr[0];
 				hdrsize += 8;
 				i++;
@@ -2812,17 +2781,17 @@ pcap_get_phdr_size(int encap, const union wtap_pseudo_header *pseudo_header)
 		case ERF_TYPE_MC_AAL5:
 		case ERF_TYPE_MC_AAL2:
 		case ERF_TYPE_COLOR_MC_HDLC_POS:
-			hdrsize += (unsigned)sizeof(struct erf_mc_hdr);
+			hdrsize += (int)sizeof(struct erf_mc_hdr);
 			break;
 		case ERF_TYPE_AAL2:
-			hdrsize += (unsigned)sizeof(struct erf_aal2_hdr);
+			hdrsize += (int)sizeof(struct erf_aal2_hdr);
 			break;
 
 		case ERF_TYPE_ETH:
 		case ERF_TYPE_COLOR_ETH:
 		case ERF_TYPE_DSM_COLOR_ETH:
 		case ERF_TYPE_COLOR_HASH_ETH:
-			hdrsize += (unsigned)sizeof(struct erf_eth_hdr);
+			hdrsize += (int)sizeof(struct erf_eth_hdr);
 			break;
 
 		default:
@@ -2831,7 +2800,7 @@ pcap_get_phdr_size(int encap, const union wtap_pseudo_header *pseudo_header)
 		break;
 
 	case WTAP_ENCAP_I2C_LINUX:
-		hdrsize = (unsigned)sizeof (struct i2c_linux_file_hdr);
+		hdrsize = (int)sizeof (struct i2c_linux_file_hdr);
 		break;
 
 	default:

@@ -53,452 +53,321 @@
 
 #define MateConfigError 65535
 
-/**
- * @brief Controls how much detail a GOP (Group of PDUs) subtree exposes in the protocol tree.
- */
 typedef enum _gop_tree_mode_t {
-    GOP_NULL_TREE,  /**< No GOP subtree is shown */
-    GOP_BASIC_TREE, /**< Show a minimal GOP subtree with key attributes only */
-    GOP_FULL_TREE   /**< Show the complete GOP subtree with all attributes */
+	GOP_NULL_TREE,
+	GOP_BASIC_TREE,
+	GOP_FULL_TREE
 } gop_tree_mode_t;
 
-
-/**
- * @brief Controls how PDUs are displayed within a GOP node in the protocol tree.
- */
 typedef enum _gop_pdu_tree {
-    GOP_NO_TREE,       /**< Do not show PDU children under the GOP node */
-    GOP_PDU_TREE,      /**< Show PDU items as children of the GOP node */
-    GOP_FRAME_TREE,    /**< Show frame references as children of the GOP node */
-    GOP_BASIC_PDU_TREE /**< Show a minimal PDU subtree with essential fields only */
+	GOP_NO_TREE,
+	GOP_PDU_TREE,
+	GOP_FRAME_TREE,
+	GOP_BASIC_PDU_TREE
 } gop_pdu_tree_t;
 
-
-/**
- * @brief Controls whether a criterium match causes a PDU to be accepted or rejected.
- */
 typedef enum _accept_mode_t {
-    ACCEPT_MODE, /**< A matching PDU is accepted and assigned to the GOP */
-    REJECT_MODE  /**< A matching PDU is rejected and excluded from the GOP */
+	ACCEPT_MODE,
+	REJECT_MODE
 } accept_mode_t;
 
 
-/**
- * @brief Configuration for a MATE PDU type, defining extraction rules and assignment criteria.
- */
 typedef struct _mate_cfg_pdu {
-    char      *name;          /**< Unique name identifying this PDU configuration */
-    GPtrArray *transforms;    /**< Ordered list of AVPL transformations applied after attribute extraction */
+	char* name;
+	unsigned last_id; /* keeps the last id given to an item of this kind */
 
-    int hfid;                 /**< Header field ID for the MATE PDU item added to the protocol tree */
-    int hfid_proto;           /**< Header field ID of the protocol that triggers this PDU configuration */
-    int hfid_pdu_rel_time;    /**< Header field ID for the PDU's relative time since capture start */
-    int hfid_pdu_time_in_gop; /**< Header field ID for the PDU's time offset since its GOP start */
+	GHashTable* items; /* all the items of this type */
+	GPtrArray* transforms; /* transformations to be applied */
 
-    GHashTable *my_hfids;     /**< Hash table of hfid→field_name mappings used during field registration */
+	int hfid;
 
-    int ett;                  /**< ett index for the PDU subtree */
-    int ett_attr;             /**< ett index for the PDU attributes subtree */
+	int hfid_proto;
+	int hfid_pdu_rel_time;
+	int hfid_pdu_time_in_gop;
 
-    GHashTable *hfids_attr;   /**< Hash table mapping hfid → AVP attribute name for extracted fields */
+	GHashTable* my_hfids; /* for creating register info */
 
-    bool discard;             /**< If true, discard the PDU's AVPL after GOP assignment */
-    bool last_extracted;      /**< If true, stop extraction after the first matching transport/payload range */
-    bool drop_unassigned;     /**< If true, do not display PDUs that are not assigned to any GOP */
+	int ett;
+	int ett_attr;
 
-    GPtrArray *transport_ranges; /**< Array of hfid ranges from which to extract transport-layer attributes */
-    GPtrArray *payload_ranges;   /**< Array of hfid ranges from which to extract payload-layer attributes */
+	GHashTable* hfids_attr; /* k=hfid v=avp_name */
 
-    avpl_match_mode  criterium_match_mode;  /**< Match mode (any/all) applied to the criterium AVPL */
-    accept_mode_t    criterium_accept_mode; /**< Whether a criterium match accepts or rejects the PDU */
-    AVPL            *criterium;             /**< AVPL used to filter which PDUs are eligible for GOP assignment */
+	bool discard;
+	bool last_extracted;
+	bool drop_unassigned;
+
+	GPtrArray* transport_ranges; /* hfids of candidate transport ranges from which to extract attributes */
+	GPtrArray* payload_ranges; /* hfids of candidate payload ranges from which to extract attributes */
+
+	avpl_match_mode criterium_match_mode;
+	accept_mode_t criterium_accept_mode;
+	AVPL* criterium;
 } mate_cfg_pdu;
 
 
-/**
- * @brief Configuration for a MATE GOP (Group of PDUs) type, defining grouping and lifecycle rules.
- */
 typedef struct _mate_cfg_gop {
-    char      *name;       /**< Unique name identifying this GOP configuration */
-    GPtrArray *transforms; /**< Ordered list of AVPL transformations applied to the GOP's AVPL */
-    const char *on_pdu;    /**< Name of the mate_cfg_pdu type that feeds into this GOP */
+	char* name;
+	unsigned last_id; /* keeps the last id given to an item of this kind */
+	GHashTable* items; /* all the items of this type */
 
-    AVPL *key;   /**< AVPL defining the attributes that form the GOP's correlation key */
-    AVPL *start; /**< AVPL whose match marks the first PDU as the GOP's start PDU */
-    AVPL *stop;  /**< AVPL whose match marks a PDU as the GOP's stop PDU */
-    AVPL *extra; /**< AVPL of additional attributes unconditionally merged into the GOP */
+	GPtrArray* transforms; /* transformations to be applied */
+	char* on_pdu;
 
-    double expiration;    /**< Seconds after release before the GOP expires and is discarded */
-    double idle_timeout;  /**< Seconds of inactivity before an unreleased GOP is timed out */
-    double lifetime;      /**< Maximum lifetime in seconds for a GOP regardless of release */
+	AVPL* key; /* key candidate avpl */
+	AVPL* start; /* start candidate avpl */
+	AVPL* stop;  /* stop candidate avpl */
+	AVPL* extra; /* attributes to be added */
 
-    bool           drop_unassigned; /**< If true, do not display GOPs not assigned to any GOG */
-    gop_pdu_tree_t pdu_tree_mode;   /**< Controls how PDU children are shown under the GOP tree node */
-    bool           show_times;      /**< If true, display GOP timing fields in the protocol tree */
+	double expiration;
+	double idle_timeout;
+	double lifetime;
 
-    GHashTable *my_hfids;       /**< Hash table of hfid→field_name mappings for field registration */
-    int hfid;                   /**< Header field ID for the GOP item in the protocol tree */
-    int hfid_start_time;        /**< Header field ID for the GOP start timestamp */
-    int hfid_stop_time;         /**< Header field ID for the GOP stop/release timestamp */
-    int hfid_last_time;         /**< Header field ID for the timestamp of the last PDU in the GOP */
-    int hfid_gop_pdu;           /**< Header field ID for PDU reference items under the GOP */
-    int hfid_gop_num_pdus;      /**< Header field ID for the total PDU count of the GOP */
+	bool drop_unassigned;
+	gop_pdu_tree_t pdu_tree_mode;
+	bool show_times;
 
-    int ett;           /**< ett index for the GOP subtree */
-    int ett_attr;      /**< ett index for the GOP attributes subtree */
-    int ett_times;     /**< ett index for the GOP timing subtree */
-    int ett_children;  /**< ett index for the GOP children (PDUs) subtree */
+	GHashTable* my_hfids; /* for creating register info */
+	int hfid;
+	int hfid_start_time;
+	int hfid_stop_time;
+	int hfid_last_time;
+	int hfid_gop_pdu;
+	int hfid_gop_num_pdus;
+
+	int ett;
+	int ett_attr;
+	int ett_times;
+	int ett_children;
+
+	GHashTable* gop_index;
+	GHashTable* gog_index;
 } mate_cfg_gop;
 
 
-/**
- * @brief Configuration for a MATE GOG (Group of GOPs) type, defining session-level grouping rules.
- */
 typedef struct _mate_cfg_gog {
-    char      *name;       /**< Unique name identifying this GOG configuration */
-    GPtrArray *transforms; /**< Ordered list of AVPL transformations applied to the GOG's AVPL */
+	char* name;
 
-    LoAL *keys;   /**< List of AVPLs used as candidate correlation keys to match GOPs into this GOG */
-    AVPL *extra;  /**< AVPL of additional attributes unconditionally merged into the GOG */
+	GHashTable* items; /* all the items of this type */
+	unsigned last_id; /* keeps the last id given to an item of this kind */
 
-    double          expiration;    /**< Seconds after all GOPs release before the GOG expires */
-    gop_tree_mode_t gop_tree_mode; /**< Controls how GOP children are shown under the GOG tree node */
-    bool            show_times;    /**< If true, display GOG timing fields in the protocol tree */
+	GPtrArray* transforms; /* transformations to be applied */
 
-    GHashTable *my_hfids;          /**< Hash table of hfid→field_name mappings for field registration */
-    int hfid;                      /**< Header field ID for the GOG item in the protocol tree */
-    int hfid_gog_num_of_gops;      /**< Header field ID for the total number of GOPs in the GOG */
-    int hfid_gog_gop;              /**< Header field ID for GOP reference items under the GOG */
-    int hfid_gog_gopstart;         /**< Header field ID for the GOP start marker under the GOG */
-    int hfid_gog_gopstop;          /**< Header field ID for the GOP stop marker under the GOG */
-    int hfid_start_time;           /**< Header field ID for the GOG start timestamp */
-    int hfid_stop_time;            /**< Header field ID for the GOG stop/release timestamp */
-    int hfid_last_time;            /**< Header field ID for the timestamp of the last activity in the GOG */
+	LoAL* keys;
+	AVPL* extra; /* attributes to be added */
 
-    int ett;          /**< ett index for the GOG subtree */
-    int ett_attr;     /**< ett index for the GOG attributes subtree */
-    int ett_times;    /**< ett index for the GOG timing subtree */
-    int ett_children; /**< ett index for the GOG children (GOPs) subtree */
-    int ett_gog_gop;  /**< ett index for the per-GOP subtree within the GOG */
+	double expiration;
+	gop_tree_mode_t gop_tree_mode;
+	bool show_times;
+
+	GHashTable* my_hfids; /* for creating register info */
+	int hfid;
+	int hfid_gog_num_of_gops;
+	int hfid_gog_gop;
+	int hfid_gog_gopstart;
+	int hfid_gog_gopstop;
+	int hfid_start_time;
+	int hfid_stop_time;
+	int hfid_last_time;
+	int ett;
+	int ett_attr;
+	int ett_times;
+	int ett_children;
+	int ett_gog_gop;
 } mate_cfg_gog;
 
-
-/**
- * @brief Master MATE configuration, aggregating all PDU, GOP, and GOG type definitions.
- */
 typedef struct _mate_config {
-    int hfid_mate; /**< Root header field ID for the MATE dissector */
+	char* mate_config_file; /* name of the config file */
 
-    GArray  *wanted_hfids;       /**< Array of hfids for all protocols and fields MATE monitors */
-    unsigned num_fields_wanted;  /**< Number of entries in @ref wanted_hfids */
+	int hfid_mate;
 
-    FILE *dbg_facility;    /**< Output stream for debug messages; falls back to ws_message() if NULL */
-    char *mate_lib_path;   /**< Primary search path for MATE "Include" configuration files */
+	GArray *wanted_hfids;    /* hfids of protocols and fields MATE needs */
+	unsigned num_fields_wanted; /* number of fields MATE will look at */
 
-    GHashTable *pducfgs; /**< Hash table of PDU configurations, keyed by mate_cfg_pdu::name */
-    GHashTable *gopcfgs; /**< Hash table of GOP configurations, keyed by mate_cfg_gop::name */
-    GHashTable *gogcfgs; /**< Hash table of GOG configurations, keyed by mate_cfg_gog::name */
-    GHashTable *transfs; /**< Hash table of named AVPL transformations, keyed by transform name */
+	FILE* dbg_facility; /* where to dump dbgprint output ws_message if null */
 
-    GPtrArray  *pducfglist;       /**< Ordered list of PDU configurations in dissection execution order */
-    GHashTable *gops_by_pduname;  /**< Maps PDU config name → GOP config for direct GOP lookup */
-    GHashTable *gogs_by_gopname;  /**< Maps GOP name → LoAL of key AVPLs for GOG matching */
+	char* mate_lib_path; /* where to look for "Include" files first */
 
-    GArray *hfrs;    /**< Array of hf_register_info entries for all dynamically registered fields */
-    int     ett_root; /**< ett index for the MATE root subtree */
-    GArray *ett;      /**< Array of ett index pointers for all MATE subtrees */
+	GHashTable* pducfgs; /* k=pducfg->name v=pducfg */
+	GHashTable* gopcfgs; /* k=gopcfg->name v=gopcfg */
+	GHashTable* gogcfgs; /* k=gogcfg->name v=gogcfg */
+	GHashTable* transfs; /* k=transform->name v=transform */
 
-    /** @brief Default values applied to newly created PDU, GOP, and GOG configurations. */
-    struct _mate_cfg_defaults {
+	GPtrArray* pducfglist; /* pducfgs in order of "execution" */
+	GHashTable* gops_by_pduname; /* k=pducfg->name v=gopcfg */
+	GHashTable* gogs_by_gopname; /* k=gopname v=loal where avpl->name == matchedgop->name */
 
-        /** @brief Default settings for PDU configurations. */
-        struct _pdu_defaults {
-            avpl_match_mode   match_mode;      /**< Default AVPL match mode for PDU criteria */
-            avpl_replace_mode replace_mode;    /**< Default AVPL replace mode for PDU transforms */
-            bool              last_extracted;  /**< Default value for mate_cfg_pdu::last_extracted */
-            bool              drop_unassigned; /**< Default value for mate_cfg_pdu::drop_unassigned */
-            bool              discard;         /**< Default value for mate_cfg_pdu::discard */
-        } pdu;
+	GArray* hfrs;
+	int ett_root;
+	GArray* ett;
 
-        /** @brief Default settings for GOP configurations. */
-        struct _gop_defaults {
-            double         expiration;    /**< Default GOP expiration time in seconds */
-            double         idle_timeout;  /**< Default GOP idle timeout in seconds */
-            double         lifetime;      /**< Default GOP maximum lifetime in seconds */
-            gop_pdu_tree_t pdu_tree_mode; /**< Default PDU tree display mode for GOPs */
-            bool           show_times;    /**< Default value for mate_cfg_gop::show_times */
-            bool           drop_unassigned; /**< Default value for mate_cfg_gop::drop_unassigned */
-        } gop;
+	/* defaults */
+	struct _mate_cfg_defaults {
+		struct _pdu_defaults {
+			avpl_match_mode match_mode;
+			avpl_replace_mode replace_mode;
+			bool last_extracted;
 
-        /** @brief Default settings for GOG configurations. */
-        struct _gog_defaults {
-            double          expiration;    /**< Default GOG expiration time in seconds */
-            bool            show_times;    /**< Default value for mate_cfg_gog::show_times */
-            gop_tree_mode_t gop_tree_mode; /**< Default GOP tree display mode for GOGs */
-        } gog;
+			bool drop_unassigned;
+			bool discard;
+		} pdu;
 
-    } defaults;
+		struct _gop_defaults {
+			double expiration;
+			double idle_timeout;
+			double lifetime;
 
-    /* Debug verbosity levels */
-    int dbg_lvl;     /**< Global MATE debug verbosity level */
-    int dbg_pdu_lvl; /**< Debug verbosity level for PDU processing */
-    int dbg_gop_lvl; /**< Debug verbosity level for GOP processing */
-    int dbg_gog_lvl; /**< Debug verbosity level for GOG processing */
+			gop_pdu_tree_t pdu_tree_mode;
+			bool show_times;
+			bool drop_unassigned;
 
-    GPtrArray *config_stack; /**< Stack of mate_config_frame entries tracking nested Include files */
-    GString   *config_error; /**< Accumulated configuration parse error messages; NULL if no errors */
+		} gop;
+
+		struct _gog_defaults {
+			double expiration;
+			bool show_times;
+			gop_tree_mode_t gop_tree_mode;
+		} gog;
+	} defaults;
+
+	/* what to dbgprint */
+	int dbg_lvl;
+	int dbg_pdu_lvl;
+	int dbg_gop_lvl;
+	int dbg_gog_lvl;
+
+	GPtrArray* config_stack;
+	GString* config_error;
+
 } mate_config;
 
 
-/**
- * @brief Tracks the source location of the currently executing MATE configuration statement.
- */
 typedef struct _mate_config_frame {
-    char    *filename; /**< Path to the MATE configuration file being parsed */
-    unsigned linenum;  /**< Current line number within @ref filename */
+	char* filename;
+	unsigned  linenum;
 } mate_config_frame;
 
 
-/**
- * @brief Per-GOP-configuration runtime state maintained during a live dissection pass.
- */
-typedef struct _gopcfg_runtime_data {
-    unsigned    last_id;   /**< Monotonically increasing counter used to assign unique IDs to new GOPs */
-    GHashTable *gop_index; /**< Hash table mapping GOP key strings → active mate_gop instances */
-    GHashTable *gog_index; /**< Hash table mapping GOG key strings → active mate_gog instances */
-} gopcfg_runtime_data;
-
-
-/**
- * @brief Global MATE runtime state for a single dissection pass over a capture file.
- */
 typedef struct _mate_runtime_data {
-    unsigned current_items;          /**< Total number of live MATE items (PDUs + GOPs + GOGs) */
-    double   now;                    /**< Relative timestamp of the packet currently being dissected */
-    unsigned highest_analyzed_frame; /**< Frame number of the highest-numbered frame analyzed so far */
+	unsigned current_items; /* a count of items */
+	double now;
+	unsigned highest_analyzed_frame;
 
-    GHashTable *frames; /**< Maps frame number → linked list of mate_pdu instances for that frame */
-    GHashTable *gops;   /**< Set of all allocated mate_gop instances; used for memory management */
-    GHashTable *gogs;   /**< Set of all allocated mate_gog instances; used for memory management */
+	GHashTable* frames; /* k=frame.num v=pdus */
 
-    GHashTable *pdu_last_ids; /**< Maps mate_cfg_pdu* → last ID assigned to a PDU of that config */
-    GHashTable *gopcfg_rd;    /**< Maps mate_cfg_gop* → gopcfg_runtime_data for that config */
-    GHashTable *gog_last_ids; /**< Maps mate_cfg_gog* → last ID assigned to a GOG of that config */
 } mate_runtime_data;
 
-
-/** @brief Forward declaration of the MATE PDU instance type. */
 typedef struct _mate_pdu mate_pdu;
-/** @brief Forward declaration of the MATE GOP instance type. */
 typedef struct _mate_gop mate_gop;
-/** @brief Forward declaration of the MATE GOG instance type. */
 typedef struct _mate_gog mate_gog;
 
-
-/**
- * @brief A single MATE PDU instance created from a dissected packet.
- */
+/* these are used to contain information regarding pdus, gops and gogs */
 struct _mate_pdu {
-    uint32_t               id;           /**< Unique PDU identifier within its configuration type */
-    const mate_cfg_pdu    *cfg;          /**< PDU configuration type that created this instance */
+	uint32_t id; /* 1:1 -> saving a g_malloc */
+	mate_cfg_pdu* cfg; /* the type of this item */
 
-    AVPL    *avpl;                        /**< Attribute-Value Pair List extracted from the packet */
+	AVPL* avpl;
 
-    uint32_t frame;                       /**< Frame number of the packet this PDU was extracted from */
-    double   rel_time;                    /**< Relative time in seconds since the start of the capture */
+	uint32_t frame; /* which frame I belong to? */
+	mate_pdu* next_in_frame; /* points to the next pdu in this frame */
+	double rel_time; /* time since start of capture  */
 
-    mate_gop *gop;                        /**< GOP this PDU has been assigned to; NULL if unassigned */
-    mate_pdu *next;                       /**< Next PDU in the owning GOP's PDU linked list */
-    double    time_in_gop;               /**< Time offset in seconds from the GOP's start PDU */
+	mate_gop* gop; /* the gop the pdu belongs to (if any) */
+	mate_pdu* next; /* next in gop */
+	double time_in_gop; /* time since gop start */
 
-    bool first;         /**< True if this is the first PDU extracted from its frame */
-    bool is_start;      /**< True if this PDU matched the GOP's start AVPL */
-    bool is_stop;       /**< True if this PDU matched the GOP's stop AVPL */
-    bool after_release; /**< True if this PDU arrived after the GOP's stop PDU */
+	bool first; /* is this the first pdu in this frame? */
+	bool is_start; /* this is the start pdu for this gop */
+	bool is_stop; /* this is the stop pdu for this gop */
+	bool after_release; /* this pdu comes after the stop */
+
 };
 
 
-/**
- * @brief A MATE GOP (Group of PDUs) instance tracking a correlated sequence of PDUs.
- */
 struct _mate_gop {
-    uint32_t            id;      /**< Unique GOP identifier within its configuration type */
-    const mate_cfg_gop *cfg;     /**< GOP configuration type that created this instance */
+	uint32_t id;
+	mate_cfg_gop* cfg;
 
-    char *gop_key; /**< String representation of the key AVPL used to correlate PDUs into this GOP */
-    AVPL *avpl;    /**< Accumulated Attribute-Value Pair List for this GOP */
-    unsigned last_n; /**< Number of attributes in @ref avpl as of the last GOG attribute check */
+	char* gop_key;
+	AVPL* avpl; /* the attributes of the pdu/gop/gog */
+	unsigned last_n;
 
-    mate_gog *gog;  /**< GOG this GOP has been assigned to; NULL if unassigned */
-    mate_gop *next; /**< Next GOP in the owning GOG's GOP linked list */
+	mate_gog* gog; /* the gog of a gop */
+	mate_gop* next; /* next in gog; */
 
-    double expiration;       /**< Absolute relative-time at which this GOP expires after release */
-    double idle_expiration;  /**< Absolute relative-time at which this GOP times out due to inactivity */
-    double time_to_die;      /**< Absolute relative-time at which this GOP exceeds its maximum lifetime */
-    double time_to_timeout;  /**< Absolute relative-time at which the next applicable timeout fires */
+	double expiration; /* when will it expire after release (all gops releases if gog)? */
+	double idle_expiration; /* when will it expire if no new pdus are assigned to it */
+	double time_to_die;
+	double time_to_timeout;
 
-    double start_time;    /**< Relative time of the GOP's start PDU */
-    double release_time;  /**< Relative time at which the GOP was released (stop PDU received) */
-    double last_time;     /**< Relative time of the most recently assigned PDU */
+	double start_time; /* time of start */
+	double release_time; /* when this gop/gog was released */
+	double last_time; /* the rel_time at which the last pdu has been added (to gop or gog's gop) */
 
-    int num_of_pdus;                /**< Total number of PDUs assigned to this GOP */
-    int num_of_after_release_pdus;  /**< Number of PDUs received after the GOP's stop PDU */
-    mate_pdu *pdus;                 /**< Head of the linked list of PDUs assigned to this GOP */
-    mate_pdu *last_pdu;             /**< Tail of the PDU linked list for O(1) append */
 
-    bool released; /**< True if this GOP has received its stop PDU and been released */
+	int num_of_pdus; /* how many gops a gog has? */
+	int num_of_after_release_pdus;  /* how many pdus have arrived since it's been released */
+	mate_pdu* pdus; /* pdus that belong to a gop (NULL in gog) */
+	mate_pdu* last_pdu; /* last pdu in pdu's list */
+
+	bool released; /* has this gop been released? */
 };
 
 
-/**
- * @brief A MATE GOG (Group of GOPs) instance tracking a correlated session of GOPs.
- */
 struct _mate_gog {
-    uint32_t            id;  /**< Unique GOG identifier within its configuration type */
-    const mate_cfg_gog *cfg; /**< GOG configuration type that created this instance */
+	uint32_t id;
+	mate_cfg_gog* cfg;
 
-    AVPL    *avpl;   /**< Accumulated Attribute-Value Pair List for this GOG */
-    unsigned last_n; /**< Number of attributes in @ref avpl as of the last update check */
+	AVPL* avpl; /* the attributes of the pdu/gop/gog */
+	unsigned last_n; /* the number of attributes the avpl had the last time we checked */
 
-    bool released; /**< True if all member GOPs have been released */
+	bool released; /* has this gop been released? */
 
-    double expiration;      /**< Absolute relative-time at which this GOG expires after full release */
-    double idle_expiration; /**< Absolute relative-time at which this GOG times out due to inactivity */
+	double expiration; /* when will it expire after release (all gops releases if gog)? */
+	double idle_expiration; /* when will it expire if no new pdus are assigned to it */
 
-    double start_time;   /**< Relative time of the first GOP assigned to this GOG */
-    double release_time; /**< Relative time at which all member GOPs were released */
-    double last_time;    /**< Relative time of the most recent activity in any member GOP */
+	/* on gop and gog: */
+	double start_time; /* time of start */
+	double release_time; /* when this gog was released */
+	double last_time; /* the rel_time at which the last pdu has been added */
 
-    mate_gop *gops;     /**< Head of the linked list of GOPs assigned to this GOG */
-    mate_gop *last_gop; /**< Tail of the GOP linked list for O(1) append */
+	mate_gop* gops; /* gops that belong to a gog (NULL in gop) */
+	mate_gop* last_gop; /* last gop in gop's list */
 
-    int num_of_gops;              /**< Total number of GOPs assigned to this GOG */
-    int num_of_counting_gops;     /**< Number of GOPs that count toward triggering GOG release */
-    int num_of_released_gops;     /**< Number of member GOPs that have been released so far */
-    GPtrArray *gog_keys;          /**< Array of key strings under which this GOG is indexed in the GOG hash */
+	int num_of_gops; /* how many gops a gog has? */
+	int num_of_counting_gops;  /* how many of them count for gog release */
+	int num_of_released_gops;  /* how many of them have already been released */
+	GPtrArray* gog_keys; /* the keys under which this gog is stored in the gogs hash */
 };
 
-/**
- * @brief Union sized to the largest of the three MATE item types, used for
- *        generic allocation and type-punning across PDU, GOP, and GOG objects.
- */
 typedef union _mate_max_size {
-    mate_pdu pdu; /**< PDU (Protocol Data Unit) item; determines size if largest. */
-    mate_gop gop; /**< GOP (Group of PDUs) item; determines size if largest. */
-    mate_gog gog; /**< GOG (Group of GOPs) item; determines size if largest. */
+	mate_pdu pdu;
+	mate_gop gop;
+	mate_gog gog;
 } mate_max_size;
 
 /* from mate_runtime.c */
-
-/**
- * @brief Initializes the MATE runtime.
- *
- * @param mc The MATE configuration.
- */
 extern void initialize_mate_runtime(mate_config* mc);
-
-/**
- * @brief Retrieves PDUs for a given frame number.
- *
- * @param framenum The frame number to retrieve PDUs for.
- * @return A GPtrArray containing the PDUs, or NULL if not found.
- */
-extern GPtrArray* mate_get_pdus(uint32_t framenum);
-
-/**
- * @brief Analyzes a frame for MATE.
- *
- * @param mc The MATE configuration.
- * @param pinfo The packet information.
- * @param tree The protocol tree.
- */
+extern mate_pdu* mate_get_pdus(uint32_t framenum);
 extern void mate_analyze_frame(mate_config *mc, packet_info *pinfo, proto_tree* tree);
 
 /* from mate_setup.c */
-/**
- * @brief Create a configuration for MATE.
- *
- * @param filename The name of the file containing the MATE module's configuration.
- * @param mate_hfid The header field identifier for MATE.
- * @return A pointer to the newly created mate_config structure, or NULL on failure.
- */
 extern mate_config* mate_make_config(const char* filename, int mate_hfid);
 
-/**
- * @brief Create and register a new PDU configuration in the MATE config.
- *
- * @param mc   The MATE configuration.
- * @param name The name of the new PDU configuration.
- * @return Pointer to the new @c mate_cfg_pdu, or NULL on failure.
- */
 extern mate_cfg_pdu* new_pducfg(mate_config* mc, char* name);
-
-/**
- * @brief Create and register a new GoP configuration in the MATE config.
- *
- * @param mc   The MATE configuration.
- * @param name The name of the new GoP configuration.
- * @return Pointer to the new @c mate_cfg_gop, or NULL on failure.
- */
 extern mate_cfg_gop* new_gopcfg(mate_config* mc, char* name);
-
-/**
- * @brief Create and register a new GoG configuration in the MATE config.
- *
- * @param mc   The MATE configuration.
- * @param name The name of the new GoG configuration.
- * @return Pointer to the new @c mate_cfg_gog, or NULL on failure.
- */
 extern mate_cfg_gog* new_gogcfg(mate_config* mc, char* name);
 
-/**
- * @brief Add a header field mapping to a MATE configuration hash table.
- *
- * @param mc    The MATE configuration.
- * @param hfi   The header field info to add.
- * @param as    The name to map the field to.
- * @param where The hash table to insert the mapping into.
- * @return true on success, false if the field is already mapped.
- */
-extern bool add_hfid(mate_config* mc, header_field_info* hfi, char* as, GHashTable* where);
-
-/**
- * @brief Append a range string to a range pointer array.
- *
- * @param range        The range string to add.
- * @param range_ptr_arr The array to append the range to.
- * @return The range string, or NULL on failure.
- */
+extern bool add_hfid(mate_config* mc, header_field_info*  hfi, char* as, GHashTable* where);
 extern char* add_ranges(char* range, GPtrArray* range_ptr_arr);
 
-/* from mate_parser.l */
 
-/**
- * @brief Load and parse a MATE configuration file.
- *
- * @param filename The path to the MATE configuration file.
- * @param mc       The MATE configuration to populate.
- * @return true on success, false on failure.
- */
+/* from mate_parser.l */
 extern bool mate_load_config(const char* filename, mate_config* mc);
 
-/** @brief The argument type for the Lemon parser allocator function. */
+/* Constructor/Destructor prototypes for Lemon Parser */
 #define YYMALLOCARGTYPE size_t
-
-/**
- * @brief Allocate and initialize a new MateParser instance.
- */
 void *MateParserAlloc(void* (*)(YYMALLOCARGTYPE));
-
-/**
- * @brief Free a MateParser instance and all its resources.
- */
 void MateParserFree(void*, void (*)(void *));
-
-
-/**
- * @brief Pass a token to the MateParser for processing.
- */
-void MateParser(void*, int, char*, mate_config*);
+void MateParser(void*, int, char*,  mate_config*);
 
 #endif

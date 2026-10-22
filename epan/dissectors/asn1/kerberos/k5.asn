@@ -71,7 +71,7 @@ PADATA-TYPE ::= INTEGER {
 	pA-USE-SPECIFIED-KVNO(20),	-- [RFC4120]
 --	pA-SVR-REFERRAL-INFO(20), --	-- [REFERRALS]
 	pA-SAM-REDIRECT(21),		-- [KRB-WG.SAM]
---	pA-GET-FROM-TYPED-DATA(22), --	-- (embedded in typed data) [RFC4120]
+	pA-GET-FROM-TYPED-DATA(22),	-- (embedded in typed data) [RFC4120]
 	tD-PADATA(22),			-- (embeds padata) [RFC4120]
 	pA-SAM-ETYPE-INFO(23),		-- (sam/otp) [KRB-WG.SAM]
 	pA-ALT-PRINC(24),		-- (crawdad@fnal.gov) [HW-AUTH]
@@ -116,7 +116,7 @@ PADATA-TYPE ::= INTEGER {
 	pA-PKU2U-NAME(148),		-- [PKU2U]
 	pA-REQ-ENC-PA-REP(149), 	-- [RFC6806]
 	pA-AS-FRESHNESS(150),		-- [RFC8070]
-	pA-SPAKE(151),			-- [RFC9588]
+	pA-SPAKE(151),			-- draft-ietf-kitten-krb-spake-preauth-09
 	pA-REDHAT-IDP-OAUTH2(152),	-- (pbrezina@redhat.com)
 	pA-REDHAT-PASSKEY(153),		-- (pbrezina@redhat.com)
 	pA-KERB-KEY-LIST-REQ(161), -- [MS-KILE]
@@ -144,8 +144,6 @@ AUTHDATA-TYPE ::= INTEGER {
 	aD-authentication-strength(70),	-- [RFC6113]
 	aD-fx-fast-armor(71),		-- [RFC6113]
 	aD-fx-fast-used(72),			-- [RFC6113]
-	aD-CAMMAC(96),  			-- [RFC7751]
-	aD-AUTHENTICATION-INDICATOR(97),        -- [RFC8129]
 	aD-WIN2K-PAC(128), 			-- [RFC4120] [MS-PAC]
 	aD-GSS-API-ETYPE-NEGOTIATION(129), -- Authenticator only
 	aD-TOKEN-RESTRICTIONS(141),		-- [MS-KILE]
@@ -315,15 +313,9 @@ ERROR-CODE ::= INTEGER {
 	eRR-REVOCATION-STATUS-UNAVAILABLE(74),
 	eRR-CLIENT-NAME-MISMATCH(75),
 	eRR-KDC-NAME-MISMATCH(76),
-	eRR-INCONSISTENT-KEY-PURPOSE(77),
-	eRR-DIGEST-IN-CERT-NOT-ACCEPTED(78),
-	eRR-PA-CHECKSUM-MUST-BE-INCLUDED(79),
-	eRR-DIGEST-IN-SIGNED-DATA-NOT-ACCEPTED(80),
-	eRR-PUBLIC-KEY-ENCRYPTION-NOT-SUPPORTED(81),
 	eRR-IAKERB-KDC-NOT-FOUND(85),
 	eRR-IAKERB-KDC-NO-RESPONSE(86),
-	eRR-KDC-MORE-PREAUTH-DATA-REQUIRED(91),
-	eRR-NO-ACCEPTABLE-KDF(100)
+	eRR-KDC-MORE-PREAUTH-DATA-REQUIRED(91)
 }
 
 -- this is sugar to make something ASN1 does not have: unsigned
@@ -962,62 +954,6 @@ KRB5-PFS-ACCEPT ::= SEQUENCE {
 
 KRB5-PFS-ERROR ::= SEQUENCE {
 	groups		[0] SEQUENCE OF KRB5-PFS-GROUP
-}
-
-AD-AUTHENTICATION-INDICATOR ::= SEQUENCE OF UTF8String -- RFC8129
-
-END
-
--- RFC7751
--- Kerberos Authorization Data Container Authenticated by Multiple
---               Message Authentication Codes (MACs)
-
-KerberosV5CAMMAC {
-        iso(1) identified-organization(3) dod(6) internet(1)
-        security(5) kerberosV5(2) modules(4) cammac(7)
-} DEFINITIONS EXPLICIT TAGS ::= BEGIN
-
-IMPORTS
-      AuthorizationData, PrincipalName, Checksum, UInt32, Int32
-        FROM KerberosV5Spec2 { iso(1) identified-organization(3)
-          dod(6) internet(1) security(5) kerberosV5(2)
-          modules(4) krb5spec2(2) };
-          -- as defined in RFC 4120.
-
-AD-CAMMAC                   ::= SEQUENCE {
-      elements              [0] AuthorizationData,
-      kdc-verifier          [1] Verifier-MAC OPTIONAL,
-      svc-verifier          [2] Verifier-MAC OPTIONAL,
-      other-verifiers       [3] SEQUENCE (SIZE (1..MAX))
-                                OF Verifier OPTIONAL
-}
-
-Verifier             ::= CHOICE {
-      mac            Verifier-MAC,
-      ...
-}
-
-Verifier-MAC         ::= SEQUENCE {
-      identifier     [0] PrincipalName OPTIONAL,
-      kvno           [1] UInt32 OPTIONAL,
-      enctype        [2] Int32 OPTIONAL,
-      mac            [3] Checksum
-}
-
-END
-
--- draft-ietf-kitten-iakerb-03, Section 4.
-IAKERB DEFINITIONS EXPLICIT TAGS ::= BEGIN
-
-IMPORTS
-    Checksum
-        FROM KerberosV5Spec2 { iso(1) identified-organization(3)
-            dod(6) internet(1) security(5) kerberosV5(2)
-            modules(4) krb5spec2(2) };
-
-IAKERB-FINISHED ::= SEQUENCE {
-    gss-mic [1] Checksum,
-    ...
 }
 
 END

@@ -42,11 +42,24 @@ SPDX-License-Identifier: ISC
 static int ws80211_get_protocol_features(int* features);
 #endif /* HAVE_NL80211_SPLIT_WIPHY_DUMP */
 
+/* libnl 1.x compatibility code */
+#ifdef HAVE_LIBNL1
+#define nl_sock nl_handle
+static inline struct nl_handle *nl_socket_alloc(void)
+{
+	return nl_handle_alloc();
+}
+
+static inline void nl_socket_free(struct nl_sock *h)
+{
+	nl_handle_destroy(h);
+}
+#endif /* HAVE_LIBNL1 */
+
 struct nl80211_state {
 	struct nl_sock *nl_sock;
 	int nl80211_id;
 	int have_split_wiphy;
-	const char* errmsg;
 };
 
 static struct nl80211_state nl_state;
@@ -62,20 +75,20 @@ int ws80211_init(void)
 
 	state->nl_sock = nl_socket_alloc();
 	if (!state->nl_sock) {
-		state->errmsg = "Failed to allocate netlink socket";
-		return WS80211_ERROR;
+		fprintf(stderr, "Failed to allocate netlink socket.\n");
+		return -ENOMEM;
 	}
 
 	if (genl_connect(state->nl_sock)) {
-		state->errmsg = "Failed to connect to generic netlink";
-		err = WS80211_ERROR;
+		fprintf(stderr, "Failed to connect to generic netlink.\n");
+		err = -ENOLINK;
 		goto out_handle_destroy;
 	}
 
 	state->nl80211_id = genl_ctrl_resolve(state->nl_sock, "nl80211");
 	if (state->nl80211_id < 0) {
-		state->errmsg = "nl80211 not found";
-		err = WS80211_ERROR;
+		fprintf(stderr, "nl80211 not found.\n");
+		err = -ENOENT;
 		goto out_handle_destroy;
 	}
 #ifdef HAVE_NL80211_SPLIT_WIPHY_DUMP
@@ -84,34 +97,12 @@ int ws80211_init(void)
 		state->have_split_wiphy = true;
 #endif /* HAVE_NL80211_SPLIT_WIPHY_DUMP */
 
-	return WS80211_OK;
+	return WS80211_INIT_OK;
 
  out_handle_destroy:
 	nl_socket_free(state->nl_sock);
 	state->nl_sock = 0;
 	return err;
-}
-
-const char* ws80211_geterror(int error)
-{
-	if (error < 0) {
-		// Eventually, when this is libnl-3 only, this should use
-		// nl_geterror instead. Right now we might have a mix of
-		// libnl3 errors and errnos in the code, due to trying to
-		// support libnl1.x
-		return g_strerror(abs(error));
-	}
-	switch (error) {
-	case WS80211_OK:
-		return "Success";
-		break;
-	case WS80211_ERROR_NOT_SUPPORTED:
-		return "Setting 802.11 channels is not supported on this platform";
-		break;
-	case WS80211_ERROR:
-	default:
-		return nl_state.errmsg ? nl_state.errmsg : "Unknown error";
-	}
 }
 
 static int error_handler(struct sockaddr_nl *nla _U_, struct nlmsgerr *err,
@@ -162,7 +153,7 @@ static int nl80211_do_cmd(struct nl_msg *msg, struct nl_cb *cb)
 	if (!nl_state.nl_sock)
 		return -ENOLINK;
 
-	err = nl_send_auto(nl_state.nl_sock, msg);
+	err = nl_send_auto_complete(nl_state.nl_sock, msg);
 	if (err < 0)
 		goto out;
 
@@ -225,8 +216,8 @@ static int ws80211_get_protocol_features(int* features)
 
 	msg = nlmsg_alloc();
 	if (!msg) {
-		nl_state.errmsg = "failed to allocate netlink message";
-		return WS80211_ERROR;
+		fprintf(stderr, "failed to allocate netlink message\n");
+		return 2;
 	}
 
 	cb = nl_cb_alloc(NL_CB_DEFAULT);
@@ -243,24 +234,24 @@ static int ws80211_get_protocol_features(int* features)
 #endif /* HAVE_NL80211_SPLIT_WIPHY_DUMP */
 
 #ifdef NL80211_BAND_ATTR_HT_CAPA
-static void parse_band_ht_capa(struct ws80211_band *band,
+static void parse_band_ht_capa(struct ws80211_interface *iface,
 			       struct nlattr *tb)
 {
 	bool ht40;
 
 	if (!tb) return;
 
-	band->channel_types |= 1 << WS80211_CHAN_HT20;
+	iface->channel_types |= 1 << WS80211_CHAN_HT20;
 	ht40 = !!(nla_get_u16(tb) & 0x02);
 	if (ht40) {
-		band->channel_types |= 1 << WS80211_CHAN_HT40MINUS;
-		band->channel_types |= 1 << WS80211_CHAN_HT40PLUS;
+		iface->channel_types |= 1 << WS80211_CHAN_HT40MINUS;
+		iface->channel_types |= 1 << WS80211_CHAN_HT40PLUS;
 	}
 }
 #endif /* NL80211_BAND_ATTR_HT_CAPA */
 
 #ifdef HAVE_NL80211_VHT_CAPABILITY
-static void parse_band_vht_capa(struct ws80211_band *band,
+static void parse_band_vht_capa(struct ws80211_interface *iface,
 				struct nlattr *tb)
 {
 	uint32_t chan_capa;
@@ -268,109 +259,15 @@ static void parse_band_vht_capa(struct ws80211_band *band,
 
 	chan_capa = (nla_get_u32(tb) >> 2) & 3;
 	if (chan_capa == 1) {
-		band->channel_types |= 1 << WS80211_CHAN_VHT160;
+		iface->channel_types |= 1 << WS80211_CHAN_VHT160;
 	}
 	if (chan_capa == 2) {
-		band->channel_types |= 1 << WS80211_CHAN_VHT160;
-		band->channel_types |= 1 << WS80211_CHAN_VHT80P80;
+		iface->channel_types |= 1 << WS80211_CHAN_VHT160;
+		iface->channel_types |= 1 << WS80211_CHAN_VHT80P80;
 	}
-	band->channel_types |= 1 << WS80211_CHAN_VHT80;
+	iface->channel_types |= 1 << WS80211_CHAN_VHT80;
 }
 #endif /* HAVE_NL80211_VHT_CAPABILITY */
-
-#ifdef HAVE_NL80211_HE_CAPABILITY
-static void parse_band_he_cap_phy(struct ws80211_band *band,
-				  struct nlattr *tb)
-{
-	/* 802.11ax 26.17.2 "HE BSS operation in the 6 GHz band"
-	 * "A STA 6G shall not transmit an HT Capabilities element,
-	 * VHT Capabilities element, ..." so we need this for 6 GHz.
-	 * In the 6 GHz band overlapping channels aren't used (see
-	 * E.1 Country information and operating classes) so the HT40PLUS
-	 * and HT40MINUS channel types are confusing for users as at least
-	 * one won't work and will result in a failed tune. Instead
-	 * we should use a NL80211_CHAN_WIDTH_40 channel where the center
-	 * freq must be provided and calculate the appropriate center freq
-	 * for the non-overlapping channel as done for VHT80 and higher
-	 * bandwidths. So we really need a different channel type for that.
-	 */
-	/* The HE PHY capabilities are 11 bytes long, so unlike the HT
-	 * and VHT PHY capabilities (which are sent as native byte-order
-	 * uint16_t and uint32_t, respectively), they're in the IE's original
-	 * Little Endian order. We only care about entries in the LSB.
-	 */
-	uint8_t chan_cap_phy;
-	if (!tb) return;
-
-	chan_cap_phy = (nla_get_u8(tb) >> 1) & 0xf;
-	band->channel_types |= 1 << WS80211_CHAN_HT20;
-	if (chan_cap_phy & 1) {
-		/* 40 MHz in 2.4 GHz band */
-		band->channel_types |= 1 << WS80211_CHAN_HE40;
-	}
-	if (chan_cap_phy & 2) {
-		/* 40 & 80 MHz in the 5 GHz and 6 GHz bands */
-		band->channel_types |= 1 << WS80211_CHAN_HE40;
-		band->channel_types |= 1 << WS80211_CHAN_VHT80;
-	}
-	if (chan_cap_phy & 4) {
-		/* 160 MHz in the 5 GHz and 6 GHz bands */
-		/* If set, above bit must also be set. */
-		band->channel_types |= 1 << WS80211_CHAN_VHT160;
-	}
-	if (chan_cap_phy & 8) {
-		/* 160/80+80 MHz in the 5 GHz and 6 GHz bands */
-		/* If set, above bit must also be set. */
-		band->channel_types |= 1 << WS80211_CHAN_VHT80P80;
-	}
-}
-
-#ifdef HAVE_NL80211_EHT_CAPABILITY
-static void parse_band_eht_cap_phy(struct ws80211_band *band,
-				   struct nlattr *tb)
-{
-	/* The EHT PHY capabilities are 9 bytes long, so unlike the HT
-	 * and VHT PHY capabilities (which are sent as native byte-order
-	 * uint16_t and uint32_t, respectively), they're in the IE's original
-	 * Little Endian order. We only care about entries in the LSB.
-	 * uint16_t or uint32_t, but in the IE's original Little Endian order.
-	 * We only care about entries in the first byte, which makes it simple.
-	 */
-	uint8_t chan_cap_phy;
-	if (!tb) return;
-
-	chan_cap_phy = (nla_get_u8(tb) >> 1) & 1;
-	if (chan_cap_phy == 1) {
-		band->channel_types |= 1 << WS80211_CHAN_EHT320;
-	}
-}
-#endif /* HAVE_NL80211_EHT_CAPABILITY */
-
-static void parse_band_iftype_data(struct ws80211_band *band,
-			     struct nlattr *tb)
-{
-	struct nlattr *nl_iftype;
-	struct nlattr *tb_iftype[NL80211_BAND_IFTYPE_ATTR_MAX + 1];
-	int rem_iftype;
-
-	if (!tb) return;
-
-	/* HE and EHT capabilities are nested inside this attribute */
-	nla_for_each_nested(nl_iftype, tb, rem_iftype) {
-		nla_parse(tb_iftype, NL80211_BAND_IFTYPE_ATTR_MAX,
-			  (struct nlattr *)nla_data(nl_iftype),
-			  nla_len(nl_iftype), NULL);
-
-		/* XXX - Read NL80211_BAND_IFTYPE_ATTR_IFTYPES and only use
-		 * if the data applies to NL80211_IFTYPE_MONITOR (assuming
-		 * drivers set that correctly?) */
-		parse_band_he_cap_phy(band, tb_iftype[NL80211_BAND_IFTYPE_ATTR_HE_CAP_PHY]);
-#ifdef HAVE_NL80211_EHT_CAPABILITY
-		parse_band_eht_cap_phy(band, tb_iftype[NL80211_BAND_IFTYPE_ATTR_EHT_CAP_PHY]);
-#endif /* HAVE_NL80211_EHT_CAPABILITY */
-	}
-}
-#endif /* HAVE_NL80211_HE_CAPABILITY */
 
 static void parse_supported_iftypes(struct ws80211_interface *iface,
 				    struct nlattr *tb)
@@ -386,7 +283,7 @@ static void parse_supported_iftypes(struct ws80211_interface *iface,
 	}
 }
 
-static void parse_band_freqs(struct ws80211_band *band,
+static void parse_band_freqs(struct ws80211_interface *iface,
 			     struct nlattr *tb)
 {
 	struct nlattr *nl_freq;
@@ -405,6 +302,7 @@ static void parse_band_freqs(struct ws80211_band *band,
 	if (!tb) return;
 
 	nla_for_each_nested(nl_freq, tb, rem_freq) {
+		uint32_t freq;
 		nla_parse(tb_freq, NL80211_FREQUENCY_ATTR_MAX,
 			  (struct nlattr *)nla_data(nl_freq),
 			  nla_len(nl_freq), freq_policy);
@@ -412,56 +310,9 @@ static void parse_band_freqs(struct ws80211_band *band,
 			continue;
 		if (tb_freq[NL80211_FREQUENCY_ATTR_DISABLED])
 			continue;
-		/* TODO - Look at other attributes like
-		 * recent nl80211.h has NL80211_FREQUENCY_ATTR_CAN_MONITOR
-		 * "This channel can be used in monitor mode despite other
-		 * (regulatory) restrictions, even if the channel is otherwise
-		 * completely disabled."
-		 * Add a compile check to see if that exists so we can enable
-		 * the frequency anyway even if disabled.
-		 */
 
-		struct ws80211_frequency freq = {
-			nla_get_u32(tb_freq[NL80211_FREQUENCY_ATTR_FREQ]),
-			0
-		};
-#ifdef HAVE_NL80211_SPLIT_WIPHY_DUMP
-		/* Advertising these channel limitations was added in
-		 * Linux kernel 3.9 (2013 April, non-LTS), SPLIT_WIPHY_DUMP
-		 * in 3.10 (2013 June, LTS)
-		 */
-		/* XXX - Unfortunately (at least some) drivers in the 6 GHz
-		 * bands don't bother reporting which one of HT40MINUS or
-		 * HT40PLUS they don't support for a given frequency
-		 * (even though in the 6 GHz band HE/802.11ax/Wi-Fi6E
-		 * only supports non-overlapping 40 MHz channels.) They do
-		 * in the other bands. They *also* don't bother reporting the
-		 * that channels don't support 80 or 160 MHz operation at the
-		 * end of the 6 GHz bands (e.g., no 80 or 160 on 6 GHz channels
-		 * 225 or 229, not 40, 80 or 160 on 233.) That would have to
-		 * be done here, not in the NL80211_ATTR_REG_RULE_FLAGS, as
-		 * it applies to only certain frequencies in the band.
-		 * We take what we get, though.
-		 */
-		if (tb_freq[NL80211_FREQUENCY_ATTR_NO_HT40_MINUS]) {
-			freq.channel_mask |= 1 << WS80211_CHAN_HT40MINUS;
-		}
-		if (tb_freq[NL80211_FREQUENCY_ATTR_NO_HT40_PLUS]) {
-			freq.channel_mask |= 1 << WS80211_CHAN_HT40PLUS;
-		}
-		if (tb_freq[NL80211_FREQUENCY_ATTR_NO_80MHZ]) {
-			freq.channel_mask |= 1 << WS80211_CHAN_VHT80;
-		}
-		if (tb_freq[NL80211_FREQUENCY_ATTR_NO_160MHZ]) {
-			freq.channel_mask |= 1 << WS80211_CHAN_VHT160;
-		}
-#ifdef HAVE_NL80211_EHT_CAPABILITY
-		if (tb_freq[NL80211_FREQUENCY_ATTR_NO_320MHZ]) {
-			freq.channel_mask |= 1 << WS80211_CHAN_EHT320;
-		}
-#endif /* HAVE_NL80211_EHT_CAPABILITY */
-#endif /* HAVE_NL80211_SPLIT_WIPHY_DUMP */
-		g_array_append_val(band->frequencies, freq);
+		freq = nla_get_u32(tb_freq[NL80211_FREQUENCY_ATTR_FREQ]);
+		g_array_append_val(iface->frequencies, freq);
 	}
 }
 
@@ -479,44 +330,13 @@ static void parse_wiphy_bands(struct ws80211_interface *iface,
 			  (struct nlattr *)nla_data(nl_band),
 			  nla_len(nl_band), NULL);
 
-		// nl_band->nla_type indicates the actual frequency band
-		// NL80211_BAND_2GHZ, NL80211_BAND_5GHZ, etc.
-
-		enum ws80211_band_type band_type;
-		switch (nl_band->nla_type) {
-		case NL80211_BAND_2GHZ:
-			band_type = WS80211_BAND_2GHZ;
-			break;
-		case NL80211_BAND_5GHZ:
-			band_type = WS80211_BAND_5GHZ;
-			break;
-		case NL80211_BAND_6GHZ:
-			band_type = WS80211_BAND_6GHZ;
-			break;
-		default:
-			// Unsupported (NL80211_BAND_60GHZ, NL80211_BAND_S1GHZ,
-			// etc. require different channel widths and caps.)
-			continue;
-		}
-
-		struct ws80211_band *band;
-		if (iface->bands->len < (unsigned)(band_type + 1)) {
-			g_array_set_size(iface->bands, (unsigned)(band_type + 1));
-		}
-		band = &g_array_index(iface->bands, struct ws80211_band, band_type);
-		if (band->frequencies == NULL) {
-			band->frequencies = g_array_new(false, false, sizeof(struct ws80211_frequency));
-		}
 #ifdef NL80211_BAND_ATTR_HT_CAPA
-		parse_band_ht_capa(band, tb_band[NL80211_BAND_ATTR_HT_CAPA]);
+		parse_band_ht_capa(iface, tb_band[NL80211_BAND_ATTR_HT_CAPA]);
 #endif /* NL80211_BAND_ATTR_HT_CAPA */
 #ifdef HAVE_NL80211_VHT_CAPABILITY
-		parse_band_vht_capa(band, tb_band[NL80211_BAND_ATTR_VHT_CAPA]);
+		parse_band_vht_capa(iface, tb_band[NL80211_BAND_ATTR_VHT_CAPA]);
 #endif /* HAVE_NL80211_VHT_CAPABILITY */
-#ifdef HAVE_NL80211_HE_CAPABILITY
-		parse_band_iftype_data(band, tb_band[NL80211_BAND_ATTR_IFTYPE_DATA]);
-#endif /* HAVE_NL80211_HE_CAPABILITY */
-		parse_band_freqs(band, tb_band[NL80211_BAND_ATTR_FREQS]);
+		parse_band_freqs(iface, tb_band[NL80211_BAND_ATTR_FREQS]);
 	}
 }
 
@@ -567,8 +387,8 @@ static int get_phys_handler(struct nl_msg *msg, void *arg)
 		}
 		added = 1;
 		iface->ifname = ifname;
-		iface->bands = g_array_new(false, true, sizeof(struct ws80211_band));
-		g_array_set_clear_func(iface->bands, (GDestroyNotify)ws80211_clear_band);
+		iface->frequencies = g_array_new(false, false, sizeof(uint32_t));
+		iface->channel_types = 1 << WS80211_CHAN_NO_HT;
 	} else {
 		g_free(ifname);
 	}
@@ -591,8 +411,8 @@ static int ws80211_get_phys(GArray *interfaces)
 	int ret;
 	msg = nlmsg_alloc();
 	if (!msg) {
-		nl_state.errmsg = "failed to allocate netlink message";
-		return WS80211_ERROR;
+		fprintf(stderr, "failed to allocate netlink message\n");
+		return 2;
 	}
 
 	cb = nl_cb_alloc(NL_CB_DEFAULT);
@@ -616,8 +436,8 @@ static int ws80211_get_phys(GArray *interfaces)
 #ifdef HAVE_NL80211_SPLIT_WIPHY_DUMP
 nla_put_failure:
 	nlmsg_free(msg);
-	nl_state.errmsg = "building message failed";
-	return WS80211_ERROR;
+	fprintf(stderr, "building message failed\n");
+	return -1;
 #endif /* HAVE_NL80211_SPLIT_WIPHY_DUMP */
 }
 
@@ -672,29 +492,24 @@ static int get_iface_info_handler(struct nl_msg *msg, void *arg)
 	}
 
 	if (tb_msg[NL80211_ATTR_WIPHY_FREQ]) {
-		/* bool found_ch_width = false; */
+		bool found_ch_width = false;
 		iface_info->pub->current_freq = nla_get_u32(tb_msg[NL80211_ATTR_WIPHY_FREQ]);
 		iface_info->pub->current_chan_type = WS80211_CHAN_NO_HT;
 #ifdef HAVE_NL80211_VHT_CAPABILITY
 		if (tb_msg[NL80211_ATTR_CHANNEL_WIDTH]) {
 			switch (nla_get_u32(tb_msg[NL80211_ATTR_CHANNEL_WIDTH])) {
-			case NL80211_CHAN_WIDTH_40:
-				iface_info->pub->current_chan_type = WS80211_CHAN_HE40;
-				break;
 			case NL80211_CHAN_WIDTH_80:
 				iface_info->pub->current_chan_type = WS80211_CHAN_VHT80;
+				found_ch_width = true;
 				break;
 			case NL80211_CHAN_WIDTH_80P80:
 				iface_info->pub->current_chan_type = WS80211_CHAN_VHT80P80;
+				found_ch_width = true;
 				break;
 			case NL80211_CHAN_WIDTH_160:
 				iface_info->pub->current_chan_type = WS80211_CHAN_VHT160;
+				found_ch_width = true;
 				break;
-#ifdef HAVE_NL80211_EHT_CAPABILITY
-			case NL80211_CHAN_WIDTH_320:
-				iface_info->pub->current_chan_type = WS80211_CHAN_EHT320;
-				break;
-#endif /* HAVE_NL80211_EHT_CAPABILITY */
 			}
 		}
 		if (tb_msg[NL80211_ATTR_CENTER_FREQ1]) {
@@ -706,18 +521,7 @@ static int get_iface_info_handler(struct nl_msg *msg, void *arg)
 				nla_get_u32(tb_msg[NL80211_ATTR_CENTER_FREQ2]);
 		}
 #endif
-		/* An interface can report both NL80211_CHAN_WIDTH_40 and one
-		 * of NL80211_CHAN_HT40{MINUS,PLUS} for its channel type and
-		 * width. CHANNEL_TYPE is officially deprecated, but prefer it
-		 * anyway since the CHANNEL_WIDTH attribute requires the center
-		 * frequency to be fully specified. (In the 2.4 GHz and 5 GHz
-		 * bands there can be multiple accepted center frequencies for
-		 * a control frequency, and the GUI doesn't display the current
-		 * center frequency nor ask the user to specify the center
-		 * frequency when tuning, but determines it automatically from
-		 * the channel type/width.)
-		 */
-		if (tb_msg[NL80211_ATTR_WIPHY_CHANNEL_TYPE]) {
+		if (!found_ch_width && tb_msg[NL80211_ATTR_WIPHY_CHANNEL_TYPE]) {
 			switch (nla_get_u32(tb_msg[NL80211_ATTR_WIPHY_CHANNEL_TYPE])) {
 
 			case NL80211_CHAN_NO_HT:
@@ -748,11 +552,10 @@ static int __ws80211_get_iface_info(const char *name, struct __iface_info *iface
 	int devidx;
 	struct nl_msg *msg;
 	struct nl_cb *cb;
-	int err;
 	msg = nlmsg_alloc();
 	if (!msg) {
-		nl_state.errmsg = "failed to allocate netlink message";
-		return WS80211_ERROR;
+		fprintf(stderr, "failed to allocate netlink message\n");
+		return 2;
 	}
 
 	cb = nl_cb_alloc(NL_CB_DEFAULT);
@@ -765,10 +568,9 @@ static int __ws80211_get_iface_info(const char *name, struct __iface_info *iface
 
 	nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, get_iface_info_handler, iface_info);
 
-	err = nl80211_do_cmd(msg, cb);
-	if (err) {
+	if (nl80211_do_cmd(msg, cb)) {
 		nlmsg_free(msg);
-		return err;
+		return -1;
 	}
 
 	/* Old kernels can't get the current freq via netlink. Try WEXT too :( */
@@ -779,8 +581,8 @@ static int __ws80211_get_iface_info(const char *name, struct __iface_info *iface
 
 nla_put_failure:
 	nlmsg_free(msg);
-	nl_state.errmsg = "building message failed";
-	return WS80211_ERROR;
+	fprintf(stderr, "building message failed\n");
+	return -1;
 }
 
 int ws80211_get_iface_info(const char *name, struct ws80211_iface_info *iface_info)
@@ -806,7 +608,7 @@ restart:
 		iface = g_array_index(interfaces, struct ws80211_interface *, j);
 		if (!iface->cap_monitor) {
 			g_array_remove_index(interfaces, j);
-			g_array_free(iface->bands, true);
+			g_array_free(iface->frequencies, true);
 			g_free(iface->ifname);
 			g_free(iface);
 			goto restart;
@@ -824,41 +626,32 @@ static int ws80211_populate_devices(GArray *interfaces)
 	char *ret;
 	int i;
 	unsigned int j;
-	int err;
 
 	struct ws80211_iface_info pub = {-1, WS80211_CHAN_NO_HT, -1, -1, WS80211_FCS_ALL};
 	struct __iface_info iface_info;
 	struct ws80211_interface *iface;
 
-	/* Get a list of PHYs that can handle monitor mode. For each PHY,
-	 * populates the list with a tentative name ("{wiphy_name}.mon")
-	 * of a monitor mode device. If no monitor mode device exists for
-	 * the PHY, we'll try to create one on demand later. */
-	err = ws80211_get_phys(interfaces);
-	if (err != 0) {
-		return err;
-	}
-	/* Remove the PHYs that don't support IFTYPE_MONITOR at all. */
+	/* Get a list of phy's that can handle monitor mode */
+	ws80211_get_phys(interfaces);
 	ws80211_keep_only_monitor(interfaces);
 
 	fh = g_fopen("/proc/net/dev", "r");
 	if(!fh) {
-		nl_state.errmsg = "Cannot open /proc/net/dev";
-		return WS80211_ERROR;
+		fprintf(stderr, "Cannot open /proc/net/dev");
+		return -ENOENT;
 	}
 
 	/* Skip the first two lines */
 	for (i = 0; i < 2; i++) {
 		ret = fgets(line, sizeof(line), fh);
 		if (ret == NULL) {
-			nl_state.errmsg = "Error parsing /proc/net/dev";
+			fprintf(stderr, "Error parsing /proc/net/dev");
 			fclose(fh);
-			return WS80211_ERROR;
+			return -1;
 		}
 	}
 
-	/* For each PHY, if it has already [user created] monitor interfaces
-	 * use the first one we find instead of creating one. */
+	/* Update names of user created monitor interfaces */
 	while(fgets(line, sizeof(line), fh)) {
 		t = index(line, ':');
 		if (!t)
@@ -869,16 +662,11 @@ static int ws80211_populate_devices(GArray *interfaces)
 			t++;
 		memset(&iface_info, 0, sizeof(iface_info));
 		iface_info.pub = &pub;
-		/* Look at each interface - is it a mac8021 interface?
-		 * Skip devices that aren't (so ignore errors.) */
 		__ws80211_get_iface_info(t, &iface_info);
 
-		// If so, is it a monitor interface?
 		if (iface_info.type == NL80211_IFTYPE_MONITOR) {
 			for (j = 0; j < interfaces->len; j++) {
 				iface = g_array_index(interfaces, struct ws80211_interface *, j);
-				/* Replace any tentative interface for the same
-				 * PHY with this existing monitor interface. */
 				t2 = ws_strdup_printf("phy%d.mon", iface_info.phyidx);
 				if (t2) {
 					if (!strcmp(t2, iface->ifname)) {
@@ -891,35 +679,34 @@ static int ws80211_populate_devices(GArray *interfaces)
 		}
 	}
 	fclose(fh);
-	return WS80211_OK;
+	return 0;
 }
 
 static int ws80211_iface_up(const char *ifname)
 {
 	int sock;
 	struct ifreq ifreq;
-	int err = 0;
 
 	sock = socket(AF_PACKET, SOCK_RAW, 0);
 	if (sock == -1)
-		return -errno;
+		return -1;
 
 	(void) g_strlcpy(ifreq.ifr_name, ifname, sizeof(ifreq.ifr_name));
 
-	if (ioctl(sock, SIOCGIFFLAGS, &ifreq)) {
-		err = -errno;
-		goto out;
-	}
+	if (ioctl(sock, SIOCGIFFLAGS, &ifreq))
+		goto out_err;
 
 	ifreq.ifr_flags |= IFF_UP;
 
-	if (ioctl(sock, SIOCSIFFLAGS, &ifreq)) {
-		err = -errno;
-	}
+	if (ioctl(sock, SIOCSIFFLAGS, &ifreq))
+		goto out_err;
 
-out:
 	close(sock);
-	return err;
+	return 0;
+
+out_err:
+	close(sock);
+	return -1;
 }
 
 /* Needed for NLA_PUT_STRING, which passes strlen as an int */
@@ -940,8 +727,8 @@ static int ws80211_create_on_demand_interface(const char *name)
 	cb = nl_cb_alloc(NL_CB_DEFAULT);
 	msg = nlmsg_alloc();
 	if (!msg) {
-		nl_state.errmsg = "failed to allocate netlink message";
-		return WS80211_ERROR;
+		fprintf(stderr, "failed to allocate netlink message\n");
+		return 2;
 	}
 
 	genlmsg_put(msg, 0, 0, nl_state.nl80211_id, 0,
@@ -959,8 +746,8 @@ static int ws80211_create_on_demand_interface(const char *name)
 
 nla_put_failure:
 	nlmsg_free(msg);
-	nl_state.errmsg = "building message failed";
-	return WS80211_ERROR;
+	fprintf(stderr, "building message failed\n");
+	return 2;
 }
 DIAG_ON_CLANG(shorten-64-to-32)
 
@@ -976,8 +763,8 @@ int ws80211_set_freq(const char *name, uint32_t freq, int chan_type, uint32_t _U
 
 	msg = nlmsg_alloc();
 	if (!msg) {
-		nl_state.errmsg = "failed to allocate netlink message";
-		return WS80211_ERROR;
+		fprintf(stderr, "failed to allocate netlink message\n");
+		return 2;
 	}
 
 	cb = nl_cb_alloc(NL_CB_DEFAULT);
@@ -1015,11 +802,6 @@ int ws80211_set_freq(const char *name, uint32_t freq, int chan_type, uint32_t _U
 		break;
 #endif
 #ifdef HAVE_NL80211_VHT_CAPABILITY
-	case WS80211_CHAN_HE40:
-		NLA_PUT_U32(msg, NL80211_ATTR_CHANNEL_WIDTH, NL80211_CHAN_WIDTH_40);
-		NLA_PUT_U32(msg, NL80211_ATTR_CENTER_FREQ1, center_freq);
-		break;
-
 	case WS80211_CHAN_VHT80:
 		NLA_PUT_U32(msg, NL80211_ATTR_CHANNEL_WIDTH, NL80211_CHAN_WIDTH_80);
 		NLA_PUT_U32(msg, NL80211_ATTR_CENTER_FREQ1, center_freq);
@@ -1036,12 +818,6 @@ int ws80211_set_freq(const char *name, uint32_t freq, int chan_type, uint32_t _U
 		NLA_PUT_U32(msg, NL80211_ATTR_CENTER_FREQ1, center_freq);
 		break;
 #endif
-#ifdef HAVE_NL80211_EHT_CAPABILITY
-	case WS80211_CHAN_EHT320:
-		NLA_PUT_U32(msg, NL80211_ATTR_CHANNEL_WIDTH, NL80211_CHAN_WIDTH_320);
-		NLA_PUT_U32(msg, NL80211_ATTR_CENTER_FREQ1, center_freq);
-		break;
-#endif
 	default:
 		break;
 	}
@@ -1051,8 +827,9 @@ int ws80211_set_freq(const char *name, uint32_t freq, int chan_type, uint32_t _U
 
 nla_put_failure:
 	nlmsg_free(msg);
-	nl_state.errmsg = "building message failed";
-	return WS80211_ERROR;
+	fprintf(stderr, "building message failed\n");
+	return 2;
+
 }
 
 GArray* ws80211_find_interfaces(void)
@@ -1088,22 +865,18 @@ ws80211_str_to_chan_type(const char *s)
 		ret = WS80211_CHAN_HT40MINUS;
 	if (!strcmp(s, CHAN_HT40PLUS))
 		ret = WS80211_CHAN_HT40PLUS;
-	if (!strcmp(s, CHAN_HE40))
-		ret = WS80211_CHAN_HE40;
 	if (!strcmp(s, CHAN_VHT80))
 		ret = WS80211_CHAN_VHT80;
 	if (!strcmp(s, CHAN_VHT80P80))
 		ret = WS80211_CHAN_VHT80P80;
 	if (!strcmp(s, CHAN_VHT160))
 		ret = WS80211_CHAN_VHT160;
-	if (!strcmp(s, CHAN_EHT320))
-		ret = WS80211_CHAN_EHT320;
 
 	return ret;
 }
 
 const char
-*ws80211_chan_type_to_str(enum ws80211_channel_type type)
+*ws80211_chan_type_to_str(int type)
 {
 	switch (type) {
 	case WS80211_CHAN_NO_HT:
@@ -1114,37 +887,14 @@ const char
 		return CHAN_HT40MINUS;
 	case WS80211_CHAN_HT40PLUS:
 		return CHAN_HT40PLUS;
-	case WS80211_CHAN_HE40:
-		return CHAN_HE40;
 	case WS80211_CHAN_VHT80:
 		return CHAN_VHT80;
 	case WS80211_CHAN_VHT80P80:
 		return CHAN_VHT80P80;
 	case WS80211_CHAN_VHT160:
 		return CHAN_VHT160;
-	case WS80211_CHAN_EHT320:
-		return CHAN_EHT320;
 	}
 	return NULL;
-}
-
-#define BAND_2GHZ       "2.4 GHz"
-#define BAND_5GHZ       "5 GHz"
-#define BAND_6GHZ       "6 GHz"
-
-const char
-*ws80211_band_type_to_str(enum ws80211_band_type type)
-{
-	switch (type) {
-	case WS80211_BAND_2GHZ:
-		return BAND_2GHZ;
-	case WS80211_BAND_5GHZ:
-		return BAND_5GHZ;
-	case WS80211_BAND_6GHZ:
-		return BAND_6GHZ;
-	default:
-		return NULL;
-	}
 }
 
 bool ws80211_has_fcs_filter(void)
@@ -1154,10 +904,10 @@ bool ws80211_has_fcs_filter(void)
 
 int ws80211_set_fcs_validation(const char *name _U_, enum ws80211_fcs_validation fcs_validation _U_)
 {
-	return WS80211_ERROR_NOT_SUPPORTED;
+	return -1;
 }
 
-static const char *network_manager_path = "/usr/sbin/NetworkManager"; /* Is this correct? */
+const char *network_manager_path = "/usr/sbin/NetworkManager"; /* Is this correct? */
 const char *ws80211_get_helper_path(void) {
 	if (g_file_test(network_manager_path, G_FILE_TEST_IS_EXECUTABLE)) {
 		return network_manager_path;
@@ -1165,15 +915,282 @@ const char *ws80211_get_helper_path(void) {
 	return NULL;
 }
 
+#elif defined(HAVE_AIRPCAP)
+
+#include <wsutil/unicode-utils.h>
+
+#include "airpcap.h"
+#include "airpcap_loader.h"
+
+int ws80211_init(void)
+{
+	if (airpcap_get_dll_state() == AIRPCAP_DLL_OK) {
+		return WS80211_INIT_OK;
+	}
+	return WS80211_INIT_NOT_SUPPORTED;
+}
+
+static const char *airpcap_dev_prefix_ = "\\\\.\\";
+
+GArray* ws80211_find_interfaces(void)
+{
+	GArray *interfaces;
+	GList *airpcap_if_list, *cur_if;
+	int err;
+	char *err_str = NULL;
+
+	interfaces = g_array_new(false, false, sizeof(struct ws80211_interface *));
+	if (!interfaces)
+		return NULL;
+
+	airpcap_if_list = get_airpcap_interface_list(&err, &err_str);
+
+	if (airpcap_if_list == NULL || g_list_length(airpcap_if_list) == 0){
+		g_free(err_str);
+		g_array_free(interfaces, true);
+		return NULL;
+	}
+
+	for (cur_if = airpcap_if_list; cur_if; cur_if = g_list_next(cur_if)) {
+		struct ws80211_interface *iface;
+		airpcap_if_info_t *airpcap_if_info = (airpcap_if_info_t *) cur_if->data;
+		char *ifname;
+		uint32_t chan;
+		uint32_t i;
+
+		if (!airpcap_if_info) continue;
+		ifname = airpcap_if_info->name;
+		if (strlen(ifname) > 4 && g_str_has_prefix(ifname, airpcap_dev_prefix_)) ifname += 4;
+
+		iface = (struct ws80211_interface *)g_malloc0(sizeof(*iface));
+		iface->ifname = g_strdup(ifname);
+		iface->can_set_freq = true;
+		iface->frequencies = g_array_new(false, false, sizeof(uint32_t));
+
+		iface->channel_types = 1 << WS80211_CHAN_NO_HT;
+		/*
+		 * AirPcap stores per-channel capabilities. We should probably
+		 * do the same. */
+		for (i = 0; i < airpcap_if_info->numSupportedChannels; i++) {
+			if (airpcap_if_info->pSupportedChannels[i].Flags & FLAG_CAN_BE_HIGH) {
+				iface->channel_types |= 1 << WS80211_CHAN_HT40MINUS;
+				iface->channel_types |= 1 << WS80211_CHAN_HT40PLUS;
+				break;
+			}
+		}
+
+		iface->cap_monitor = 1;
+
+		for (chan = 0; chan < airpcap_if_info->numSupportedChannels; chan++) {
+			g_array_append_val(iface->frequencies, airpcap_if_info->pSupportedChannels[chan].Frequency);
+		}
+
+		g_array_append_val(interfaces, iface);
+	}
+
+	return interfaces;
+}
+
+int ws80211_get_iface_info(const char *name, struct ws80211_iface_info *iface_info)
+{
+	GList *airpcap_if_list;
+	int err;
+	char *err_str = NULL;
+	airpcap_if_info_t *airpcap_if_info;
+
+	if (!iface_info) return -1;
+
+	airpcap_if_list = get_airpcap_interface_list(&err, &err_str);
+
+	if (airpcap_if_list == NULL || g_list_length(airpcap_if_list) == 0){
+		g_free(err_str);
+		return -1;
+	}
+
+	airpcap_if_info = get_airpcap_if_from_name(airpcap_if_list, name);
+
+	if (!airpcap_if_info) {
+		free_airpcap_interface_list(airpcap_if_list);
+		return -1;
+	}
+
+	memset(iface_info, 0, sizeof(*iface_info));
+	iface_info->current_freq = airpcap_if_info->channelInfo.Frequency;
+	switch (airpcap_if_info->channelInfo.ExtChannel) {
+		case 0:
+			iface_info->current_chan_type = WS80211_CHAN_NO_HT;
+			break;
+		case -1:
+			iface_info->current_chan_type = WS80211_CHAN_HT40MINUS;
+			break;
+		case 1:
+			iface_info->current_chan_type = WS80211_CHAN_HT40PLUS;
+			break;
+		default:
+			return -1;
+	}
+
+	switch (airpcap_if_info->CrcValidationOn) {
+		case AIRPCAP_VT_ACCEPT_CORRECT_FRAMES:
+			iface_info->current_fcs_validation = WS80211_FCS_VALID;
+			break;
+		case AIRPCAP_VT_ACCEPT_CORRUPT_FRAMES:
+			iface_info->current_fcs_validation = WS80211_FCS_INVALID;
+			break;
+		default:
+			iface_info->current_fcs_validation = WS80211_FCS_ALL;
+			break;
+	}
+
+	return 0;
+}
+
+int ws80211_set_freq(const char *name, uint32_t freq, int chan_type, uint32_t _U_ center_freq, uint32_t _U_ center_freq2)
+{
+	GList *airpcap_if_list;
+	int err;
+	char *err_str = NULL;
+	airpcap_if_info_t *airpcap_if_info;
+	char err_buf[AIRPCAP_ERRBUF_SIZE];
+	PAirpcapHandle adapter;
+	int ret_val = -1;
+
+	airpcap_if_list = get_airpcap_interface_list(&err, &err_str);
+
+	if (airpcap_if_list == NULL || g_list_length(airpcap_if_list) == 0){
+		g_free(err_str);
+		return ret_val;
+	}
+
+	airpcap_if_info = get_airpcap_if_from_name(airpcap_if_list, name);
+
+	if (!airpcap_if_info) {
+		free_airpcap_interface_list(airpcap_if_list);
+		return ret_val;
+	}
+
+	adapter = airpcap_if_open(airpcap_if_info->name, err_buf);
+	if (adapter) {
+		airpcap_if_info->channelInfo.Frequency = freq;
+		switch (chan_type) {
+			case WS80211_CHAN_HT40MINUS:
+				airpcap_if_info->channelInfo.ExtChannel = -1;
+				break;
+			case WS80211_CHAN_HT40PLUS:
+				airpcap_if_info->channelInfo.ExtChannel = 1;
+				break;
+			default:
+				airpcap_if_info->channelInfo.ExtChannel = 0;
+				break;
+		}
+
+		if (airpcap_if_set_device_channel_ex(adapter, airpcap_if_info->channelInfo)) {
+			ret_val = 0;
+		}
+		airpcap_if_close(adapter);
+	}
+
+	free_airpcap_interface_list(airpcap_if_list);
+	return ret_val;
+}
+
+int ws80211_str_to_chan_type(const char *s _U_)
+{
+	return -1;
+}
+
+const char *ws80211_chan_type_to_str(int type _U_)
+{
+	return NULL;
+}
+
+bool ws80211_has_fcs_filter(void)
+{
+	return true;
+}
+
+int ws80211_set_fcs_validation(const char *name, enum ws80211_fcs_validation fcs_validation)
+{
+	GList *airpcap_if_list;
+	int err;
+	char *err_str = NULL;
+	airpcap_if_info_t *airpcap_if_info;
+	char err_buf[AIRPCAP_ERRBUF_SIZE];
+	PAirpcapHandle adapter;
+	int ret_val = -1;
+
+	airpcap_if_list = get_airpcap_interface_list(&err, &err_str);
+
+	if (airpcap_if_list == NULL || g_list_length(airpcap_if_list) == 0){
+		g_free(err_str);
+		return ret_val;
+	}
+
+	airpcap_if_info = get_airpcap_if_from_name(airpcap_if_list, name);
+
+	if (!airpcap_if_info) {
+		free_airpcap_interface_list(airpcap_if_list);
+		return ret_val;
+	}
+
+	adapter = airpcap_if_open(airpcap_if_info->name, err_buf);
+	if (adapter) {
+		AirpcapValidationType val_type = AIRPCAP_VT_ACCEPT_EVERYTHING;
+		switch (fcs_validation) {
+			case WS80211_FCS_VALID:
+				val_type = AIRPCAP_VT_ACCEPT_CORRECT_FRAMES;
+				break;
+			case WS80211_FCS_INVALID:
+				val_type = AIRPCAP_VT_ACCEPT_CORRUPT_FRAMES;
+				break;
+			default:
+				break;
+		}
+
+		if (airpcap_if_set_fcs_validation(adapter, val_type)) {
+			/* Appears to be necessary for this to take effect. */
+			airpcap_if_store_cur_config_as_adapter_default(adapter);
+			ret_val = 0;
+		}
+		airpcap_if_close(adapter);
+	}
+
+	free_airpcap_interface_list(airpcap_if_list);
+	return ret_val;
+}
+
+static char *airpcap_conf_path;
+const char *ws80211_get_helper_path(void)
+{
+	HKEY h_key = NULL;
+
+	if (!airpcap_conf_path && RegOpenKeyEx(HKEY_LOCAL_MACHINE, _T("SOFTWARE\\AirPcap"), 0, KEY_QUERY_VALUE|KEY_WOW64_32KEY, &h_key) == ERROR_SUCCESS) {
+		DWORD reg_ret;
+		TCHAR airpcap_dir_utf16[MAX_PATH];
+		DWORD ad_size = array_length(airpcap_dir_utf16);
+
+		reg_ret = RegQueryValueEx(h_key, NULL, NULL, NULL,
+				(LPBYTE) &airpcap_dir_utf16, &ad_size);
+
+		if (reg_ret == ERROR_SUCCESS) {
+			airpcap_dir_utf16[ad_size-1] = L'\0';
+			g_free(airpcap_conf_path);
+			airpcap_conf_path = ws_strdup_printf("%s\\AirpcapConf.exe", utf_16to8(airpcap_dir_utf16));
+
+			if (!g_file_test(airpcap_conf_path, G_FILE_TEST_IS_EXECUTABLE)) {
+				g_free(airpcap_conf_path);
+				airpcap_conf_path = NULL;
+			}
+		}
+	}
+
+	return airpcap_conf_path;
+}
+
 #else /* Everyone else. */
 int ws80211_init(void)
 {
-	return WS80211_ERROR_NOT_SUPPORTED;
-}
-
-const char* ws80211_geterror(int error _U_)
-{
-	return "Setting 802.11 channels is not supported on this platform";
+	return WS80211_INIT_NOT_SUPPORTED;
 }
 
 GArray* ws80211_find_interfaces(void)
@@ -1183,12 +1200,12 @@ GArray* ws80211_find_interfaces(void)
 
 int ws80211_get_iface_info(const char *name _U_, struct ws80211_iface_info *iface_info _U_)
 {
-	return WS80211_ERROR_NOT_SUPPORTED;
+	return -1;
 }
 
 int ws80211_set_freq(const char *name _U_, uint32_t freq _U_, int _U_ chan_type, uint32_t _U_ center_freq, uint32_t _U_ center_freq2)
 {
-	return WS80211_ERROR_NOT_SUPPORTED;
+	return -1;
 }
 
 int ws80211_str_to_chan_type(const char *s _U_)
@@ -1196,12 +1213,7 @@ int ws80211_str_to_chan_type(const char *s _U_)
 	return -1;
 }
 
-const char *ws80211_chan_type_to_str(enum ws80211_channel_type type _U_)
-{
-	return NULL;
-}
-
-const char *ws80211_band_type_to_str(enum ws80211_band_type type _U_)
+const char *ws80211_chan_type_to_str(int type _U_)
 {
 	return NULL;
 }
@@ -1213,7 +1225,7 @@ bool ws80211_has_fcs_filter(void)
 
 int ws80211_set_fcs_validation(const char *name _U_, enum ws80211_fcs_validation fcs_validation _U_)
 {
-	return WS80211_ERROR_NOT_SUPPORTED;
+	return -1;
 }
 
 const char *ws80211_get_helper_path(void) {
@@ -1232,101 +1244,67 @@ void ws80211_free_interfaces(GArray *interfaces)
 		return;
 
 	while (interfaces->len) {
-		iface = g_array_index(interfaces, struct ws80211_interface *, interfaces->len - 1);
-		g_array_remove_index(interfaces, interfaces->len - 1);
-		g_array_free(iface->bands, true);
+		iface = g_array_index(interfaces, struct ws80211_interface *, 0);
+		g_array_remove_index(interfaces, 0);
+		g_array_free(iface->frequencies, true);
 		g_free(iface->ifname);
 		g_free(iface);
 	}
 	g_array_free(interfaces, true);
 }
 
-void ws80211_clear_band(struct ws80211_band *band)
+int ws80211_get_center_frequency(int control_frequency, int bandwidth)
 {
-	if (band->frequencies)
-		g_array_free(band->frequencies, true);
-	band->frequencies = NULL;
-}
+    int cf1 = -1;
+    size_t j;
+    int bw80[] = { 5180, 5260, 5500, 5580, 5660, 5745,
+                   5955, 6035, 6115, 6195, 6275, 6355,
+                   6435, 6515, 6595, 6675, 6755, 6835,
+                   6195, 6995 };
+    int bw160[] = { 5180, 5500, 5955, 6115, 6275, 6435,
+                    6595, 6755, 6915 };
+    /* based on 11be D2 E.1 Country information and operating classes */
+    int bw320[] = {5955, 6115, 6275, 6435, 6595, 6755};
 
-int ws80211_get_center_frequency(int control_frequency, enum ws80211_channel_type chan_type)
-{
-	int cf1 = -1;
-	size_t j;
-	const int bw80[] = { 5180, 5260, 5500, 5580, 5660, 5745,
-			     5955, 6035, 6115, 6195, 6275, 6355,
-			     6435, 6515, 6595, 6675, 6755, 6835,
-			     6195, 6995 };
-	const int bw160[] = { 5180, 5500, 5955, 6115, 6275, 6435,
-			      6595, 6755, 6915 };
-	/* based on 11be D2 E.1 Country information and operating classes */
+    switch (bandwidth) {
+    case 80:
+        for (j = 0; j < array_length(bw80); j++) {
+            if (control_frequency >= bw80[j] && control_frequency < bw80[j] + 80)
+                break;
+        }
 
-	/* XXX - The 320 MHz channels in 6 GHz are once again overlapping
-	 * (spaced 160 MHz apart), unlike the 80 and 160 MHz channels. That
-	 * means that there isn't a unique center frequency for many given
-	 * control frequencies.
-	 */
-	const int bw320[] = { 5955, 6115, 6275, 6435, 6595, 6755};
-	/* 27.3.23.2 cf = starting_freq + 5 * channel_num */
-	switch (chan_type) {
-	case WS80211_CHAN_HE40:
-		/* 40 MHz operation with explicit center frequency, e.g.
-		 * in the 6 GHz band. Calculate the control frequency that
-		 * produces non-overlapping bands. Look at operating class
-		 * 132 in the Country information and operating classes table.
-		 */
+        if (j == array_length(bw80))
+            break;
 
-		if (control_frequency >= 5955) {
-			cf1 = ((control_frequency - 5955) / 40) * 40;
-			cf1 += 5955 + 10;
-			break;
-		} else if (control_frequency >= 5180) {
-			cf1 = ((control_frequency - 5180) / 40) * 40;
-			cf1 += 5180 + 10;
-			break;
-		}
-		break;
-	case WS80211_CHAN_VHT80:
-	case WS80211_CHAN_VHT80P80: /* Needs a second cf as well. */
-		for (j = 0; j < array_length(bw80); j++) {
-			if (control_frequency >= bw80[j] && control_frequency < bw80[j] + 80)
-				break;
-		}
+        cf1 = bw80[j] + 30;
+        break;
+    case 160:
+        for (j = 0; j < array_length(bw160); j++) {
+            if (control_frequency >= bw160[j] && control_frequency < bw160[j] + 160)
+                break;
+        }
 
-		if (j == array_length(bw80))
-			break;
+        if (j == array_length(bw160))
+            break;
 
-		cf1 = bw80[j] + 30;
-		break;
-	case WS80211_CHAN_VHT160:
-		for (j = 0; j < array_length(bw160); j++) {
-			if (control_frequency >= bw160[j] && control_frequency < bw160[j] + 160)
-				break;
-		}
+        cf1 = bw160[j] + 70;
+        break;
+    case 320:
+        for (j = 0; j < array_length(bw320); j++) {
+            if (control_frequency >= bw320[j] && control_frequency < bw320[j] + 160)
+                break;
+        }
 
-		if (j == array_length(bw160))
-			break;
+        if (j == array_length(bw320))
+            break;
 
-		cf1 = bw160[j] + 70;
-		break;
-	case WS80211_CHAN_EHT320:
-		for (j = 0; j < array_length(bw320); j++) {
-			if (control_frequency >= bw320[j] && control_frequency < bw320[j] + 160)
-				break;
-		}
+        cf1 = bw320[j] + 150;
+        break;
+    default:
+        break;
+    }
 
-		if (j == array_length(bw320))
-			break;
-
-		cf1 = bw320[j] + 150;
-		break;
-	default:
-	/* Since we explicitly specify HT40MINUS vs HT40PLUS we don't need to
-	* calculate the center freq for those; ws80211_set_freq doesn't need it.
-	*/
-		break;
-	}
-
-	return cf1;
+    return cf1;
 }
 
 /*

@@ -37,10 +37,8 @@ typedef struct {
 	unsigned block_option;                     /* Indicates Block1 or Block2 option */
 	unsigned block_number;
 	unsigned block_mflag;
-	unsigned block_size;
-	wmem_strbuf_t *uri_host_strbuf;
-	wmem_strbuf_t *uri_path_strbuf;
-	wmem_strbuf_t *uri_query_strbuf;
+	wmem_strbuf_t *uri_str_strbuf;		/* the maximum is 1024 > 510 = Uri-Host:255 + Uri-Path:255 x 2 */
+	wmem_strbuf_t *uri_query_strbuf;	/* the maximum is 1024 >         765 = Uri-Query:255 x 3 */
 	bool is_coap_for_tmf;		/* CoAP for Thread Management Framework */
 	bool object_security;
 	oscore_info_t *oscore_info;		/* OSCORE data needed to decrypt */
@@ -54,8 +52,7 @@ typedef struct {
 /* CoAP Transaction tracking information */
 typedef struct {
 	wmem_map_t    *req_rsp;
-	wmem_strbuf_t *uri_host_strbuf;
-	wmem_strbuf_t *uri_path_strbuf;
+	wmem_strbuf_t *uri_str_strbuf;
 	oscore_info_t *oscore_info;		/* OSCORE transaction to decrypt response */
 } coap_transaction;
 
@@ -141,8 +138,8 @@ typedef struct coap_common_dissect {
 	} ei;
 } coap_common_dissect_t;
 
-uint8_t dissect_coap_code(tvbuff_t *tvb, proto_tree *coap_tree, unsigned *offset, coap_common_dissect_t *dissect_hf, uint8_t *code_class);
-unsigned dissect_coap_options(tvbuff_t *tvb, packet_info *pinfo, proto_tree *coap_tree, unsigned offset, unsigned offset_end, uint8_t code_class, coap_info *coinfo, coap_common_dissect_t *dissect_hf, bool *ok);
+uint8_t dissect_coap_code(tvbuff_t *tvb, proto_tree *coap_tree, int *offset, coap_common_dissect_t *dissect_hf, uint8_t *code_class);
+int dissect_coap_options(tvbuff_t *tvb, packet_info *pinfo, proto_tree *coap_tree, int offset, int offset_end, uint8_t code_class, coap_info *coinfo, coap_common_dissect_t *dissect_hf);
 void dissect_coap_payload(tvbuff_t *tvb, packet_info *pinfo, proto_tree *coap_tree, proto_tree *parent_tree, int offset, int offset_end, uint8_t code_class, coap_info *coinfo, coap_common_dissect_t *dissect_hf, bool oscore);
 
 extern const value_string coap_vals_observe_options[];
@@ -150,7 +147,7 @@ extern value_string_ext coap_vals_code_ext;
 
 /* {{{ */
 #define COAP_COMMON_LIST_T(name)						\
-coap_common_dissect_t name
+coap_common_dissect_t name;
 /* }}} */
 
 /* {{{ */

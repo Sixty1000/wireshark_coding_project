@@ -42,8 +42,8 @@ static e_guid_t uuid_remact = { 0x4d9f4ab8, 0x7d1c, 0x11cf, { 0x86, 0x1e, 0x00, 
 static uint16_t ver_remact;
 
 
-static unsigned
-dissect_remact_remote_activation_rqst(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_remact_remote_activation_rqst(tvbuff_t *tvb, int offset,
 				      packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
 	uint32_t u32ClientImpLevel;
@@ -87,10 +87,12 @@ dissect_remact_remote_activation_rqst(tvbuff_t *tvb, unsigned offset,
 	if (u32Pointer) {
 		offset = dissect_dcom_dcerpc_array_size(tvb, offset, pinfo, tree, di, drep,
 							&u32ArraySize);
-		for (u32ItemIdx = 1; u32ItemIdx <= u32Interfaces; u32ItemIdx++) {
+		u32ItemIdx = 1;
+		while (u32Interfaces--) {
 			offset = dissect_dcom_append_UUID(tvb, offset, pinfo, tree, di, drep,
 							  hf_dcom_iid, u32ItemIdx, &iid);
 
+			u32ItemIdx++;
 		}
 	}
 
@@ -99,17 +101,19 @@ dissect_remact_remote_activation_rqst(tvbuff_t *tvb, unsigned offset,
 
 	offset = dissect_dcom_dcerpc_array_size(tvb, offset, pinfo, tree, di, drep,
 						&u32ArraySize);
-	for (u32ItemIdx = 1; u32ItemIdx <= u32ArraySize; u32ItemIdx++) {
+	u32ItemIdx = 1;
+	while (u32ArraySize--) {
 		offset = dissect_dcom_WORD(tvb, offset, pinfo, tree, di, drep,
 					   hf_remact_protseqs, &u16ProtSeqs);
+		u32ItemIdx++;
 	}
 
 	return offset;
 }
 
 
-static unsigned
-dissect_remact_remote_activation_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_remact_remote_activation_resp(tvbuff_t *tvb, int offset,
 				      packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
 	uint32_t	u32Pointer;
@@ -167,7 +171,7 @@ dissect_remact_remote_activation_resp(tvbuff_t *tvb, unsigned offset,
 						      &u32HResult, u32Idx);
 		/* update column info now */
 		col_append_fstr(pinfo->cinfo, COL_INFO, " %s[%u]",
-				val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)"),
+				val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)"),
 				u32Idx);
 		u32Idx++;
 	}
@@ -177,7 +181,7 @@ dissect_remact_remote_activation_resp(tvbuff_t *tvb, unsigned offset,
 
 	/* update column info now */
 	col_append_fstr(pinfo->cinfo, COL_INFO, " -> %s",
-			val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)"));
+			val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)"));
 
 	return offset;
 }

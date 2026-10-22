@@ -16,8 +16,6 @@
 #include <wsutil/utf8_entities.h>
 #include <epan/expert.h>
 #include <epan/crc16-tvb.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 
 void proto_register_xra(void);
 void proto_reg_handoff_xra(void);
@@ -319,6 +317,12 @@ static const true_false_string codeword_tagging = {
   "this codeword is not included in the codeword counts reported by the CM in the OPT-RSP message"
 };
 
+static const value_string local_proto_checksum_vals[] = {
+  { PROTO_CHECKSUM_E_BAD, "Bad"},
+  { PROTO_CHECKSUM_E_GOOD, "Good"},
+  { 0, NULL}
+};
+
 static const value_string control_word_vals[] = {
   { 0, "I=128, J=1"},
   { 1, "I=128, J=1"},
@@ -366,7 +370,7 @@ dissect_xra(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* data _
   proto_item_append_text(it, " (Excentis XRA header: %d bytes). DOCSIS frame is %d bytes.", xra_length, tvb_reported_length_remaining(tvb, xra_length));
   proto_item_set_len(it, xra_length);
 
-  col_add_str(pinfo->cinfo, COL_INFO, val_to_str(pinfo->pool, packet_type, packettype, "Unknown XRA Packet Type: %u"));
+  col_add_str(pinfo->cinfo, COL_INFO, val_to_str(packet_type, packettype, "Unknown XRA Packet Type: %u"));
 
   /* Dissecting TLVs */
   unsigned segment_header_present = 0;
@@ -443,7 +447,7 @@ dissect_xra_tlv_cw_info(tvbuff_t * tvb, proto_tree * tree, void* data _U_, uint1
     ++tlv_index;
     switch (type) {
       case XRA_TLV_CW_INFO_NR_OF_INFO_BYTES:
-        proto_tree_add_item (xra_tlv_cw_info_tree, hf_xra_tlv_cw_info_nr_of_info_bytes, tvb, tlv_index, length, ENC_BIG_ENDIAN);
+        proto_tree_add_item (xra_tlv_cw_info_tree, hf_xra_tlv_cw_info_nr_of_info_bytes, tvb, tlv_index, length, ENC_NA);
         break;
       case XRA_TLV_CW_INFO_BCH_DECODING_SUCCESFUL:
         proto_tree_add_item (xra_tlv_cw_info_tree, hf_xra_tlv_cw_info_bch_decoding_successful, tvb, tlv_index, length, ENC_NA);
@@ -1315,7 +1319,7 @@ proto_register_xra (void)
     },
     { &hf_docsis_segment_hcs_status,
      { "Segment HCS Status", "docsis_segment.hcs.status",
-       FT_UINT8, BASE_NONE, VALS(proto_checksum_vals), 0x0,
+       FT_UINT8, BASE_NONE, VALS(local_proto_checksum_vals), 0x0,
        NULL, HFILL}
     },
     {&hf_docsis_segment_data,

@@ -15,16 +15,19 @@
 #include <epan/capture_dissectors.h>
 #include <wsutil/pint.h>
 #include <epan/oui.h>
+#include <epan/xdlc.h>
+#include <epan/llcsaps.h>
+#include <epan/bridged_pids.h>
+#include <epan/ppptypes.h>
+#include <epan/arcnet_pids.h>
+#include <epan/nlpid.h>
 #include <epan/addr_resolv.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 #include "packet-fc.h"
+#include "packet-ip.h"
+#include "packet-ipx.h"
+#include "packet-netbios.h"
 #include "packet-sll.h"
 #include "packet-juniper.h"
-#include "packet-xdlc.h"
-#include "packet-osi.h"
-#include "packet-ppp.h"
-#include "packet-arcnet.h"
 
 #include "packet-llc.h"
 
@@ -244,7 +247,7 @@ capture_snap(const unsigned char *pd, int offset, int len, capture_packet_info_t
 		return false;
 
 	oui = pd[offset] << 16 | pd[offset+1] << 8 | pd[offset+2];
-	etype = pntohu16(&pd[offset+3]);
+	etype = pntoh16(&pd[offset+3]);
 	switch (oui) {
 
 	case OUI_ENCAP_ETHER:
@@ -332,20 +335,33 @@ dissect_basicxid(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
 {
 	proto_tree	*xid_tree = NULL;
 	proto_item	*ti = NULL;
-	uint32_t	types, wsize;
+	uint8_t		format, types, wsize;
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "XID");
 	col_clear(pinfo->cinfo, COL_INFO);
 
+	format = tvb_get_uint8(tvb, 0);
+
 	ti = proto_tree_add_item(tree, proto_basicxid, tvb, 0, -1, ENC_NA);
 	xid_tree = proto_item_add_subtree(ti, ett_llc_basicxid);
-	proto_tree_add_item(xid_tree, hf_llc_xid_format, tvb, 0, 1, ENC_NA);
+	proto_tree_add_uint(xid_tree, hf_llc_xid_format, tvb, 0, 1, format);
 
-	proto_tree_add_item_ret_uint(xid_tree, hf_llc_xid_types, tvb, 1, 1, ENC_NA, &types);
-	proto_tree_add_item_ret_uint(xid_tree, hf_llc_xid_wsize, tvb, 2, 1, ENC_NA, &wsize);
+	col_append_str(pinfo->cinfo, COL_INFO, "Basic Format");
 
-	col_add_fstr(pinfo->cinfo, COL_INFO, "Basic Format; %s; Window Size %d",
-		val_to_str(pinfo->pool, types, type_vals, "0x%02x"), wsize);
+	types = tvb_get_uint8(tvb, 1);
+	proto_tree_add_uint(xid_tree, hf_llc_xid_types, tvb, 1,
+			1, types & TYPES_MASK);
+
+	col_append_fstr(pinfo->cinfo, COL_INFO,
+		    "; %s", val_to_str(types & TYPES_MASK, type_vals, "0x%02x")
+		);
+
+	wsize = tvb_get_uint8(tvb, 2);
+	proto_tree_add_uint(xid_tree, hf_llc_xid_wsize, tvb, 2,
+			1, (wsize & 0xFE) >> 1);
+
+	col_append_fstr(pinfo->cinfo, COL_INFO,
+		    "; Window Size %d", (wsize & 0xFE) >> 1);
 	return tvb_captured_length(tvb);
 }
 
@@ -364,21 +380,24 @@ dissect_llc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 	int		is_snap;
 	uint16_t		control;
 	int		llc_header_len;
-	uint32_t	dsap, ssap, format;
+	uint8_t		dsap, ssap, format;
 	tvbuff_t	*next_tvb;
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "LLC");
 	col_clear(pinfo->cinfo, COL_INFO);
 
+	dsap = tvb_get_uint8(tvb, 0);
+
 	ti = proto_tree_add_item(tree, proto_llc, tvb, 0, -1, ENC_NA);
 	llc_tree = proto_item_add_subtree(ti, ett_llc);
 
-	sap_item = proto_tree_add_item_ret_uint(llc_tree, hf_llc_dsap, tvb, 0, 1, ENC_BIG_ENDIAN, &dsap);
+	sap_item = proto_tree_add_item(llc_tree, hf_llc_dsap, tvb, 0, 1, ENC_BIG_ENDIAN);
 	field_tree = proto_item_add_subtree(sap_item, ett_llc_dsap);
 	proto_tree_add_item(field_tree, hf_llc_dsap_sap, tvb, 0, 1, ENC_BIG_ENDIAN);
 	proto_tree_add_item(field_tree, hf_llc_dsap_ig, tvb, 0, 1, ENC_NA);
 
-	sap_item = proto_tree_add_item_ret_uint(llc_tree, hf_llc_ssap, tvb, 1, 1, ENC_BIG_ENDIAN, &ssap);
+	ssap = tvb_get_uint8(tvb, 1);
+	sap_item = proto_tree_add_item(llc_tree, hf_llc_ssap, tvb, 1, 1, ENC_BIG_ENDIAN);
 	field_tree = proto_item_add_subtree(sap_item, ett_llc_ssap);
 	proto_tree_add_item(field_tree, hf_llc_ssap_sap, tvb, 1, 1, ENC_BIG_ENDIAN);
 	proto_tree_add_item(field_tree, hf_llc_ssap_cr, tvb, 1, 1, ENC_NA);
@@ -400,7 +419,8 @@ dissect_llc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 	if (is_snap)
 		llc_header_len += 5;	/* 3 bytes of OUI, 2 bytes of protocol ID */
 
-	proto_item_set_len(ti, llc_header_len);
+	if (tree)
+		proto_item_set_len(ti, llc_header_len);
 
 	if (is_snap) {
 		dissect_snap(tvb, 2+XDLC_CONTROL_LEN(control, true), pinfo, tree, llc_tree, control,
@@ -409,10 +429,10 @@ dissect_llc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 	else {
 		col_append_fstr(pinfo->cinfo, COL_INFO,
 			    "; DSAP %s %s, SSAP %s %s",
-			    val_to_str(pinfo->pool, dsap & SAP_MASK, sap_vals, "0x%02x"),
+			    val_to_str(dsap & SAP_MASK, sap_vals, "0x%02x"),
 			    dsap & DSAP_GI_BIT ?
 			      "Group" : "Individual",
-			    val_to_str(pinfo->pool, ssap & SAP_MASK, sap_vals, "0x%02x"),
+			    val_to_str(ssap & SAP_MASK, sap_vals, "0x%02x"),
 			    ssap & SSAP_CR_BIT ?
 			      "Response" : "Command"
 			);
@@ -840,11 +860,11 @@ proto_register_basicxid(void)
 
 		{ &hf_llc_xid_types,
 		{ "LLC Types/Classes", "basicxid.llc.xid.types", FT_UINT8, BASE_HEX,
-			VALS(type_vals), TYPES_MASK, NULL, HFILL }},
+			VALS(type_vals), 0x0, NULL, HFILL }},
 
 		{ &hf_llc_xid_wsize,
 		{ "Receive Window Size", "basicxid.llc.xid.wsize", FT_UINT8, BASE_DEC,
-			NULL, 0xFE, NULL, HFILL }}
+			NULL, 0x0, NULL, HFILL }}
 	};
 	static int *ett[] = {
 		&ett_llc_basicxid

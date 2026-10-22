@@ -71,13 +71,11 @@ typedef enum  {
 	DONE=2
 } session_state_t;
 
-/* Modern systems often support up to 256 these days (but rlogin isn't
- * used so much anymore.) */
 #define NAME_LEN 32
 typedef struct {
 	session_state_t  state;
 	uint32_t         info_framenum;
-	char*            user_name;
+	char             user_name[NAME_LEN];
 } rlogin_hash_entry_t;
 
 
@@ -159,17 +157,9 @@ rlogin_state_machine(rlogin_hash_entry_t *hash_info, tvbuff_t *tvb, packet_info 
 		else if (stringlen > NAME_LEN - 1)
 			stringlen = NAME_LEN - 1;   /* name too long */
 
-		/* Copy string into hash name */
-		/* POSIX-2024 strongly recommends that user names be composed of
-		 * characteers from the portable filename character set and that
-		 * the first character cannot be '-'. We could check this with
-		 * module_check_valid_name and add an expert info in the tree,
-		 * since that's exactly what that function tests. (There's also
-		 * some usernames with '$' at the end for Samba, IIRC.)
-		 * https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap03.html#tag_03_409
-		 * https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap03.html#tag_03_265
-		 */
-		hash_info->user_name = (char *)tvb_get_string_enc(wmem_file_scope(), tvb, 0, stringlen, ENC_ASCII);
+		/* Copy and terminate string into hash name */
+		tvb_memcpy(tvb, (uint8_t *)hash_info->user_name, 0, stringlen);
+		hash_info->user_name[stringlen] = '\0';
 
 		col_append_str(pinfo->cinfo, COL_INFO, ", (User information)");
 	}
@@ -183,12 +173,12 @@ static void rlogin_display(rlogin_hash_entry_t *hash_info,
 			   struct tcpinfo *tcpinfo)
 {
 	/* Display the proto tree */
-	unsigned        offset = 0;
+	int             offset = 0;
 	proto_tree      *rlogin_tree, *user_info_tree, *window_tree;
 	proto_item      *ti;
 	unsigned        length;
-	unsigned        str_len;
-	unsigned        ti_offset;
+	int             str_len;
+	int             ti_offset;
 	proto_item      *user_info_item, *window_info_item;
 
 	/* Create rlogin subtree */
@@ -212,7 +202,7 @@ static void rlogin_display(rlogin_hash_entry_t *hash_info,
 	    length >= tcpinfo->urgent_pointer) /* and it's in this frame */
 	{
 		/* Get urgent byte into Temp */
-		unsigned urgent_offset = tcpinfo->urgent_pointer - 1;
+		int urgent_offset = tcpinfo->urgent_pointer - 1;
 		uint8_t control_byte;
 
 		/* Check for text data in front */
@@ -255,18 +245,18 @@ static void rlogin_display(rlogin_hash_entry_t *hash_info,
 
 	if (hash_info->info_framenum == pinfo->num)
 	{
-		unsigned info_len;
-		unsigned slash_offset;
+		int info_len;
+		int slash_offset;
 
 		/* First frame of conversation, assume user info... */
 
 		info_len = tvb_captured_length_remaining(tvb, offset);
-		if (info_len == 0)
+		if (info_len <= 0)
 			return;
 
 		/* User info tree */
 		user_info_item = proto_tree_add_string_format(rlogin_tree, hf_user_info, tvb,
-		                                              offset, info_len, NULL,
+		                                              offset, info_len, false,
 		                                              "User info (%s)",
 		                                              tvb_format_text(pinfo->pool, tvb, offset, info_len));
 		user_info_tree = proto_item_add_subtree(user_info_item,
@@ -285,9 +275,10 @@ static void rlogin_display(rlogin_hash_entry_t *hash_info,
 		offset += str_len;
 
 		/* Terminal type/speed. */
-		if (!tvb_find_uint8_remaining(tvb, offset, '/', &slash_offset))
+		slash_offset = tvb_find_uint8(tvb, offset, -1, '/');
+		if (slash_offset != -1)
 		{
-			const char* str = NULL;
+			uint8_t* str = NULL;
 			uint32_t term_len = 0;
 			bool term_len_valid;
 			proto_item* pi = NULL;
@@ -299,7 +290,7 @@ static void rlogin_display(rlogin_hash_entry_t *hash_info,
 
 			/* Terminal speed */
 			str_len = tvb_strsize(tvb, offset);
-			str = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, str_len,
+			str = tvb_get_string_enc(pinfo->pool, tvb, offset, str_len,
 				ENC_NA|ENC_ASCII);
 			term_len_valid = ws_strtou32(str, NULL, &term_len);
 			pi = proto_tree_add_uint(user_info_tree,
@@ -319,10 +310,11 @@ static void rlogin_display(rlogin_hash_entry_t *hash_info,
 	}
 
 	/* Test for terminal information, the data will have 2 0xff bytes */
-	/* look for first 0xff byte
-	 * Next byte must also be 0xff
-	 */
-	if (tvb_find_uint8_remaining(tvb, offset, 0xff, &ti_offset) &&
+	/* look for first 0xff byte */
+	ti_offset = tvb_find_uint8(tvb, offset, -1, 0xff);
+
+	/* Next byte must also be 0xff */
+	if (ti_offset != -1 &&
 	    tvb_bytes_exist(tvb, ti_offset + 1, 1) &&
 	    tvb_get_uint8(tvb, ti_offset + 1) == 0xff)
 	{
@@ -394,7 +386,7 @@ dissect_rlogin(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 	conversation_t *conversation;
 	rlogin_hash_entry_t *hash_info;
 	unsigned length;
-	unsigned ti_offset;
+	int ti_offset;
 
 	/* Get or create conversation */
 	conversation = find_or_create_conversation(pinfo);
@@ -407,7 +399,7 @@ dissect_rlogin(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 		hash_info = wmem_new(wmem_file_scope(), rlogin_hash_entry_t);
 		hash_info->state = NONE;
 		hash_info->info_framenum = 0;  /* no frame has the number 0 */
-		hash_info->user_name = NULL;
+		hash_info->user_name[0] = '\0';
 
 		/* ... and store in conversation */
 		conversation_add_proto_data(conversation, proto_rlogin, hash_info);
@@ -418,7 +410,7 @@ dissect_rlogin(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 
 	/* Set info column */
 	/* Show user-name if available */
-	if (hash_info->user_name)
+	if (hash_info->user_name[0])
 	{
 		col_add_fstr(pinfo->cinfo, COL_INFO,
 		              "User name: %s, ", hash_info->user_name);
@@ -450,7 +442,8 @@ dissect_rlogin(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 		{
 			/* Search for 2 consecutive ff bytes
 			  (signifies window change control message) */
-			if (tvb_find_uint8_remaining(tvb, 0, 0xff, &ti_offset) &&
+			ti_offset = tvb_find_uint8(tvb, 0, -1, 0xff);
+			if (ti_offset != -1 &&
 			    tvb_bytes_exist(tvb, ti_offset + 1, 1) &&
 			    tvb_get_uint8(tvb, ti_offset + 1) == 0xff)
 			{
@@ -459,7 +452,7 @@ dissect_rlogin(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 			else
 			{
 				/* Show any text data in the frame */
-				unsigned bytes_to_copy = tvb_captured_length(tvb);
+				int bytes_to_copy = tvb_captured_length(tvb);
 				if (bytes_to_copy > 128)
 				{
 					/* Truncate to 128 bytes for display */

@@ -8,16 +8,15 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "config.h"
+#include <config.h>
 #define WS_LOG_DOMAIN LOG_DOMAIN_QTUI
 #include "io_console_dialog.h"
 #include <ui_io_console_dialog.h>
 
 #include "main_application.h"
-#include <ui/qt/utils/font_manager.h>
 
 extern "C" {
-    static void print_function(const char *str, void *ptr);
+static void print_function(const char *str, void *ptr);
 }
 
 static void print_function(const char *str, void *print_data)
@@ -27,11 +26,11 @@ static void print_function(const char *str, void *print_data)
 }
 
 IOConsoleDialog::IOConsoleDialog(QWidget &parent,
-                                 QString title,
-                                 funnel_console_eval_cb_t eval_cb,
-                                 funnel_console_open_cb_t open_cb,
-                                 funnel_console_close_cb_t close_cb,
-                                 void *callback_data = nullptr) :
+                                QString title,
+                                funnel_console_eval_cb_t eval_cb,
+                                funnel_console_open_cb_t open_cb,
+                                funnel_console_close_cb_t close_cb,
+                                void *callback_data = nullptr) :
     GeometryStateDialog(&parent),
     ui(new Ui::IOConsoleDialog),
     eval_cb_(eval_cb),
@@ -42,7 +41,7 @@ IOConsoleDialog::IOConsoleDialog(QWidget &parent,
     ui->setupUi(this);
 
     if (title.isEmpty())
-        title = tr("Console");
+        title = QString("Console");
 
     loadGeometry(0, 0, title);
     loadSplitterState(ui->splitter);
@@ -56,18 +55,14 @@ IOConsoleDialog::IOConsoleDialog(QWidget &parent,
     QPushButton *clear_button = ui->buttonBox->addButton(tr("Clear"), QDialogButtonBox::ActionRole);
     connect(clear_button, &QPushButton::clicked, this, &IOConsoleDialog::on_clearActivated);
 
-    ui->inputTextEdit->setFont(FontManager::monospaceFont());
-    ui->inputTextEdit->setPlaceholderText(tr("Use %1 to evaluate.")
-                                          .arg(eval_button->shortcut().toString(QKeySequence::NativeText)));
-    ui->inputTextEdit->setAcceptRichText(false);
+    ui->inputTextEdit->setFont(mainApp->monospaceFont());
+    ui->inputTextEdit->setPlaceholderText(QString(tr("Use %1 to evaluate."))
+            .arg(eval_button->shortcut().toString(QKeySequence::NativeText)));
 
-    ui->outputTextEdit->setFont(FontManager::monospaceFont());
+    ui->outputTextEdit->setFont(mainApp->monospaceFont());
     ui->outputTextEdit->setReadOnly(true);
 
-    // Shrink down to a small but nonzero size.
-    int one_em = fontMetrics().height();
-    ui->hintLabel->setMinimumSize(one_em, one_em);
-    clearHintText();
+    ui->hintLabel->clear();
 
     // Install print
     open_cb_(print_function, this, callback_data_);
@@ -82,7 +77,7 @@ IOConsoleDialog::~IOConsoleDialog()
 
 void IOConsoleDialog::setHintText(const QString &text)
 {
-    ui->hintLabel->setText(QStringLiteral("<small><i>%1.</i></small>").arg(text));
+    ui->hintLabel->setText(QString("<small><i>%1.</i></small>").arg(text));
 }
 
 void IOConsoleDialog::clearHintText()
@@ -93,7 +88,7 @@ void IOConsoleDialog::clearHintText()
 void IOConsoleDialog::clearSuccessHint()
 {
     // Text changed so we no longer have a success.
-    clearHintText();
+    ui->hintLabel->clear();
     // Disconnect this slot until the next success.
     disconnect(ui->inputTextEdit, &QTextEdit::textChanged, this, &IOConsoleDialog::clearSuccessHint);
 }
@@ -114,16 +109,19 @@ void IOConsoleDialog::acceptInput()
             QString hint(error_hint);
             setHintText(hint.at(0).toUpper() + hint.mid(1));
             g_free(error_hint);
-        } else if (result < 0) {
+        }
+        else if (result < 0) {
             setHintText("Error loading string");
-        } else {
+        }
+        else {
             setHintText("Error running chunk");
         }
         if (error_str) {
             appendOutputText(QString(error_str));
             g_free(error_str);
         }
-    } else {
+    }
+    else {
         setHintText("Code evaluated successfully");
         connect(ui->inputTextEdit, &QTextEdit::textChanged, this, &IOConsoleDialog::clearSuccessHint);
     }
@@ -136,6 +134,7 @@ void IOConsoleDialog::appendOutputText(const QString &text)
 
 void IOConsoleDialog::on_clearActivated()
 {
+    ui->inputTextEdit->clear();
     ui->outputTextEdit->clear();
-    clearHintText();
+    ui->hintLabel->clear();
 }

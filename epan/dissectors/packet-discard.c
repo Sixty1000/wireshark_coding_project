@@ -38,9 +38,6 @@ static bool generate_md5_hash;
 
 static int ett_discard;
 
-static dissector_handle_t discard_handle;
-static dissector_handle_t wol_handle;
-
 /* dissect_discard - dissects discard packet data
  * tvb - tvbuff for packet data (IN)
  * pinfo - packet info
@@ -79,7 +76,7 @@ dissect_discard(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* disse
 
 	if (generate_md5_hash) {
 		const uint8_t *cp;
-		uint8_t       digest[HASH_MD5_LENGTH] = {0};
+		uint8_t       digest[HASH_MD5_LENGTH];
 		const char   *digest_string;
 
 		cp = tvb_get_ptr(tvb, 0, cap_len);
@@ -102,19 +99,6 @@ dissect_discard(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* disse
 	}
 
 	return cap_len;
-}
-
-static int
-dissect_discard_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
-{
-	/* Wake On Lan is commonly used over UDP port 9 and has strong heuristics,
-	 * whereas the discard dissector never rejects a packet, so try WOL first.
-	 * Unfortunately "discard" still ends up in frame.protocols this way.
-	 */
-	if (wol_handle && call_dissector_only(wol_handle, tvb, pinfo, tree, data)) {
-		return tvb_captured_length(tvb);
-	}
-	return dissect_discard(tvb, pinfo, tree, data);
 }
 
 void
@@ -167,17 +151,16 @@ proto_register_discard(void)
 		"Generate MD5 hash",
 		"Whether or not MD5 hashes should be generated and shown for each payload.",
 		&generate_md5_hash);
-
-	discard_handle = register_dissector("discard", dissect_discard, proto_discard);
 }
 
 void
 proto_reg_handoff_discard(void)
 {
-	dissector_add_uint_with_preference("udp.port", DISCARD_PORT_UDP, create_dissector_handle(dissect_discard_udp, proto_discard));
-	dissector_add_uint_with_preference("tcp.port", DISCARD_PORT_TCP, discard_handle);
+	dissector_handle_t discard_handle;
 
-	wol_handle = find_dissector_add_dependency("wol", proto_discard);
+	discard_handle = create_dissector_handle(dissect_discard, proto_discard);
+	dissector_add_uint_with_preference("udp.port", DISCARD_PORT_UDP, discard_handle);
+	dissector_add_uint_with_preference("tcp.port", DISCARD_PORT_TCP, discard_handle);
 }
 
 /*

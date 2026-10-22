@@ -2,10 +2,6 @@
  * Dissector routines for the ZigBee Direct
  * Copyright 2021 DSR Corporation, http://dsr-wireless.com/
  *
- * Zigbee Direct Specification, 1.1
- * Connectivity Standards Alliance Document 20-27688-041
- * https://csa-iot.org/all-solutions/zigbee/zigbee-direct/
- *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
@@ -19,10 +15,6 @@
 #include <epan/packet.h>
 #include <epan/expert.h>
 #include <epan/uat.h>
-
-#include "packet-zbee.h"
-#include "packet-zbee-zcl.h"
-#include "packet-zbee-aps.h"
 
 #include "packet-zbee-security.h"
 #include "packet-bluetooth.h"
@@ -127,12 +119,7 @@ static const uint8_t serv_tunnel_uuid[]          = { 0x3f, 0x31, 0xd5, 0x8b, 0x3
                                                     0xf4, 0x45, 0x00, 0x00, 0xfd, 0x78, 0xd1, 0x8b };
 static const uint8_t char_tunnel_uuid[]          = { 0x3f, 0x31, 0xd5, 0x8b, 0x37, 0xb2, 0x20, 0x81,
                                                     0xf4, 0x45, 0x01, 0x00, 0xfd, 0x78, 0xd1, 0x8b };
-
-/* The Zigbee Direct Specification states 247 as the RecommendedAttMtuSize
- * (with the Minimum being 185 octets), see 7.4 and 8.2, but the ATT_MTU
- * can be negotiated larger (see Bluetooth Core Specification Vol 3, Part F,
- * Section 3.2.8, 3.2.9, 3.4.2.) */
-#define ZIGBEE_DIRECT_MAX_ATT_SIZE  512
+#define ZIGBEE_DIRECT_MAX_ATT_SIZE  248
 #define ZIGBEE_DIRECT_AUTH_STR_SIZE (16 + 1 + 16 + 1)
 #define ZIGBEE_DIRECT_SECUR_CONTROL 0x05
 
@@ -246,7 +233,7 @@ static inline void memcpy_reverse(uint8_t *dst, const uint8_t *src, size_t len)
  *
  * @param  str       pointer to a hex string
  * @param  buf       pointer to buffer, where to place result
- * @param  bytes_num number of bytes to retrieve from the string
+ * @param  bytes_num number of bytes to retrive from the string
  * @return success
  */
 static bool zbd_parse_uat_hexline(const char *str,
@@ -266,7 +253,7 @@ static bool zbd_parse_uat_hexline(const char *str,
 
     /**
      * Attempt to parse the hex string. The hex string must
-     * be at least 16 pairs of hexadecimal digits with the
+     * be at least 16 pairs of hexidecimal digits with the
      * following optional separators: ':', '-', " ", or 16
      * alphanumeric characters after a double-quote.
      */
@@ -460,7 +447,7 @@ static void zbd_free_key_record(void *ptr)
 }
 
 /**
- * Deletes all existing keys in zbee_pc_keyring and adds new ones
+ * Deletes all existing keys in zbee_pc_keyrig and adds new ones
  * from uat_key_records.
  */
 static void uat_key_record_post_update(void)
@@ -618,7 +605,7 @@ static bool decrypt_data(const uint8_t *serv_uuid,
                              bool          to_zdd,
                              const uint8_t *in,
                              uint8_t      *out,
-                             uint16_t      len,
+                             uint16_t     *len,
                              uint8_t       zdd_ieee[8],
                              uint8_t       zvd_ieee[8],
                              uint8_t       key[KEY_LEN]);
@@ -630,7 +617,7 @@ static bool decrypt_data(const uint8_t *serv_uuid,
  * @param  char_uuid  characteristic UUID
  * @param  in         pointer to encrypted payload
  * @param  out        pointer to buffer for the result
- * @param  len        length of encrypted payload (on success, decrypted length is len - 8)
+ * @param  len        pointer to the length of payload, outputs length of out
  * @param  zdd_ieee   ZDD IEEE
  * @param  zvd_ieee   ZVD IEEE
  * @param  key        key for decryption
@@ -640,7 +627,7 @@ static bool try_decrypt(const uint8_t *serv_uuid,
                             const uint8_t *char_uuid,
                             const uint8_t *in,
                             uint8_t      *out,
-                            uint16_t      len,
+                            uint16_t     *len,
                             uint8_t       zdd_ieee[8],
                             uint8_t       zvd_ieee[8],
                             uint8_t       key[KEY_LEN])
@@ -648,6 +635,7 @@ static bool try_decrypt(const uint8_t *serv_uuid,
     /* As there is no reliable way known to determine,
      * if the packet is from zdd or zvd, try both cases */
 
+    uint16_t len_buf  = *len;
     bool success = decrypt_data(serv_uuid, char_uuid,
                                     true,
                                     in,
@@ -656,6 +644,7 @@ static bool try_decrypt(const uint8_t *serv_uuid,
 
     if (!success)
     {
+        *len = len_buf;
         success = decrypt_data(serv_uuid, char_uuid,
                                false,
                                in,
@@ -734,28 +723,11 @@ static int zb_direct_decrypt(tvbuff_t    **tvb,
     {
         uint8_t  ieee[8];
         bool success = false;
-        uint32_t size = tvb_reported_length_remaining(*tvb, offset);
-        /* The maximum value of ATT_MTU is negotiated in 2 octet parameters
-         * (Bluetooth Core Specification Vol 3, Part F, 3.4.2); since "the
-         * maximum length of an attribute value shall be 512 octets" (ibid.,
-         * 3.2.9) it doesn't make sense to set it to more than 515 or so, but
-         * it's not clear if libwiretap or the Bluetooth dissector enforces
-         * any maximum. */
-        if (size > ZIGBEE_DIRECT_MAX_ATT_SIZE) {
-            /* Larger than supported; fail. */
-            expert_add_info_format(pinfo, tree, &ei_zb_direct_crypt_error, "Packet size exceeds maximum supported MTU (%u > %u)", size, ZIGBEE_DIRECT_MAX_ATT_SIZE);
-            return tvb_reported_length(*tvb);
-        }
-        if (size < (sizeof(uint32_t) + ZB_CCM_M)) {
-            /* Not enough room for the 32-bit counter for the nonce and the
-             * MIC, so don't try to decrypt. */
-            expert_add_info_format(pinfo, tree, &ei_zb_direct_crypt_error, "Packet is too short to decrypt (%u < %u)", size, 8);
-            return tvb_reported_length(*tvb);
-        }
-        unsigned decrypted_size = size - (sizeof(uint32_t) + ZB_CCM_M);
-        uint8_t *decrypted = (uint8_t *)wmem_alloc(pinfo->pool, decrypted_size);
-        GSList **pan_keyring;
+        uint16_t size = tvb_reported_length_remaining(*tvb, offset);
+        uint8_t *decrypted = (uint8_t *)wmem_alloc(pinfo->pool, 512);
+        GList   *pan_keyring;
         GSList  *i = zbee_pc_keyring;
+        uint16_t init_size = size;
 
         zb_direct_ieee_from_packet_data(pinfo, ieee);
 
@@ -775,7 +747,7 @@ static int zb_direct_decrypt(tvbuff_t    **tvb,
                                   char_uuid,
                                   tvb_get_ptr(*tvb, offset, size),
                                   decrypted,
-                                  size,
+                                  &size,
                                   keyrec(i)->zdd_ieee,
                                   keyrec(i)->zvd_ieee,
                                   keyrec(i)->key);
@@ -783,35 +755,44 @@ static int zb_direct_decrypt(tvbuff_t    **tvb,
             if (!success)
             {
                 i = g_slist_next(i);
+                size = init_size;
             }
         }
 
         /* Retrieve all pan-specific nwk keyrings from the hash table */
         if (!success && zbee_table_nwk_keyring)
         {
-            GHashTableIter keyring_iter;
-            g_hash_table_iter_init(&keyring_iter, zbee_table_nwk_keyring);
+            pan_keyring = (GList*)g_hash_table_get_values(zbee_table_nwk_keyring);
 
-            while (!success && g_hash_table_iter_next(&keyring_iter, NULL, (void*)&pan_keyring))
+            while (!success && pan_keyring)
             {
+                i = *((GSList**)pan_keyring->data);
+
                 /* Iterate over keys in the keyring */
-                for (i = *pan_keyring; !success && i; i = g_slist_next(i))
+                while (!success && i)
                 {
                     if (!ignore_late_keys || ((key_record_t*)i->data)->frame_num > pinfo->num)
                     {
                         success = decrypt_data(serv_uuid, char_uuid, false,
                                                tvb_get_ptr(*tvb, offset, size),
-                                               decrypted, size,
+                                               decrypted, &size,
                                                ieee, NULL, ((key_record_t*)i->data)->key);
+
+                        i = g_slist_next(i);
+                        if (!success)
+                        {
+                            size = init_size;
+                        }
                     }
                 }
+                pan_keyring = g_list_next(i);
             }
         }
 
         if (success)
         {
             /* On decryption success: replace the tvb, make offset point to its beginning */
-            *tvb = tvb_new_child_real_data(*tvb, decrypted, decrypted_size, decrypted_size);
+            *tvb = tvb_new_child_real_data(*tvb, decrypted, size, size);
             add_new_data_source(pinfo, *tvb, "CCM* decrypted payload");
             offset = 0;
         }
@@ -825,6 +806,23 @@ static int zb_direct_decrypt(tvbuff_t    **tvb,
 
     return offset;
 }
+
+/* 6.4.3. CCM Nonce */
+typedef struct
+#if defined(_MSC_VER)
+# pragma pack(push, 1)
+#else
+__attribute__((__packed__))
+#endif
+    zb_secur_ccm_nonce_s
+{
+    uint8_t  source_address[8];
+    uint32_t frame_counter;
+    uint8_t  secur_control;
+} zb_secur_ccm_nonce_t;
+#ifdef _MSC_VER
+# pragma pack(pop)
+#endif
 
 /**
  * Creates an auth string.
@@ -852,7 +850,7 @@ static void create_auth_string(const uint8_t serv_uuid[16],
  * @param  to_zdd     true if packet ws sent to zdd, false if to zvd (needed for nonce formation)
  * @param  in         pointer to encrypted payload
  * @param  out        pointer to buffer for the result
- * @param  len        length of encrypted payload (on success, decrypted length is len - 8)
+ * @param  len        pointer to the length of payload, outputs length of out
  * @param  zdd_ieee   ZDD IEEE
  * @param  zvd_ieee   ZVD IEEE
  * @param  key        key for decryption
@@ -863,45 +861,54 @@ static bool decrypt_data(const uint8_t *serv_uuid,
                              bool          to_zdd,
                              const uint8_t *in,
                              uint8_t      *out,
-                             uint16_t      len,
+                             uint16_t     *len,
                              uint8_t       zdd_ieee[8],
                              uint8_t       zvd_ieee[8],
                              uint8_t       key[KEY_LEN])
 {
-    DISSECTOR_ASSERT_CMPINT(len, >=, sizeof(uint32_t) + ZB_CCM_M);
-
     bool success = true;
     uint8_t  auth_str[ZIGBEE_DIRECT_AUTH_STR_SIZE];
+    uint8_t  decrypted_data[ZIGBEE_DIRECT_MAX_ATT_SIZE + 16];
+    uint16_t decrypted_data_len = sizeof(decrypted_data);
 
     /* Remove 32-bit counter from the beginning */
     const uint8_t *encrypted_data     = in + sizeof(uint32_t);
-    uint16_t       encrypted_data_len = len - sizeof(uint32_t);
+    uint16_t      encrypted_data_len = *len - sizeof(uint32_t);
 
-    /* 6.4.3. CCM Nonce */
     /* Form the nonce */
-    uint8_t nonce[ZBEE_SEC_CONST_NONCE_LEN];
+    zb_secur_ccm_nonce_t nonce = (zb_secur_ccm_nonce_t)
+    {
+        .secur_control = ZIGBEE_DIRECT_SECUR_CONTROL
+    };
 
-    /* First 8 bytes are the source address. (Little-Endian) */
-    memcpy(nonce, to_zdd ? zvd_ieee : zdd_ieee, 8);
+    /* Fetch counter from the packet (don't check) */
+    memcpy(&nonce.frame_counter, in, sizeof(uint32_t));
+    memcpy(&nonce.source_address, to_zdd ? zvd_ieee : zdd_ieee, 8);
 
-    /* Fetch counter from the packet (don't check),
-     * in Little-Endian order as transmitted.  */
-    memcpy(&nonce[8], in, 4);
-
-    /* Last byte is the security control field. */
-    nonce[12] = ZIGBEE_DIRECT_SECUR_CONTROL;
-
+    if (*len < 8) return false;
 
     create_auth_string(serv_uuid, char_uuid, auth_str);
 
     success = zbee_sec_ccm_decrypt(key,
-                                   nonce,
+                                   (uint8_t*)&nonce,
                                    auth_str,
                                    encrypted_data,
-                                   out,
+                                   decrypted_data,
                                    sizeof(auth_str),
                                    encrypted_data_len - ZB_CCM_M,
                                    ZB_CCM_M);
+
+
+    if (success)
+    {
+        decrypted_data_len = encrypted_data_len - ZB_CCM_M;
+        memcpy(out, decrypted_data, decrypted_data_len);
+        *len = decrypted_data_len;
+    }
+    else
+    {
+        *len = 0;
+    }
 
     return success;
 }
@@ -1032,12 +1039,12 @@ static int dissect_zb_direct_dump_info(tvbuff_t    *tvb,
             tvb_memcpy(tvb, key_record.zvd_ieee, offset, sizeof(key_record.zdd_ieee));
             offset += 8;
 
+            key_record.frame_num = pinfo->num;
+            key_record.label = g_strdup_printf("Key reported over air in packet #%d", pinfo->num);
+
             /* Check if this key was already added */
             if (zbee_pc_keyring == NULL || keyrec(zbee_pc_keyring)->frame_num < pinfo->num)
             {
-                key_record.frame_num = pinfo->num;
-                key_record.label = g_strdup_printf("Key reported over air in packet #%u", pinfo->num);
-
                 /* store the keys in order: latest <- ... <- first <- (UAT: top <- ... <- bottom) */
                 zbee_pc_keyring = g_slist_prepend(zbee_pc_keyring,
                                                   g_memdup2(&key_record, sizeof(zb_direct_key_record_t)));
@@ -1378,7 +1385,7 @@ static int dissect_zb_direct_permit_join(tvbuff_t    *tvb,
 }
 
 /**
- * Dissector for Leave Network.
+ * Dissector for Leave Networ.
  *
  * @param  tvb     pointer to buffer containing raw packet
  * @param  pinfo   pointer to packet information fields
@@ -1451,7 +1458,7 @@ static int dissect_zb_direct_manage_joiners(tvbuff_t    *tvb,
 }
 
 /**
- * Dissector for Identify.
+ * Dissector for Indentify.
  *
  * @param  tvb     pointer to buffer containing raw packet
  * @param  pinfo   pointer to packet information fields
@@ -1567,301 +1574,6 @@ static int dissect_zb_direct_tunneling(tvbuff_t    *tvb,
     return offset;
 }
 
-/* ############################################################################################### */
-/* #### (0x003d) Zigbee Direct (ZBD) CONFIGURATION CLUSTER ####################################### */
-/* ############################################################################################### */
-
-/*Server commands received*/
-#define ZBEE_ZCL_CMD_ID_CONFIG_ZBD_INTERFACE_STATE          0x00
-#define ZBEE_ZCL_CMD_ID_CONFIG_ZBD_ANONYMOUS_JOIN_TIMEOUT   0x01
-
-/*Server commands generated*/
-#define ZBEE_ZCL_CMD_ID_CONFIG_ZBD_INTERFACE_RESPONSE       0x00
-
-static const value_string zbee_zcl_zbd_configuration_rx_cmd_names[] = {
-    { ZBEE_ZCL_CMD_ID_CONFIG_ZBD_INTERFACE_STATE, "Configure ZBD Interface" },
-    { ZBEE_ZCL_CMD_ID_CONFIG_ZBD_ANONYMOUS_JOIN_TIMEOUT, "Configure ZBD Anonymous Join Timeout" },
-    { 0, NULL }
-};
-static const value_string zbee_zcl_zbd_configuration_tx_cmd_names[] = {
-    { ZBEE_ZCL_CMD_ID_CONFIG_ZBD_INTERFACE_RESPONSE, "Configure ZBD Interface response" },
-    { 0, NULL }
-};
-
-/* Initialize the protocol and registered fields */
-static int proto_zbee_zcl_zbd_configuration;
-
-static int hf_zbee_zcl_zbd_configuration_rx_cmd_id;
-static int hf_zbee_zcl_zbd_configuration_tx_cmd_id;
-
-static int hf_zbee_zcl_zbd_configuration_attr_id;
-static int hf_zbee_zcl_zbd_configuration_interface_state;
-static int hf_zbee_zcl_zbd_configuration_interface_state_status;
-static int hf_zbee_zcl_zbd_configuration_interface_state_mask_enabled;
-static int hf_zbee_zcl_zbd_configuration_interface_state_mask_reserved;
-static int hf_zbee_zcl_zbd_configuration_anonymous_join_timeout;
-
-/* Initialize the subtree pointers */
-static int ett_zbee_zcl_zbd_configuration;
-static int ett_zbee_zcl_zbd_configuration_interface_state;
-static int ett_zbee_zcl_zbd_configuration_anonymous_join_timeout;
-
-/* Attributes */
-#define ZBEE_ZCL_ATTR_ID_ZBD_CONFIGURATION_INTERFACE_STATE       0x0000  /*InterfaceState*/
-#define ZBEE_ZCL_ATTR_ID_ZBD_CONFIGURATION_ANON_JOIN_TIMEOUT     0x0001  /*AnonymousJoinTimeout*/
-
-/*Device Temperature Alarm Mask Value*/
-#define ZBEE_ZCL_ZBD_CONFIGURATION_INTERFACE_STATE_ENABLED       0x01    /*Interface State Enabled*/
-#define ZBEE_ZCL_ZBD_CONFIGURATION_INTERFACE_STATE_RESERVED      0xfe    /*Interface State reserved*/
-
-static const value_string zbee_zcl_zbd_configuration_attr_names[] = {
-    { ZBEE_ZCL_ATTR_ID_ZBD_CONFIGURATION_INTERFACE_STATE,               "Interface State" },
-    { ZBEE_ZCL_ATTR_ID_ZBD_CONFIGURATION_ANON_JOIN_TIMEOUT,             "Anonymous Join Timeout" },
-    { 0, NULL }
-};
-
-static int * const zbee_zcl_zbd_configuration_interface_state_mask[] = {
-    &hf_zbee_zcl_zbd_configuration_interface_state_mask_enabled,
-    &hf_zbee_zcl_zbd_configuration_interface_state_mask_reserved,
-    NULL
-};
-
-void proto_register_zbee_zcl_zbd_configuration(void);
-void proto_reg_handoff_zbee_zcl_zbd_configuration(void);
-
-/* Command Dissector Helpers */
-static void dissect_zcl_zbd_configuration_attr_data      (proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, unsigned *offset, uint16_t attr_id, unsigned data_type, bool client_attr);
-
-
-/*FUNCTION:------------------------------------------------------
- *  NAME
- *      dissect_zbee_zcl_zbd_configuration
- *  DESCRIPTION
- *      ZigBee ZCL ZBD Configuration cluster dissector for wireshark.
- *  PARAMETERS
- *      tvbuff_t *tvb       - pointer to buffer containing raw packet.
- *      packet_info *pinfo  - pointer to packet information fields
- *      proto_tree *tree    - pointer to data tree Wireshark uses to display packet.
- *  RETURNS
- *      int                 - length of parsed data.
- *---------------------------------------------------------------
- */
-
-static int
-dissect_zbee_zcl_zbd_configuration(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void* data _U_)
-{
-    zbee_zcl_packet   *zcl;
-    unsigned          offset = 0;
-    uint8_t           cmd_id;
-    int               hf_cmd_id;
-    const value_string *vals_cmd_id;
-
-    /* Reject the packet if data is NULL */
-    if (data == NULL)
-        return 0;
-    zcl = (zbee_zcl_packet *)data;
-    cmd_id = zcl->cmd_id;
-
-    if (zcl->direction == ZBEE_ZCL_FCF_TO_SERVER) {
-        hf_cmd_id = hf_zbee_zcl_zbd_configuration_rx_cmd_id;
-        vals_cmd_id = zbee_zcl_zbd_configuration_rx_cmd_names;
-    } else {
-        hf_cmd_id = hf_zbee_zcl_zbd_configuration_tx_cmd_id;
-        vals_cmd_id = zbee_zcl_zbd_configuration_tx_cmd_names;
-    }
-
-    /* Append the command name to the info column. */
-    col_append_fstr(pinfo->cinfo, COL_INFO, "%s, Seq: %u",
-        val_to_str_const(cmd_id, vals_cmd_id, "Unknown Command"),
-        zcl->tran_seqno);
-    /* Add the command ID. */
-    if (tree) {
-        proto_tree_add_item(tree, hf_cmd_id, tvb, offset, 1, ENC_LITTLE_ENDIAN);
-    }
-    offset++;
-
-    /*  Create a subtree for the ZCL Command frame, and add the command ID to it. */
-    if (zcl->direction == ZBEE_ZCL_FCF_TO_SERVER) {
-        /* Call the appropriate command dissector */
-        switch (cmd_id) {
-            case ZBEE_ZCL_CMD_ID_CONFIG_ZBD_INTERFACE_STATE:
-                proto_tree_add_bitmask(tree, tvb, offset, hf_zbee_zcl_zbd_configuration_interface_state,
-                    ett_zbee_zcl_zbd_configuration_interface_state, zbee_zcl_zbd_configuration_interface_state_mask, ENC_LITTLE_ENDIAN);
-                offset += 1;
-                break;
-
-            case ZBEE_ZCL_CMD_ID_CONFIG_ZBD_ANONYMOUS_JOIN_TIMEOUT:
-                proto_tree_add_item(tree, hf_zbee_zcl_zbd_configuration_anonymous_join_timeout, tvb, offset, 3, ENC_LITTLE_ENDIAN);
-                offset += 3;
-                break;
-
-            default:
-                break;
-        }
-    }
-    else {
-        /* Call the appropriate command dissector */
-        switch (cmd_id) {
-            case ZBEE_ZCL_CMD_ID_CONFIG_ZBD_INTERFACE_RESPONSE:
-                proto_tree_add_item(tree, hf_zbee_zcl_zbd_configuration_interface_state_status, tvb, offset, 1, ENC_LITTLE_ENDIAN);
-                offset += 1;
-                proto_tree_add_bitmask(tree, tvb, offset, hf_zbee_zcl_zbd_configuration_interface_state,
-                    ett_zbee_zcl_zbd_configuration_interface_state, zbee_zcl_zbd_configuration_interface_state_mask, ENC_LITTLE_ENDIAN);
-                offset += 1;
-                break;
-
-            default:
-                break;
-        }
-    }
-
-    /* Dump leftover data. */
-    if (tvb_captured_length_remaining(tvb, offset) > 0) {
-        tvbuff_t *excess = tvb_new_subset_remaining(tvb, offset);
-        call_data_dissector(excess, pinfo, proto_tree_get_root(tree));
-    }
-    return offset;
-} /*dissect_zbee_zcl_zbd_configuration*/
-
-
-/*FUNCTION:------------------------------------------------------
- *  NAME
- *      dissect_zcl_zbd_configuration_attr_data
- *  DESCRIPTION
- *      this function is called by ZCL foundation dissector in order to decode
- *      specific cluster attributes data.
- *  PARAMETERS
- *      proto_tree *tree    - pointer to data tree Wireshark uses to display packet.
- *      tvbuff_t *tvb       - pointer to buffer containing raw packet.
- *      unsigned *offset       - pointer to buffer offset
- *      uint16_t attr_id     - attribute identifier
- *      unsigned data_type     - attribute data type
- *      bool client_attr- ZCL client
- *  RETURNS
- *      none
- *---------------------------------------------------------------
- */
-void
-dissect_zcl_zbd_configuration_attr_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, unsigned *offset, uint16_t attr_id, unsigned data_type, bool client_attr)
-{
-    /* Dissect attribute data type and data */
-    switch (attr_id) {
-
-        case ZBEE_ZCL_ATTR_ID_ZBD_CONFIGURATION_INTERFACE_STATE:
-            proto_tree_add_bitmask(tree, tvb, *offset, hf_zbee_zcl_zbd_configuration_interface_state,
-                ett_zbee_zcl_zbd_configuration_interface_state, zbee_zcl_zbd_configuration_interface_state_mask, ENC_LITTLE_ENDIAN);
-            *offset += 1;
-            break;
-
-        case ZBEE_ZCL_ATTR_ID_ZBD_CONFIGURATION_ANON_JOIN_TIMEOUT:
-            proto_tree_add_item(tree, hf_zbee_zcl_zbd_configuration_anonymous_join_timeout, tvb, *offset, 3, ENC_LITTLE_ENDIAN);
-            *offset += 3;
-            break;
-
-        default:
-            dissect_zcl_attr_data(tvb, pinfo, tree, offset, data_type, client_attr);
-            break;
-    }
-
-} /*dissect_zcl_zbd_configuration_attr_data*/
-
-
-/*FUNCTION:------------------------------------------------------
- *  NAME
- *      proto_register_zbee_zcl_zbd_configuration
- *  DESCRIPTION
- *      ZigBee ZCL ZBD Configuration cluster protocol registration routine.
- *  PARAMETERS
- *      none
- *  RETURNS
- *      none
- *---------------------------------------------------------------
- */
-void
-proto_register_zbee_zcl_zbd_configuration(void)
-{
-    /* Setup list of header fields */
-    static hf_register_info hf[] = {
-        { &hf_zbee_zcl_zbd_configuration_rx_cmd_id,
-            { "Command", "zbd.configuration.rx_cmd_id", FT_UINT8, BASE_HEX, VALS(zbee_zcl_zbd_configuration_rx_cmd_names),
-            0x00, NULL, HFILL } },
-
-        { &hf_zbee_zcl_zbd_configuration_tx_cmd_id,
-            { "Command", "zbd.configuration.tx_cmd_id", FT_UINT8, BASE_HEX, VALS(zbee_zcl_zbd_configuration_tx_cmd_names),
-            0x00, NULL, HFILL } },
-
-        { &hf_zbee_zcl_zbd_configuration_attr_id,
-            { "Attribute", "zbd.configuration.attr_id", FT_UINT16, BASE_HEX, VALS(zbee_zcl_zbd_configuration_attr_names),
-            0x00, NULL, HFILL } },
-
-        /* interface state */
-        { &hf_zbee_zcl_zbd_configuration_interface_state_status,
-            { "Status", "zbd.configuration.interface_state.status", FT_UINT8, BASE_HEX, VALS(zbee_zcl_status_names),
-            0x00, NULL, HFILL } },
-
-        { &hf_zbee_zcl_zbd_configuration_interface_state,
-            { "ZBD InterfaceState", "zbd.configuration.attr.interface_state", FT_UINT8, BASE_HEX, NULL,
-            0x00, NULL, HFILL } },
-
-        { &hf_zbee_zcl_zbd_configuration_interface_state_mask_enabled,
-            { "Enabled", "zbd.configuration.attr.interface_state.enabled", FT_UINT8, BASE_DEC, NULL,
-            ZBEE_ZCL_ZBD_CONFIGURATION_INTERFACE_STATE_ENABLED, NULL, HFILL } },
-
-        { &hf_zbee_zcl_zbd_configuration_interface_state_mask_reserved,
-            { "Reserved", "zbd.configuration.attr.interface_state.reserved", FT_UINT8, BASE_DEC, NULL,
-            ZBEE_ZCL_ZBD_CONFIGURATION_INTERFACE_STATE_RESERVED, NULL, HFILL } },
-
-        /* anonymous join timeout */
-        { &hf_zbee_zcl_zbd_configuration_anonymous_join_timeout,
-            { "ZBD AnonymousJoinTimeout", "zbd.configuration.attr.anonymous_join_timeout", FT_UINT24, BASE_HEX, NULL,
-            0x00, NULL, HFILL } },
-    };
-
-    /* ZCL ZBD Configuration subtrees */
-    static int *ett[] = {
-        &ett_zbee_zcl_zbd_configuration,
-        &ett_zbee_zcl_zbd_configuration_interface_state,
-        &ett_zbee_zcl_zbd_configuration_anonymous_join_timeout,
-    };
-
-    /* Register the ZigBee ZCL ZBD Configuration cluster protocol name and description */
-    proto_zbee_zcl_zbd_configuration = proto_register_protocol("ZigBee ZCL ZBD Configuration", "ZCL ZBD Configuration",
-        ZBEE_PROTOABBREV_ZCL_ZBD_CONFIGURATION);
-    proto_register_field_array(proto_zbee_zcl_zbd_configuration, hf, array_length(hf));
-    proto_register_subtree_array(ett, array_length(ett));
-
-    /* Register the ZigBee ZCL Device Temperature Configuration dissector. */
-    register_dissector(ZBEE_PROTOABBREV_ZCL_ZBD_CONFIGURATION, dissect_zbee_zcl_zbd_configuration, proto_zbee_zcl_zbd_configuration);
-} /*proto_register_zbee_zcl_zbd_configuration*/
-
-
-/*FUNCTION:------------------------------------------------------
- *  NAME
- *      proto_reg_handoff_zbee_zcl_zbd_configuration
- *  DESCRIPTION
- *      Hands off the ZCL ZBD Configuration dissector.
- *  PARAMETERS
- *      none
- *  RETURNS
- *      none
- *---------------------------------------------------------------
- */
-void
-proto_reg_handoff_zbee_zcl_zbd_configuration(void)
-{
-    zbee_zcl_init_cluster(  ZBEE_PROTOABBREV_ZCL_ZBD_CONFIGURATION,
-                            proto_zbee_zcl_zbd_configuration,
-                            ett_zbee_zcl_zbd_configuration,
-                            ZBEE_ZCL_ZBD_CONFIGURATION,
-                            ZBEE_MFG_CODE_NONE,
-                            hf_zbee_zcl_zbd_configuration_attr_id,
-                            hf_zbee_zcl_zbd_configuration_attr_id,
-                            -1, -1,
-                            dissect_zcl_zbd_configuration_attr_data
-                         );
-} /*proto_reg_handoff_zbee_zcl_zbd_configuration*/
-
-
 /*****************************************************************************/
 /******************************* Registration ********************************/
 /*****************************************************************************/
@@ -1892,7 +1604,6 @@ static void zb_direct_cleanup(void)
     {
         GSList *element = zbee_pc_keyring;
 
-        zbd_free_key_record(element->data);
         zbee_pc_keyring = g_slist_delete_link(zbee_pc_keyring, element);
     }
 }
@@ -2069,8 +1780,8 @@ void proto_register_zb_direct(void)
 
     static ei_register_info ei[] = {
         { &ei_zb_direct_crypt_error,
-            { "zbd.error.decryption", PI_DECRYPTION, PI_WARN,
-                "Decryption failure",
+            { "zbd.error.decryption", PI_UNDECODED, PI_WARN,
+                "Decryption fail",
                 EXPFILL }
         }
     };
@@ -2083,7 +1794,9 @@ void proto_register_zb_direct(void)
 
     expert_module_t *expert_zb_direct;
 
-    proto_zb_direct = proto_register_protocol("ZigBee Direct", "ZBD", "zbd"); /* name, short name, abbreviation */
+    proto_zb_direct = proto_register_protocol("ZigBee Direct", /* name        */
+                                              "ZBD",           /* short_name  */
+                                              "zbd");          /* filter_name */
 
     proto_register_field_array(proto_zb_direct, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
@@ -2186,7 +1899,7 @@ void proto_reg_handoff_zb_direct(void)
 
     for (size_t i = 0; services[i].uuid; i++)
     {
-        bluetooth_add_custom_uuid(services[i].uuid, services[i].description, false);
+        wmem_tree_insert_string(bluetooth_uuids, services[i].uuid, services[i].description, 0);
 
         dissector_handle_t handle = create_dissector_handle_with_name_and_description(
             services[i].dissector, proto_zb_direct,

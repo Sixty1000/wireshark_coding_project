@@ -50,7 +50,6 @@ struct _rtp_info {
 	wmem_map_t    *info_payload_fmtp_map;
 	bool          info_is_ed137;
 	const char    *info_ed137_info;    /* pointer to static string, no freeing is required */
-	bool          info_is_iuup;
 	/*
 	* info_data: pointer to raw rtp data = header + payload incl. padding.
 	* That should be safe because the "epan_dissect_t" constructed for the packet
@@ -253,7 +252,6 @@ struct _rtp_packet_info
     uint32_t frame_number;                           /**> the frame where this conversation is started */
     uint32_t media_types;
     rtp_dyn_payload_t *rtp_dyn_payload;             /**> the dynamic RTP payload info - see comments above */
-    const char* dyn_payload_encoding_name;          /**> Cached encoding name of the payload */
 
     uint32_t extended_seqno;                         /**> the sequence number, extended to a 32-bit
                                                      * int to guarantee it increasing monotonically

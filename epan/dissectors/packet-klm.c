@@ -10,8 +10,6 @@
 
 #include "config.h"
 
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 #include "packet-nfs.h"
 
 void proto_register_klm(void);
@@ -90,7 +88,7 @@ dissect_lock(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, int offset, rp
 
 	lock_tree = proto_item_add_subtree(lock_item, ett_klm_lock);
 
-	offset = dissect_rpc_string(tvb, pinfo, lock_tree,
+	offset = dissect_rpc_string(tvb, lock_tree,
 			hf_klm_servername, offset, NULL);
 
 	offset = dissect_nfs3_fh(tvb, offset, pinfo, lock_tree,"fh", NULL, civ);
@@ -122,7 +120,7 @@ dissect_klm_stat_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, 
 static int
 dissect_klm_lock_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	offset = dissect_rpc_bool( tvb, tree,
 			hf_klm_block, offset);
 
@@ -138,7 +136,7 @@ static int
 dissect_klm_test_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
 	int32_t	stats;
-	unsigned offset = 0;
+	int offset = 0;
 
 	stats = tvb_get_ntohl(tvb, offset);
 
@@ -155,7 +153,7 @@ dissect_klm_test_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, 
 static int
 dissect_klm_test_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	offset = dissect_rpc_bool( tvb, tree,
 			hf_klm_exclusive, offset);
 

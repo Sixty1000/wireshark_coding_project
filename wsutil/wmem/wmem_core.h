@@ -64,21 +64,19 @@ typedef enum _wmem_allocator_type_t {
                 the next free_all is always just around the corner. */
 } wmem_allocator_type_t;
 
-/**
- * @brief Allocate the requested amount of memory in the given pool.
+/** Allocate the requested amount of memory in the given pool.
  *
  * @param allocator The allocator object to use to allocate the memory.
  * @param size The amount of memory to allocate.
  * @return A void pointer to the newly allocated memory.
  */
-WS_WARN_UNUSED WS_DLL_PUBLIC
+WS_DLL_PUBLIC
 void *
 wmem_alloc(wmem_allocator_t *allocator, const size_t size)
 G_GNUC_MALLOC
 G_GNUC_ALLOC_SIZE(2);
 
-/**
- * @brief Allocate memory sufficient to hold one object of the given type.
+/** Allocate memory sufficient to hold one object of the given type.
  *
  * @param allocator The allocator object to use to allocate the memory.
  * @param type The type that the newly allocated memory will hold.
@@ -87,22 +85,15 @@ G_GNUC_ALLOC_SIZE(2);
 #define wmem_new(allocator, type) \
     ((type*)wmem_alloc((allocator), sizeof(type)))
 
-/**
- * @brief Overflow-safe multiplication of the size of a type by a number of items.
- *
- * Returns 0 if the multiplication would overflow or if the number of elements is negative.
- * Otherwise, returns the product of sizeof(type) and num.
- *
- * @param type The data type whose size is to be multiplied.
- * @param num  The number of elements of that type.
- *
- * @return The total size in bytes, or 0 on overflow or invalid input.
+/*
+ * Overflow-safe multiplication of the size of a type by a number of
+ * items of that type, returning 0 if the result would overflow (or
+ * if the number of elements is negative), and the product otherwise.
  */
 #define wmem_safe_mult_type_size(type, num) \
     ((((num) <= 0) || ((size_t)sizeof(type) > (G_MAXSSIZE / (size_t)(num)))) ? 0 : (sizeof(type) * (num)))
 
-/**
- * @brief Allocate memory sufficient to hold n objects of the given type.
+/** Allocate memory sufficient to hold n objects of the given type.
  *
  * @param allocator The allocator object to use to allocate the memory.
  * @param type The type that the newly allocated memory will hold.
@@ -112,22 +103,20 @@ G_GNUC_ALLOC_SIZE(2);
 #define wmem_alloc_array(allocator, type, num) \
     ((type*)wmem_alloc((allocator), wmem_safe_mult_type_size(type, (num))))
 
-/**
- * @brief Allocate the requested amount of memory in the given pool. Initializes the
+/** Allocate the requested amount of memory in the given pool. Initializes the
  * allocated memory with zeroes.
  *
  * @param allocator The allocator object to use to allocate the memory.
  * @param size The amount of memory to allocate.
  * @return A void pointer to the newly allocated and zeroed memory.
  */
-WS_WARN_UNUSED WS_DLL_PUBLIC
+WS_DLL_PUBLIC
 void *
 wmem_alloc0(wmem_allocator_t *allocator, const size_t size)
 G_GNUC_MALLOC
 G_GNUC_ALLOC_SIZE(2);
 
-/**
- * @brief Allocate memory sufficient to hold one object of the given type.
+/** Allocate memory sufficient to hold one object of the given type.
  * Initializes the allocated memory with zeroes.
  *
  * @param allocator The allocator object to use to allocate the memory.
@@ -137,8 +126,7 @@ G_GNUC_ALLOC_SIZE(2);
 #define wmem_new0(allocator, type) \
     ((type*)wmem_alloc0((allocator), sizeof(type)))
 
-/**
- * @brief Allocate memory sufficient to hold n objects of the given type.
+/** Allocate memory sufficient to hold n objects of the given type.
  * Initializes the allocated memory with zeroes.
  *
  * @param allocator The allocator object to use to allocate the memory.
@@ -149,10 +137,7 @@ G_GNUC_ALLOC_SIZE(2);
 #define wmem_alloc0_array(allocator, type, num) \
     ((type*)wmem_alloc0((allocator), wmem_safe_mult_type_size(type, (num))))
 
-/**
- * @brief Returns the allocated memory to the allocator.
- *
- * This function should only
+/** Returns the allocated memory to the allocator. This function should only
  * be called directly by allocators when the allocated block is sufficiently
  * large that the reduced memory usage is worth the cost of the extra function
  * call. It's usually easier to just let it get cleaned up when wmem_free_all()
@@ -166,8 +151,7 @@ WS_DLL_PUBLIC
 void
 wmem_free(wmem_allocator_t *allocator, void *ptr);
 
-/**
- * @brief Resizes a block of memory, potentially moving it if resizing it in place
+/** Resizes a block of memory, potentially moving it if resizing it in place
  * is not possible.
  *
  * @param allocator The allocator object used to originally allocate the memory.
@@ -176,15 +160,12 @@ wmem_free(wmem_allocator_t *allocator, void *ptr);
  * @return The new location of the memory block. If this is different from ptr
  * then ptr no longer points to valid memory.
  */
-WS_WARN_UNUSED WS_DLL_PUBLIC
+WS_DLL_PUBLIC
 void *
 wmem_realloc(wmem_allocator_t *allocator, void *ptr, const size_t size)
 G_GNUC_ALLOC_SIZE(3);
 
-/**
- * @brief Frees all the memory allocated in a pool.
- *
- * Depending on the allocator
+/** Frees all the memory allocated in a pool. Depending on the allocator
  * implementation used this can be significantly cheaper than calling
  * wmem_free() on all the individual blocks. It also doesn't require you to have
  * external pointers to those blocks.
@@ -195,10 +176,7 @@ WS_DLL_PUBLIC
 void
 wmem_free_all(wmem_allocator_t *allocator);
 
-/**
- * @brief Triggers a garbage-collection in the allocator.
- *
- * This does not free any
+/** Triggers a garbage-collection in the allocator. This does not free any
  * memory, but it can return unused blocks to the operating system or perform
  * other optimizations.
  *
@@ -208,10 +186,7 @@ WS_DLL_PUBLIC
 void
 wmem_gc(wmem_allocator_t *allocator);
 
-/**
- * @brief Destroy the given allocator, freeing all memory allocated in it.
- *
- * Once this
+/** Destroy the given allocator, freeing all memory allocated in it. Once this
  * function has been called, no memory allocated with the allocator is valid.
  *
  * @param allocator The allocator to destroy.
@@ -220,10 +195,7 @@ WS_DLL_PUBLIC
 void
 wmem_destroy_allocator(wmem_allocator_t *allocator);
 
-/**
- * @brief Create a new allocator of the given type.
- *
- * The type may be overridden by the
+/** Create a new allocator of the given type. The type may be overridden by the
  * WIRESHARK_DEBUG_WMEM_OVERRIDE environment variable.
  *
  * @param type The type of allocator to create.
@@ -233,20 +205,14 @@ WS_DLL_PUBLIC
 wmem_allocator_t *
 wmem_allocator_new(const wmem_allocator_type_t type);
 
-/**
- * @brief Initialize the wmem subsystem.
- *
- * This must be called before any other wmem
+/** Initialize the wmem subsystem. This must be called before any other wmem
  * function, usually at the very beginning of your program.
  */
 WS_DLL_PUBLIC
 void
 wmem_init(void);
 
-/**
- * @brief Teardown the wmem subsystem.
- *
- * This must be called after all other wmem
+/** Teardown the wmem subsystem. This must be called after all other wmem
  * functions, usually at the very end of your program. This function will not
  * destroy outstanding allocators, you must do that yourself.
  */
@@ -254,38 +220,14 @@ WS_DLL_PUBLIC
 void
 wmem_cleanup(void);
 
-/**
- * @brief Mark an allocator as entering a scoped memory region.
- *
- * Sets the `in_scope` flag on the given allocator to true, indicating that
- * memory allocations made from this point forward are within a managed scope.
- *
- * @param allocator Pointer to the memory allocator entering scope.
- */
 WS_DLL_PUBLIC
 void
 wmem_enter_scope(wmem_allocator_t *allocator);
 
-/**
- * @brief Exit a scoped memory region and free all scoped allocations.
- *
- * Frees all memory allocated within the current scope using `wmem_free_all`,
- * and marks the allocator as no longer in scope.
- *
- * @param allocator Pointer to the memory allocator leaving scope.
- */
 WS_DLL_PUBLIC
 void
 wmem_leave_scope(wmem_allocator_t *allocator);
 
-/**
- * @brief Check whether an allocator is currently in a scoped region.
- *
- * Returns the value of the `in_scope` flag for the given allocator.
- *
- * @param allocator Pointer to the memory allocator to check.
- * @return `true` if the allocator is in scope, `false` otherwise.
- */
 WS_DLL_PUBLIC
 bool
 wmem_in_scope(wmem_allocator_t *allocator);

@@ -10,22 +10,9 @@
 #include "netxray.h"
 
 #include <string.h>
-
-#include <wsutil/array.h>
-#include <wsutil/pint.h>
-
-#include "wtap_module.h"
+#include "wtap-int.h"
 #include "file_wrappers.h"
 #include "atm.h"
-
-/*
- * Sniffer Basic (NetXRay)/Windows Sniffer Pro
- *
- * Network Associates' Sniffer Basic (formerly NetXRay from Cinco Networks)
- * file format is now supported, at least for Ethernet and token-ring.
- * Network Associates' Windows Sniffer Pro appears to use a variant of that
- * format; it's supported to the same extent.
-*/
 
 /* Capture file header, *including* magic number, is padded to 128 bytes. */
 #define	CAPTUREFILE_HEADER_SIZE	128
@@ -419,19 +406,22 @@ typedef struct {
 	unsigned	isdn_type;	/* 1 = E1 PRI, 2 = T1 PRI, 3 = BRI */
 } netxray_t;
 
-static bool netxray_read(wtap *wth, wtap_rec *rec,
+static bool netxray_read(wtap *wth, wtap_rec *rec, Buffer *buf,
     int *err, char **err_info, int64_t *data_offset);
 static bool netxray_seek_read(wtap *wth, int64_t seek_off,
-    wtap_rec *rec, int *err, char **err_info);
+    wtap_rec *rec, Buffer *buf, int *err, char **err_info);
 static int netxray_process_rec_header(wtap *wth, FILE_T fh,
     wtap_rec *rec, int *err, char **err_info);
-static void netxray_guess_atm_type(wtap *wth, wtap_rec *rec);
-static bool netxray_dump_1_1(wtap_dumper *wdh, const wtap_rec *rec,
-    int *err, char **err_info);
+static void netxray_guess_atm_type(wtap *wth, wtap_rec *rec,
+    Buffer *buf);
+static bool netxray_dump_1_1(wtap_dumper *wdh,
+    const wtap_rec *rec,
+    const uint8_t *pd, int *err, char **err_info);
 static bool netxray_dump_finish_1_1(wtap_dumper *wdh, int *err,
     char **err_info);
-static bool netxray_dump_2_0(wtap_dumper *wdh, const wtap_rec *rec,
-    int *err, char **err_info);
+static bool netxray_dump_2_0(wtap_dumper *wdh,
+    const wtap_rec *rec,
+    const uint8_t *pd, int *err, char **err_info);
 static bool netxray_dump_finish_2_0(wtap_dumper *wdh, int *err,
     char **err_info);
 
@@ -583,8 +573,8 @@ netxray_open(wtap *wth, int *err, char **err_info)
 	/*
 	 * Figure out the time stamp units and start time stamp.
 	 */
-	start_timestamp = (double)pletohu32(&hdr.timelo)
-	    + (double)pletohu32(&hdr.timehi)*4294967296.0;
+	start_timestamp = (double)pletoh32(&hdr.timelo)
+	    + (double)pletoh32(&hdr.timehi)*4294967296.0;
 	if (is_old) {
 		ticks_per_sec = 1000.0;
 		wth->file_tsprec = WTAP_TSPREC_MSEC;
@@ -645,14 +635,7 @@ netxray_open(wtap *wth, int *err, char **err_info)
 					bug reports).
 				*/
 				if (hdr.timeunit == 2) {
-					ticks_per_sec = pletohu32(hdr.realtick);
-					if (ticks_per_sec == 0.0) {
-						*err = WTAP_ERR_BAD_FILE;
-						*err_info = ws_strdup_printf(
-						    "netxray: Timeunit %u with invalid realtick 0 for Ethernet/ETH_CAPTYPE_NDIS version %.8s capture",
-						    hdr.timeunit, hdr.version);
-						return WTAP_OPEN_ERROR;
-					}
+					ticks_per_sec = pletoh32(hdr.realtick);
 				}
 				else {
 					ticks_per_sec = TpS[hdr.timeunit];
@@ -786,14 +769,6 @@ netxray_open(wtap *wth, int *err, char **err_info)
 		                            version_major, version_minor);
 		return WTAP_OPEN_ERROR;
 	}
-	if (ticks_per_sec == 0.0) {
-		/* "Can't happen" - we should have rejected this in all the
-		 * cases above, but double-check. */
-		*err = WTAP_ERR_INTERNAL;
-		*err_info = ws_strdup_printf(
-		    "netxray: ticks_per_sec cannot be 0");
-		return WTAP_OPEN_ERROR;
-	}
 	start_timestamp = start_timestamp/ticks_per_sec;
 
 	if (network_type == 4) {
@@ -899,7 +874,7 @@ netxray_open(wtap *wth, int *err, char **err_info)
 	wth->subtype_seek_read = netxray_seek_read;
 	wth->file_encap = file_encap;
 	wth->snapshot_length = 0;	/* not available in header */
-	netxray->start_time = pletohu32(&hdr.start_time);
+	netxray->start_time = pletoh32(&hdr.start_time);
 	netxray->ticks_per_sec = ticks_per_sec;
 	netxray->start_timestamp = start_timestamp;
 	netxray->version_major = version_major;
@@ -1012,9 +987,9 @@ netxray_open(wtap *wth, int *err, char **err_info)
 	 * XXX: Remember 'start_offset' to help testing for 'short file' at EOF
 	 */
 	netxray->wrapped      = false;
-	netxray->nframes      = pletohu32(&hdr.nframes);
-	netxray->start_offset = pletohu32(&hdr.start_offset);
-	netxray->end_offset   = pletohu32(&hdr.end_offset);
+	netxray->nframes      = pletoh32(&hdr.nframes);
+	netxray->start_offset = pletoh32(&hdr.start_offset);
+	netxray->end_offset   = pletoh32(&hdr.end_offset);
 
 	/* Seek to the beginning of the data records. */
 	if (file_seek(wth->fh, netxray->start_offset, SEEK_SET, err) == -1) {
@@ -1034,8 +1009,8 @@ netxray_open(wtap *wth, int *err, char **err_info)
 
 /* Read the next packet */
 static bool
-netxray_read(wtap *wth, wtap_rec *rec, int *err, char **err_info,
-             int64_t *data_offset)
+netxray_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err,
+             char **err_info, int64_t *data_offset)
 {
 	netxray_t *netxray = (netxray_t *)wth->priv;
 	int	padding;
@@ -1108,7 +1083,7 @@ reread:
 	/*
 	 * Read the packet data.
 	 */
-	if (!wtap_read_bytes_buffer(wth->fh, &rec->data,
+	if (!wtap_read_packet_bytes(wth->fh, buf,
 	    rec->rec_header.packet_header.caplen, err, err_info))
 		return false;
 
@@ -1123,12 +1098,13 @@ reread:
 	 * from the packet header to determine its type or subtype,
 	 * attempt to guess them from the packet data.
 	 */
-	netxray_guess_atm_type(wth, rec);
+	netxray_guess_atm_type(wth, rec, buf);
 	return true;
 }
 
 static bool
-netxray_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
+netxray_seek_read(wtap *wth, int64_t seek_off,
+		  wtap_rec *rec, Buffer *buf,
 		  int *err, char **err_info)
 {
 	if (file_seek(wth->random_fh, seek_off, SEEK_SET, err) == -1)
@@ -1150,8 +1126,8 @@ netxray_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
 	/*
 	 * Read the packet data.
 	 */
-	if (!wtap_read_bytes_buffer(wth->random_fh, &rec->data,
-	    rec->rec_header.packet_header.caplen, err, err_info))
+	if (!wtap_read_packet_bytes(wth->random_fh, buf, rec->rec_header.packet_header.caplen, err,
+	    err_info))
 		return false;
 
 	/*
@@ -1159,7 +1135,7 @@ netxray_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
 	 * from the packet header to determine its type or subtype,
 	 * attempt to guess them from the packet data.
 	 */
-	netxray_guess_atm_type(wth, rec);
+	netxray_guess_atm_type(wth, rec, buf);
 	return true;
 }
 
@@ -1515,7 +1491,7 @@ netxray_process_rec_header(wtap *wth, FILE_T fh, wtap_rec *rec,
 			if (hdr.hdr_2_x.xxx[9] & 0x04)
 				rec->rec_header.packet_header.pseudo_header.atm.flags |= ATM_RAW_CELL;
 			rec->rec_header.packet_header.pseudo_header.atm.vpi = hdr.hdr_2_x.xxx[11];
-			rec->rec_header.packet_header.pseudo_header.atm.vci = pletohu16(&hdr.hdr_2_x.xxx[12]);
+			rec->rec_header.packet_header.pseudo_header.atm.vci = pletoh16(&hdr.hdr_2_x.xxx[12]);
 			rec->rec_header.packet_header.pseudo_header.atm.channel =
 			    (hdr.hdr_2_x.xxx[15] & 0x10)? 1 : 0;
 			rec->rec_header.packet_header.pseudo_header.atm.cells = 0;
@@ -1643,12 +1619,12 @@ netxray_process_rec_header(wtap *wth, FILE_T fh, wtap_rec *rec,
 		break;
 	}
 
-	wtap_setup_packet_rec(rec, wth->file_encap);
+	rec->rec_type = REC_TYPE_PACKET;
 	rec->block = wtap_block_create(WTAP_BLOCK_PACKET);
 	if (netxray->version_major == 0) {
 		rec->presence_flags = WTAP_HAS_TS;
-		t = (double)pletohu32(&hdr.old_hdr.timelo)
-		    + (double)pletohu32(&hdr.old_hdr.timehi)*4294967296.0;
+		t = (double)pletoh32(&hdr.old_hdr.timelo)
+		    + (double)pletoh32(&hdr.old_hdr.timehi)*4294967296.0;
 		t /= netxray->ticks_per_sec;
 		t -= netxray->start_timestamp;
 		rec->ts.secs = netxray->start_time + (long)t;
@@ -1658,16 +1634,13 @@ netxray_process_rec_header(wtap *wth, FILE_T fh, wtap_rec *rec,
 		 * We subtract the padding from the packet size, so our caller
 		 * doesn't see it.
 		 */
-		packet_size = pletohu16(&hdr.old_hdr.len);
-		if (packet_size < padding) {
-			padding = packet_size;
-		}
+		packet_size = pletoh16(&hdr.old_hdr.len);
 		rec->rec_header.packet_header.caplen = packet_size - padding;
 		rec->rec_header.packet_header.len = rec->rec_header.packet_header.caplen;
 	} else {
 		rec->presence_flags = WTAP_HAS_TS|WTAP_HAS_CAP_LEN;
-		t = (double)pletohu32(&hdr.hdr_1_x.timelo)
-		    + (double)pletohu32(&hdr.hdr_1_x.timehi)*4294967296.0;
+		t = (double)pletoh32(&hdr.hdr_1_x.timelo)
+		    + (double)pletoh32(&hdr.hdr_1_x.timehi)*4294967296.0;
 		t /= netxray->ticks_per_sec;
 		t -= netxray->start_timestamp;
 		rec->ts.secs = netxray->start_time + (time_t)t;
@@ -1677,20 +1650,19 @@ netxray_process_rec_header(wtap *wth, FILE_T fh, wtap_rec *rec,
 		 * We subtract the padding from the packet size, so our caller
 		 * doesn't see it.
 		 */
-		packet_size = pletohu16(&hdr.hdr_1_x.incl_len);
-		if (packet_size < padding) {
-			padding = packet_size;
-		}
+		packet_size = pletoh16(&hdr.hdr_1_x.incl_len);
 		rec->rec_header.packet_header.caplen = packet_size - padding;
-		rec->rec_header.packet_header.len = pletohu16(&hdr.hdr_1_x.orig_len) - padding;
+		rec->rec_header.packet_header.len = pletoh16(&hdr.hdr_1_x.orig_len) - padding;
 	}
 
 	return padding;
 }
 
 static void
-netxray_guess_atm_type(wtap *wth, wtap_rec *rec)
+netxray_guess_atm_type(wtap *wth, wtap_rec *rec, Buffer *buf)
 {
+	const uint8_t *pd;
+
 	if (wth->file_encap == WTAP_ENCAP_ATM_PDUS_UNTRUNCATED &&
 	   !(rec->rec_header.packet_header.pseudo_header.atm.flags & ATM_REASSEMBLY_ERROR)) {
 		if (rec->rec_header.packet_header.pseudo_header.atm.aal == AAL_UNKNOWN) {
@@ -1698,14 +1670,16 @@ netxray_guess_atm_type(wtap *wth, wtap_rec *rec)
 			 * Try to guess the type and subtype based
 			 * on the VPI/VCI and packet contents.
 			 */
-			atm_guess_traffic_type(rec);
+			pd = ws_buffer_start_ptr(buf);
+			atm_guess_traffic_type(rec, pd);
 		} else if (rec->rec_header.packet_header.pseudo_header.atm.aal == AAL_5 &&
 		    rec->rec_header.packet_header.pseudo_header.atm.type == TRAF_LANE) {
 			/*
 			 * Try to guess the subtype based on the
 			 * packet contents.
 			 */
-			atm_guess_lane_type(rec);
+			pd = ws_buffer_start_ptr(buf);
+			atm_guess_lane_type(rec, pd);
 		}
 	}
 }
@@ -1785,8 +1759,9 @@ netxray_dump_open_1_1(wtap_dumper *wdh, int *err, char **err_info _U_)
 /* Write a record for a packet to a dump file.
    Returns true on success, false on failure. */
 static bool
-netxray_dump_1_1(wtap_dumper *wdh, const wtap_rec *rec,
-		 int *err, char **err_info _U_)
+netxray_dump_1_1(wtap_dumper *wdh,
+		 const wtap_rec *rec,
+		 const uint8_t *pd, int *err, char **err_info _U_)
 {
 	netxray_dump_t *netxray = (netxray_dump_t *)wdh->priv;
 	uint64_t timestamp;
@@ -1796,7 +1771,6 @@ netxray_dump_1_1(wtap_dumper *wdh, const wtap_rec *rec,
 	/* We can only write packet records. */
 	if (rec->rec_type != REC_TYPE_PACKET) {
 		*err = WTAP_ERR_UNWRITABLE_REC_TYPE;
-		*err_info = wtap_unwritable_rec_type_err_string(rec);
 		return false;
 	}
 
@@ -1859,8 +1833,7 @@ netxray_dump_1_1(wtap_dumper *wdh, const wtap_rec *rec,
 		return false;
 
 	/* write the packet data */
-	if (!wtap_dump_file_write(wdh, ws_buffer_start_ptr(&rec->data),
-	    rec->rec_header.packet_header.caplen, err))
+	if (!wtap_dump_file_write(wdh, pd, rec->rec_header.packet_header.caplen, err))
 		return false;
 
 	netxray->nframes++;
@@ -1875,22 +1848,11 @@ netxray_dump_finish_1_1(wtap_dumper *wdh, int *err, char **err_info _U_)
 {
 	char hdr_buf[CAPTUREFILE_HEADER_SIZE - sizeof(netxray_magic)];
 	netxray_dump_t *netxray = (netxray_dump_t *)wdh->priv;
-	int64_t tell_result;
-	uint64_t filelen;
+	int64_t filelen;
 	struct netxray_hdr file_hdr;
 
-	/*
-	 * XXX - should we determine this by getting the file size
-	 * directly?
-	 *
-	 * Should we fail if the size doesn't fit in a 32-bit integer,
-	 * as that isn't supported by NetXRay files, given that the
-	 * file size is 32 bits?
-	 */
-	tell_result = wtap_dump_file_tell(wdh, err);
-	if (-1 == tell_result)
+	if (-1 == (filelen = wtap_dump_file_tell(wdh, err)))
 		return false;
-	filelen = (uint64_t) tell_result;
 
 	/* Go back to beginning */
 	if (wtap_dump_file_seek(wdh, 0, SEEK_SET, err) == -1)
@@ -1995,8 +1957,9 @@ netxray_dump_open_2_0(wtap_dumper *wdh, int *err, char **err_info _U_)
 /* Write a record for a packet to a dump file.
    Returns true on success, false on failure. */
 static bool
-netxray_dump_2_0(wtap_dumper *wdh, const wtap_rec *rec,
-		 int *err, char **err_info _U_)
+netxray_dump_2_0(wtap_dumper *wdh,
+		 const wtap_rec *rec,
+		 const uint8_t *pd, int *err, char **err_info _U_)
 {
 	const union wtap_pseudo_header *pseudo_header = &rec->rec_header.packet_header.pseudo_header;
 	netxray_dump_t *netxray = (netxray_dump_t *)wdh->priv;
@@ -2007,7 +1970,6 @@ netxray_dump_2_0(wtap_dumper *wdh, const wtap_rec *rec,
 	/* We can only write packet records. */
 	if (rec->rec_type != REC_TYPE_PACKET) {
 		*err = WTAP_ERR_UNWRITABLE_REC_TYPE;
-		*err_info = wtap_unwritable_rec_type_err_string(rec);
 		return false;
 	}
 
@@ -2100,8 +2062,7 @@ netxray_dump_2_0(wtap_dumper *wdh, const wtap_rec *rec,
 		return false;
 
 	/* write the packet data */
-	if (!wtap_dump_file_write(wdh, ws_buffer_start_ptr(&rec->data),
-	    rec->rec_header.packet_header.caplen, err))
+	if (!wtap_dump_file_write(wdh, pd, rec->rec_header.packet_header.caplen, err))
 		return false;
 
 	netxray->nframes++;
@@ -2116,22 +2077,11 @@ netxray_dump_finish_2_0(wtap_dumper *wdh, int *err, char **err_info _U_)
 {
 	char hdr_buf[CAPTUREFILE_HEADER_SIZE - sizeof(netxray_magic)];
 	netxray_dump_t *netxray = (netxray_dump_t *)wdh->priv;
-	int64_t tell_result;
-	uint64_t filelen;
+	int64_t filelen;
 	struct netxray_hdr file_hdr;
 
-	/*
-	 * XXX - should we determine this by getting the file size
-	 * directly?
-	 *
-	 * Should we fail if the size doesn't fit in a 32-bit integer,
-	 * as that isn't supported by NetXRay files, given that the
-	 * file size is 32 bits?
-	 */
-	tell_result = wtap_dump_file_tell(wdh, err);
-	if (-1 == tell_result)
+	if (-1 == (filelen = wtap_dump_file_tell(wdh, err)))
 		return false;
-	filelen = (uint64_t) tell_result;
 
 	/* Go back to beginning */
 	if (wtap_dump_file_seek(wdh, 0, SEEK_SET, err) == -1)

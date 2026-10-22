@@ -1,4 +1,4 @@
--- 3GPP TS 38.455 V19.1.0 (2025-12)
+-- 3GPP TS 38.455 V18.2.0 (2024-06)
 --9.3.4	PDU Definitions
 --
 -- **************************************************************
@@ -87,13 +87,7 @@ IMPORTS
 	SRSReservationType,
 	RequestedSRSPreconfigurationCharacteristics-List,
 	SRSPreconfiguration-List,
-	PosSRSResourceSet-Aggregation-List,
-	Remote-UE-Indication-Request,
-	Remote-UE-Indication,
-	Remote-UE-Status,
-	PositioningDataInformation,
-	PositioningDataUnavailable,
-	PositioningDataCollectionNeeded
+	PosSRSResourceSet-Aggregation-List
 
 
 
@@ -184,13 +178,7 @@ FROM NRPPA-Containers
 	id-RequestedSRSPreconfigurationCharacteristics-List,
 	id-SRSPreconfiguration-List,
 	id-SRSInformation,
-	id-PosSRSResourceSet-Aggregation-List,
-	id-PreconfiguredSRSInformation,
-	id-Remote-UE-Indication-Request,
-	id-Remote-UE-Indication,
-	id-Remote-UE-Status,
-	id-PositioningDataInformation,
-	id-PositioningDataUnavailable
+	id-PosSRSResourceSet-Aggregation-List
 
 
 
@@ -475,9 +463,8 @@ PositioningInformationRequest-IEs NRPPA-PROTOCOL-IES ::= {
 	{ ID id-UE-TEG-Info-Request						CRITICALITY ignore	TYPE UE-TEG-Info-Request								PRESENCE optional	}|
 	{ ID id-UE-TEG-ReportingPeriodicity				CRITICALITY reject	TYPE UE-TEG-ReportingPeriodicity					PRESENCE conditional	}|
 -- This IE shall be present if the UE TEG Information Request IE is set to the value "periodic".
-	{ ID id-TimeWindowInformation-SRS-List			CRITICALITY ignore	TYPE TimeWindowInformation-SRS-List				PRESENCE optional	}|
-	{ ID id-RequestedSRSPreconfigurationCharacteristics-List	CRITICALITY ignore	TYPE RequestedSRSPreconfigurationCharacteristics-List				PRESENCE optional	}|
-	{ ID id-Remote-UE-Indication-Request			CRITICALITY ignore	TYPE Remote-UE-Indication-Request				PRESENCE optional	},
+	{ ID id-TimeWindowInformation-SRS-List			CRITICALITY reject	TYPE TimeWindowInformation-SRS-List				PRESENCE optional	}|
+	{ ID id-RequestedSRSPreconfigurationCharacteristics-List	CRITICALITY ignore	TYPE RequestedSRSPreconfigurationCharacteristics-List				PRESENCE optional	},
 	...
 }
 
@@ -499,8 +486,7 @@ PositioningInformationResponse-IEs NRPPA-PROTOCOL-IES ::= {
 	{ ID id-UETxTEGAssociationList		CRITICALITY ignore	TYPE UETxTEGAssociationList		PRESENCE optional}|
 	{ ID id-NewNRCGI					CRITICALITY ignore	TYPE CGI-NR							PRESENCE optional}|
 	{ ID id-PosValidityAreaCellList		CRITICALITY ignore	TYPE PosValidityAreaCellList	PRESENCE optional}|
-	{ ID id-SRSPreconfiguration-List	CRITICALITY ignore	TYPE SRSPreconfiguration-List	PRESENCE optional}|
-	{ ID id-Remote-UE-Indication		CRITICALITY ignore	TYPE Remote-UE-Indication			PRESENCE optional},
+	{ ID id-SRSPreconfiguration-List	CRITICALITY ignore	TYPE SRSPreconfiguration-List	PRESENCE optional},
 	...
 }
 
@@ -537,8 +523,7 @@ PositioningInformationUpdate-IEs NRPPA-PROTOCOL-IES ::= {
 	{ ID id-SFNInitialisationTime		CRITICALITY ignore	TYPE RelativeTime1900			PRESENCE optional}|
 	{ ID id-UETxTEGAssociationList		CRITICALITY ignore	TYPE UETxTEGAssociationList		PRESENCE optional}|
 	{ ID id-SRSTransmissionStatus		CRITICALITY ignore	TYPE SRSTransmissionStatus	PRESENCE optional}|
-	{ ID id-NewCellIdentity				CRITICALITY ignore	TYPE CGI-NR						PRESENCE optional}|
-	{ ID id-Remote-UE-Status			CRITICALITY ignore	TYPE Remote-UE-Status			PRESENCE optional},
+	{ ID id-NewCellIdentity				CRITICALITY ignore	TYPE CGI-NR						PRESENCE optional},
 	...
 }
 
@@ -627,6 +612,7 @@ MeasurementReport-IEs NRPPA-PROTOCOL-IES ::= {
 	{ ID id-LMF-Measurement-ID		CRITICALITY reject	TYPE Measurement-ID				PRESENCE mandatory}|
 	{ ID id-RAN-Measurement-ID		CRITICALITY reject	TYPE Measurement-ID				PRESENCE mandatory}|
 	{ ID id-TRP-MeasurementReportList			CRITICALITY reject	TYPE TRP-MeasurementResponseList PRESENCE mandatory},
+
 	...
 }
 
@@ -753,7 +739,8 @@ PositioningActivationRequest ::= SEQUENCE {
 
 PositioningActivationRequestIEs NRPPA-PROTOCOL-IES ::= {
 	{ ID id-SRSType					CRITICALITY reject	TYPE SRSType					PRESENCE mandatory	} |
-	{ ID id-ActivationTime			CRITICALITY ignore	TYPE RelativeTime1900				PRESENCE optional	},
+	{ ID id-ActivationTime			CRITICALITY ignore	TYPE RelativeTime1900				PRESENCE optional	}|
+	{ ID id-PosSRSResourceSet-Aggregation-List	CRITICALITY ignore TYPE PosSRSResourceSet-Aggregation-List		PRESENCE optional },
 	...
 }
 
@@ -774,9 +761,8 @@ SemipersistentSRS ::= SEQUENCE {
 }
 
 SemipersistentSRS-ExtIEs NRPPA-PROTOCOL-EXTENSION ::= {
-	{ ID id-SRSSpatialRelation						CRITICALITY ignore	EXTENSION SpatialRelationInfo					PRESENCE optional}|
-	{ ID id-SRSSpatialRelationPerSRSResource		CRITICALITY ignore	EXTENSION SpatialRelationPerSRSResource		PRESENCE optional}|
-	{ ID id-PosSRSResourceSet-Aggregation-List		CRITICALITY ignore	EXTENSION PosSRSResourceSet-Aggregation-List		PRESENCE optional},
+	{ ID id-SRSSpatialRelation					CRITICALITY ignore	EXTENSION SpatialRelationInfo					PRESENCE optional}|
+	{ ID id-SRSSpatialRelationPerSRSResource		CRITICALITY ignore	EXTENSION SpatialRelationPerSRSResource	PRESENCE optional},
 	...
 }
 
@@ -788,7 +774,6 @@ AperiodicSRS ::= SEQUENCE {
 }
 
 AperiodicSRS-ExtIEs NRPPA-PROTOCOL-EXTENSION ::= {
-	{ ID id-PosSRSResourceSet-Aggregation-List		CRITICALITY ignore	EXTENSION PosSRSResourceSet-Aggregation-List		PRESENCE optional},
 	...
 }
 
@@ -979,30 +964,11 @@ SRSInformationReservationNotification	::= SEQUENCE {
 }
 
 SRSInformationReservationNotification-IEs NRPPA-PROTOCOL-IES ::= {
-	{ ID id-SRSReservationType	CRITICALITY reject	TYPE SRSReservationType								PRESENCE mandatory}|
-	{ ID id-SRSInformation		CRITICALITY ignore	TYPE RequestedSRSTransmissionCharacteristics		PRESENCE optional}|
-	{ ID id-PreconfiguredSRSInformation	CRITICALITY ignore	TYPE RequestedSRSPreconfigurationCharacteristics-List		PRESENCE optional},
+	{ ID id-SRSReservationType	CRITICALITY ignore	TYPE SRSReservationType								PRESENCE mandatory}|
+	{ ID id-SRSInformation		CRITICALITY ignore	TYPE RequestedSRSTransmissionCharacteristics		PRESENCE optional },
 	...
 }
 
--- **************************************************************
---
--- POSITIONING DATA COLLECTION REPORT
---
--- **************************************************************
-
-PositioningDataCollectionReport ::= SEQUENCE {
-	protocolIEs		ProtocolIE-Container	{{ PositioningDataCollectionReport-IEs}},
-	...
-}
-
-PositioningDataCollectionReport-IEs NRPPA-PROTOCOL-IES ::= {
-	{ ID id-LMF-Measurement-ID			CRITICALITY reject	TYPE Measurement-ID		PRESENCE mandatory}|
-	{ ID id-RAN-Measurement-ID			CRITICALITY reject	TYPE Measurement-ID		PRESENCE mandatory}|
-	{ ID id-PositioningDataInformation	CRITICALITY ignore	TYPE PositioningDataInformation	PRESENCE optional}|
-	{ ID id-PositioningDataUnavailable	CRITICALITY ignore	TYPE PositioningDataUnavailable	PRESENCE optional},
-	...
-}
 
 
 END

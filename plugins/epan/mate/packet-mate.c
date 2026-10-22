@@ -295,7 +295,7 @@ mate_pdu_tree(mate_pdu *pdu, packet_info *pinfo, tvbuff_t *tvb, proto_item *item
 static int
 mate_tree(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	GPtrArray* pdus;
+	mate_pdu* pdus;
 	proto_item *mate_i;
 	proto_tree *mate_t;
 
@@ -310,10 +310,10 @@ mate_tree(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 	mate_analyze_frame(mc, pinfo,tree);
 
 	if (( pdus = mate_get_pdus(pinfo->num) )) {
-		for (unsigned i = 0; i < pdus->len; ++i) {
+		for ( ; pdus; pdus = pdus->next_in_frame) {
 			mate_i = proto_tree_add_protocol_format(tree,mc->hfid_mate,tvb,0,0,"MATE");
 			mate_t = proto_item_add_subtree(mate_i, mc->ett_root);
-			mate_pdu_tree(g_ptr_array_index(pdus, i),pinfo,tvb,mate_i,mate_t);
+			mate_pdu_tree(pdus,pinfo,tvb,mate_i,mate_t);
 		}
 	}
 	return tvb_captured_length(tvb);
@@ -368,6 +368,15 @@ proto_reg_handoff_mate(void)
 				 */
 				set_postdissector_wanted_hfids(mate_handle,
 				    mc->wanted_hfids);
+				/* XXX: Due to #17877, any protocol added to the tree with length -1
+				 * that changes its length later (and there are many, such as TCP)
+				 * doesn't actually change its length unless the tree is visible,
+				 * which means that entire range checking work in MATE to split up
+				 * multiple PDUs of the target protocol in the same frame doesn't
+				 * work. Set the tree as visible as with Lua postdissectors that
+				 * need all fields. It's overkill and bad for performance, though.
+				 */
+				epan_set_always_visible(true);
 
 				initialize_mate_runtime(mc);
 			}
@@ -438,3 +447,16 @@ proto_register_mate(void)
 
 	register_postdissector(mate_handle);
 }
+
+/*
+ * Editor modelines  -  https://www.wireshark.org/tools/modelines.html
+ *
+ * Local variables:
+ * c-basic-offset: 8
+ * tab-width: 8
+ * indent-tabs-mode: t
+ * End:
+ *
+ * vi: set shiftwidth=8 tabstop=8 noexpandtab:
+ * :indentSize=8:tabSize=8:noTabs=false:
+ */

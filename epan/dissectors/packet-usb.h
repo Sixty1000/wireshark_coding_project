@@ -13,7 +13,7 @@
 #include <epan/packet_info.h>
 #include <epan/proto.h>
 #include <epan/tvbuff.h>
-#include <wsutil/value_string.h>
+#include <epan/value_string.h>
 #include <epan/tfs.h>
 #include <wsutil/nstime.h>
 
@@ -52,7 +52,6 @@ typedef enum {
     USB_HEADER_USBIP,
     USB_HEADER_DARWIN,
     USB_HEADER_PSEUDO_URB,
-    USB_HEADER_FREEBSD,
 } usb_header_t;
 
 #define USB_HEADER_IS_LINUX(type) \
@@ -113,7 +112,6 @@ enum usb_conv_class_data_type {
     USB_CONV_MASS_STORAGE_BOT,
     USB_CONV_MASS_STORAGE_UASP,
     USB_CONV_CDC_DATA,
-    USB_CONV_PTP,
 };
 
 /* Conversation Structure
@@ -135,7 +133,6 @@ struct _usb_conv_info_t {
 
     void *class_data;           /* private class/id decode data */
     enum usb_conv_class_data_type class_data_type;
-    uint32_t config_desc_frame_num;  /* configuration descriptor frame number (0 = none) */
 
     wmem_array_t *alt_settings;
 };
@@ -294,18 +291,18 @@ typedef struct _usb_tap_data_t {
 #define USB_SETUP_SET_ISOCH_DELAY       49
 
 /* transfer_flags */
-#define URB_SHORT_NOT_OK	0x00000001	/* report short reads as errors */
-#define URB_ISO_ASAP		0x00000002	/* iso-only; use the first unexpired
+#define URB_SHORT_NOT_OK	0x0001	/* report short reads as errors */
+#define URB_ISO_ASAP		0x0002	/* iso-only; use the first unexpired
 					 * slot in the schedule */
-#define URB_NO_TRANSFER_DMA_MAP	0x00000004	/* urb->transfer_dma valid on submit */
-#define URB_NO_FSBR		0x00000020	/* UHCI-specific */
-#define URB_ZERO_PACKET		0x00000040	/* Finish bulk OUT with short packet */
-#define URB_NO_INTERRUPT	0x00000080	/* HINT: no non-error interrupt
+#define URB_NO_TRANSFER_DMA_MAP	0x0004	/* urb->transfer_dma valid on submit */
+#define URB_NO_FSBR		0x0020	/* UHCI-specific */
+#define URB_ZERO_PACKET		0x0040	/* Finish bulk OUT with short packet */
+#define URB_NO_INTERRUPT	0x0080	/* HINT: no non-error interrupt
 					 * needed */
-#define URB_FREE_BUFFER		0x00000100	/* Free transfer buffer with the URB */
+#define URB_FREE_BUFFER		0x0100	/* Free transfer buffer with the URB */
 
 /* The following flags are used internally by usbcore and HCDs */
-#define URB_DIR_IN		0x00000200	/* Transfer from device to host */
+#define URB_DIR_IN		0x0200	/* Transfer from device to host */
 #define URB_DIR_OUT		0
 #define URB_DIR_MASK		URB_DIR_IN
 
@@ -323,12 +320,6 @@ typedef struct _usb_tap_data_t {
 extern const true_false_string tfs_endpoint_direction;
 
 extern value_string_ext usb_class_vals_ext;
-extern value_string_ext usb_langid_vals_ext;
-extern value_string_ext ext_usb_audio_subclass_vals;
-extern value_string_ext ext_usb_massstorage_subclass_vals;
-extern value_string_ext ext_usb_com_subclass_vals;
-extern value_string_ext usb_massstorage_protocol_vals_ext;
-
 
 usb_conv_info_t *get_usb_iface_conv_info(packet_info *pinfo, uint8_t interface_num);
 usb_conv_info_t *get_existing_usb_ep_conv_info(packet_info *pinfo, uint16_t bus_id,

@@ -18,6 +18,10 @@
 
 #include "packet-per.h"
 
+#define PNAME  "H.283 Logical Channel Transport"
+#define PSNAME "LCT"
+#define PFNAME "lct"
+
 void proto_register_h283(void);
 void proto_reg_handoff_h283(void);
 
@@ -46,7 +50,7 @@ dissect_h283_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
   proto_item  *ti = NULL;
   proto_tree  *h283_tree = NULL;
 
-  col_set_str(pinfo->cinfo, COL_PROTOCOL, "LCT");
+  col_set_str(pinfo->cinfo, COL_PROTOCOL, PSNAME);
 
   info_is_set = false;
 
@@ -71,13 +75,13 @@ void proto_register_h283(void) {
   };
 
   /* Register protocol */
-  proto_h283 = proto_register_protocol("H.283 Logical Channel Transport", "LCT", "lct");
+  proto_h283 = proto_register_protocol(PNAME, PSNAME, PFNAME);
 
   /* Register fields and subtrees */
   proto_register_field_array(proto_h283, hf, array_length(hf));
   proto_register_subtree_array(ett, array_length(ett));
 
-  h283_udp_handle = register_dissector("lct", dissect_h283_udp, proto_h283);
+  h283_udp_handle = register_dissector(PFNAME, dissect_h283_udp, proto_h283);
 
 }
 

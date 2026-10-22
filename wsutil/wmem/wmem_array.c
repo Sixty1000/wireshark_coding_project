@@ -10,12 +10,10 @@
  */
 
 #include "config.h"
-#define WS_LOG_DOMAIN LOG_DOMAIN_WSUTIL
 
-#include "wireshark.h"
-
+#include <string.h>
 #include <stdlib.h>
-#include <wsutil/wslog.h>
+#include <glib.h>
 
 #include "wmem_core.h"
 #include "wmem_array.h"
@@ -69,61 +67,35 @@ wmem_array_new(wmem_allocator_t *allocator, const size_t elem_size)
     return array;
 }
 
-bool
+void
 wmem_array_grow(wmem_array_t *array, const unsigned to_add)
 {
     unsigned new_alloc_count, new_count;
-    size_t new_size;
-    uint8_t *new_buf;
 
     new_alloc_count = array->alloc_count;
-    if (ckd_add(&new_count, array->elem_count, to_add)) {
-        ws_critical("Can't grow array (element count would overflow)!");
-        return false;
-    }
+    new_count = array->elem_count + to_add;
 
     while (new_alloc_count < new_count) {
-        if (ckd_mul(&new_alloc_count, new_alloc_count, 2)) {
-            ws_critical("Can't grow array (element count would overflow)!");
-            return false;
-        }
+        new_alloc_count *= 2;
     }
 
-    if (new_alloc_count <= array->alloc_count) {
-        return true;
+    if (new_alloc_count == array->alloc_count) {
+        return;
     }
 
-    if (ckd_mul(&new_size, new_alloc_count, array->elem_size)) {
-        ws_critical("Can't grow array (size would overflow)!");
-        return false;
-    }
+    array->buf = (uint8_t *)wmem_realloc(array->allocator, array->buf,
+            new_alloc_count * array->elem_size);
 
-    new_buf = (uint8_t *)wmem_realloc(array->allocator, array->buf, new_size);
-
-    if ((new_buf == NULL) && new_size) {
-        /* Check degenerate case of elem_size 0, which otherwise works.
-         * Note g_realloc aborts the program on error; the various
-         * wmem allocators might or might not. */
-        ws_critical("Reallocating array failed!");
-        return false;
-    }
-
-    array->buf = new_buf;
     array->alloc_count = new_alloc_count;
-
-    return true;
 }
 
-static bool
+static void
 wmem_array_write_null_terminator(wmem_array_t *array)
 {
     if (array->null_terminated) {
-        if (!wmem_array_grow(array, 1)) {
-            return false;
-        }
+        wmem_array_grow(array, 1);
         memset(&array->buf[array->elem_count * array->elem_size], 0x0, array->elem_size);
     }
-    return true;
 }
 
 void
@@ -139,30 +111,28 @@ wmem_array_bzero(wmem_array_t *array)
     memset(array->buf, 0x0, array->elem_size * array->elem_count);
 }
 
-bool
+void
 wmem_array_append(wmem_array_t *array, const void *in, unsigned count)
 {
-    if (!wmem_array_grow(array, count)) {
-        return false;
-    }
+    wmem_array_grow(array, count);
 
     memcpy(&array->buf[array->elem_count * array->elem_size], in,
             count * array->elem_size);
 
     array->elem_count += count;
 
-    return wmem_array_write_null_terminator(array);
+    wmem_array_write_null_terminator(array);
 }
 
 void *
-wmem_array_index(const wmem_array_t *array, unsigned array_index)
+wmem_array_index(wmem_array_t *array, unsigned array_index)
 {
     g_assert(array_index < array->elem_count);
     return &array->buf[array_index * array->elem_size];
 }
 
 int
-wmem_array_try_index(const wmem_array_t *array, unsigned array_index, void *val)
+wmem_array_try_index(wmem_array_t *array, unsigned array_index, void *val)
 {
     if (array_index >= array->elem_count)
         return -1;
@@ -177,27 +147,18 @@ wmem_array_sort(wmem_array_t *array, int (*compar)(const void*,const void*))
 }
 
 void *
-wmem_array_get_raw(const wmem_array_t *array)
+wmem_array_get_raw(wmem_array_t *array)
 {
     return array->buf;
 }
 
 unsigned
-wmem_array_get_count(const wmem_array_t *array)
+wmem_array_get_count(wmem_array_t *array)
 {
     if (array == NULL)
         return 0;
 
     return array->elem_count;
-}
-
-wmem_allocator_t*
-wmem_array_get_allocator(const wmem_array_t* array)
-{
-    if (array == NULL)
-        return NULL;
-
-    return array->allocator;
 }
 
 void *

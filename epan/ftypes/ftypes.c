@@ -13,7 +13,7 @@
 #include <wsutil/ws_assert.h>
 
 /* Keep track of ftype_t's via their ftenum number */
-const ftype_t* type_list[FT_ENUM_SIZE + 1];
+const ftype_t* type_list[FT_NUM_TYPES];
 
 /* Initialize the ftype module. */
 void
@@ -37,7 +37,10 @@ ftypes_register_pseudofields(void)
 {
 	static int proto_ftypes;
 
-	proto_ftypes = proto_register_protocol("Wireshark Field/Fundamental Types", "Wireshark FTypes", "_ws.ftypes");
+	proto_ftypes = proto_register_protocol(
+				"Wireshark Field/Fundamental Types",
+				"Wireshark FTypes",
+				"_ws.ftypes");
 
 	ftype_register_pseudofields_bytes(proto_ftypes);
 	ftype_register_pseudofields_double(proto_ftypes);
@@ -71,24 +74,13 @@ ftype_register(enum ftenum ftype, const ftype_t *ft)
 
 /* from README.dissector:
 	Note that the formats used must all belong to the same list as defined below:
-	- FT_INT8, FT_INT16, FT_INT24 and FT_INT32, FT_CHAR, FT_UINT8, FT_UINT16,
-	  FT_UINT24, FT_UINT32, FT_IPXNET, FT_FRAMENUM, FT_INT40, FT_INT48, FT_INT56
-	  FT_INT64, FT_UINT40, FT_UINT48, FT_UINT56 and FT_UINT64
+	- FT_INT8, FT_INT16, FT_INT24 and FT_INT32
+	- FT_UINT8, FT_UINT16, FT_UINT24, FT_UINT32, FT_IPXNET and FT_FRAMENUM
+	- FT_UINT64 and FT_EUI64
+	- FT_STRING, FT_STRINGZ and FT_UINT_STRING
+	- FT_FLOAT and FT_DOUBLE
+	- FT_BYTES, FT_UINT_BYTES, FT_AX25, FT_ETHER, FT_VINES, FT_OID and FT_REL_OID
 	- FT_ABSOLUTE_TIME and FT_RELATIVE_TIME
-	- FT_STRING, FT_STRINGZ, FT_UINT_STRING, FT_STRINGZPAD, FT_STRINGZTRUNC and FT_AX25
-	- FT_FLOAT, FT_DOUBLE, FT_IEEE_11073_SFLOAT and FT_IEEE_11073_FLOAT
-	- FT_BYTES, FT_UINT_BYTES, FT_ETHER, FT_VINES, FT_FCWWN and FT_EUI64
-	- FT_OID, FT_REL_OID and FT_SYSTEM_ID
-
-   We thus divide the types into equivalence classes of compatible types.
-   The same field abbreviation can be used by more than one field, even of
-   different types, so long as the types are compatible.
-
-   This function returns the canonical representative of a type. It can
-   be used to check if two fields are compatible.
-
-   XXX - Currently epan/dfilter/semcheck.c has its own implementation of
-   compatible types.
 */
 static enum ftenum
 same_ftype(const enum ftenum ftype)
@@ -98,17 +90,20 @@ same_ftype(const enum ftenum ftype)
 		case FT_INT16:
 		case FT_INT24:
 		case FT_INT32:
-		case FT_CHAR:
+			return FT_INT32;
+
 		case FT_UINT8:
 		case FT_UINT16:
 		case FT_UINT24:
 		case FT_UINT32:
-		case FT_IPXNET:
-		case FT_FRAMENUM:
+			return FT_UINT32;
+
 		case FT_INT40:
 		case FT_INT48:
 		case FT_INT56:
 		case FT_INT64:
+			return FT_INT64;
+
 		case FT_UINT40:
 		case FT_UINT48:
 		case FT_UINT56:
@@ -118,9 +113,6 @@ same_ftype(const enum ftenum ftype)
 		case FT_STRING:
 		case FT_STRINGZ:
 		case FT_UINT_STRING:
-		case FT_STRINGZPAD:
-		case FT_STRINGZTRUNC:
-		case FT_AX25:
 			return FT_STRING;
 
 		case FT_FLOAT:
@@ -129,26 +121,17 @@ same_ftype(const enum ftenum ftype)
 
 		case FT_BYTES:
 		case FT_UINT_BYTES:
-		case FT_ETHER:
-		case FT_VINES:
-		case FT_FCWWN:
-		case FT_EUI64:
 			return FT_BYTES;
 
 		case FT_OID:
 		case FT_REL_OID:
-		case FT_SYSTEM_ID:
-			/* XXX - dfilter/semcheck.c treats this group as compatible with BYTES */
 			return FT_OID;
 
 		/* XXX: the following are unique for now */
 		case FT_IPv4:
 		case FT_IPv6:
-		case FT_IEEE_11073_SFLOAT: /* XXX - should be able to compare with DOUBLE (#19011) */
-		case FT_IEEE_11073_FLOAT:  /* XXX - should be able to compare with DOUBLE */
 
 		/* everything else is unique */
-		/* XXX - README.dissector claims the time types are compatible. */
 		default:
 			return ftype;
 	}
@@ -167,9 +150,11 @@ ftype_similar_types(const enum ftenum ftype_a, const enum ftenum ftype_b)
 const char*
 ftype_name(enum ftenum ftype)
 {
+	const ftype_t	*ft;
 	const char *s = "(null)";
 
-	switch (ftype) {
+	FTYPE_LOOKUP(ftype, ft);
+	switch (ft->ftype) {
 		case FT_NONE:		s = "FT_NONE"; break;
 		case FT_PROTOCOL:	s = "FT_PROTOCOL"; break;
 		case FT_BOOLEAN:	s = "FT_BOOLEAN"; break;
@@ -225,9 +210,11 @@ ftype_name(enum ftenum ftype)
 const char*
 ftype_pretty_name(enum ftenum ftype)
 {
+	const ftype_t	*ft;
 	const char *s = "(null)";
 
-	switch (ftype) {
+	FTYPE_LOOKUP(ftype, ft);
+	switch (ft->ftype) {
 		case FT_NONE:		s = "Label"; break;
 		case FT_PROTOCOL:	s = "Protocol"; break;
 		case FT_BOOLEAN:	s = "Boolean"; break;
@@ -425,15 +412,6 @@ ftype_can_is_negative(enum ftenum ftype)
 }
 
 bool
-ftype_can_is_nan(enum ftenum ftype)
-{
-	const ftype_t	*ft;
-
-	FTYPE_LOOKUP(ftype, ft);
-	return ft->is_nan ? true : false;
-}
-
-bool
 ftype_can_val_to_sinteger(enum ftenum ftype)
 {
 	const ftype_t	*ft;
@@ -471,38 +449,25 @@ ftype_can_val_to_uinteger64(enum ftenum ftype)
 	return ft->val_to_uinteger64 ? true : false;
 }
 
-bool
-ftype_can_val_to_double(enum ftenum ftype)
-{
-	const ftype_t	*ft;
-
-	FTYPE_LOOKUP(ftype, ft);
-	/* We first convert to 64 bit and then check for overflow. */
-	return ft->val_to_double ? true : false;
-}
-
 /* ---------------------------------------------------------- */
 
-/* Allocate and initialize an fvalue_t, given an ftype using a GSlice. */
+/* Allocate and initialize an fvalue_t, given an ftype */
 fvalue_t*
 fvalue_new(ftenum_t ftype)
 {
 	fvalue_t		*fv;
+	const ftype_t		*ft;
+	FvalueNewFunc		new_value;
 
 	fv = g_slice_new(fvalue_t);
-	fvalue_init(fv, ftype);
 
-	return fv;
-}
+	FTYPE_LOOKUP(ftype, ft);
+	fv->ftype = ft;
 
-/* Allocate and initialize an fvalue_t, given an ftype using wmem. */
-fvalue_t *
-fvalue_new_pool(wmem_allocator_t *scope, ftenum_t ftype)
-{
-	fvalue_t		*fv;
-
-	fv = wmem_new(scope, fvalue_t);
-	fvalue_init(fv, ftype);
+	new_value = ft->new_value;
+	if (new_value) {
+		new_value(fv);
+	}
 
 	return fv;
 }
@@ -670,7 +635,7 @@ fvalue_from_uinteger64(ftenum_t ftype, const char *s, uint64_t num, char **err_m
 	}
 	else {
 		if (err_msg != NULL && *err_msg == NULL) {
-			*err_msg = ws_strdup_printf("Unsigned integer %"PRIu64" cannot be converted to %s.",
+			*err_msg = ws_strdup_printf("Unsigned integer 0x%"PRIu64" cannot be converted to %s.",
 						num, ftype_pretty_name(ftype));
 		}
 	}
@@ -757,8 +722,6 @@ fvalue_to_sinteger(const fvalue_t *fv, int32_t *repr)
 		return res;
 	if (val > INT32_MAX)
 		return FT_OVERFLOW;
-	if (val < INT32_MIN)
-		return FT_UNDERFLOW;
 
 	*repr = (int32_t)val;
 	return FT_OK;
@@ -767,31 +730,21 @@ fvalue_to_sinteger(const fvalue_t *fv, int32_t *repr)
 enum ft_result
 fvalue_to_uinteger64(const fvalue_t *fv, uint64_t *repr)
 {
-	if (!fv->ftype->val_to_uinteger64) {
-		return FT_BADARG;
-	}
+	ws_assert(fv->ftype->val_to_uinteger64);
 	return fv->ftype->val_to_uinteger64(fv, repr);
 }
 
 enum ft_result
 fvalue_to_sinteger64(const fvalue_t *fv, int64_t *repr)
 {
-	if (!fv->ftype->val_to_sinteger64) {
-		return FT_BADARG;
-	}
+	ws_assert(fv->ftype->val_to_sinteger64);
 	return fv->ftype->val_to_sinteger64(fv, repr);
 }
 
 enum ft_result
 fvalue_to_double(const fvalue_t *fv, double *repr)
 {
-	/* We should be able to test this earlier (e.g., in semantic check)
-	 * but there are non-compatible fields that share the same abbrev
-	 * so we have to check it on each fvalue.
-	 */
-	if (!fv->ftype->val_to_double) {
-		return FT_BADARG;
-	}
+	ws_assert(fv->ftype->val_to_double);
 	return fv->ftype->val_to_double(fv, repr);
 }
 
@@ -942,7 +895,6 @@ fvalue_set_bytes(fvalue_t *fv, GBytes *value)
 			fv->ftype->ftype == FT_SYSTEM_ID ||
 			fv->ftype->ftype == FT_VINES ||
 			fv->ftype->ftype == FT_ETHER ||
-			fv->ftype->ftype == FT_EUI64 ||
 			fv->ftype->ftype == FT_FCWWN);
 	ws_assert(fv->ftype->set_value.set_value_bytes);
 	fv->ftype->set_value.set_value_bytes(fv, value);
@@ -1042,24 +994,18 @@ fvalue_set_strbuf(fvalue_t *fv, wmem_strbuf_t *value)
 }
 
 void
-fvalue_set_protocol(fvalue_t *fv, tvbuff_t *value, const char *name, unsigned length)
+fvalue_set_protocol(fvalue_t *fv, tvbuff_t *value, const char *name, int length)
 {
 	ws_assert(fv->ftype->ftype == FT_PROTOCOL);
 	ws_assert(fv->ftype->set_value.set_value_protocol);
-	// We probably should check the below, but some parts of proto.c
-	// don't guarantee this.
-	ws_assert(value == NULL || tvb_captured_length(value) >= length);
 	fv->ftype->set_value.set_value_protocol(fv, value, name, length);
 }
 
 void
-fvalue_set_protocol_length(fvalue_t *fv, unsigned length)
+fvalue_set_protocol_length(fvalue_t *fv, int length)
 {
 	ws_assert(fv->ftype->ftype == FT_PROTOCOL);
 	protocol_value_t *proto = &fv->value.protocol;
-	// We probably should check the below, but some parts of proto.c
-	// don't guarantee this.
-	ws_assert(proto->tvb == NULL || tvb_captured_length(proto->tvb) >= length);
 	proto->length = length;
 }
 
@@ -1097,7 +1043,8 @@ fvalue_set_uinteger64(fvalue_t *fv, uint64_t value)
 			fv->ftype->ftype == FT_UINT48 ||
 			fv->ftype->ftype == FT_UINT56 ||
 			fv->ftype->ftype == FT_UINT64 ||
-			fv->ftype->ftype == FT_BOOLEAN);
+			fv->ftype->ftype == FT_BOOLEAN ||
+			fv->ftype->ftype == FT_EUI64);
 	ws_assert(fv->ftype->set_value.set_value_uinteger64);
 	fv->ftype->set_value.set_value_uinteger64(fv, value);
 }
@@ -1149,7 +1096,6 @@ fvalue_get_bytes(fvalue_t *fv)
 			fv->ftype->ftype == FT_REL_OID ||
 			fv->ftype->ftype == FT_SYSTEM_ID ||
 			fv->ftype->ftype == FT_FCWWN ||
-			fv->ftype->ftype == FT_EUI64 ||
 			fv->ftype->ftype == FT_IPv6);
 	ws_assert(fv->ftype->get_value.get_value_bytes);
 	return fv->ftype->get_value.get_value_bytes(fv);
@@ -1245,7 +1191,8 @@ fvalue_get_uinteger64(fvalue_t *fv)
 			fv->ftype->ftype == FT_UINT48 ||
 			fv->ftype->ftype == FT_UINT56 ||
 			fv->ftype->ftype == FT_UINT64 ||
-			fv->ftype->ftype == FT_BOOLEAN);
+			fv->ftype->ftype == FT_BOOLEAN ||
+			fv->ftype->ftype == FT_EUI64);
 	ws_assert(fv->ftype->get_value.get_value_uinteger64);
 	return fv->ftype->get_value.get_value_uinteger64(fv);
 }
@@ -1390,22 +1337,16 @@ fvalue_matches(const fvalue_t *a, const ws_regex_t *re)
 	return yes ? FT_TRUE : FT_FALSE;
 }
 
-bool
+ft_bool_t
 fvalue_is_zero(const fvalue_t *a)
 {
-	return a->ftype->is_zero(a);
+	return a->ftype->is_zero(a) ? FT_TRUE : FT_FALSE;
 }
 
-bool
+ft_bool_t
 fvalue_is_negative(const fvalue_t *a)
 {
-	return a->ftype->is_negative(a);
-}
-
-bool
-fvalue_is_nan(const fvalue_t *a)
-{
-	return a->ftype->is_nan(a);
+	return a->ftype->is_negative(a) ? FT_TRUE : FT_FALSE;
 }
 
 static fvalue_t *

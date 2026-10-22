@@ -11,8 +11,14 @@
  */
 
 #include <wsutil/adler32.h>
-#include <wsutil/zlib_compat.h>
 
+#ifdef HAVE_ZLIBNG
+#include <zlib-ng.h>
+#else
+#ifdef HAVE_ZLIB
+#include <zlib.h>
+#endif /* HAVE_ZLIB */
+#endif
 #include <string.h>
 
 #define BASE 65521 /* largest prime smaller than 65536 */
@@ -20,8 +26,12 @@
 /*--- update_adler32 --------------------------------------------------------*/
 uint32_t update_adler32(uint32_t adler, const uint8_t *buf, size_t len)
 {
-#ifdef USE_ZLIB_OR_ZLIBNG
-  return (uint32_t)ZLIB_PREFIX(adler32)(adler, buf, len);
+#if defined (HAVE_ZLIB) || defined (HAVE_ZLIBNG)
+#ifdef HAVE_ZLIBNG
+  return (uint32_t)zng_adler32(adler, buf, len);
+#else
+  return (uint32_t)adler32(adler, buf, len);
+#endif
 #endif
   uint32_t s1 = adler & 0xffff;
   uint32_t s2 = (adler >> 16) & 0xffff;

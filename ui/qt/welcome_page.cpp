@@ -11,24 +11,21 @@
 
 #include <epan/prefs.h>
 
-#include "ui/recent.h"
+#include "ui/capture_globals.h"
 #include "ui/urls.h"
 
-#include <app/application_flavor.h>
+#include "wsutil/filesystem.h"
+#include "wsutil/version_info.h"
 
 #include "welcome_page.h"
 #include <ui_welcome_page.h>
+#include <ui/qt/utils/tango_colors.h>
 #include <ui/qt/utils/color_utils.h>
 #include <ui/qt/utils/qt_ui_utils.h>
-#include <ui/qt/utils/theme_manager.h>
-#include <ui/qt/models/recentcapturefiles_list_model.h>
-#include <ui/qt/utils/workspace_state.h>
-#include <ui/qt/widgets/capture_card_widget.h>
-
 #include "main_application.h"
 
-#include <QBoxLayout>
 #include <QClipboard>
+#include <QDate>
 #include <QDesktopServices>
 #include <QDir>
 #include <QListWidget>
@@ -41,10 +38,13 @@
 #define VERSION_FLAVOR ""
 #endif
 
+#include <extcap.h>
+
 WelcomePage::WelcomePage(QWidget *parent) :
     QFrame(parent),
     welcome_ui_(new Ui::WelcomePage),
-    #ifdef Q_OS_MACOS
+    flavor_(tr(VERSION_FLAVOR)),
+    #ifdef Q_OS_MAC
     show_in_str_(tr("Show in Finder")),
     #else
     show_in_str_(tr("Show in Folder")),
@@ -54,68 +54,46 @@ WelcomePage::WelcomePage(QWidget *parent) :
 {
     welcome_ui_->setupUi(this);
 
-    setContentsMargins(0, 0, 0, 0);
-    setAccessibleName(tr("Welcome page"));
-    setAccessibleDescription(tr("The %1 welcome page provides access to recent files, capture interfaces, and learning resources.").arg(mainApp->applicationName()));
+    recent_files_ = welcome_ui_->recentList;
 
-    /* Initially set the sidebar hidden, it will be made visible or not by
-     * applySidebarPreferences. */
-    welcome_ui_->sidebarContainer->setVisible(false);
+    welcome_ui_->captureFilterComboBox->setEnabled(false);
+
+    welcome_ui_->mainWelcomeBanner->setText(tr("Welcome to %1").arg(mainApp->applicationName()));
 
     updateStyleSheets();
-    connect(ThemeManager::instance(), &ThemeManager::themeChanged,
-            this, &WelcomePage::updateStyleSheets);
 
-    /* Handle Recent Capture Files List */
-    // In welcome_page.cpp or wherever the list is created
-    auto *model = new RecentCaptureFilesListModel(this);
-    auto *proxyModel = new RecentCaptureFilesReverseProxyModel(this);
-    proxyModel->setSourceModel(model);
 
-    welcome_ui_->openFileSectionRecentList->setVisible(true);
-    welcome_ui_->openFileSectionRecentList->setModel(proxyModel);
-    welcome_ui_->openFileSectionRecentList->setItemDelegate(new RecentCaptureFilesDelegate(welcome_ui_->openFileSectionRecentList));
-    welcome_ui_->openFileSectionRecentList->setContextMenuPolicy(Qt::CustomContextMenu);
-    welcome_ui_->openFileSectionRecentList->setAccessibleName(tr("Recent capture files"));
-    welcome_ui_->openFileSectionRecentList->setAccessibleDescription(tr("List of recently opened capture files. Double-click or press Enter to open."));
-    connect(welcome_ui_->openFileSectionRecentList, &QListView::activated,
-        this, [this]() {
-            QModelIndex index = welcome_ui_->openFileSectionRecentList->currentIndex();
-            if (index.isValid()) {
-                QString cfile = index.data(RecentCaptureFilesListModel::FilenameRole).toString();
-                emit recentFileActivated(cfile);
-            }
-        });
-    connect(welcome_ui_->openFileSectionRecentList, &QListView::customContextMenuRequested,
-        this, &WelcomePage::showCaptureFilesContextMenu);
-
-    // Show the Open section only when there are recent files, and keep it
-    // (and the layout) up to date as files are added or removed.
-    auto updateOpenSection = [this]() {
-        bool has_recent = !WorkspaceState::instance()->recentCaptureFiles().isEmpty();
-        welcome_ui_->openFileSectionLabel->setVisible(has_recent);
-        welcome_ui_->openFileSectionRecentList->setVisible(has_recent);
-        updateSidebarLayout();
-    };
-    updateOpenSection();
-    connect(WorkspaceState::instance(), &WorkspaceState::recentCaptureFilesChanged, this, updateOpenSection);
-    connect(WorkspaceState::instance(), &WorkspaceState::stateLoaded, this, updateOpenSection);
-
-#ifdef Q_OS_MACOS
-    welcome_ui_->openFileSectionRecentList->setAttribute(Qt::WA_MacShowFocusRect, false);
+#ifdef Q_OS_MAC
+    recent_files_->setAttribute(Qt::WA_MacShowFocusRect, false);
 #endif
 
-    welcome_ui_->openFileSectionRecentList->setTextElideMode(Qt::ElideLeft);
+    welcome_ui_->openFrame->hide();
+    recent_files_->setTextElideMode(Qt::ElideLeft);
 
-    mainApp->whenInitialized(this, [this]() { appInitialized(); });
-    connect(mainApp, &MainApplication::preferencesChanged, this, &WelcomePage::applySidebarPreferences);
+    welcome_ui_->recentList->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(recent_files_, &QListWidget::customContextMenuRequested, this, &WelcomePage::showRecentContextMenu);
 
-    // "Capture" header click opens Capture Options dialog
-    if (auto *captureHeader = welcome_ui_->captureSectionCard->findChild<ClickableLabel*>(QStringLiteral("captureHeader"))) {
-        connect(captureHeader, &ClickableLabel::clicked, this, []() {
-            mainApp->doTriggerMenuItem(MainApplication::CaptureOptionsDialog);
-        });
-    }
+    connect(mainApp, &MainApplication::updateRecentCaptureStatus, this, &WelcomePage::updateRecentCaptures);
+    connect(mainApp, &MainApplication::preferencesChanged, this, &WelcomePage::updateRecentCaptures);
+    connect(mainApp, &MainApplication::appInitialized, this, &WelcomePage::appInitialized);
+    connect(mainApp, &MainApplication::localInterfaceListChanged, this, &WelcomePage::interfaceListChanged);
+#ifdef HAVE_LIBPCAP
+    connect(mainApp, &MainApplication::scanLocalInterfaces,
+            welcome_ui_->interfaceFrame, &InterfaceFrame::scanLocalInterfaces);
+#endif
+    connect(welcome_ui_->interfaceFrame, &InterfaceFrame::itemSelectionChanged,
+            welcome_ui_->captureFilterComboBox, &CaptureFilterCombo::interfacesChanged);
+    connect(welcome_ui_->interfaceFrame, &InterfaceFrame::typeSelectionChanged,
+                    this, &WelcomePage::interfaceListChanged);
+    connect(welcome_ui_->interfaceFrame, &InterfaceFrame::itemSelectionChanged, this, &WelcomePage::interfaceSelected);
+    connect(welcome_ui_->captureFilterComboBox->lineEdit(), &QLineEdit::textEdited,
+            this, &WelcomePage::captureFilterTextEdited);
+    connect(welcome_ui_->captureFilterComboBox, &CaptureFilterCombo::captureFilterSyntaxChanged,
+            this, &WelcomePage::captureFilterSyntaxChanged);
+    connect(welcome_ui_->captureFilterComboBox, &CaptureFilterCombo::startCapture,
+            this, &WelcomePage::captureStarting);
+    connect(recent_files_, &QListWidget::itemActivated, this, &WelcomePage::openRecentItem);
+    updateRecentCaptures();
 
     splash_overlay_ = new SplashOverlay(this);
 }
@@ -127,90 +105,150 @@ WelcomePage::~WelcomePage()
 
 InterfaceFrame *WelcomePage::getInterfaceFrame()
 {
-    return welcome_ui_->captureSectionCard->interfaceFrame();
-}
-
-CaptureCardWidget *WelcomePage::captureCard()
-{
-    return welcome_ui_->captureSectionCard;
+    return welcome_ui_->interfaceFrame;
 }
 
 const QString WelcomePage::captureFilter()
 {
-    return welcome_ui_->captureSectionCard->captureFilter();
+    return welcome_ui_->captureFilterComboBox->currentText();
 }
 
 void WelcomePage::setCaptureFilter(const QString capture_filter)
 {
-    welcome_ui_->captureSectionCard->setCaptureFilter(capture_filter);
+    // capture_filter comes from the current filter in
+    // CaptureInterfacesDialog. We need to find a good way to handle
+    // multiple filters.
+    welcome_ui_->captureFilterComboBox->lineEdit()->setText(capture_filter);
 }
 
-void WelcomePage::setCaptureFilterText(const QString capture_filter)
+void WelcomePage::interfaceListChanged()
 {
-    welcome_ui_->captureSectionCard->setCaptureFilterText(capture_filter);
+    QString btnText = tr("All interfaces shown");
+    if (welcome_ui_->interfaceFrame->interfacesHidden() > 0) {
+        btnText = tr("%n interface(s) shown, %1 hidden", "",
+                     welcome_ui_->interfaceFrame->interfacesPresent())
+                .arg(welcome_ui_->interfaceFrame->interfacesHidden());
+    }
+    welcome_ui_->btnInterfaceType->setText(btnText);
+    welcome_ui_->btnInterfaceType->setMenu(welcome_ui_->interfaceFrame->getSelectionMenu());
 }
 
-void WelcomePage::interfaceSelected()
+void WelcomePage::setReleaseLabel()
 {
-    welcome_ui_->captureSectionCard->interfaceSelected();
+    // XXX Add a "check for updates" link?
+    QString full_release;
+    QDate today = QDate::currentDate();
+    if ((today.month() == 4 && today.day() == 1) || (today.month() == 7 && today.day() == 14)) {
+        if (is_packet_configuration_namespace()) {
+            full_release = tr("You are sniffing the glue that holds the Internet together using Wireshark ");
+        } else {
+            full_release = tr("You are sniffing the glue that holds your system together using Logray ");
+        }
+    } else {
+        if (is_packet_configuration_namespace()) {
+            full_release = tr("You are running Wireshark ");
+        } else {
+            full_release = tr("You are running Logray ");
+        }
+    }
+    full_release += is_packet_configuration_namespace() ? get_ws_vcs_version_info() : get_lr_vcs_version_info();
+    full_release += ".";
+#ifdef HAVE_SOFTWARE_UPDATE
+    if (prefs.gui_update_enabled) {
+        full_release += tr(" You receive automatic updates.");
+    } else {
+        full_release += tr(" You have disabled automatic updates.");
+    }
+#else
+    // XXX Is there a way to tell if the user installed Wireshark via an
+    // external package manager? If so we could say so here. We could
+    // also add a link to the download page.
+#endif
+    welcome_ui_->fullReleaseLabel->setText(full_release);
 }
 
 void WelcomePage::appInitialized()
 {
-    applySidebarPreferences();
+    setReleaseLabel();
 
-    splash_overlay_->fadeOut();
+#ifdef HAVE_LIBPCAP
+    welcome_ui_->captureFilterComboBox->lineEdit()->setText(global_capture_opts.default_options.cfilter);
+#endif // HAVE_LIBPCAP
+
+    welcome_ui_->captureFilterComboBox->setEnabled(true);
+
+    interfaceListChanged();
+
+    welcome_ui_->interfaceFrame->ensureSelectedInterface();
+
+    delete splash_overlay_;
     splash_overlay_ = NULL;
-
-    // Ensure sidebar layout adapts to the restored window size.
-    // resizeEvent may have fired before the layout was finalized.
-    updateSidebarLayout();
 }
 
-void WelcomePage::applySidebarPreferences()
+#ifdef HAVE_LIBPCAP
+// Update each selected device cfilter when the user changes the contents
+// of the capture filter lineedit. We do so here so that we don't clobber
+// filters set in the Capture Options / Interfaces dialog or ones set via
+// the command line.
+void WelcomePage::captureFilterTextEdited(const QString capture_filter)
 {
-    // There are slides that will be shown EVEN if the section card is set hidden through the preferences.
-    // hasVisibleSlides() checks if there are any slides that should be shown, as well as the user's preferences.
-    bool slidesAreVisible = welcome_ui_->tipsSectionCard->hasVisibleSlides();
+    if (global_capture_opts.num_selected > 0) {
+        interface_t *device;
 
-    welcome_ui_->tipsSectionCard->setSlideDeckFreeze(true);
-    welcome_ui_->tipsSectionCard->setSlideTypeVisible(BannerEvents, recent.gui_welcome_page_sidebar_tips_events);
-    welcome_ui_->tipsSectionCard->setSlideTypeVisible(BannerSponsorship, recent.gui_welcome_page_sidebar_tips_sponsorship);
-    welcome_ui_->tipsSectionCard->setSlideTypeVisible(BannerTips, recent.gui_welcome_page_sidebar_tips_tips);
-    welcome_ui_->tipsSectionCard->setSlidesTest(recent.gui_welcome_page_sidebar_tips_slides_test);
-    welcome_ui_->tipsSectionCard->setSlideDeckFreeze(false);
-    welcome_ui_->tipsSectionCard->setAutoAdvance(recent.gui_welcome_page_sidebar_tips_auto_advance);
-    welcome_ui_->tipsSectionCard->setAutoAdvanceInterval(recent.gui_welcome_page_sidebar_tips_interval);
-    welcome_ui_->tipsSectionCard->setVisible(slidesAreVisible);
+        for (unsigned i = 0; i < global_capture_opts.all_ifaces->len; i++) {
+            device = &g_array_index(global_capture_opts.all_ifaces, interface_t, i);
+            if (!device->selected) {
+                continue;
+            }
+            //                if (device->active_dlt == -1) {
+            //                    simple_dialog(ESD_TYPE_ERROR, ESD_BTN_OK, "The link type of interface %s was not specified.", device->name);
+            //                    continue;  /* Programming error: somehow managed to select an "unsupported" entry */
+            //                }
+            g_free(device->cfilter);
+            if (capture_filter.isEmpty()) {
+                device->cfilter = NULL;
+            } else {
+                device->cfilter = qstring_strdup(capture_filter);
+            }
+            //                update_filter_string(device->name, filter_text);
+        }
+    }
+}
+#else
+// No-op if we don't have capturing.
+void WelcomePage::captureFilterTextEdited(const QString)
+{
+}
+#endif
 
-    welcome_ui_->learnSectionCard->setVisible(recent.gui_welcome_page_sidebar_learn_visible);
+// The interface list selection has changed. At this point the user might
+// have entered a filter or we might have pre-filled one from a number of
+// sources such as our remote connection, the command line, or a previous
+// selection.
+// Must not change any interface data.
+void WelcomePage::interfaceSelected()
+{
+    QPair <const QString, bool> sf_pair = CaptureFilterEdit::getSelectedFilter();
+    const QString user_filter = sf_pair.first;
+    bool conflict = sf_pair.second;
 
-    // Hide the entire sidebar container when all sidebar widgets are disabled,
-    // so the main content area can expand to fill the full window width.
-    bool sidebar_visible = slidesAreVisible || recent.gui_welcome_page_sidebar_learn_visible;
-    welcome_ui_->sidebarContainer->setVisible(sidebar_visible);
+    if (conflict) {
+        welcome_ui_->captureFilterComboBox->lineEdit()->clear();
+        welcome_ui_->captureFilterComboBox->setConflict(true);
+    } else {
+        welcome_ui_->captureFilterComboBox->lineEdit()->setText(user_filter);
+    }
 
-    // Ensure sidebar layout adapts to the restored window size.
-    // (XXX - This really only needs to happen if one of the cards is switching
-    // to visible, and only if this is the first time being shown or if a
-    // ResizeEvent occurred while hidden. But preference changes should be
-    // rare.)
-    updateSidebarLayout();
+    // Notify others (capture options dialog) that the selection has changed.
+    emit interfacesChanged();
 }
 
 bool WelcomePage::event(QEvent *event)
 {
     switch (event->type()) {
     case QEvent::ApplicationPaletteChange:
-    {
         updateStyleSheets();
         break;
-    }
-    case QEvent::LanguageChange:
-    {
-        welcome_ui_->retranslateUi(this);
-        break;
-    }
     default:
         break;
 
@@ -218,198 +256,299 @@ bool WelcomePage::event(QEvent *event)
     return QFrame::event(event);
 }
 
+void WelcomePage::on_interfaceFrame_showExtcapOptions(QString device_name, bool startCaptureOnClose)
+{
+    emit showExtcapOptions(device_name, startCaptureOnClose);
+}
+
+void WelcomePage::on_interfaceFrame_startCapture(QStringList ifaces)
+{
+    emit startCapture(ifaces);
+}
+
+void WelcomePage::captureStarting()
+{
+    welcome_ui_->interfaceFrame->ensureSelectedInterface();
+    emit startCapture(QStringList());
+}
+
+void WelcomePage::updateRecentCaptures() {
+    QString itemLabel;
+    QListWidgetItem *rfItem;
+    QFont rfFont;
+    QString selectedFilename;
+
+    if (!recent_files_->selectedItems().isEmpty()) {
+        rfItem = recent_files_->selectedItems().first();
+        selectedFilename = rfItem->data(Qt::UserRole).toString();
+    }
+
+    if (mainApp->recentItems().count() == 0 || prefs.gui_welcome_page_show_recent) {
+       // Recent menu has been cleared, remove all recent files.
+       while (recent_files_->count()) {
+          delete recent_files_->item(0);
+       }
+    }
+
+    int rfRow = 0;
+    if(prefs.gui_welcome_page_show_recent) {
+        foreach (recent_item_status *ri, mainApp->recentItems()) {
+            itemLabel = ri->filename;
+
+            if (rfRow >= recent_files_->count()) {
+                recent_files_->addItem(itemLabel);
+            }
+
+            itemLabel.append(" (");
+            if (ri->accessible) {
+                if (ri->size/1024/1024/1024 > 10) {
+                    itemLabel.append(QString("%1 GB").arg(ri->size/1024/1024/1024));
+                } else if (ri->size/1024/1024 > 10) {
+                    itemLabel.append(QString("%1 MB").arg(ri->size/1024/1024));
+                } else if (ri->size/1024 > 10) {
+                    itemLabel.append(QString("%1 KB").arg(ri->size/1024));
+                } else {
+                    itemLabel.append(QString("%1 Bytes").arg(ri->size));
+                }
+            } else {
+                itemLabel.append(tr("not found"));
+            }
+            itemLabel.append(")");
+            rfFont.setItalic(!ri->accessible);
+            rfItem = recent_files_->item(rfRow);
+            rfItem->setText(itemLabel);
+            rfItem->setData(Qt::AccessibleTextRole, itemLabel);
+            rfItem->setData(Qt::UserRole, ri->filename);
+            rfItem->setFlags(ri->accessible ? Qt::ItemIsSelectable | Qt::ItemIsEnabled : Qt::NoItemFlags);
+            rfItem->setFont(rfFont);
+            if (ri->filename == selectedFilename) {
+                rfItem->setSelected(true);
+            }
+            rfRow++;
+        }
+    }
+
+    int row = recent_files_->count();
+    while (row > 0 && (row > (int) prefs.gui_recent_files_count_max || row > rfRow)) {
+        row--;
+        delete recent_files_->item(row);
+    }
+    if (recent_files_->count() > 0) {
+        welcome_ui_->openFrame->animatedShow();
+    } else {
+        welcome_ui_->openFrame->animatedHide();
+    }
+}
+
+void WelcomePage::openRecentItem(QListWidgetItem *item) {
+    QString cfPath = item->data(Qt::UserRole).toString();
+    emit recentFileActivated(cfPath);
+}
+
 void WelcomePage::resizeEvent(QResizeEvent *event)
 {
     if (splash_overlay_)
         splash_overlay_->resize(event->size());
+//    event->accept();
 
     QFrame::resizeEvent(event);
-
-    updateSidebarLayout();
 }
 
-void WelcomePage::showEvent(QShowEvent *event)
+void WelcomePage::setCaptureFilterText(const QString capture_filter)
 {
-    QFrame::showEvent(event);
-
-    // The final window geometry may not be known until the widget is shown
-    // (especially on macOS with restored window positions). Ensure the
-    // sidebar layout adapts to the actual available space.
-    updateSidebarLayout();
+    welcome_ui_->captureFilterComboBox->lineEdit()->setText(capture_filter);
+    captureFilterTextEdited(capture_filter);
 }
 
-/*
- * Adapts the sidebar widget states to the available vertical space.
- *
- * The sidebar contains two widgets stacked vertically with spacing between
- * them: the InfoBannerWidget (tips/sponsors) and the LearnCardWidget (docs
- * links + action buttons). Both support a compact mode to reduce their
- * height when the window is small.
- *
- * Collapse order (as the window shrinks):
- *   1. LearnCardWidget links collapse (vertical list -> horizontal row)
- *   2. InfoBannerWidget compacts (hides illustration and body text)
- *
- * Expand order (as the window grows) is the reverse:
- *   1. InfoBannerWidget expands back to full
- *   2. LearnCardWidget links expand back to vertical
- *
- * All size values are queried from the widgets and layout, not hardcoded:
- *   - tipsFull:  InfoBannerWidget::sizeHint().height()
- *                Always returns the full preferred height (360) regardless
- *                of compact state. This is stable because sizeHint()
- *                reports what the widget *wants*, while compact mode is
- *                enforced via setMaximumHeight().
- *   - learnMax:  LearnCardWidget::maximumHeight()  (from .ui: 240)
- *   - learnMin:  LearnCardWidget::minimumHeight()   (from .ui: 110)
- *   - spacing:   sidebarLayout->spacing()            (from .ui: 16)
- *
- * Hysteresis (kHysteresis = 20px):
- *   Without hysteresis, at the exact collapse threshold the layout
- *   oscillates: collapsing a widget frees space, which satisfies the
- *   expand threshold, which expands, which exceeds the threshold again.
- *   On each resize event this cycle repeats, causing visible flickering.
- *
- *   Hysteresis adds a dead zone between collapse and expand thresholds.
- *   A widget collapses at threshold T but only re-expands at T + 20.
- *   In the 20px gap, the current state is preserved.
- *
- *   The value 20px was chosen empirically: it must be large enough that
- *   the layout geometry change from collapsing/expanding a widget (which
- *   can shift available height by a few pixels due to rounding, spacing,
- *   and platform differences) doesn't cross back over the threshold. In
- *   practice, resize events during a user drag arrive ~8-12px apart, so
- *   20px ensures at least one stable frame at the boundary. A larger
- *   value would delay the transition visibly; a smaller one risks not
- *   fully suppressing the oscillation on high-DPI displays where pixel
- *   increments are coarser.
- *
- * Decision zones (with current widget sizes):
- *
- *   available >= 636 (linksExpandAt)
- *     -> full tips + expanded links
- *
- *   available >= 506 (tipsExpandAt)  and  < 636
- *     -> full tips + collapsed links
- *     (between 616-635: hysteresis zone for links -- keeps current state
- *      if already expanded, won't re-expand if collapsed)
- *
- *   available >= 486 (tipsCompactAt)  and  < 506
- *     -> hysteresis zone for tips -- keeps current tips state,
- *       links forced collapsed
- *
- *   available < 486 (tipsCompactAt)
- *     -> compact tips + collapsed links
- *
- * Called from: resizeEvent(), showEvent(), appInitialized(), and
- * indirectly via updateGeometry() when the welcome header banner
- * visibility changes.
- */
-void WelcomePage::updateSidebarLayout()
+void WelcomePage::changeEvent(QEvent* event)
 {
-    // Open and Capture go side-by-side if preferred, there are recent files
-    // to list, and each column gets at least kMinColumnWidth; otherwise
-    // they are stacked. The container width doesn't depend on the direction,
-    // so this can't oscillate.
-    static const int kMinColumnWidth = 320;
-    QBoxLayout *content = welcome_ui_->mainContentLayout;
-    static const int kColumnSpacing = 24;
-    bool sideBySide = recent.gui_welcome_page_side_by_side &&
-            !WorkspaceState::instance()->recentCaptureFiles().isEmpty() &&
-            welcome_ui_->mainContentContainer->width() >= 2 * kMinColumnWidth + kColumnSpacing;
-    content->setDirection(sideBySide ? QBoxLayout::LeftToRight : QBoxLayout::TopToBottom);
-    content->setSpacing(sideBySide ? kColumnSpacing : -1);
-    content->setStretch(0, sideBySide ? 1 : 0);
-    content->setStretch(1, sideBySide ? 1 : 0);
-
-    int available = welcome_ui_->sidebarContainer->height();
-    if (available <= 0)
-        return;
-
-    static const int kHysteresis = 20;
-
-    int spacing = welcome_ui_->sidebarLayout->spacing();
-    int tipsFull = welcome_ui_->tipsSectionCard->sizeHint().height();
-    int learnMax = welcome_ui_->learnSectionCard->maximumHeight();
-    int learnMin = welcome_ui_->learnSectionCard->minimumHeight();
-
-    // Collapse threshold: the minimum available height to show this state.
-    // Expand threshold: collapse + hysteresis -- prevents oscillation.
-
-    // Level 1: links collapse when full tips + expanded learn don't fit.
-    int linksCollapseAt = tipsFull + spacing + learnMax;
-    int linksExpandAt = linksCollapseAt + kHysteresis;
-
-    // Level 2: tips compact when full tips + collapsed learn don't fit.
-    int tipsCompactAt = tipsFull + spacing + learnMin;
-    int tipsExpandAt = tipsCompactAt + kHysteresis;
-
-    bool collapseLinks;
-    bool compactTips = welcome_ui_->tipsSectionCard->isCompactMode();
-
-    if (available >= linksExpandAt) {
-        collapseLinks = false;
-        compactTips = false;
-    } else if (available >= tipsExpandAt) {
-        collapseLinks = true;
-        compactTips = false;
-    } else if (available >= tipsCompactAt) {
-        collapseLinks = true;
-        // tips state preserved (hysteresis zone)
-    } else {
-        collapseLinks = true;
-        compactTips = true;
+    if (0 != event)
+    {
+        switch (event->type())
+        {
+        case QEvent::LanguageChange:
+            welcome_ui_->retranslateUi(this);
+            welcome_ui_->flavorBanner->setText(flavor_);
+            interfaceListChanged();
+            setReleaseLabel();
+            break;
+        default:
+            break;
+        }
     }
-
-    welcome_ui_->learnSectionCard->setLinksCollapsed(collapseLinks);
-    welcome_ui_->tipsSectionCard->setCompactMode(compactTips);
+    QFrame::changeEvent(event);
 }
 
-void WelcomePage::showCaptureFilesContextMenu(QPoint pos)
+void WelcomePage::showRecentContextMenu(QPoint pos)
 {
-    QModelIndex index = welcome_ui_->openFileSectionRecentList->indexAt(pos);
-    if (!index.isValid()) return;
+    QListWidgetItem *li = recent_files_->itemAt(pos);
+    if (!li) return;
 
     QMenu *recent_ctx_menu = new QMenu(this);
     recent_ctx_menu->setAttribute(Qt::WA_DeleteOnClose);
 
-    QModelIndex sourceIndex = static_cast<QSortFilterProxyModel*>(welcome_ui_->openFileSectionRecentList->model())->mapToSource(index);
-    RecentCaptureFilesListModel *model = static_cast<RecentCaptureFilesListModel*>(
-        static_cast<QSortFilterProxyModel*>(welcome_ui_->openFileSectionRecentList->model())->sourceModel());
-
-    QString filePath = model->data(sourceIndex, RecentCaptureFilesListModel::FilenameRole).toString();
-    bool accessible = model->data(sourceIndex, RecentCaptureFilesListModel::AccessibleRole).toBool();
+    QString cf_path = li->data(Qt::UserRole).toString();
 
     QAction *show_action = recent_ctx_menu->addAction(show_in_str_);
-    show_action->setEnabled(accessible);
-    connect(show_action, &QAction::triggered, this, [filePath]{ desktop_show_in_folder(filePath); });
+    show_action->setData(cf_path);
+    connect(show_action, &QAction::triggered, this, &WelcomePage::showRecentFolder);
 
     QAction *copy_action = recent_ctx_menu->addAction(tr("Copy file path"));
-    connect(copy_action, &QAction::triggered, this, [filePath]{ mainApp->clipboard()->setText(filePath); });
+    copy_action->setData(cf_path);
+    connect(copy_action, &QAction::triggered, this, &WelcomePage::copyRecentPath);
 
     recent_ctx_menu->addSeparator();
 
     QAction *remove_action = recent_ctx_menu->addAction(tr("Remove from list"));
-    connect(remove_action, &QAction::triggered, this, [filePath]{
-        WorkspaceState::instance()->removeRecentCaptureFile(filePath);
-    });
+    remove_action->setData(cf_path);
+    connect(remove_action, &QAction::triggered, this, &WelcomePage::removeRecentPath);
 
-    recent_ctx_menu->popup(welcome_ui_->openFileSectionRecentList->viewport()->mapToGlobal(pos));
+    recent_ctx_menu->popup(recent_files_->mapToGlobal(pos));
+}
+
+void WelcomePage::showRecentFolder()
+{
+    QAction *ria = qobject_cast<QAction*>(sender());
+    if (!ria) return;
+
+    QString cf_path = ria->data().toString();
+    if (cf_path.isEmpty()) return;
+
+    desktop_show_in_folder(cf_path);
+}
+
+void WelcomePage::copyRecentPath()
+{
+    QAction *ria = qobject_cast<QAction*>(sender());
+    if (!ria) return;
+
+    QString cf_path = ria->data().toString();
+    if (cf_path.isEmpty()) return;
+
+    mainApp->clipboard()->setText(cf_path);
+}
+
+void WelcomePage::removeRecentPath()
+{
+    QAction *ria = qobject_cast<QAction*>(sender());
+    if (!ria) return;
+
+    QString cf_path = ria->data().toString();
+    if (cf_path.isEmpty()) return;
+
+    mainApp->removeRecentItem(cf_path);
+}
+
+void WelcomePage::on_captureLabel_clicked()
+{
+    mainApp->doTriggerMenuItem(MainApplication::CaptureOptionsDialog);
+}
+
+void WelcomePage::on_helpLabel_clicked()
+{
+    QDesktopServices::openUrl(QUrl(WS_DOCS_URL));
 }
 
 void WelcomePage::updateStyleSheets()
 {
-    QString welcome_ss = ThemeManager::styleSheet(QStringLiteral("welcome-page"));
+    QString welcome_ss = QString(
+                "WelcomePage {"
+                "  padding: 1em;"
+                " }"
+                "WelcomePage, QAbstractItemView {"
+                "  background-color: palette(base);"
+                "  color: palette(text);"
+                " }"
+                "QAbstractItemView {"
+                "  border: 0;"
+                "}"
+                );
 #if !defined(Q_OS_WIN)
-    // Same hover fill as the other item views.
-    welcome_ss += ColorUtils::itemHoverStyleSheet(QStringLiteral("QAbstractItemView"));
+    welcome_ss += QString(
+                "QAbstractItemView:item:hover {"
+                "  background-color: %1;"
+                "  color: palette(text);"
+                "}"
+                )
+            .arg(ColorUtils::hoverBackground().name(QColor::HexArgb));
 #endif
     setStyleSheet(welcome_ss);
 
-    /* LearnCardWidget and CaptureCardWidget manage their own stylesheets */
+    QString banner_ss = QString(
+                "QLabel {"
+                "  border-radius: 0.33em;"
+                "  color: %1;"
+                "  background-color: %2;"
+                "  padding: 0.33em;"
+                "}"
+                )
+            .arg(QColor(tango_aluminium_6).name())   // Text color
+            .arg(QColor(tango_sky_blue_2).name());   // Background color
+    welcome_ui_->mainWelcomeBanner->setStyleSheet(banner_ss);
+
+    QString title_button_ss = QString(
+            "QLabel {"
+            "  color: %1;"
+            "}"
+            "QLabel::hover {"
+            "  color: %2;"
+            "}"
+            )
+            .arg(QColor(tango_aluminium_4).name())   // Text color
+            .arg(QColor(tango_sky_blue_4).name());   // Hover color
+
+    // XXX Is there a better term than "flavor"? Provider? Admonition (a la DocBook)?
+    // Release_source?
+    // Typical use cases are automated builds from wireshark.org and private,
+    // not-for-redistribution packages.
+    if (flavor_.isEmpty()) {
+        welcome_ui_->flavorBanner->hide();
+    } else {
+        // If needed there are a couple of ways we can make this customizable.
+        // - Add one or more classes, e.g. "note" or "warning" similar to
+        //   SyntaxLineEdit, which we can then expose vi #defines.
+        // - Just expose direct color values via #defines.
+        QString flavor_ss = QString(
+                    "QLabel {"
+                    "  border-radius: 0.25em;"
+                    "  color: %1;"
+                    "  background-color: %2;"
+                    "  padding: 0.25em;"
+                    "}"
+                    )
+                .arg("white") //   Text color
+                .arg("#2c4bc4"); // Background color. Matches capture start button.
+        //            .arg(QColor(tango_butter_5).name());      // "Warning" background
+
+        welcome_ui_->flavorBanner->setText(flavor_);
+        welcome_ui_->flavorBanner->setStyleSheet(flavor_ss);
+    }
+    welcome_ui_->captureLabel->setStyleSheet(title_button_ss);
+    welcome_ui_->recentLabel->setStyleSheet(title_button_ss);
+    welcome_ui_->helpLabel->setStyleSheet(title_button_ss);
+
+    recent_files_->setStyleSheet(
+            "QListWidget::item {"
+            "  padding-top: 0.2em;"
+            "  padding-bottom: 0.2em;"
+            "}"
+            "QListWidget::item::first {"
+            "  padding-top: 0;"
+            "}"
+            "QListWidget::item::last {"
+            "  padding-bottom: 0;"
+            "}"
+            );
+
+    // The helpLinks markup includes its own <style>...</style> section.
+    // Replacing it with a stylesheet and reapplying it like we do above
+    // doesn't work, but this does.
+    QString hl_text = welcome_ui_->helpLinks->text();
+    welcome_ui_->helpLinks->clear();
+    welcome_ui_->helpLinks->setText(hl_text);
 }
 
-void WelcomePage::on_openFileSectionLabel_clicked()
+void WelcomePage::on_recentLabel_clicked()
 {
     mainApp->doTriggerMenuItem(MainApplication::FileOpenDialog);
 }

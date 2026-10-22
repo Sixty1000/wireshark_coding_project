@@ -1109,11 +1109,13 @@ dissect_dsmcc_dii_compat_desc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
     proto_tree *compat_tree;
     proto_tree *desc_sub_tree;
 
-    proto_tree_add_item_ret_uint16(tree, hf_compat_desc_length, tvb, offset, 2, ENC_BIG_ENDIAN, &len);
+    len = tvb_get_ntohs(tvb, offset);
+    proto_tree_add_item(tree, hf_compat_desc_length, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
     if (0 < len) {
-        proto_tree_add_item_ret_uint16(tree, hf_compat_desc_count, tvb, offset, 2, ENC_BIG_ENDIAN, &count);
+        count = tvb_get_ntohs(tvb, offset);
+        proto_tree_add_item(tree, hf_compat_desc_count, tvb, offset, 2, ENC_BIG_ENDIAN);
         offset += 2;
 
         for (i = 0; i < count; i++) {
@@ -1179,7 +1181,8 @@ dissect_dsmcc_dii(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     proto_tree_add_item(tree, hf_dsmcc_dii_t_c_download_scenario, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
     offset += dissect_dsmcc_dii_compat_desc(tvb, pinfo, tree, offset);
-    proto_tree_add_item_ret_uint16(tree, hf_dsmcc_dii_number_of_modules, tvb, offset, 2, ENC_BIG_ENDIAN, &modules);
+    proto_tree_add_item(tree, hf_dsmcc_dii_number_of_modules, tvb, offset, 2, ENC_BIG_ENDIAN);
+    modules = tvb_get_ntohs(tvb, offset);
     offset += 2;
 
     for (i = 0; i < modules; i++ ) {
@@ -1257,7 +1260,7 @@ dissect_dsmcc_un_download(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, p
     msg_id = tvb_get_ntohs(tvb, offset+2);
 
     sub_tree = proto_tree_add_subtree_format(tree, tvb, 0, -1, ett_dsmcc_payload, NULL,
-            "User Network Message - %s", val_to_str(pinfo->pool, msg_id, dsmcc_dd_message_id_vals, "%u"));
+            "User Network Message - %s", val_to_str(msg_id, dsmcc_dd_message_id_vals, "%u"));
 
     switch (msg_id) {
         case 0x1001:
@@ -1348,7 +1351,8 @@ dissect_dsmcc_un_session_resources(
         sub_sub_sub_tree = proto_tree_add_subtree(sub_sub_tree, tvb, offset, 14, ett_dsmcc_heading, NULL, "Header");
         proto_tree_add_item(sub_sub_sub_tree, hf_dsmcc_un_sess_rsrc_request_id, tvb, offset, 2, ENC_NA);
         offset += 2;
-        proto_tree_add_item_ret_uint16(sub_sub_sub_tree, hf_dsmcc_un_sess_rsrc_descriptor_type, tvb, offset, 2, ENC_BIG_ENDIAN, &resource_type);
+        proto_tree_add_item(sub_sub_sub_tree, hf_dsmcc_un_sess_rsrc_descriptor_type, tvb, offset, 2, ENC_BIG_ENDIAN);
+        resource_type = tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN);
         offset += 2;
         proto_tree_add_bitmask_with_flags(sub_sub_sub_tree, tvb, offset, hf_dsmcc_un_sess_rsrc_number, ett_dsmcc_rsrc_number, bf_rsrc_number, ENC_BIG_ENDIAN, BMT_NO_APPEND);
         offset += 2;
@@ -1358,7 +1362,8 @@ dissect_dsmcc_un_session_resources(
         offset += 1;
         proto_tree_add_item(sub_sub_sub_tree, hf_dsmcc_un_sess_rsrc_status, tvb, offset, 1, ENC_BIG_ENDIAN);
         offset += 1;
-        proto_tree_add_item_ret_uint16(sub_sub_sub_tree, hf_dsmcc_un_sess_rsrc_desc_data_fields_length, tvb, offset, 2, ENC_BIG_ENDIAN, &data_fields_length);
+        proto_tree_add_item(sub_sub_sub_tree, hf_dsmcc_un_sess_rsrc_desc_data_fields_length, tvb, offset, 2, ENC_BIG_ENDIAN);
+        data_fields_length = tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN);
         offset += 2;
         proto_tree_add_item(sub_sub_sub_tree, hf_dsmcc_un_sess_rsrc_data_field_count, tvb, offset, 2, ENC_BIG_ENDIAN);
         offset += 2;
@@ -1379,7 +1384,6 @@ dissect_dsmcc_un_session_resources(
                 for (i=0; i<counter; i++)
                 {
                     proto_tree_add_item(sub_sub_sub_tree, hf_dsmcc_un_sess_rsrc_cfs_num, tvb, offset, 2, ENC_NA);
-                    offset += 2;
                 }
                 break;
             /* Table 4-75 ATM Connection */
@@ -1707,9 +1711,9 @@ dissect_dsmcc_un_session(tvbuff_t *tvb, packet_info *pinfo,
 
     sub_tree = proto_tree_add_subtree_format(tree, tvb, offset, -1,
             ett_dsmcc_payload, &pi, "User Network Message (Session) - %s",
-            val_to_str(pinfo->pool, msg_id, dsmcc_un_sess_message_id_vals, "0x%x"));
+            val_to_str(msg_id, dsmcc_un_sess_message_id_vals, "0x%x"));
     col_append_sep_str(pinfo->cinfo, COL_INFO, NULL,
-            val_to_str(pinfo->pool, msg_id, dsmcc_un_sess_message_id_vals, "0x%x"));
+            val_to_str(msg_id, dsmcc_un_sess_message_id_vals, "0x%x"));
 
     offset += dissect_dsmcc_header(tvb, pinfo, sub_tree, offset, false);
 
@@ -1897,7 +1901,7 @@ dissect_dsmcc_un_session(tvbuff_t *tvb, packet_info *pinfo,
             break;
         case DSMCC_UN_SESS_CLN_SESS_TRN_IND:
             offset += dissect_dsmcc_un_session_id(tvb, offset, pinfo, sub_tree);
-            proto_tree_add_item(sub_tree, hf_dsmcc_reserved, tvb, offset, 2, ENC_BIG_ENDIAN);
+            proto_tree_add_item(sub_tree, hf_dsmcc_reserved, tvb, offset, 2, ENC_NA);
             offset += 2;
             /* client */
             sub_sub_tree = proto_tree_add_subtree(sub_tree, tvb, offset, 20, ett_dsmcc_heading, NULL, "Client ID");
@@ -2136,7 +2140,7 @@ dissect_dsmcc_un_session(tvbuff_t *tvb, packet_info *pinfo,
             break;
         case DSMCC_UN_SESS_SRV_SESS_TRN_REQ:
             offset += dissect_dsmcc_un_session_id(tvb, offset, pinfo, sub_tree);
-            proto_tree_add_item(sub_tree, hf_dsmcc_reserved, tvb, offset, 2, ENC_BIG_ENDIAN);
+            proto_tree_add_item(sub_tree, hf_dsmcc_reserved, tvb, offset, 2, ENC_NA);
             offset += 2;
             /* destination server */
             sub_sub_tree = proto_tree_add_subtree(sub_tree, tvb, offset, 20, ett_dsmcc_heading, NULL, "Destination Server ID");
@@ -2156,7 +2160,7 @@ dissect_dsmcc_un_session(tvbuff_t *tvb, packet_info *pinfo,
             break;
         case DSMCC_UN_SESS_SRV_SESS_TRN_IND:
             offset += dissect_dsmcc_un_session_id(tvb, offset, pinfo, sub_tree);
-            proto_tree_add_item(sub_tree, hf_dsmcc_reserved, tvb, offset, 2, ENC_BIG_ENDIAN);
+            proto_tree_add_item(sub_tree, hf_dsmcc_reserved, tvb, offset, 2, ENC_NA);
             offset += 2;
             /* client */
             sub_sub_tree = proto_tree_add_subtree(sub_tree, tvb, offset, 20, ett_dsmcc_heading, NULL, "Client ID");
@@ -3264,7 +3268,7 @@ proto_register_dsmcc(void)
     static ei_register_info ei[] = {
         { &ei_dsmcc_invalid_value, { "mpeg_dsmcc.invalid_value", PI_PROTOCOL, PI_WARN,
                     "Invalid value", EXPFILL }},
-        { &ei_dsmcc_crc_invalid, { "mpeg_dsmcc.crc.invalid", PI_CHECKSUM, PI_WARN,
+        { &ei_dsmcc_crc_invalid, { "mpeg_sect.crc.invalid", PI_CHECKSUM, PI_WARN,
                     "Invalid CRC", EXPFILL }},
     };
 

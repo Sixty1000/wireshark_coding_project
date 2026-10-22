@@ -110,12 +110,8 @@ end
 
 local function getDictionaryKeys(t)
   local keys, length = {}, #t
-  local k0 = nil
-  while true do
-    local k = next(t, k0)
-    if k == nil then break end
+  for k,_ in pairs(t) do
     if isDictionaryKey(k, length) then table.insert(keys, k) end
-    k0 = k
   end
   table.sort(keys, sortKeys)
   return keys
@@ -152,13 +148,9 @@ local function countTableAppearances(t, tableAppearances)
   if type(t) == 'table' then
     if not tableAppearances[t] then
       tableAppearances[t] = 1
-      local k0 = nil
-      while true do
-        local k, v = next(t, k0)
-        if k == nil then break end
+      for k,v in pairs(t) do
         countTableAppearances(k, tableAppearances)
         countTableAppearances(v, tableAppearances)
-        k0 = k
       end
       countTableAppearances(getmetatable(t), tableAppearances)
     else
@@ -365,19 +357,7 @@ function inspect.inspect(rootObject, options)
     end
   end
 
-  -- While tonumber can accept the current locale decimal point, load, which
-  -- uses the Lua lexer, only accepts a period, so an entire table cannot be
-  -- unmarshaled back if it is serialized using a locale decimal point other
-  -- than dot.
-  -- https://www.lua.org/manual/5.4/manual.html#3.4.3
-  if serialize then
-    local savedNumeric = os.setlocale(nil, "numeric")
-    os.setlocale("C", "numeric")
-  end
   putValue(rootObject, {})
-  if serialize then
-    os.setlocale(savedNumeric, "numeric")
-  end
 
   return table.concat(buffer)
 end

@@ -9,7 +9,7 @@
 #include "config.h"
 #include "ascendtext.h"
 
-#include "wtap_module.h"
+#include "wtap-int.h"
 #include "ascend-int.h"
 #include "file_wrappers.h"
 
@@ -76,10 +76,11 @@ static const ascend_magic_string ascend_magic[] = {
 
 #define ASCEND_DATE             "Date:"
 
-static bool ascend_read(wtap *wth, wtap_rec *rec,
+static bool ascend_read(wtap *wth, wtap_rec *rec, Buffer *buf,
         int *err, char **err_info, int64_t *data_offset);
 static bool ascend_seek_read(wtap *wth, int64_t seek_off,
-        wtap_rec *rec, int *err, char **err_info);
+        wtap_rec *rec, Buffer *buf,
+        int *err, char **err_info);
 
 static int ascend_file_type_subtype = -1;
 
@@ -245,15 +246,9 @@ wtap_open_return_val ascend_open(wtap *wth, int *err, char **err_info)
         fail; those will be I/O errors. */
     parser_state.fh = wth->fh;
     parser_state.pseudo_header = &rec.rec_header.packet_header.pseudo_header.ascend;
-    if (!run_ascend_parser(buf, &parser_state, err, err_info)) {
-        if (*err != WTAP_ERR_SHORT_READ && *err != WTAP_ERR_BAD_FILE) {
-            /* An I/O error. */
-            return WTAP_OPEN_ERROR;
-        }
-        /* EOF or a bad line; that's not fatal here. */
-        *err = 0;
-        g_free(*err_info);
-        *err_info = NULL;
+    if (run_ascend_parser(buf, &parser_state, err, err_info) != 0 && *err != 0) {
+        /* An I/O error. */
+        return WTAP_OPEN_ERROR;
     }
 
     /* Either the parse succeeded, or it failed but didn't get an I/O
@@ -309,20 +304,18 @@ wtap_open_return_val ascend_open(wtap *wth, int *err, char **err_info)
 /* Parse the capture file.
    Returns true if we got a packet, false otherwise. */
 static bool
-parse_ascend(ascend_t *ascend, wtap *wth, FILE_T fh, wtap_rec *rec,
-             int64_t *next_packet_seek_start_ret, int *err, char **err_info)
+parse_ascend(ascend_t *ascend, FILE_T fh, wtap_rec *rec, Buffer *buf,
+             unsigned length, int64_t *next_packet_seek_start_ret,
+             int *err, char **err_info)
 {
     ascend_state_t parser_state = {0};
-    bool parse_failed;
+    int retval;
 
-    ws_buffer_assure_space(&rec->data, wth->snapshot_length);
+    ws_buffer_assure_space(buf, length);
     parser_state.fh = fh;
     parser_state.pseudo_header = &rec->rec_header.packet_header.pseudo_header.ascend;
 
-    /* The parser returns false only for an I/O error; a syntax error
-       just sets ascend_parse_error. */
-    parse_failed = !run_ascend_parser(ws_buffer_start_ptr(&rec->data), &parser_state, err, err_info) ||
-                   parser_state.ascend_parse_error != NULL;
+    retval = run_ascend_parser(ws_buffer_start_ptr(buf), &parser_state, err, err_info);
 
     /* Did we see any data (hex bytes)? */
     if (parser_state.first_hexbyte) {
@@ -347,7 +340,7 @@ parse_ascend(ascend_t *ascend, wtap *wth, FILE_T fh, wtap_rec *rec,
         *next_packet_seek_start_ret = file_tell(fh);
 
         /* Don't treat that as a fatal error; pretend the parse succeeded. */
-        parse_failed = false;
+        retval = 0;
     }
 
     /* if we got at least some data, return success even if the parser
@@ -374,20 +367,19 @@ parse_ascend(ascend_t *ascend, wtap *wth, FILE_T fh, wtap_rec *rec,
         if (ascend->inittime > parser_state.secs)
             ascend->inittime -= parser_state.secs;
         }
-        wtap_setup_packet_rec(rec, wth->file_encap);
+        rec->rec_type = REC_TYPE_PACKET;
         rec->block = wtap_block_create(WTAP_BLOCK_PACKET);
         rec->presence_flags = WTAP_HAS_TS|WTAP_HAS_CAP_LEN;
         rec->ts.secs = parser_state.secs + ascend->inittime;
         rec->ts.nsecs = parser_state.usecs * 1000;
         rec->rec_header.packet_header.caplen = parser_state.caplen;
         rec->rec_header.packet_header.len = parser_state.wirelen;
-        ws_buffer_increase_length(&rec->data, parser_state.caplen);
 
         return true;
     }
 
     /* Didn't see any data. Still, perhaps the parser was happy.  */
-    if (parse_failed) {
+    if (retval) {
         if (*err == 0) {
         /* Parser failed, but didn't report an I/O error, so a parse error.
             Return WTAP_ERR_BAD_FILE, with the parse error as the error string. */
@@ -406,7 +398,7 @@ parse_ascend(ascend_t *ascend, wtap *wth, FILE_T fh, wtap_rec *rec,
 }
 
 /* Read the next packet; called from wtap_read(). */
-static bool ascend_read(wtap *wth, wtap_rec *rec, int *err,
+static bool ascend_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err,
 	char **err_info, int64_t *data_offset)
 {
     ascend_t *ascend = (ascend_t *)wth->priv;
@@ -425,8 +417,8 @@ static bool ascend_read(wtap *wth, wtap_rec *rec, int *err,
         /* EOF or read error */
         return false;
     }
-    if (!parse_ascend(ascend, wth, wth->fh, rec,
-                      &ascend->next_packet_seek_start, err, err_info))
+    if (!parse_ascend(ascend, wth->fh, rec, buf, wth->snapshot_length,
+                        &ascend->next_packet_seek_start, err, err_info))
         return false;
 
     /* Flex might have gotten an EOF and caused *err to be set to
@@ -442,14 +434,16 @@ static bool ascend_read(wtap *wth, wtap_rec *rec, int *err,
     return true;
 }
 
-static bool ascend_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
+static bool ascend_seek_read(wtap *wth, int64_t seek_off,
+        wtap_rec *rec, Buffer *buf,
         int *err, char **err_info)
 {
     ascend_t *ascend = (ascend_t *)wth->priv;
 
     if (file_seek(wth->random_fh, seek_off, SEEK_SET, err) == -1)
         return false;
-    if (!parse_ascend(ascend, wth, wth->random_fh, rec, NULL, err, err_info))
+    if (!parse_ascend(ascend, wth->random_fh, rec, buf,
+                    wth->snapshot_length, NULL, err, err_info))
         return false;
 
     /* Flex might have gotten an EOF and caused *err to be set to

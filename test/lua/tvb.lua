@@ -23,7 +23,7 @@ local OTHER = "other"
 -- if one happens to know the number of fields and the number of values.
 --
 local n_frames = 1
-local taptests = { [FRAME]=n_frames, [OTHER]=397*n_frames }
+local taptests = { [FRAME]=n_frames, [OTHER]=391*n_frames }
 
 testlib.init(taptests)
 
@@ -295,15 +295,6 @@ function test_proto.dissector(tvbuf,pktinfo,root)
     local barray_bytes      = ByteArray.new(barray_bytes_hex)
     local tvb_bytes         = barray_bytes:tvb("Basic bytes")
     local bool_match_fields = {}
-
-    testlib.test(OTHER, "Tvb.__tostring",
-        string.match(tostring(tvb_bytes), "^Tvb: captured=%d+ reported=%d+ bytes=") ~= nil)
-    local tr_full = tvb_bytes:range(0, 6)
-    testlib.test(OTHER, "TvbRange.__tostring-nonempty",
-        string.match(tostring(tr_full), "^TvbRange: offset=0 length=6 bytes=") ~= nil)
-    local tr_empty = tvb_bytes:range(0, 0)
-    testlib.test(OTHER, "TvbRange.__tostring-empty",
-        tostring(tr_empty) == string.format("TvbRange: offset=%d length=0 (empty)", tr_empty:offset()))
 
     testlib.test(OTHER, "basic-boolean", pcall (callTreeAdd, tree, testfield.basic.BOOLEAN, tvb_bytes:range(0,2)) )
     addMatchFields(bool_match_fields, true)
@@ -915,28 +906,6 @@ function test_proto.dissector(tvbuf,pktinfo,root)
     range_raw = range:raw(b_offset, b_len)
     expected = range:bytes():raw(b_offset, b_len)
     testlib.test(OTHER, "tvbrange_offset_len_raw_offset_len", range_raw == expected,
-        string.format('range_raw="%s" expected="%s"', range_raw, expected))
-
-    -- Edge cases with zero length, and different ways to create them
-    range = bytestvb1()
-    -- Subrange of a range starting with the last offset (zero length)
-    local subrange = range:range(range:len())
-    range_raw = subrange:raw()
-    expected = subrange:bytes():raw()
-    testlib.test(OTHER, "tvbrange_subrange_empty_raw", range_raw == expected,
-        string.format('range_raw="%s" expected="%s"', range_raw, expected))
-    -- Create an empty byte array (this is different because the backing
-    -- tvb is empty)
-    local emptybytestvb1 = ByteArray.new("", true):tvb("Empty bytes hex-string1")
-    range = emptybytestvb1()
-    range_raw = range:raw()
-    expected = range:bytes():raw()
-    testlib.test(OTHER, "tvbrange_empty_raw", range_raw == expected,
-        string.format('range_raw="%s" expected="%s"', range_raw, expected))
-    -- Convert the range back to an empty tvb
-    local emptybytestvb2 = range:tvb()
-    expected = emptybytestvb2:bytes():raw()
-    testlib.test(OTHER, "tvbrange_empty_tvb_raw", range_raw == expected,
         string.format('range_raw="%s" expected="%s"', range_raw, expected))
 
 ----------------------------------------

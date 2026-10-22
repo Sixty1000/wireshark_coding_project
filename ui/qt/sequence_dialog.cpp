@@ -20,12 +20,12 @@
 #include <wsutil/report_message.h>
 
 #include <ui/qt/utils/color_utils.h>
-#include <ui/qt/utils/plot_theme.h>
 #include "progress_frame.h"
 #include <ui/qt/utils/qt_ui_utils.h>
 #include "sequence_diagram.h"
 #include "main_application.h"
 #include <ui/qt/utils/variant_pointer.h>
+#include <ui/alert_box.h>
 #include "ui/qt/widgets/wireshark_file_dialog.h"
 #include <ui/voip_calls.h>
 #include "rtp_stream_dialog.h"
@@ -107,20 +107,16 @@ SequenceDialog::SequenceDialog(QWidget &parent, CaptureFile &cf, SequenceInfo *i
     sp->xAxis->setLabelPadding(0);
     sp->xAxis->setTickLabelPadding(0);
 
-    // Light border for the diagram. PlotTheme recolors the axis base pens
-    // with the full text color, so reapply the lighter border after it.
-    auto apply_border = [sp, this]() {
-        QPen base_pen(ColorUtils::alphaBlend(palette().text(), palette().base(), 0.25));
-        base_pen.setWidthF(0.5);
-        sp->xAxis2->setBasePen(base_pen);
-        sp->yAxis->setBasePen(base_pen);
-        sp->yAxis2->setBasePen(base_pen);
-        // Keep the border the same if/when the axis is selected, instead of blue
-        sp->xAxis2->setSelectedBasePen(base_pen);
-        sp->yAxis->setSelectedBasePen(base_pen);
-        sp->yAxis2->setSelectedBasePen(base_pen);
-    };
-    PlotTheme::track(sp, apply_border);
+    // Light border for the diagram
+    QPen base_pen(ColorUtils::alphaBlend(palette().text(), palette().base(), 0.25));
+    base_pen.setWidthF(0.5);
+    sp->xAxis2->setBasePen(base_pen);
+    sp->yAxis->setBasePen(base_pen);
+    sp->yAxis2->setBasePen(base_pen);
+    // Keep the border the same if/when the axis is selected, instead of blue
+    sp->xAxis2->setSelectedBasePen(base_pen);
+    sp->yAxis->setSelectedBasePen(base_pen);
+    sp->yAxis2->setSelectedBasePen(base_pen);
 
     /* QCP documentation for setTicks() says "setting show to false does not imply
      * that tick labels are invisible, too." In practice it seems to make them
@@ -178,6 +174,7 @@ SequenceDialog::SequenceDialog(QWidget &parent, CaptureFile &cf, SequenceInfo *i
     ctx_menu_.addAction(action);
     action->setVisible(false);
     action->setEnabled(false);
+    set_action_shortcuts_visible_in_context_menu(ctx_menu_.actions());
 
     sp->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(sp, &QCustomPlot::customContextMenuRequested, this, &SequenceDialog::showContextMenu);
@@ -186,7 +183,11 @@ SequenceDialog::SequenceDialog(QWidget &parent, CaptureFile &cf, SequenceInfo *i
     ui->addressComboBox->addItem(tr("Network"), QVariant(false));
     ui->addressComboBox->setCurrentIndex(ui->addressComboBox->findData(QVariant(true)));
 
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    connect(ui->addressComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SequenceDialog::addressChanged);
+#else
     connect(ui->addressComboBox, &QComboBox::currentIndexChanged, this, &SequenceDialog::addressChanged);
+#endif
 
     sequence_items_t item_data;
 
@@ -475,7 +476,7 @@ void SequenceDialog::mouseMoved(QMouseEvent *event)
                 current_rtp_sai_hovered_ = sai;
             }
             packet_num_ = sai->frame_number;
-            hint = QStringLiteral("Packet %1: %2").arg(packet_num_).arg(sai->comment);
+            hint = QString("Packet %1: %2").arg(packet_num_).arg(sai->comment);
         }
     }
 
@@ -487,7 +488,7 @@ void SequenceDialog::mouseMoved(QMouseEvent *event)
         if (!info_->sainfo()) {
             hint += tr("No data");
         } else {
-            hint += tr("%Ln node(s)", "", info_->sainfo()->num_nodes) + QStringLiteral(", ")
+            hint += tr("%Ln node(s)", "", info_->sainfo()->num_nodes) + QString(", ")
                     + tr("%Ln item(s)", "", num_items_);
         }
     }
@@ -523,7 +524,7 @@ void SequenceDialog::on_buttonBox_clicked(QAbstractButton *button)
 
 void SequenceDialog::exportDiagram()
 {
-    QString file_name;
+    QString file_name, extension;
     QDir path(mainApp->openDialogInitialDir());
     QString pdf_filter = tr("Portable Document Format (*.pdf)");
     QString png_filter = tr("Portable Network Graphics (*.png)");
@@ -532,15 +533,13 @@ void SequenceDialog::exportDiagram()
     QString jpeg_filter = tr("JPEG File Interchange Format (*.jpeg *.jpg)");
     QString ascii_filter = tr("ASCII (*.txt)");
 
-    QString filter = QStringLiteral("%1;;%2;;%3;;%4").arg(
-        pdf_filter,
-        png_filter,
-        bmp_filter,
-        jpeg_filter
-    );
-    QString extension = png_filter;
+    QString filter = QString("%1;;%2;;%3;;%4")
+            .arg(pdf_filter)
+            .arg(png_filter)
+            .arg(bmp_filter)
+            .arg(jpeg_filter);
     if (!file_closed_) {
-        filter.append(QStringLiteral(";;%5").arg(ascii_filter));
+        filter.append(QString(";;%5").arg(ascii_filter));
     }
 
     file_name = WiresharkFileDialog::getSaveFileName(this, mainApp->windowTitleString(tr("Save Graph As…")),
@@ -613,7 +612,7 @@ void SequenceDialog::exportDiagram()
         if (save_ok) {
             mainApp->setLastOpenDirFromFilename(file_name);
         } else {
-            report_open_failure(file_name.toUtf8().constData(), errno, true);
+            open_failure_alert_box(file_name.toUtf8().constData(), errno, true);
         }
     }
 }

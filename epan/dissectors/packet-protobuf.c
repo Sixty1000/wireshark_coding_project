@@ -40,21 +40,12 @@
 #include <wsutil/file_util.h>
 #include <wsutil/json_dumper.h>
 #include <wsutil/pint.h>
+#include <epan/ws_printf.h>
 #include <wsutil/report_message.h>
 
 #include "protobuf-helper.h"
+#include "packet-protobuf.h"
 #include "epan/dissectors/packet-http.h"
-
-#define protobuf_wire_type_VALUE_STRING_LIST(XXX)    \
-    XXX(PROTOBUF_WIRETYPE_VARINT, 0, "varint")  \
-    XXX(PROTOBUF_WIRETYPE_FIXED64, 1, "64-bit")   \
-    XXX(PROTOBUF_WIRETYPE_LENGTH_DELIMITED, 2, "Length-delimited") \
-    XXX(PROTOBUF_WIRETYPE_START_GROUP, 3, "Start group (deprecated)") \
-    XXX(PROTOBUF_WIRETYPE_END_GROUP, 4, "End group (deprecated)") \
-    XXX(PROTOBUF_WIRETYPE_FIXED32, 5, "32-bit")
-
-VALUE_STRING_ENUM(protobuf_wire_type);
-
 
 /* converting */
 static inline double
@@ -73,7 +64,7 @@ protobuf_uint32_to_float(uint32_t value) {
     return float_uint32_union.f;
 }
 
-static VALUE_STRING_ARRAY_GLOBAL_DEF(protobuf_wire_type);
+VALUE_STRING_ARRAY_GLOBAL_DEF(protobuf_wire_type);
 
 /* which field type of each wire type could be */
 static int protobuf_wire_to_field_type[6][9] = {
@@ -161,7 +152,6 @@ static int ett_protobuf_json;
 /* preferences */
 static bool try_dissect_as_string;
 static bool show_all_possible_field_types;
-static bool hide_fields_in_info;
 static bool dissect_bytes_as_string;
 static bool old_dissect_bytes_as_string;
 static bool show_details;
@@ -214,7 +204,7 @@ typedef struct {
 static protobuf_search_path_t* protobuf_search_paths;
 static unsigned num_protobuf_search_paths;
 
-static int proto_http;
+int proto_http;
 
 static void *
 protobuf_search_paths_copy_cb(void* n, const void* o, size_t siz _U_)
@@ -324,55 +314,6 @@ protobuf_uri_message_type_copy_cb(void* n, const void* o, size_t siz _U_)
         new_rec->message_type = g_strdup(old_rec->message_type);
 
     return new_rec;
-}
-
-/* Update by checking whether uri and message type look sensible */
-static bool protobuf_uri_message_type_update_cb(void* r _U_, char** error)
-{
-    protobuf_uri_mapping_t* updated_rec = (protobuf_uri_mapping_t*)r;
-    const char* uri = updated_rec->uri;
-    const char *message_type = updated_rec->message_type;
-
-    /* Message type may not be empty */
-    if (strlen(uri) == 0) {
-        *error = g_strdup("URI pattern may not be empty");
-        return false;
-    }
-
-    /* Limit number of wildcard '*' chars in uri pattern */
-    int stars = 0;
-    for (size_t n=0; n < strlen(uri); n++) {
-        if (uri[n] == '*') {
-            if (++stars > 16) {
-                *error = g_strdup("uri has too many wildcards in it");
-                return false;
-            }
-        }
-    }
-
-    /* Consecutive wildcards in uri makes no sense */
-    if (strstr(uri, "**")) {
-        *error = g_strdup("uri has consecutive wildcard characters - this makes no sense");
-        return false;
-    }
-
-
-    /* Message type may not be empty */
-    if (strlen(message_type) == 0) {
-        *error = g_strdup("Message type must be set");
-        return false;
-    }
-
-    /* Don't allow any whitespace in message type */
-    for (size_t n=0; n < strlen(message_type); n++) {
-        if (g_ascii_isspace(message_type[n])) {
-            *error = g_strdup("Message type should not contain any whitespace characters");
-            return false;
-        }
-    }
-
-    /* Return true only if *error has not been set by checking code. */
-    return true;
 }
 
 static void
@@ -690,7 +631,7 @@ protobuf_dissect_field_value(proto_tree *value_tree, tvbuff_t *tvb, unsigned off
         double_value = protobuf_uint64_to_double(value);
         proto_tree_add_double(value_tree, hf_protobuf_value_double, tvb, offset, length, double_value);
         proto_item_append_text(ti_field, "%s %lf", prepend_text, double_value);
-        if (!hide_fields_in_info && is_top_level) {
+        if (is_top_level) {
             col_append_fstr(pinfo->cinfo, COL_INFO, "=%lf", double_value);
         }
         if (hf_id_ptr) {
@@ -705,7 +646,7 @@ protobuf_dissect_field_value(proto_tree *value_tree, tvbuff_t *tvb, unsigned off
         float_value = protobuf_uint32_to_float((uint32_t) value);
         proto_tree_add_float(value_tree, hf_protobuf_value_float, tvb, offset, length, float_value);
         proto_item_append_text(ti_field, "%s %f", prepend_text, float_value);
-        if (!hide_fields_in_info && is_top_level) {
+        if (is_top_level) {
             col_append_fstr(pinfo->cinfo, COL_INFO, "=%f", float_value);
         }
         if (hf_id_ptr) {
@@ -721,7 +662,7 @@ protobuf_dissect_field_value(proto_tree *value_tree, tvbuff_t *tvb, unsigned off
         int64_value = (int64_t) value;
         proto_tree_add_int64(value_tree, hf_protobuf_value_int64, tvb, offset, length, int64_value);
         proto_item_append_text(ti_field, "%s %" PRId64, prepend_text, int64_value);
-        if (!hide_fields_in_info && is_top_level) {
+        if (is_top_level) {
             col_append_fstr(pinfo->cinfo, COL_INFO, "=%" PRId64, int64_value);
         }
         if (hf_id_ptr) {
@@ -736,7 +677,7 @@ protobuf_dissect_field_value(proto_tree *value_tree, tvbuff_t *tvb, unsigned off
     case PROTOBUF_TYPE_FIXED64: /* same as UINT64 */
         proto_tree_add_uint64(value_tree, hf_protobuf_value_uint64, tvb, offset, length, value);
         proto_item_append_text(ti_field, "%s %" PRIu64, prepend_text, value);
-        if (!hide_fields_in_info && is_top_level) {
+        if (is_top_level) {
             col_append_fstr(pinfo->cinfo, COL_INFO, "=%" PRIu64, value);
         }
         if (hf_id_ptr) {
@@ -752,7 +693,7 @@ protobuf_dissect_field_value(proto_tree *value_tree, tvbuff_t *tvb, unsigned off
         int32_value = (int32_t)value;
         proto_tree_add_int(value_tree, hf_protobuf_value_int32, tvb, offset, length, int32_value);
         proto_item_append_text(ti_field, "%s %d", prepend_text, int32_value);
-        if (!hide_fields_in_info && is_top_level) {
+        if (is_top_level) {
             col_append_fstr(pinfo->cinfo, COL_INFO, "=%d", int32_value);
         }
         if (hf_id_ptr) {
@@ -779,12 +720,12 @@ protobuf_dissect_field_value(proto_tree *value_tree, tvbuff_t *tvb, unsigned off
         if (enum_value_name) { /* show enum value name */
             proto_item_append_text(ti_field, "%s %s(%d)", prepend_text, enum_value_name, int32_value);
             proto_item_append_text(ti, " (%s)", enum_value_name);
-            if (!hide_fields_in_info && is_top_level) {
+            if (is_top_level) {
                 col_append_fstr(pinfo->cinfo, COL_INFO, "=%s", enum_value_name);
             }
         } else {
             proto_item_append_text(ti_field, "%s %d", prepend_text, int32_value);
-            if (!hide_fields_in_info && is_top_level) {
+            if (is_top_level) {
                 col_append_fstr(pinfo->cinfo, COL_INFO, "=%d", int32_value);
             }
 
@@ -806,7 +747,7 @@ protobuf_dissect_field_value(proto_tree *value_tree, tvbuff_t *tvb, unsigned off
         if (length > 1) break; /* boolean should not use more than one bytes */
         proto_tree_add_boolean(value_tree, hf_protobuf_value_bool, tvb, offset, length, value);
         proto_item_append_text(ti_field, "%s %s", prepend_text, value ? "true" : "false");
-        if (!hide_fields_in_info && is_top_level) {
+        if (is_top_level) {
             col_append_fstr(pinfo->cinfo, COL_INFO, "=%s", value ? "true" : "false");
         }
         if (hf_id_ptr) {
@@ -820,9 +761,10 @@ protobuf_dissect_field_value(proto_tree *value_tree, tvbuff_t *tvb, unsigned off
     case PROTOBUF_TYPE_BYTES:
         if (field_desc && dumper) {
             json_dumper_begin_base64(dumper);
-            buf = (char*) tvb_memdup(pinfo->pool, tvb, offset, length);
+            buf = (char*) tvb_memdup(wmem_file_scope(), tvb, offset, length);
             if (buf) {
-                json_dumper_write_base64(dumper, (uint8_t*)buf, length);
+                json_dumper_write_base64(dumper, buf, length);
+                wmem_free(wmem_file_scope(), buf);
             }
             json_dumper_end_base64(dumper);
         }
@@ -851,7 +793,7 @@ protobuf_dissect_field_value(proto_tree *value_tree, tvbuff_t *tvb, unsigned off
     case PROTOBUF_TYPE_STRING:
         proto_tree_add_item_ret_string(value_tree, hf_protobuf_value_string, tvb, offset, length, ENC_UTF_8|ENC_NA, pinfo->pool, (const uint8_t**)&buf);
         proto_item_append_text(ti_field, "%s %s", prepend_text, buf);
-        if (!hide_fields_in_info && is_top_level) {
+        if (is_top_level) {
             col_append_fstr(pinfo->cinfo, COL_INFO, "=%s", buf);
         }
         if (hf_id_ptr) {
@@ -894,7 +836,7 @@ protobuf_dissect_field_value(proto_tree *value_tree, tvbuff_t *tvb, unsigned off
     case PROTOBUF_TYPE_FIXED32: /* same as UINT32 */
         proto_tree_add_uint(value_tree, hf_protobuf_value_uint32, tvb, offset, length, (uint32_t)value);
         proto_item_append_text(ti_field, "%s %u", prepend_text, (uint32_t)value);
-        if (!hide_fields_in_info && is_top_level) {
+        if (is_top_level) {
             col_append_fstr(pinfo->cinfo, COL_INFO, "=%u", (uint32_t)value);
         }
         if (hf_id_ptr) {
@@ -909,7 +851,7 @@ protobuf_dissect_field_value(proto_tree *value_tree, tvbuff_t *tvb, unsigned off
         int32_value = sint32_decode((uint32_t)value);
         proto_tree_add_int(value_tree, hf_protobuf_value_int32, tvb, offset, length, int32_value);
         proto_item_append_text(ti_field, "%s %d", prepend_text, int32_value);
-        if (!hide_fields_in_info && is_top_level) {
+        if (is_top_level) {
             col_append_fstr(pinfo->cinfo, COL_INFO, "=%d", int32_value);
         }
         if (hf_id_ptr) {
@@ -924,7 +866,7 @@ protobuf_dissect_field_value(proto_tree *value_tree, tvbuff_t *tvb, unsigned off
         int64_value = sint64_decode(value);
         proto_tree_add_int64(value_tree, hf_protobuf_value_int64, tvb, offset, length, int64_value);
         proto_item_append_text(ti_field, "%s %" PRId64, prepend_text, int64_value);
-        if (!hide_fields_in_info && is_top_level) {
+        if (is_top_level) {
             col_append_fstr(pinfo->cinfo, COL_INFO, "=%" PRId64, int64_value);
         }
         if (hf_id_ptr) {
@@ -956,7 +898,7 @@ protobuf_dissect_field_value(proto_tree *value_tree, tvbuff_t *tvb, unsigned off
     }
 
     if (add_datatype)
-        proto_item_append_text(ti_field, " (%s)", val_to_str(pinfo->pool, field_type, protobuf_field_type, "Unknown type (%d)"));
+        proto_item_append_text(ti_field, " (%s)", val_to_str(field_type, protobuf_field_type, "Unknown type (%d)"));
 
 }
 
@@ -1061,7 +1003,7 @@ dissect_one_protobuf_field(tvbuff_t *tvb, unsigned* offset, unsigned maxlen, pac
             proto_item_set_generated(ti_field_type);
         }
 
-        if (!hide_fields_in_info && is_top_level) {
+        if (is_top_level) {
             /* Show field name in Info column */
             col_append_fstr(pinfo->cinfo, COL_INFO, " %s", field_name);
         }
@@ -1152,13 +1094,6 @@ dissect_one_protobuf_field(tvbuff_t *tvb, unsigned* offset, unsigned maxlen, pac
                                          is_top_level, dumper);
         }
     } else {
-        /* end JSON array if previous field is repeated field. We must end
-         * the array here even if we don't add this unknown field to the JSON,
-         * so that the array ends at the correct nested level.
-         */
-        if (dumper && prev_field_desc && pbw_FieldDescriptor_is_repeated(prev_field_desc)) {
-            json_dumper_end_array(dumper);
-        }
         if (show_all_possible_field_types) {
             /* try dissect every possible field type */
             protobuf_try_dissect_field_value_on_multi_types(value_tree, tvb, *offset, value_length, pinfo,
@@ -1202,15 +1137,14 @@ dissect_one_protobuf_field(tvbuff_t *tvb, unsigned* offset, unsigned maxlen, pac
  *  2. For bools, the default value is false.
  *  3. For enums, the default value is the first defined enum value, which must be 0 in 'proto3' (but
  *     allowed to be other in 'proto2').
- *  4. For numeric types, the default value is zero; for strings, the default value is the empty string;
- *     and for bytes, the default value is empty bytes.
- * There are no default values for fields 'repeated'.
+ *  4. For numeric types, the default value is zero.
+ * There are no default values for fields 'repeated' or 'bytes' and 'string' without default value declared.
  * If the missing field is 'required' in a 'proto2' file, an expert warning item will be added to the tree.
  *
  * Which fields will be displayed is controlled by 'add_default_value' option:
  *  - ADD_DEFAULT_VALUE_NONE      -- do not display any missing fields.
  *  - ADD_DEFAULT_VALUE_DECLARED  -- only missing fields of situation (1) will be displayed.
- *  - ADD_DEFAULT_VALUE_ENUM_BOOL -- missing fields of situations (1, 2 and 3) will be displayed.
+ *  - ADD_DEFAULT_VALUE_ENUM_BOOL -- missing fields of situantions (1, 2 and 3) will be displayed.
  *  - ADD_DEFAULT_VALUE_ALL       -- missing fields of all situations (1, 2, 3, and 4) will be displayed.
  */
 static void
@@ -1258,17 +1192,20 @@ add_missing_fields_with_default_values(tvbuff_t* tvb, unsigned offset, packet_in
             continue;
         }
 
-        /* ignore repeated fields, or optional fields of message/group.
+        /* ignore repeated fields, or optional fields of message/group,
+         * or string/bytes fields without explicitly-declared default value.
          */
         if (is_repeated || (!is_required && (field_type == PROTOBUF_TYPE_NONE
             || field_type == PROTOBUF_TYPE_MESSAGE
             || field_type == PROTOBUF_TYPE_GROUP
+            || (field_type == PROTOBUF_TYPE_BYTES && !has_default_value)
+            || (field_type == PROTOBUF_TYPE_STRING && !has_default_value)
             ))) {
             continue;
         }
 
         /* check if it is parsed */
-        if (wmem_map_lookup(parsed_fields, GINT_TO_POINTER((int)field_number))) {
+        if (wmem_map_lookup(parsed_fields, GINT_TO_POINTER(field_number))) {
             continue; /* this field is parsed */
         }
 
@@ -1292,8 +1229,7 @@ add_missing_fields_with_default_values(tvbuff_t* tvb, unsigned offset, packet_in
         proto_item_set_generated(ti_field_name);
         ti_field_type = proto_tree_add_int(field_tree, hf_protobuf_field_type, tvb, offset, 0, field_type);
         proto_item_set_generated(ti_field_type);
-        // XXX - Why multiply the field_number by 8 here?
-        ti_field_number = proto_tree_add_uint64_format_value(field_tree, hf_protobuf_field_number, tvb, offset, 0, field_number << 3, "%" PRIu64, field_number);
+        ti_field_number = proto_tree_add_uint64_format(field_tree, hf_protobuf_field_number, tvb, offset, 0, field_number << 3, "Field Number: %" PRIu64, field_number);
         proto_item_set_generated(ti_field_number);
 
         hf_id_ptr = NULL;
@@ -1411,29 +1347,18 @@ add_missing_fields_with_default_values(tvbuff_t* tvb, unsigned offset, packet_in
 
         case PROTOBUF_TYPE_BYTES:
             string_value = pbw_FieldDescriptor_default_value_string(field_desc, &size);
+            DISSECTOR_ASSERT_HINT(has_default_value && string_value, "Bytes field must have default value!");
             if (dumper) {
-                if (string_value == NULL) {
-                    json_dumper_value_string(dumper, "");
-                } else {
-                    json_dumper_begin_base64(dumper);
-                    json_dumper_write_base64(dumper, (const unsigned char *)string_value, size);
-                    json_dumper_end_base64(dumper);
-                }
+                json_dumper_begin_base64(dumper);
+                json_dumper_write_base64(dumper, (const unsigned char *)string_value, size);
+                json_dumper_end_base64(dumper);
             }
             if (!dissect_bytes_as_string) {
-                if (string_value == NULL) {
-                    ti_value = proto_tree_add_bytes_format_value(field_tree, hf_protobuf_value_data, tvb, offset, 0, NULL, "%s", "");
-                } else {
-                    ti_value = proto_tree_add_bytes_with_length(field_tree, hf_protobuf_value_data, tvb, offset, 0, (const uint8_t*)string_value, size);
-                }
+                ti_value = proto_tree_add_bytes_with_length(field_tree, hf_protobuf_value_data, tvb, offset, 0, (const uint8_t*) string_value, size);
                 proto_item_append_text(ti_field, " (%d bytes)", size);
                 /* the type of *hf_id_ptr MUST be FT_BYTES now */
                 if (hf_id_ptr) {
-                    if (string_value == NULL) {
-                        ti_pbf = proto_tree_add_bytes_format_value(pbf_tree, *hf_id_ptr, tvb, offset, 0, NULL, "%s", "");
-                    } else {
-                        ti_pbf = proto_tree_add_bytes_with_length(pbf_tree, *hf_id_ptr, tvb, offset, 0, (const uint8_t*)string_value, size);
-                    }
+                    ti_pbf = proto_tree_add_bytes_with_length(pbf_tree, *hf_id_ptr, tvb, offset, 0, (const uint8_t*)string_value, size);
                 }
                 break;
             }
@@ -1443,9 +1368,7 @@ add_missing_fields_with_default_values(tvbuff_t* tvb, unsigned offset, packet_in
             if (string_value == NULL) {
                 string_value = pbw_FieldDescriptor_default_value_string(field_desc, &size);
             }
-            if (string_value == NULL) {
-                string_value = "";
-            }
+            DISSECTOR_ASSERT_HINT(has_default_value && string_value, "String field must have default value!");
             ti_value = proto_tree_add_string(field_tree, hf_protobuf_value_string, tvb, offset, 0, string_value);
             proto_item_append_text(ti_field, " %s", string_value);
             if (hf_id_ptr) {
@@ -1486,7 +1409,7 @@ add_missing_fields_with_default_values(tvbuff_t* tvb, unsigned offset, packet_in
             break;
         }
 
-        proto_item_append_text(ti_field, " (%s)", val_to_str(pinfo->pool, field_type, protobuf_field_type, "Unknown type (%d)"));
+        proto_item_append_text(ti_field, " (%s)", val_to_str(field_type, protobuf_field_type, "Unknown type (%d)"));
 
         if (ti_value) {
             proto_item_set_generated(ti_value);
@@ -1574,7 +1497,14 @@ dissect_protobuf_message(tvbuff_t *tvb, unsigned offset, unsigned length, packet
     }
 
     if (is_top_level) {
-        col_append_sep_fstr(pinfo->cinfo, COL_PROTOCOL, "/", "PB(%s)", message_name);
+        if (col_get_text(pinfo->cinfo, COL_PROTOCOL) && strlen(col_get_text(pinfo->cinfo, COL_PROTOCOL))) {
+            col_append_str(pinfo->cinfo, COL_PROTOCOL, "/");
+        }
+        else {
+            col_clear(pinfo->cinfo, COL_PROTOCOL);
+            col_clear(pinfo->cinfo, COL_INFO);
+        }
+        col_append_fstr(pinfo->cinfo, COL_PROTOCOL, "PB(%s)", message_name);
     }
 
     /* support filtering with message name */
@@ -1603,9 +1533,6 @@ dissect_protobuf_message(tvbuff_t *tvb, unsigned offset, unsigned length, packet
             wmem_map_insert(parsed_fields, GINT_TO_POINTER(pbw_FieldDescriptor_number(field_desc)), GINT_TO_POINTER(1));
         }
 
-        /* Only set this on success - if we didn't dissect a field, we
-         * may still need to close the JSON array associated with the
-         * last successfully dissected field. */
         prev_field_desc = field_desc;
     }
     decrement_dissection_depth(pinfo);
@@ -1660,7 +1587,7 @@ static bool
 uri_matches_pattern(const char *request_uri, const char *uri_pattern, int depth)
 {
     /* Arbitrary recursion depth limit.. */
-    if (depth >= 16) {
+    if (depth > 32) {
         return false;
     }
 
@@ -1669,31 +1596,27 @@ uri_matches_pattern(const char *request_uri, const char *uri_pattern, int depth)
         return true;
     }
 
-    size_t uri_request_length = strlen(request_uri);
-    size_t uri_pattern_length = strlen(uri_pattern);
-
-
     /* Match if both strings now empty */
-    if (uri_pattern_length==0 && uri_request_length==0) {
+    if (strlen(uri_pattern)==0 && strlen(request_uri)==0) {
         return true;
     }
 
     /* Fail if remaining, unmatched pattern but reached end of uri */
-    if (uri_pattern_length>0 && uri_request_length==0) {
+    if (strlen(uri_pattern)>0 && strlen(request_uri)==0) {
         return false;
     }
 
     /* If remainder of pattern is just '*', it matches */
-    if (uri_pattern_length==1 && uri_pattern[0] == '*') {
+    if (strlen(uri_pattern)==1 && uri_pattern[0] == '*') {
         return true;
     }
 
     /* If next uri_pattern char is not '*', needs to match exactly */
-    if (uri_pattern_length && uri_pattern[0] != '*') {
+    if (strlen(uri_pattern) && uri_pattern[0] != '*') {
 
         /* Skip identical characters */
         int n;
-        for (n=0; uri_request_length-n && uri_pattern_length-n && uri_pattern[n] != '*'; n++) {
+        for (n=0; strlen(request_uri+n) && strlen(request_uri+n) && uri_pattern[n] != '*'; n++) {
             if (request_uri[n] == uri_pattern[n]) {
                 continue;
             }
@@ -1707,7 +1630,7 @@ uri_matches_pattern(const char *request_uri, const char *uri_pattern, int depth)
         return uri_matches_pattern(request_uri+n, uri_pattern+n, depth+1);
     }
 
-    if (uri_pattern_length && uri_pattern[0] == '*') {
+    if (strlen(uri_pattern) && uri_pattern[0] == '*') {
         /* We are at a '*'. Test with/without moving past it now */
         return (uri_matches_pattern(request_uri+1, uri_pattern,   depth+1) ||
                 uri_matches_pattern(request_uri+1, uri_pattern+1, depth+1));
@@ -2230,8 +2153,8 @@ protobuf_reinit(int target)
         source_paths = g_new0(char *, num_proto_paths + 1);
 
         /* Load the files in the global and personal config dirs */
-        source_paths[0] = get_datafile_path("protobuf", epan_get_environment_prefix());
-        source_paths[1] = get_persconffile_path("protobuf", true, epan_get_environment_prefix());
+        source_paths[0] = get_datafile_path("protobuf");
+        source_paths[1] = get_persconffile_path("protobuf", true);
 
         for (i = 0; i < num_protobuf_search_paths; ++i) {
             source_paths[i + 2] = protobuf_search_paths[i].path;
@@ -2509,8 +2432,8 @@ proto_register_protobuf(void)
         "  1) The value of the 'default' option of an optional field defined in 'proto2' file. (explicitly-declared)\n"
         "  2) False for bools.\n"
         "  3) First defined enum value for enums.\n"
-        "  4) Zero for numeric types; empty string for 'string'; and empty bytes for 'bytes'.\n"
-        "There are no default values for fields 'repeated'.\n"
+        "  4) Zero for numeric types.\n"
+        "There are no default values for fields 'repeated' or 'bytes' and 'string' without default value declared.\n"
         "If the missing field is 'required' in a 'proto2' file, a warning item will be added to the tree.",
         &add_default_value, add_default_value_policy_vals, false);
 
@@ -2544,7 +2467,7 @@ proto_register_protobuf(void)
         UAT_AFFECTS_DISSECTION | UAT_AFFECTS_FIELDS,
         NULL, //"ChProtobufURIMessageTypes",
         protobuf_uri_message_type_copy_cb,
-        protobuf_uri_message_type_update_cb,
+        NULL,
         protobuf_uri_message_type_free_cb,
         update_protobuf_uri_message_types,
         NULL,
@@ -2590,11 +2513,6 @@ proto_register_protobuf(void)
         "Subdissector can register itself in \"protobuf_field\" dissector table for parsing"
         " the value of the field.",
         "The key of \"protobuf_field\" table is the full name of field.");
-
-    prefs_register_bool_preference(protobuf_module, "hide_fields_in_info",
-        "Hide toplevel fields in the info column.",
-        "Hide toplevel fields in the info column.",
-        &hide_fields_in_info);
 
     protobuf_field_subdissector_table =
         register_dissector_table("protobuf_field", "Protobuf field subdissector table",

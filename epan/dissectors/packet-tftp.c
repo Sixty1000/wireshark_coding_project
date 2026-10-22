@@ -55,7 +55,7 @@ void proto_register_tftp(void);
 /* Things we may want to remember for a whole conversation */
 typedef struct _tftp_conv_info_t {
   uint16_t     blocksize;
-  const char  *source_file, *destination_file;
+  const uint8_t *source_file, *destination_file;
   uint32_t     request_frame;
   bool         tsize_requested;
   bool         dynamic_windowing_active;
@@ -121,13 +121,11 @@ static expert_field ei_tftp_blocknum_will_wrap;
 static expert_field ei_tftp_windowsize_range;
 static expert_field ei_tftp_msftwindow_unrecognized;
 static expert_field ei_tftp_windowsize_change;
-static expert_field ei_tftp_oack_late;
 
 #define LIKELY_TSIZE_PROBE_KEY 0
 #define FULL_BLOCKNUM_KEY 1
 #define CONVERSATION_KEY 2
 #define WINDOWSIZE_CHANGE_KEY 3
-#define LATE_OPTIONS_ACK_KEY 4
 
 static dissector_handle_t tftp_handle;
 
@@ -302,27 +300,25 @@ tftp_dissect_options(tvbuff_t *tvb, packet_info *pinfo, int offset,
         tftp_info->tsize_requested = true;
       }
     } else if (opcode == TFTP_OACK) {
-      /* Don't change tftp_info for options that arrive after the transfer
-       * of data has begun. */
       if (!g_ascii_strcasecmp((const char *)optionname, "blksize")) {
         int blocksize = (int)strtol((const char *)optionvalue, NULL, 10);
         if (blocksize < 8 || blocksize > 65464) {
           expert_add_info(pinfo, opt_tree, &ei_tftp_blocksize_range);
-        } else if (!PINFO_FD_VISITED(pinfo) && tftp_info->next_block_num == 1) {
+        } else {
           tftp_info->blocksize = blocksize;
         }
       } else if (!g_ascii_strcasecmp((const char *)optionname, "windowsize")) {
         int windowsize = (int)strtol((const char *)optionvalue, NULL, 10);
         if (windowsize < 1 || windowsize > 65535) {
           expert_add_info(pinfo, opt_tree, &ei_tftp_windowsize_range);
-        } else if (!PINFO_FD_VISITED(pinfo) && tftp_info->next_block_num == 1) {
+        } else {
           tftp_info->windowsize = windowsize;
         }
       } else if (!g_ascii_strcasecmp((const char *)optionname, "msftwindow")) {
-        if (g_strcmp0((const char *)optionvalue, "27182") != 0) {
-          expert_add_info(pinfo, opt_tree, &ei_tftp_msftwindow_unrecognized);
-        } else if (!PINFO_FD_VISITED(pinfo) && tftp_info->next_block_num == 1) {
+        if (!g_strcmp0((const char *)optionvalue, "27182")) {
           tftp_info->dynamic_windowing_active = true;
+        } else {
+          expert_add_info(pinfo, opt_tree, &ei_tftp_msftwindow_unrecognized);
         }
       }
     }
@@ -413,7 +409,7 @@ static void dissect_tftp_message(tftp_conv_info_t *tftp_info,
   opcode = tvb_get_ntohs(tvb, offset);
   proto_tree_add_uint(tftp_tree, hf_tftp_opcode, tvb, offset, 2, opcode);
   col_add_str(pinfo->cinfo, COL_INFO,
-              val_to_str(pinfo->pool, opcode, tftp_opcode_vals, "Unknown (0x%04x)"));
+              val_to_str(opcode, tftp_opcode_vals, "Unknown (0x%04x)"));
   offset += 2;
 
   /* read and write requests contain file names
@@ -441,7 +437,7 @@ static void dissect_tftp_message(tftp_conv_info_t *tftp_info,
   case TFTP_RRQ:
     i1 = tvb_strsize(tvb, offset);
     proto_tree_add_item_ret_string(tftp_tree, hf_tftp_source_file,
-                        tvb, offset, i1, ENC_ASCII|ENC_NA, wmem_file_scope(), (const uint8_t**)&tftp_info->source_file);
+                        tvb, offset, i1, ENC_ASCII|ENC_NA, wmem_file_scope(), &tftp_info->source_file);
 
     /* we either have a source file name (for read requests) or a
        destination file name (for write requests)
@@ -470,7 +466,7 @@ static void dissect_tftp_message(tftp_conv_info_t *tftp_info,
   case TFTP_WRQ:
     i1 = tvb_strsize(tvb, offset);
     proto_tree_add_item_ret_string(tftp_tree, hf_tftp_destination_file,
-                        tvb, offset, i1, ENC_ASCII|ENC_NA, wmem_file_scope(), (const uint8_t**)&tftp_info->destination_file);
+                        tvb, offset, i1, ENC_ASCII|ENC_NA, wmem_file_scope(), &tftp_info->destination_file);
 
     tftp_info->source_file = NULL; /* see above */
     tftp_info->request_frame = pinfo->num;
@@ -517,8 +513,6 @@ static void dissect_tftp_message(tftp_conv_info_t *tftp_info,
     proto_item_set_generated(ti);
 
     bytes = tvb_reported_length_remaining(tvb, offset);
-    /* XXX - What if bytes is *larger* than the blocksize? What if there are
-     * multiple blocks with size smaller than the blocksize? */
     is_last_package = (bytes < tftp_info->blocksize);
 
     /* Sequence analysis on blocknums (first pass only) */
@@ -602,23 +596,13 @@ static void dissect_tftp_message(tftp_conv_info_t *tftp_info,
 
       if (PINFO_FD_VISITED(pinfo)) {
         if (blocknum == 1 && !tftp_info->payload_data) {
-          /* XXX - This can allocate data which is leaked if the frame is being
-           * dissected for other reasons, e.g. if the file is long and the
-           * Export Objects dialog was opened before idle dissection for the
-           * columns completed. It might be easier just to always (re-)allocate in
-           * file scope as in the other branch, at the cost of a single copy.
-           * Also note that if tftp_defragment is true, then we are already
-           * collecting data in the reassembly head and could just use that.
-           */
           tftp_info->payload_data = (uint8_t *)g_try_malloc((size_t)tftp_info->file_length);
         }
       } else {
         /* We allocate this in file scope so that it doesn't leak if it
          * turns out we don't have all the blocks so we never send this
-         * to the tap. That means we have to copy it when we actually send
-         * it to the tap, since the tap frees it. (Alternatively we could
-         * add a wmem callback to be called if tftp_info->payload_data were
-         * non-NULL, to avoid the copy.) */
+         * to the tap.
+         */
         tftp_info->payload_data = (uint8_t *)wmem_realloc(wmem_file_scope(), tftp_info->payload_data, (size_t)tftp_info->file_length);
       }
 
@@ -629,8 +613,6 @@ static void dissect_tftp_message(tftp_conv_info_t *tftp_info,
       }
       payload_data_offset =
           (tftp_info->next_tap_block_num - 1) * tftp_info->blocksize;
-
-      DISSECTOR_ASSERT_CMPINT(payload_data_offset + bytes, <=, tftp_info->file_length);
 
       /* Copy data to its place in the payload_data */
       tvb_memcpy(tvb, tftp_info->payload_data + payload_data_offset, offset,
@@ -649,11 +631,7 @@ static void dissect_tftp_message(tftp_conv_info_t *tftp_info,
 
         /* Set payload */
         eo_info->payload_len = tftp_info->file_length;
-        if (PINFO_FD_VISITED(pinfo)) {
-          eo_info->payload_data = tftp_info->payload_data;
-        } else {
-          eo_info->payload_data = g_memdup2(tftp_info->payload_data, tftp_info->file_length);
-        }
+        eo_info->payload_data = tftp_info->payload_data;
 
         /* Send to tap */
         tap_queue_packet(tftp_eo_tap, pinfo, eo_info);
@@ -719,7 +697,7 @@ static void dissect_tftp_message(tftp_conv_info_t *tftp_info,
                         error);
 
     col_append_fstr(pinfo->cinfo, COL_INFO, ", Code: %s",
-                    val_to_str(pinfo->pool, error, tftp_error_code_vals, "Unknown (%u)"));
+                    val_to_str(error, tftp_error_code_vals, "Unknown (%u)"));
 
     offset += 2;
 
@@ -749,19 +727,6 @@ static void dissect_tftp_message(tftp_conv_info_t *tftp_info,
     break;
 
   case TFTP_OACK:
-    /* RFC 2347 says options can be negotiated "prior to the transfer."
-     * New values for Microsoft's dynamic window size are sent in an ACK,
-     * not an OACK. */
-    if (!PINFO_FD_VISITED(pinfo)) {
-      if (tftp_info->next_block_num != 1) {
-        expert_add_info(pinfo, tftp_tree, &ei_tftp_oack_late);
-        p_add_proto_data(wmem_file_scope(), pinfo, proto_tftp, LATE_OPTIONS_ACK_KEY, GUINT_TO_POINTER(1));
-      }
-    } else {
-      if (GPOINTER_TO_UINT(p_get_proto_data(wmem_file_scope(), pinfo, proto_tftp, LATE_OPTIONS_ACK_KEY)) != 0) {
-        expert_add_info(pinfo, tftp_tree, &ei_tftp_oack_late);
-      }
-    }
     tftp_dissect_options(tvb, pinfo, offset, tftp_tree,
                          opcode, tftp_info);
     break;
@@ -849,12 +814,8 @@ static conversation_t* create_tftp_conversation(packet_info *pinfo)
   conversation_t* conversation = NULL;
   if (!PINFO_FD_VISITED(pinfo)) {
     /* New read or write request on first pass, so create conversation with client port only */
-    /* XXX - We might want to create one conversation for the addresses and
-     * port, and have a wmem_tree_t of tftp_conv_info_t, which is the
-     * information for a single transfer.
-     */
-    conversation = conversation_new_strat(pinfo, CONVERSATION_UDP, NO_PORT2);
-
+    conversation = conversation_new(pinfo->num, &pinfo->src, &pinfo->dst, CONVERSATION_UDP,
+                                    pinfo->srcport, 0, NO_PORT2);
     conversation_set_dissector(conversation, tftp_handle);
     /* Store conversation in this frame */
     p_add_proto_data(wmem_file_scope(), pinfo, proto_tftp, CONVERSATION_KEY,
@@ -940,24 +901,27 @@ dissect_tftp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
   conversation_t   *conversation = NULL;
 
   /*
-   * The first TFTP packet (which is always a read or write request)
-   * goes to the TFTP port; the second one comes from some *other* port,
-   * but goes back to the same IP address and port as the ones from which
-   * the first packet came; all subsequent packets go between those two
-   * IP addresses and ports.
+   * The first TFTP packet goes to the TFTP port; the second one
+   * comes from some *other* port, but goes back to the same
+   * IP address and port as the ones from which the first packet
+   * came; all subsequent packets go between those two IP addresses
+   * and ports.
    *
-   * If this packet looks like the first of a transfer, we create
-   * a conversation, with its address 1/port 1 pair being
+   * If this packet went to the TFTP port (either to one of the ports
+   * set in the preferences or to a port set via Decode As), we check
+   * to see if there's already a conversation with one address/port pair
+   * matching the source IP address and port of this packet,
+   * the other address matching the destination IP address of this
+   * packet, and any destination port.
+   *
+   * If not, we create one, with its address 1/port 1 pair being
    * the source address/port of this packet, its address 2 being
    * the destination address of this packet, and its port 2 being
    * wildcarded, and give it the TFTP dissector as a dissector.
-   *
-   * By checking if it looks like a request, we handle the case where
-   * the same port is reused for another file transfer later in the
-   * capture, and also handle the (rare but apparently existing) case
-   * where the *other* port is still the TFTP port.
    */
-  if (is_valid_request(tvb, pinfo))
+  if ((value_is_in_range(global_tftp_port_range, pinfo->destport) ||
+       (pinfo->match_uint == pinfo->destport)) &&
+      is_valid_request(tvb, pinfo))
   {
     conversation = create_tftp_conversation(pinfo);
   }
@@ -965,10 +929,9 @@ dissect_tftp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
   if (conversation == NULL)
   {
     /* Not the initial read or write request */
-    /* Look for wildcarded conversation based upon client port, checking
-     * both directions (we don't know which side *is* the client port.) */
-    if ((conversation = find_conversation_strat(pinfo, CONVERSATION_UDP,
-                                     NO_PORT_B, true)) && conversation_get_dissector(conversation, pinfo->num) == tftp_handle) {
+    /* Look for wildcarded conversation based upon client port */
+    if ((conversation = find_conversation(pinfo->num, &pinfo->dst, &pinfo->src, CONVERSATION_UDP,
+                                     pinfo->destport, 0, NO_PORT_B)) && conversation_get_dissector(conversation, pinfo->num) == tftp_handle) {
 #if 0
       /* XXX: While setting the wildcarded port makes sense, if we do that,
        * it's more complicated to find the correct conversation if ports are
@@ -981,8 +944,8 @@ dissect_tftp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
       if (pinfo->destport == conversation_key_port1(conversation->key_ptr))
         conversation_set_port2(conversation, pinfo->srcport);
 #endif
-    } else if ((conversation = find_conversation_strat(pinfo, CONVERSATION_UDP,
-                                     NO_PORT_B, false)) && conversation_get_dissector(conversation, pinfo->num) == tftp_handle) {
+    } else if ((conversation = find_conversation(pinfo->num, &pinfo->src, &pinfo->dst, CONVERSATION_UDP,
+                                     pinfo->srcport, 0, NO_PORT_B)) && conversation_get_dissector(conversation, pinfo->num) == tftp_handle) {
 
     } else {
       /* How did we get here? We must have matched one of the TFTP ports
@@ -991,7 +954,7 @@ dissect_tftp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
        * such servers out there (issue #18122), and since the default port
        * is IANA assigned it doesn't do harm to process it. Note that in
        * that case the conversation won't have the tftp dissector set. */
-      conversation = find_conversation_pinfo_strat(pinfo, 0);
+      conversation = find_conversation_pinfo(pinfo, 0);
       if (conversation == NULL) {
         return 0;
       }
@@ -1151,7 +1114,6 @@ proto_register_tftp(void)
      { &ei_tftp_windowsize_range, { "tftp.windowsize_range", PI_RESPONSE_CODE, PI_WARN, "TFTP windowsize out of range", EXPFILL }},
      { &ei_tftp_msftwindow_unrecognized, { "tftp.msftwindow.unrecognized", PI_RESPONSE_CODE, PI_WARN, "Unrecognized msftwindow option", EXPFILL }},
      { &ei_tftp_windowsize_change, { "tftp.windowsize.change", PI_SEQUENCE, PI_CHAT, "TFTP window size is changing", EXPFILL }},
-     { &ei_tftp_oack_late, { "tftp.oack.late", PI_PROTOCOL, PI_WARN, "Option negotiation after transfer start ignored", EXPFILL }},
   };
 
   module_t *tftp_module;

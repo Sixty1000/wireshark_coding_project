@@ -54,8 +54,8 @@ ColumnPreferencesFrame::ColumnPreferencesFrame(QWidget *parent) :
     ui->columnTreeView->setDragDropMode(QAbstractItemView::InternalMove);
     ui->columnTreeView->setContextMenuPolicy(Qt::CustomContextMenu);
 
-    ui->newToolButton->setIconByName("list-add");
-    ui->deleteToolButton->setIconByName("list-remove");
+    ui->newToolButton->setStockIcon("list-add");
+    ui->deleteToolButton->setStockIcon("list-remove");
 
     ui->columnTreeView->setModel(proxyModel_);
     delegate_ = new ColumnTypeDelegate();
@@ -66,7 +66,7 @@ ColumnPreferencesFrame::ColumnPreferencesFrame(QWidget *parent) :
     ui->columnTreeView->resizeColumnToContents(ColumnListModel::COL_TITLE);
     ui->columnTreeView->resizeColumnToContents(ColumnListModel::COL_TYPE);
     ui->columnTreeView->resizeColumnToContents(ColumnListModel::COL_OCCURRENCE);
-    ui->columnTreeView->resizeColumnToContents(ColumnListModel::COL_DISPLAY);
+    ui->columnTreeView->resizeColumnToContents(ColumnListModel::COL_RESOLVED);
 
     connect(ui->columnTreeView->selectionModel(), &QItemSelectionModel::selectionChanged,
         this, &ColumnPreferencesFrame::selectionChanged);

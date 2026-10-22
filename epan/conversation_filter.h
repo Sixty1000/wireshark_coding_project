@@ -8,7 +8,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-#pragma once
+
+#ifndef __DISSECTOR_FILTERS_H__
+#define __DISSECTOR_FILTERS_H__
+
 #include <glib.h>
 
 #include "ws_symbol_export.h"
@@ -20,9 +23,7 @@ extern "C" {
 /** @file
  */
 
-/**
- * @brief Initialize internal structures for conversation filters.
- */
+/** Initialize internal structures */
 extern void conversation_filters_init(void);
 
 /**
@@ -58,7 +59,7 @@ WS_DLL_PUBLIC void register_conversation_filter(const char *proto_name, const ch
                                                       is_filter_valid_func is_filter_valid, build_filter_string_func build_filter_string, void *user_data);
 
 /**
- * @brief Register a new log conversation filter.
+ * Register a new log conversation filter.
  *
  * @param proto_name The protocol name.
  * @param display_name A friendly name for the filter.
@@ -69,16 +70,12 @@ WS_DLL_PUBLIC void register_conversation_filter(const char *proto_name, const ch
 WS_DLL_PUBLIC void register_log_conversation_filter(const char *proto_name, const char *display_name,
                                                       is_filter_valid_func is_filter_valid, build_filter_string_func build_filter_string, void *user_data);
 /**
- * @brief Prepend a protocol to the list of filterable protocols.
+ * Prepend a protocol to the list of filterable protocols.
  * @param proto_name A valid protocol name.
  */
 WS_DLL_PUBLIC void add_conversation_filter_protocol(const char *proto_name);
 
-/**
- * @brief Cleans up conversation filters.
- *
- * Cleanup internal structures associated with conversation filters.
- */
+/** Cleanup internal structures */
 extern void conversation_filters_cleanup(void);
 
 /**
@@ -103,15 +100,12 @@ WS_DLL_PUBLIC char *conversation_filter_from_log(struct _packet_info *pinfo);
 
 /*** THE FOLLOWING SHOULD NOT BE USED BY ANY DISSECTORS!!! ***/
 
-/**
- * @brief Describes a registered conversation filter that can build a display filter string from a packet.
- */
 typedef struct conversation_filter_s {
-    const char              *proto_name;          /**< Internal protocol name used to identify this filter (e.g. "tcp") */
-    const char              *display_name;         /**< Human-readable name shown in the UI (e.g. "TCP Conversation") */
-    is_filter_valid_func     is_filter_valid;      /**< Callback that returns true if a valid filter can be built from the given packet */
-    build_filter_string_func build_filter_string;  /**< Callback that constructs the display filter string for the given packet */
-    void                    *user_data;            /**< Caller-supplied context pointer forwarded to both callbacks */
+    const char *              proto_name;
+    const char *              display_name;
+    is_filter_valid_func      is_filter_valid;
+    build_filter_string_func  build_filter_string;
+    void *                    user_data;
 } conversation_filter_t;
 
 WS_DLL_PUBLIC GList *packet_conv_filter_list;
@@ -120,3 +114,5 @@ WS_DLL_PUBLIC GList *log_conv_filter_list;
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
+
+#endif /* conversation_filter.h */

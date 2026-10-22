@@ -504,11 +504,11 @@ literal:
 				time_t sse;
 
 				/* Extract the seconds as a 64-bit signed number. */
-				if (!ws_strtoi64((const char*)bp, &endptr, &secs)) {
+				if (!ws_strtoi64(bp, &endptr, &secs)) {
 					bp = NULL;
 					continue;
 				}
-				bp = (const unsigned char*)endptr;
+				bp = endptr;
 
 				/* For now, reject times before the Epoch. */
 				if (secs < 0) {
@@ -658,8 +658,6 @@ literal:
 			case '-':
 				neg = 1;
 				break;
-			case '\0':
-				goto out;
 			default:
 namedzone:
 				bp = zname;
@@ -678,7 +676,7 @@ namedzone:
 						tm_gmtoff = 'M' - (int)*bp;
 					else {
 						/* Not reached. */
-						ws_critical("Not reached.");
+						ws_critical("Not reached!");
 						goto out;
 					}
 					tm_gmtoff *= SECSPERHOUR;

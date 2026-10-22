@@ -104,6 +104,7 @@ Exec '"$SYSDIR\ie4uinit.exe" -ClearIconCache'
   Push ".tpc"
   Push ".syc"
   Push ".snoop"
+  Push ".scap"
   Push ".rf5"
   Push ".pkt"
   Push ".pklg"
@@ -125,7 +126,6 @@ Exec '"$SYSDIR\ie4uinit.exe" -ClearIconCache'
   Push ".5vw"
   Push ".rtp"
   Push ".ems"
-  Push ".ttl"
 !macroend
 
 !macro IsWiresharkRunning

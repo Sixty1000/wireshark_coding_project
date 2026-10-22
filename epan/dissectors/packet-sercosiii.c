@@ -22,8 +22,6 @@
 #include <epan/packet.h>
 #include <epan/expert.h>
 #include <epan/etypes.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 
 #define MAX_SERCOS_DEVICES (512)
 #define MAX_SERCOS_ADDRESS (511)
@@ -965,7 +963,7 @@ static void dissect_siii_mdt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
   break;
 
   default:
-    proto_tree_add_expert_remaining(tree, pinfo, &ei_siii_cp_unknown, tvb, 6);
+    proto_tree_add_expert(tree, pinfo, &ei_siii_cp_unknown, tvb, 6, -1);
   }
 }
 
@@ -1147,7 +1145,7 @@ static void dissect_siii_at(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
     break;
 
     default:
-      proto_tree_add_expert_remaining(tree, pinfo, &ei_siii_cp_unknown, tvb, 6);
+      proto_tree_add_expert(tree, pinfo, &ei_siii_cp_unknown, tvb, 6, -1);
     break;
     }
 }

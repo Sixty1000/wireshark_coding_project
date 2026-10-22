@@ -23,6 +23,7 @@
 
 #include <glib.h>
 
+#include <epan/rtp_pt.h>
 #include <epan/addr_resolv.h>
 #include <epan/proto_data.h>
 #include <epan/dissectors/packet-rtp.h>
@@ -229,7 +230,7 @@ register_tap_listener_rtpstream(rtpstream_tapinfo_t *tapinfo, const char *fstrin
                 tap_error(error_string);
             }
             g_string_free(error_string, TRUE);
-            return;
+            exit(1);
         }
 
         tapinfo->is_registered = true;
@@ -266,7 +267,7 @@ static void update_payload_names(rtpstream_info_t *stream_info, const struct _rt
     else {
         /* String is created from const strings only */
         new_payload_type_str = val_to_str_ext_const(rtpinfo->info_payload_type,
-            get_external_value_string_ext("rtp_payload_type_short_vals_ext"),
+            &rtp_payload_type_short_vals_ext,
             PAYLOAD_UNKNOWN_STR
         );
     }
@@ -377,6 +378,11 @@ tap_packet_status rtpstream_packet_cb(void *arg, packet_info *pinfo, epan_dissec
     new_stream_id.ssrc = rtpinfo->info_sync_src;
 
     if (tapinfo->mode == TAP_ANALYSE) {
+        /* if display filtering activated and packet do not match, ignore it */
+        if (tapinfo->apply_display_filter && (pinfo->fd->passed_dfilter == 0)) {
+            return TAP_PACKET_DONT_REDRAW;
+        }
+
         /* check whether we already have a stream with these parameters in the list */
         if (tapinfo->strinfo_hash) {
             stream_info = rtpstream_info_multihash_lookup(tapinfo->strinfo_hash, &new_stream_id);

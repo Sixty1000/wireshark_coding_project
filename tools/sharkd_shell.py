@@ -20,8 +20,30 @@ import sys
 _logger = logging.getLogger(__name__)
 
 # grep -Po 'tok_req, "\K\w+' sharkd_session.c
-all_commands = ["load", "status", "analyse", "info", "check", "complete", "frames", "tap", "follow", "iograph", "intervals", "frame", "setcomment", "setconf", "dumpconf", "download", "bye"]
-all_commands += ["!pretty", "!histfile", "!debug"]
+all_commands = """
+load
+status
+analyse
+info
+check
+complete
+frames
+tap
+follow
+iograph
+intervals
+frame
+setcomment
+setconf
+dumpconf
+download
+bye
+""".split()
+all_commands += """
+!pretty
+!histfile
+!debug
+""".split()
 
 
 class SharkdShell:
@@ -55,7 +77,7 @@ class SharkdShell:
             line = origline.lstrip()
             skipped = len(origline) - len(line)
             startpos = readline.get_begidx() - skipped
-            #curpos = readline.get_endidx() - skipped
+            curpos = readline.get_endidx() - skipped
             # _logger.debug('Completing: head=%r cur=%r tail=%r',
             #              line[:startpos], line[startpos:curpos], line[curpos:])
             completions = []
@@ -119,7 +141,7 @@ class SharkdShell:
         except json.JSONDecodeError as e:
             _logger.error('Invalid command: %s', e)
             return
-        if c is not dict or 'req' not in c:
+        if type(c) != dict or not 'req' in c:
             _logger.error('Missing req key in request')
             return
         return c
@@ -250,11 +272,11 @@ class SharkdShell:
             try:
                 if self.pretty == 'jq':
                     subprocess.run(['jq', '.'], input=resp,
-                                   text=True, check=False)
+                                   universal_newlines=True)
                 elif self.pretty == 'indent':
                     r = json.loads(resp)
                     json.dump(r, sys.stdout, indent='  ')
-                    print()
+                    print('')
                 else:
                     print(resp)
             except Exception as e:
@@ -282,7 +304,7 @@ def main(args):
     try:
         shell.main_loop()
     except EOFError:
-        print()
+        print('')
 
 
 if __name__ == '__main__':

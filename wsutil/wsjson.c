@@ -19,7 +19,6 @@
 #include <errno.h>
 #include <wsutil/jsmn.h>
 #include <wsutil/str_util.h>
-#include <wsutil/strtoi.h>
 #include <wsutil/unicode-utils.h>
 #include <wsutil/wslog.h>
 
@@ -49,18 +48,13 @@ json_validate(const uint8_t *buf, const size_t len)
         return false;
     }
 
-    /*
-     * XXX - We create the token array and have jsmn_parse fill it in, only
-     * to free it. It might make more sense to pass in NULL for tokens, and
-     * for our sanity check just check that len isn't too big.
-     */
     t = g_new0(jsmntok_t, max_tokens);
 
     if (!t)
         return false;
 
     jsmn_init(&p);
-    rcode = jsmn_parse(&p, (const char*)buf, len, t, max_tokens);
+    rcode = jsmn_parse(&p, buf, len, t, max_tokens);
     if (rcode < 0) {
         switch (rcode) {
             case JSMN_ERROR_NOMEM:
@@ -93,22 +87,16 @@ json_parse(const char *buf, jsmntok_t *tokens, unsigned int max_tokens)
     return jsmn_parse(&p, buf, strlen(buf), tokens, max_tokens);
 }
 
-int
-json_parse_len(const char *buf, size_t len, jsmntok_t *tokens, unsigned int max_tokens)
-{
-    jsmn_parser p;
-
-    jsmn_init(&p);
-    return jsmn_parse(&p, buf, len, tokens, max_tokens);
-}
-
+static
 jsmntok_t *json_get_next_object(jsmntok_t *cur)
 {
-    for (size_t tokens_remaining = 1; tokens_remaining > 0; tokens_remaining--) {
-        tokens_remaining += cur->size;
-        cur++;
+    int i;
+    jsmntok_t *next = cur+1;
+
+    for (i = 0; i < cur->size; i++) {
+        next = json_get_next_object(next);
     }
-    return cur;
+    return next;
 }
 
 jsmntok_t *json_get_object(const char *buf, jsmntok_t *parent, const char *name)
@@ -196,29 +184,10 @@ bool json_get_double(char *buf, jsmntok_t *parent, const char *name, double *val
             && strlen(name) == (size_t)(cur->end - cur->start) &&
             cur->size == 1 && (cur+1)->type == JSMN_PRIMITIVE) {
             buf[(cur+1)->end] = '\0';
-            errno = 0; // GLib says it resets errno but this doesn't hurt.
             *val = g_ascii_strtod(&buf[(cur+1)->start], NULL);
             if (errno != 0)
                 return false;
             return true;
-        }
-        cur = json_get_next_object(cur);
-    }
-    return false;
-}
-
-bool json_get_int(char *buf, jsmntok_t *parent, const char *name, int64_t *val)
-{
-    int i;
-    jsmntok_t *cur = parent+1;
-
-    for (i = 0; i < parent->size; i++) {
-        if (cur->type == JSMN_STRING &&
-            !strncmp(&buf[cur->start], name, cur->end - cur->start)
-            && strlen(name) == (size_t)(cur->end - cur->start) &&
-            cur->size == 1 && (cur+1)->type == JSMN_PRIMITIVE) {
-            buf[(cur+1)->end] = '\0';
-            return ws_strtoi64(&buf[(cur+1)->start], NULL, val);
         }
         cur = json_get_next_object(cur);
     }
@@ -363,73 +332,6 @@ json_decode_string_inplace(char *text)
     }
 
     *output = '\0';
-    return true;
-}
-
-bool
-json_strip_jsonc_comments(char *text)
-{
-    bool in_string = false;
-    size_t len = strlen(text);
-    size_t pos = 0;
-
-    while (pos < len) {
-        char ch = text[pos];
-
-        if (in_string) {
-            if (ch == '\\') {
-                /* Skip the escaped character, whatever it is; it can't
-                 * end the string or start a comment. */
-                pos += (pos + 1 < len) ? 2 : 1;
-                continue;
-            }
-            if (ch == '"')
-                in_string = false;
-            pos++;
-            continue;
-        }
-
-        if (ch == '"') {
-            in_string = true;
-            pos++;
-            continue;
-        }
-
-        if (ch == '/' && pos + 1 < len && text[pos + 1] == '/') {
-            while (pos < len && text[pos] != '\n') {
-                text[pos] = ' ';
-                pos++;
-            }
-            continue;
-        }
-
-        if (ch == '/' && pos + 1 < len && text[pos + 1] == '*') {
-            bool closed = false;
-
-            text[pos] = ' ';
-            text[pos + 1] = ' ';
-            pos += 2;
-            while (pos < len) {
-                if (text[pos] == '*' && pos + 1 < len && text[pos + 1] == '/') {
-                    text[pos] = ' ';
-                    text[pos + 1] = ' ';
-                    pos += 2;
-                    closed = true;
-                    break;
-                }
-                if (text[pos] != '\n')
-                    text[pos] = ' ';
-                pos++;
-            }
-            if (!closed) {
-                ws_debug("unterminated block comment in JSONC data");
-                return false;
-            }
-            continue;
-        }
-        pos++;
-    }
-
     return true;
 }
 

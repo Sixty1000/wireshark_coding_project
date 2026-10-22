@@ -10,14 +10,13 @@
 #include "protocol_hierarchy_dialog.h"
 #include <ui_protocol_hierarchy_dialog.h>
 
-#include <epan/cfile.h>
+#include "cfile.h"
 
 #include "ui/proto_hier_stats.h"
 
 #include <ui/qt/utils/variant_pointer.h>
 
 #include <wsutil/utf8_entities.h>
-#include <app/application_flavor.h>
 
 #include <ui/qt/utils/qt_ui_utils.h>
 #include "main_application.h"
@@ -89,7 +88,7 @@ public:
         }
 
         setText(protocol_col_, ph_stats_node.hfinfo->name);
-        setToolTip(protocol_col_, QStringLiteral("%1").arg(ph_stats_node.hfinfo->abbrev));
+        setToolTip(protocol_col_, QString("%1").arg(ph_stats_node.hfinfo->abbrev));
         setData(pct_packets_col_, Qt::UserRole, percent_packets_);
         setText(packets_col_, QString::number(total_packets_));
         setData(pct_bytes_col_, Qt::UserRole, percent_bytes_);
@@ -130,7 +129,7 @@ public:
         return QVariant();
     }
 
-    bool operator< (const QTreeWidgetItem &other) const override
+    bool operator< (const QTreeWidgetItem &other) const
     {
         const ProtocolHierarchyTreeWidgetItem &other_phtwi = dynamic_cast<const ProtocolHierarchyTreeWidgetItem&>(other);
 
@@ -372,7 +371,7 @@ void ProtocolHierarchyDialog::on_actionCopyAsCsv_triggered()
             if (!v.isValid()) {
                 separated_value << "\"\"";
             } else if (v.userType() == QMetaType::QString) {
-                separated_value << QStringLiteral("\"%1\"").arg(v.toString());
+                separated_value << QString("\"%1\"").arg(v.toString());
             } else {
                 separated_value << v.toString();
             }
@@ -447,7 +446,7 @@ void ProtocolHierarchyDialog::on_actionDisableProtos_triggered()
 void ProtocolHierarchyDialog::on_actionRevertProtos_triggered()
 {
     proto_reenable_all();
-    read_enabled_and_disabled_lists(application_configuration_environment_prefix());
+    read_enabled_and_disabled_lists();
 
     proto_revert_->setEnabled(enabled_protos_unsaved_changes());
     QString hint = "<small><i>"

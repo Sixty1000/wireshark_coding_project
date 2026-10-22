@@ -1,6 +1,6 @@
 # lpp.cnf
 # lpp conformation file
-# Copyright 2011-2026 Pascal Quantin
+# Copyright 2011-2024 Pascal Quantin
 
 #.OPT
 PER
@@ -129,10 +129,6 @@ Velocity
 CellGlobalIdGERAN/cellIdentity cellGlobalIdGERAN_cellIdentity
 LocationCoordinates/polygon locationCoordinates_polygon
 UTC-ModelSet4/utcDN uTC-ModelSet4_utcDN
-ScheduledLocationTimeSupport-r17/utcTime-r17 utcTime-r17-enum
-ScheduledLocationTimeSupportPerMode-r17/utcTime-r17 utcTime-r17-PositioningModes
-CommonIEsProvideCapabilities/eag_2/remoteUE-Indication-r18 commonIEsProvideCapabilities-remoteUE-Indication-r18
-
 
 #.FIELD_ATTR
 CellGlobalIdGERAN/cellIdentity  ABBREV=cellGlobalIdGERAN.cellIdentity
@@ -855,7 +851,7 @@ NavModelCNAV-KeplerianSet/cnavDeltaNo DISPLAY=BASE_CUSTOM STRINGS=CF_FUNC(lpp_cn
 #.TYPE_ATTR
 NavModelCNAV-KeplerianSet/cnavDeltaNoDot DISPLAY=BASE_CUSTOM STRINGS=CF_FUNC(lpp_cnavDeltaNoDot_fmt)
 
-#.FN_BODY NavModelCNAV-KeplerianSet/cnavMo VAL_PTR=(uint64_t*)&cnavMo
+#.FN_BODY NavModelCNAV-KeplerianSet/cnavMo VAL_PTR=&cnavMo
   int64_t cnavMo;
   int curr_offset = offset;
 %(DEFAULT_BODY)s
@@ -877,7 +873,7 @@ NavModelCNAV-KeplerianSet/cnavDeltaNoDot DISPLAY=BASE_CUSTOM STRINGS=CF_FUNC(lpp
                                                           cnavE, "%g (%"PRIu64")",
                                                           (double)cnavE*pow(2, -34), cnavE);
 
-#.FN_BODY NavModelCNAV-KeplerianSet/cnavOmega VAL_PTR=(uint64_t*)&cnavOmega
+#.FN_BODY NavModelCNAV-KeplerianSet/cnavOmega VAL_PTR=&cnavOmega
   int64_t cnavOmega;
   int curr_offset = offset;
 %(DEFAULT_BODY)s
@@ -888,7 +884,7 @@ NavModelCNAV-KeplerianSet/cnavDeltaNoDot DISPLAY=BASE_CUSTOM STRINGS=CF_FUNC(lpp
                                                          cnavOmega, "%g semi-circles (%"PRId64")",
                                                          (double)cnavOmega*pow(2, -32), cnavOmega);
 
-#.FN_BODY NavModelCNAV-KeplerianSet/cnavOMEGA0 VAL_PTR=(uint64_t*)&cnavOMEGA0
+#.FN_BODY NavModelCNAV-KeplerianSet/cnavOMEGA0 VAL_PTR=&cnavOMEGA0
   int64_t cnavOMEGA0;
   int curr_offset = offset;
 %(DEFAULT_BODY)s
@@ -902,7 +898,7 @@ NavModelCNAV-KeplerianSet/cnavDeltaNoDot DISPLAY=BASE_CUSTOM STRINGS=CF_FUNC(lpp
 #.TYPE_ATTR
 NavModelCNAV-KeplerianSet/cnavDeltaOmegaDot DISPLAY=BASE_CUSTOM STRINGS=CF_FUNC(lpp_cnavDeltaOmegaDot_IoDot_fmt)
 
-#.FN_BODY NavModelCNAV-KeplerianSet/cnavIo VAL_PTR=(uint64_t*)&cnavIo
+#.FN_BODY NavModelCNAV-KeplerianSet/cnavIo VAL_PTR=&cnavIo
   int64_t cnavIo;
   int curr_offset = offset;
 %(DEFAULT_BODY)s
@@ -1692,10 +1688,10 @@ MBS-BeaconMeasElement-r13/codePhaseRMSError-r13 DISPLAY=BASE_CUSTOM STRINGS=CF_F
 MBS-BeaconMeasElement-r13/eag_1/rssi-r14 DISPLAY=BASE_DEC|BASE_UNIT_STRING STRINGS=UNS(&units_dbm)
 
 #.TYPE_ATTR
-Sensor-MeasurementInformation-r13/uncompensatedBarometricPressure-r13 DISPLAY=BASE_DEC|BASE_UNIT_STRING STRINGS=UNS(&units_pascal)
+Sensor-MeasurementInformation-r13/uncompensatedBarometricPressure-r13 DISPLAY=BASE_DEC|BASE_UNIT_STRING STRINGS=UNS(&units_pa)
 
 #.TYPE_ATTR
-Sensor-MeasurementInformation-r13/eag_1/uncertainty-r14/range-r14 DISPLAY=BASE_DEC|BASE_UNIT_STRING STRINGS=UNS(&units_pascal)
+Sensor-MeasurementInformation-r13/eag_1/uncertainty-r14/range-r14 DISPLAY=BASE_DEC|BASE_UNIT_STRING STRINGS=UNS(&units_pa)
 
 #.TYPE_ATTR
 Sensor-MeasurementInformation-r13/eag_1/uncertainty-r14/confidence-r14 DISPLAY=BASE_CUSTOM STRINGS=CF_FUNC(lpp_confidence_fmt)

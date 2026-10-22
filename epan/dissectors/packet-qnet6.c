@@ -16,10 +16,8 @@
 
 #include <epan/etypes.h>
 #include <epan/crc32-tvb.h>
-#include <epan/tfs.h>
-#include <epan/iana-info.h>
-#include <wsutil/array.h>
 #include <wsutil/crc32.h>
+#include <epan/ipproto.h>
 
 void proto_reg_handoff_qnet6(void);
 void proto_register_qnet6(void);
@@ -1474,7 +1472,7 @@ dissect_qnet6_lr(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, int * p
   uint32_t      total_len, off, len, rlen;
   int           lr_start, i, hf_index_off = -1, hf_index_len = -1, hf_index = -1;
   uint8_t       type;
-  char const *p, *name[QNET6_LR_PAIRS];
+  uint8_t const *p, *name[QNET6_LR_PAIRS];
 
   col_set_str(pinfo->cinfo, COL_PROTOCOL, "QNET_LR");
 
@@ -1495,7 +1493,8 @@ dissect_qnet6_lr(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, int * p
   /*
    * type
    */
-  proto_tree_add_item_ret_uint8(stree, hf_qnet6_lr_type, tvb, (*poffset)++, 1, ENC_BIG_ENDIAN, &type);
+  type = tvb_get_uint8(tvb, *poffset);
+  proto_tree_add_item(stree, hf_qnet6_lr_type, tvb, (*poffset)++, 1, ENC_BIG_ENDIAN);
   (*poffset)++; /* skip another spare byte */
 
   /*
@@ -1580,7 +1579,7 @@ dissect_qnet6_lr(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, int * p
            */
           if (i != 2 && i != 5)
             {
-            name[i] = (char*)tvb_get_string_enc(pinfo->pool,
+            name[i] = tvb_get_string_enc(pinfo->pool,
                                          tvb,
                                          addr_data_offset,
                                          len,
@@ -1687,7 +1686,8 @@ dissect_qnet6_nr(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, int * p
   /*
    * type
    */
-  proto_tree_add_item_ret_uint8(stree, hf_qnet6_nr_type, tvb, (*poffset)++, 1, ENC_NA, &type);
+  type = tvb_get_uint8(tvb, *poffset);
+  proto_tree_add_item(stree, hf_qnet6_nr_type, tvb, (*poffset)++, 1, ENC_NA);
   switch (type)
     {
     case QNX_NR_PING_REQ:
@@ -1929,12 +1929,14 @@ dissect_qnet6_kif_msgsend_msg_msginfo(tvbuff_t * tvb, packet_info * pinfo _U_, p
   *poffset += 4;
   proto_tree_add_item(tree, hf_qnet6_kif_msg_msginfo_tid, tvb, *poffset, 4, encoding);
   *poffset += 4;
-  ti = proto_tree_add_item_ret_uint(tree, hf_qnet6_kif_msg_msginfo_chid, tvb, *poffset, 4, encoding, &chid);
+  chid = tvb_get_uint32(tvb, *poffset, encoding);
+  ti = proto_tree_add_item(tree, hf_qnet6_kif_msg_msginfo_chid, tvb, *poffset, 4, encoding);
   display_channel_id(chid, ti);
   *poffset += 4;
   proto_tree_add_item(tree, hf_qnet6_kif_msg_msginfo_scoid, tvb, *poffset, 4, encoding);
   *poffset += 4;
-  ti = proto_tree_add_item_ret_uint(tree, hf_qnet6_kif_msg_msginfo_coid, tvb, *poffset, 4, encoding, &coid);
+  coid = tvb_get_uint32(tvb, *poffset, encoding);
+  ti = proto_tree_add_item(tree, hf_qnet6_kif_msg_msginfo_coid, tvb, *poffset, 4, encoding);
   display_coid(coid, ti);
   *poffset += 4;
   proto_tree_add_item(tree, hf_qnet6_kif_msg_msginfo_msglen, tvb, *poffset, 4, encoding);
@@ -1969,8 +1971,7 @@ static int
 dissect_qnet6_kif_msgsend_msg_devctl(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, int * poffset, unsigned encoding)
 {
   int         ret = -1;
-  unsigned    combine_len;
-  int         left;
+  int         combine_len, left;
   const char *p;
   uint32_t    dcmd;
   static int * const dcmd_fields[] = {
@@ -1983,7 +1984,8 @@ dissect_qnet6_kif_msgsend_msg_devctl(tvbuff_t * tvb, packet_info * pinfo, proto_
     NULL
   };
 
-  proto_tree_add_item_ret_uint(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding, &combine_len);
+  combine_len = tvb_get_uint16(tvb, *poffset, encoding);
+  proto_tree_add_item(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding);
   *poffset += 2;
   dcmd = tvb_get_uint32(tvb, *poffset, encoding);
   proto_tree_add_bitmask(tree, tvb, *poffset, hf_qnet6_kif_msg_devctl_dcmd, ett_qnet6_kif_msg_devctl_dcmd, dcmd_fields, encoding);
@@ -2035,8 +2037,7 @@ dissect_qnet6_kif_msgsend_msg_read(tvbuff_t * tvb, packet_info * pinfo _U_, prot
 {
   int     ret = -1;
   uint32_t xtypes;
-  unsigned combine_len;
-  int     left;
+  int     combine_len, left;
   static int * const xtypes_fields[] = {
     &hf_qnet6_kif_msg_io_read_xtypes_0_7,
     &hf_qnet6_kif_msg_io_read_xtypes_8,
@@ -2046,7 +2047,8 @@ dissect_qnet6_kif_msgsend_msg_read(tvbuff_t * tvb, packet_info * pinfo _U_, prot
   };
 
   left = tvb_reported_length_remaining(tvb, *poffset);
-  proto_tree_add_item_ret_uint(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding, &combine_len);
+  combine_len = tvb_get_uint16(tvb, *poffset, encoding);
+  proto_tree_add_item(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding);
   *poffset += 2;
   proto_tree_add_item(tree, hf_qnet6_kif_msg_io_read_nbytes, tvb,  *poffset, 4, encoding);
   *poffset += 4;
@@ -2100,10 +2102,9 @@ dissect_qnet6_kif_msgsend_msg_read(tvbuff_t * tvb, packet_info * pinfo _U_, prot
 static int
 dissect_qnet6_kif_msgsend_msg_write(tvbuff_t * tvb, packet_info * pinfo _U_, proto_tree * tree, int * poffset, unsigned encoding)
 {
-  int      ret = -1;
+  int     ret = -1;
   uint32_t xtypes;
-  unsigned combine_len;
-  int      left;
+  int     combine_len, left;
   static int * const xtypes_fields[] = {
     &hf_qnet6_kif_msg_io_write_xtypes_0_7,
     &hf_qnet6_kif_msg_io_write_xtypes_8,
@@ -2113,7 +2114,8 @@ dissect_qnet6_kif_msgsend_msg_write(tvbuff_t * tvb, packet_info * pinfo _U_, pro
   };
 
   left = tvb_reported_length_remaining(tvb, *poffset);
-  proto_tree_add_item_ret_uint(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding, &combine_len);
+  combine_len = tvb_get_uint16(tvb, *poffset, encoding);
+  proto_tree_add_item(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding);
   *poffset += 2;
   proto_tree_add_item(tree, hf_qnet6_kif_msg_io_write_nbytes, tvb, *poffset, 4, encoding);
   *poffset += 4;
@@ -2188,11 +2190,11 @@ static int
 dissect_qnet6_kif_msgsend_msg_seek(tvbuff_t * tvb, packet_info * pinfo _U_, proto_tree * tree, int * poffset, unsigned encoding)
 {
   int  ret = -1;
-  unsigned combine_len;
-  int      left;
+  int combine_len, left;
 
   left = tvb_reported_length_remaining(tvb, *poffset);
-  proto_tree_add_item_ret_uint(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding, &combine_len);
+  combine_len = tvb_get_uint16(tvb, *poffset, encoding);
+  proto_tree_add_item(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding);
   *poffset += 2;
   proto_tree_add_item(tree, hf_qnet6_kif_msg_seek_whence, tvb, *poffset, 2, encoding);
   *poffset += 2;
@@ -2234,11 +2236,11 @@ static int
 dissect_qnet6_kif_msgsend_msg_pathconf(tvbuff_t * tvb, packet_info * pinfo _U_, proto_tree * tree, int * poffset, unsigned encoding)
 {
   int  ret = -1;
-  uint16_t combine_len;
-  int left;
+  int combine_len, left;
 
   left = tvb_reported_length_remaining(tvb, *poffset);
-  proto_tree_add_item_ret_uint16(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding, &combine_len);
+  combine_len = tvb_get_uint16(tvb, *poffset, encoding);
+  proto_tree_add_item(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding);
   *poffset += 2;
   proto_tree_add_item(tree, hf_qnet6_kif_msg_pathconf_name, tvb, *poffset, 2, encoding);
   *poffset += 2;
@@ -2278,8 +2280,7 @@ static int
 dissect_qnet6_kif_msgsend_msg_chmod(tvbuff_t * tvb, packet_info * pinfo _U_, proto_tree * tree, int * poffset, unsigned encoding)
 {
   int  ret = -1;
-  uint16_t combine_len;
-  int left;
+  int combine_len, left;
   static int * const chmod_fields[] = {
     &hf_qnet6_kif_msg_io_chmod_other_exe,
     &hf_qnet6_kif_msg_io_chmod_other_write,
@@ -2297,7 +2298,8 @@ dissect_qnet6_kif_msgsend_msg_chmod(tvbuff_t * tvb, packet_info * pinfo _U_, pro
   };
 
   left = tvb_reported_length_remaining(tvb, *poffset);
-  proto_tree_add_item_ret_uint16(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding, &combine_len);
+  combine_len = tvb_get_uint16(tvb, *poffset, encoding);
+  proto_tree_add_item(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding);
   *poffset += 2;
   proto_tree_add_bitmask(tree, tvb, *poffset, hf_qnet6_kif_msg_io_chmod, ett_qnet6_kif_chmod_mode, chmod_fields, encoding);
   *poffset += 4;
@@ -2335,14 +2337,14 @@ static int
 dissect_qnet6_kif_msgsend_msg_fdinfo(tvbuff_t * tvb, packet_info * pinfo _U_, proto_tree * tree, int * poffset, unsigned encoding)
 {
   int  ret = -1;
-  uint16_t combine_len;
-  int left;
+  int combine_len, left;
 
   left = tvb_reported_length_remaining(tvb, *poffset);
   if (left < 2 + 4 + 4 + 4)
     return ret;
 
-  proto_tree_add_item_ret_uint16(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding, &combine_len);
+  combine_len = tvb_get_uint16(tvb, *poffset, encoding);
+  proto_tree_add_item(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding);
   *poffset += 2;
   proto_tree_add_item(tree, hf_qnet6_kif_msg_io_fdinfo_flags, tvb, *poffset, 4, encoding);
   *poffset += 4;
@@ -2380,12 +2382,12 @@ static int
 dissect_qnet6_kif_msgsend_msg_lock(tvbuff_t * tvb, packet_info * pinfo _U_, proto_tree * tree, int * poffset, unsigned encoding)
 {
   int  ret = -1;
-  uint16_t combine_len;
-  int left;
+  int combine_len, left;
 
   left = tvb_reported_length_remaining(tvb, *poffset);
 
-  proto_tree_add_item_ret_uint16(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding, &combine_len);
+  combine_len = tvb_get_uint16(tvb, *poffset, encoding);
+  proto_tree_add_item(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding);
   *poffset += 2;
   proto_tree_add_item(tree, hf_qnet6_kif_msg_io_lock_subtype, tvb, *poffset, 4, encoding);
   *poffset += 4;
@@ -2413,12 +2415,12 @@ static int
 dissect_qnet6_kif_msgsend_msg_space(tvbuff_t * tvb, packet_info * pinfo _U_, proto_tree * tree, int * poffset, unsigned encoding)
 {
   int  ret = -1;
-  uint16_t combine_len;
-  int left;
+  int combine_len, left;
 
   left = tvb_reported_length_remaining(tvb, *poffset);
 
-  proto_tree_add_item_ret_uint16(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding, &combine_len);
+  combine_len = tvb_get_uint16(tvb, *poffset, encoding);
+  proto_tree_add_item(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding);
   *poffset += 2;
   proto_tree_add_item(tree, hf_qnet6_kif_msg_io_space_subtype, tvb, *poffset, 2, encoding);
   *poffset += 2;
@@ -2450,12 +2452,12 @@ static int
 dissect_qnet6_kif_msgsend_msg_chown(tvbuff_t * tvb, packet_info * pinfo _U_, proto_tree * tree, int * poffset, unsigned encoding)
 {
   int  ret = -1;
-  unsigned combine_len;
-  int left;
+  int combine_len, left;
 
   left = tvb_reported_length_remaining(tvb, *poffset);
 
-  proto_tree_add_item_ret_uint(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding, &combine_len);
+  combine_len = tvb_get_uint16(tvb, *poffset, encoding);
+  proto_tree_add_item(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding);
   *poffset += 2;
   proto_tree_add_item(tree, hf_qnet6_kif_msg_io_chown_gid, tvb, *poffset, 4, encoding);
   *poffset += 4;
@@ -2491,12 +2493,12 @@ static int
 dissect_qnet6_kif_msgsend_msg_utime(tvbuff_t * tvb, packet_info * pinfo _U_, proto_tree * tree, int * poffset, unsigned encoding)
 {
   int      ret = -1;
-  unsigned combine_len;
-  int      left;
+  int      combine_len, left;
 
   left = tvb_reported_length_remaining(tvb, *poffset);
 
-  proto_tree_add_item_ret_uint(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding, &combine_len);
+  combine_len = tvb_get_uint16(tvb, *poffset, encoding);
+  proto_tree_add_item(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding);
   *poffset += 2;
   proto_tree_add_item(tree, hf_qnet6_kif_msg_io_utime_curflag, tvb, *poffset, 4, encoding);
   *poffset += 4;
@@ -2528,8 +2530,7 @@ static int
 dissect_qnet6_kif_msgsend_msg_sync(tvbuff_t * tvb, packet_info * pinfo _U_, proto_tree * tree, int * poffset, unsigned encoding)
 {
   int  ret = -1;
-  unsigned combine_len;
-  int left;
+  int combine_len, left;
   static int * const sync_fields[] = {
     &hf_qnet6_kif_msg_syncflag_dsync,
     &hf_qnet6_kif_msg_syncflag_sync,
@@ -2540,7 +2541,7 @@ dissect_qnet6_kif_msgsend_msg_sync(tvbuff_t * tvb, packet_info * pinfo _U_, prot
   left = tvb_reported_length_remaining(tvb, *poffset);
 
   combine_len = tvb_get_uint16(tvb, *poffset, encoding);
-  proto_tree_add_item_ret_uint(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding, &combine_len);
+  proto_tree_add_item(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding);
   *poffset += 2;
   proto_tree_add_bitmask(tree, tvb, *poffset, hf_qnet6_kif_msg_io_sync, ett_qnet6_kif_msg_sync, sync_fields, encoding);
   *poffset += 4;
@@ -2566,12 +2567,12 @@ static int
 dissect_qnet6_kif_msgsend_msg_close(tvbuff_t * tvb, packet_info * pinfo _U_, proto_tree * tree, int * poffset, unsigned encoding)
 {
   int  ret = -1;
-  unsigned combine_len;
-  int left;
+  int combine_len, left;
 
   left = tvb_reported_length_remaining(tvb, *poffset);
 
-  proto_tree_add_item_ret_uint(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding, &combine_len);
+  combine_len = tvb_get_uint16(tvb, *poffset, encoding);
+  proto_tree_add_item(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding);
   *poffset += 2;
 
   left -= 2;
@@ -2594,12 +2595,12 @@ static int
 dissect_qnet6_kif_msgsend_msg_stat(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, int * poffset, unsigned encoding)
 {
   int  ret = -1;
-  unsigned combine_len;
-  int left;
+  int combine_len, left;
 
   left = tvb_reported_length_remaining(tvb, *poffset);
 
-  proto_tree_add_item_ret_uint(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding, &combine_len);
+  combine_len = tvb_get_uint16(tvb, *poffset, encoding);
+  proto_tree_add_item(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding);
   *poffset += 2;
   proto_tree_add_item(tree, hf_qnet6_kif_zero, tvb, *poffset, 4, ENC_NA);
   *poffset += 4;
@@ -2625,12 +2626,11 @@ static int
 dissect_qnet6_kif_msgsend_msg_shutdown(tvbuff_t * tvb, packet_info * pinfo _U_, proto_tree * tree, int * poffset, unsigned encoding)
 {
   int  ret = -1;
-  unsigned combine_len;
-  int left;
+  int combine_len, left;
 
   left = tvb_reported_length_remaining(tvb, *poffset);
-
-  proto_tree_add_item_ret_uint(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding, &combine_len);
+  combine_len = tvb_get_uint16(tvb, *poffset, encoding);
+  proto_tree_add_item(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding);
   *poffset += 2;
 
   left -= 2;
@@ -2654,8 +2654,7 @@ static int
 dissect_qnet6_kif_msgsend_msg_openfd(tvbuff_t * tvb, packet_info * pinfo _U_, proto_tree * tree, int * poffset, unsigned encoding)
 {
   int         ret = -1;
-  unsigned    combine_len;
-  int         left;
+  int         combine_len, left;
   proto_tree *stree;
   static int * const openfd_ioflag_fields[] = {
     &hf_qnet6_kif_msg_openfd_ioflag_access,
@@ -2676,7 +2675,8 @@ dissect_qnet6_kif_msgsend_msg_openfd(tvbuff_t * tvb, packet_info * pinfo _U_, pr
   };
 
   left = tvb_reported_length_remaining(tvb, *poffset);
-  proto_tree_add_item_ret_uint(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding, &combine_len);
+  combine_len = tvb_get_uint16(tvb, *poffset, encoding);
+  proto_tree_add_item(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding);
   *poffset += 2;
   proto_tree_add_bitmask(tree, tvb, *poffset, hf_qnet6_kif_msg_openfd_ioflag, ett_qnet6_kif_msg_openfd_ioflag, openfd_ioflag_fields, encoding);
   *poffset += 4;
@@ -2719,8 +2719,7 @@ static int
 dissect_qnet6_kif_msgsend_msg_mmap(tvbuff_t * tvb, packet_info * pinfo _U_, proto_tree * tree, int * poffset, unsigned encoding)
 {
   int         ret = -1;
-  unsigned    combine_len;
-  int         left;
+  int         combine_len, left;
   proto_tree *stree;
   static int * const prot_fields[] = {
     &hf_qnet6_kif_msg_io_mmap_prot_read,
@@ -2731,7 +2730,8 @@ dissect_qnet6_kif_msgsend_msg_mmap(tvbuff_t * tvb, packet_info * pinfo _U_, prot
 
   left = tvb_reported_length_remaining(tvb, *poffset);
 
-  proto_tree_add_item_ret_uint(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding, &combine_len);
+  combine_len = tvb_get_uint16(tvb, *poffset, encoding);
+  proto_tree_add_item(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding);
   *poffset += 2;
   proto_tree_add_bitmask(tree, tvb, *poffset, hf_qnet6_kif_msg_io_mmap_prot, ett_qnet6_kif_msg_prot, prot_fields, encoding);
   *poffset += 4;
@@ -2767,12 +2767,12 @@ static int
 dissect_qnet6_kif_msgsend_msg_iomsg(tvbuff_t * tvb, packet_info * pinfo _U_, proto_tree * tree, int * poffset, unsigned encoding)
 {
   int  ret = -1;
-  unsigned combine_len;
-  int  left;
+  int combine_len, left;
 
   left = tvb_reported_length_remaining(tvb, *poffset);
 
-  proto_tree_add_item_ret_uint(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding, &combine_len);
+  combine_len = tvb_get_uint16(tvb, *poffset, encoding);
+  proto_tree_add_item(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding);
   *poffset += 2;
   proto_tree_add_item(tree, hf_qnet6_kif_msg_io_msg_mgrid, tvb, *poffset, 2, encoding);
   *poffset += 2;
@@ -2809,7 +2809,7 @@ dissect_qnet6_kif_msgsend_msg_iomsg(tvbuff_t * tvb, packet_info * pinfo _U_, pro
  * events returned };
  *
  */
-static const char *qnet6_kif_msg_io_notify_event_str[] = {
+static const uint8_t *qnet6_kif_msg_io_notify_event_str[] = {
   "read ", "write ", "rdband "
 };
 
@@ -2817,14 +2817,13 @@ static int
 dissect_qnet6_kif_msgsend_msg_notify(tvbuff_t * tvb, packet_info * pinfo _U_, proto_tree * tree, int * poffset, unsigned encoding)
 {
   int         ret = -1;
-  unsigned    combine_len;
-  int         left, fd;
+  int         combine_len, left, fd;
   uint16_t    event, revent;
   proto_tree *stree;
   nstime_t    nt;
   uint64_t    timo;
   uint32_t    nfds, i, j, n, m;
-  char        sevent[20], srevent[20]; /* enough to fit "read,write,rdband" */
+  uint8_t     sevent[20], srevent[20]; /* enough to fit "read,write,rdband" */
   static int * const notify_flags_fields[] = {
     &hf_qnet6_kif_msg_io_notify_flags_28,
     &hf_qnet6_kif_msg_io_notify_flags_29,
@@ -2835,7 +2834,8 @@ dissect_qnet6_kif_msgsend_msg_notify(tvbuff_t * tvb, packet_info * pinfo _U_, pr
 
   left = tvb_reported_length_remaining(tvb, *poffset);
 
-  proto_tree_add_item_ret_uint(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding, &combine_len);
+  combine_len = tvb_get_uint16(tvb, *poffset, encoding);
+  proto_tree_add_item(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding);
   *poffset += 2;
   proto_tree_add_item(tree, hf_qnet6_kif_msg_io_notify_action, tvb, *poffset, 4, encoding);
   *poffset += 4;
@@ -2863,7 +2863,8 @@ dissect_qnet6_kif_msgsend_msg_notify(tvbuff_t * tvb, packet_info * pinfo _U_, pr
   *poffset += 4;
   proto_tree_add_item(tree, hf_qnet6_kif_msg_io_notify_flags_exten, tvb, *poffset, 4, encoding);
   *poffset += 4;
-  proto_tree_add_item_ret_uint(tree, hf_qnet6_kif_msg_io_notify_nfds, tvb, *poffset, 4, encoding, &nfds);
+  nfds = tvb_get_uint32(tvb, *poffset, encoding);
+  proto_tree_add_item(tree, hf_qnet6_kif_msg_io_notify_nfds, tvb, *poffset, 4, encoding);
   *poffset += 4;
   proto_tree_add_item(tree, hf_qnet6_kif_msg_io_notify_fd_first, tvb, *poffset, 4, encoding);
   *poffset += 4;
@@ -2949,12 +2950,12 @@ static int
 dissect_qnet6_kif_msgsend_msg_dup(tvbuff_t * tvb, packet_info * pinfo _U_, proto_tree * tree, int * poffset, unsigned encoding)
 {
   int         ret = -1;
-  unsigned    combine_len;
-  int         left;
+  int         combine_len, left;
   proto_tree *stree;
 
   left = tvb_reported_length_remaining(tvb, *poffset);
-  proto_tree_add_item_ret_uint(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding, &combine_len);
+  combine_len = tvb_get_uint16(tvb, *poffset, encoding);
+  proto_tree_add_item(tree, hf_qnet6_kif_msg_io_combine_len, tvb, *poffset, 2, encoding);
   *poffset += 2;
   stree = proto_tree_add_subtree(tree, tvb, *poffset, QNX_MSG_INFO_SIZE, ett_qnet6_kif_msg_msginfo, NULL, "MsgInfo");
 
@@ -3055,7 +3056,8 @@ dissect_qnet6_kif_msgsend_msg(tvbuff_t * tvb, packet_info * pinfo, proto_tree * 
         return ret;
 
       head_len = 2 + 2 + 4 + 2 * 2 + 4 * 4 + 2 * 4 + 1 * 2 + 2;
-      proto_tree_add_item_ret_uint16(stree, hf_qnet6_kif_msg_connect_subtype,tvb, *poffset, 2, encoding, &subtype);
+      proto_tree_add_item(stree, hf_qnet6_kif_msg_connect_subtype,tvb, *poffset, 2, encoding);
+      subtype = tvb_get_uint16(tvb, *poffset, encoding);
       *poffset += 2;
       rlen -= 2;
       if (head_len - 2 - 2 > rlen) /* there is no rest of io_connect */
@@ -3439,10 +3441,11 @@ dissect_qnet6_kif_cred(tvbuff_t * tvb, packet_info * pinfo _U_, proto_tree * tre
    */
   proto_tree_add_item(sstree, hf_qnet6_kif_client_info_cred_sgid, tvb, *poffset, 4, encoding);
   *poffset += 4;
+  ngroups = tvb_get_uint32(tvb, *poffset, encoding);
   /*
    * ngroups
    */
-  proto_tree_add_item_ret_uint(sstree, hf_qnet6_kif_client_info_cred_ngroups, tvb, *poffset, 4, encoding, &ngroups);
+  proto_tree_add_item(sstree, hf_qnet6_kif_client_info_cred_ngroups, tvb, *poffset, 4, encoding);
   *poffset += 4;
   if (ngroups > __NGROUPS_MAX) /* ngroups is wrong */
     return ret;
@@ -3554,7 +3557,8 @@ dissect_qnet6_kif(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, int * 
       /*
        * server chid
        */
-      ti = proto_tree_add_item_ret_uint(stree,hf_qnet6_kif_connect_server_chid, tvb,*poffset, 4, encoding, &chid);
+      chid = tvb_get_uint32(tvb, *poffset, encoding);
+      ti = proto_tree_add_item(stree,hf_qnet6_kif_connect_server_chid, tvb,*poffset, 4, encoding);
       display_channel_id(chid, ti);
       *poffset += 4;
       /*
@@ -3585,7 +3589,7 @@ dissect_qnet6_kif(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, int * 
        */
       /*
        * connect_msgsend format: connect cred (optional, msgtype
-       * indicates it size=sizeof(connect)+optional sizeof(cred)) msgsend
+       * indicates it size=sizeof(connect)+optinal sizeof(cred)) msgsend
        * cred (optional)
        */
       /*
@@ -3627,7 +3631,7 @@ dissect_qnet6_kif(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, int * 
        * server chid
        */
       chid = tvb_get_uint32(tvb, *poffset, encoding);
-      ti = proto_tree_add_item_ret_uint(stree1, hf_qnet6_kif_connect_server_chid, tvb, *poffset, 4, encoding, &chid);
+      ti = proto_tree_add_item(stree1, hf_qnet6_kif_connect_server_chid, tvb, *poffset, 4, encoding);
       display_channel_id(chid, ti);
       *poffset += 4;
       /*
@@ -3767,7 +3771,8 @@ dissect_qnet6_kif(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, int * 
        */
       proto_tree_add_item(sstree, hf_qnet6_kif_vtid_info_tid, tvb, *poffset, 4, encoding);
       *poffset += 4;
-      ti = proto_tree_add_item_ret_uint(sstree, hf_qnet6_kif_vtid_info_coid, tvb, *poffset, 4, encoding, &coid);
+      coid = tvb_get_uint32(tvb, *poffset, encoding);
+      ti = proto_tree_add_item(sstree, hf_qnet6_kif_vtid_info_coid, tvb, *poffset, 4, encoding);
       display_coid(coid, ti);
       *poffset += 4;
       proto_tree_add_item(sstree, hf_qnet6_kif_vtid_info_priority, tvb, *poffset, 4, encoding);
@@ -4058,7 +4063,7 @@ dissect_qnet6(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void * dat
   qtype = tvb_get_uint8(tvb, offset);
   proto_tree_add_item(qnet6_tree, hf_qnet6_l4_type, tvb, offset++, 1, ENC_BIG_ENDIAN);
 
-  col_add_str(pinfo->cinfo, COL_INFO, val_to_str(pinfo->pool, qtype, qnet6_type_vals, "Unknown LWL4 Type %u packets"));
+  col_add_str(pinfo->cinfo, COL_INFO, val_to_str(qtype, qnet6_type_vals, "Unknown LWL4 Type %u packets"));
   /*
    * flags
    */
@@ -4707,7 +4712,7 @@ proto_register_qnet6(void)
     },
     {&hf_qnet6_kif_vtid_info_coid,
      {"Coid", "qnet6.kif.msgsend.vtid_info.coid",
-      FT_UINT32, BASE_DEC, NULL, 0,
+      FT_INT32, BASE_DEC, NULL, 0,
       "Kernel Interface MsgSend Message virtual thread connection id", HFILL}
     },
     {&hf_qnet6_kif_vtid_info_priority,
@@ -5551,7 +5556,7 @@ proto_register_qnet6(void)
     },
     {&hf_qnet6_kif_msg_msginfo_chid,
      {"Chid", "qnet6.kif.msgsend.msg_info.chid",
-      FT_UINT32, BASE_DEC, NULL, 0,
+      FT_INT32, BASE_DEC, NULL, 0,
       "channel id", HFILL}
     },
     {&hf_qnet6_kif_msg_msginfo_scoid,
@@ -5561,7 +5566,7 @@ proto_register_qnet6(void)
     },
     {&hf_qnet6_kif_msg_msginfo_coid,
      {"Coid", "qnet6.kif.msgsend.msg_info.coid",
-      FT_UINT32, BASE_DEC, NULL, 0,
+      FT_INT32, BASE_DEC, NULL, 0,
       "connection id", HFILL}
     },
     {&hf_qnet6_kif_msg_msginfo_msglen,

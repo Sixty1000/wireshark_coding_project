@@ -1,4 +1,4 @@
-/* packet-mrp-msrp.c
+/* packet-mrp_msrp.c
  * Routines for MSRP (MRP Multiple Stream Reservation Protocol) dissection
  * Copyright 2010, Torrey Atcitty <tatcitty@harman.com>
  *                 Craig Gunther <craig.gunther@harman.com>

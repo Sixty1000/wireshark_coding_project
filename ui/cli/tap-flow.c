@@ -19,13 +19,18 @@
 #include <epan/sequence_analysis.h>
 #include <epan/stat_tap_ui.h>
 #include <epan/tap.h>
-#include <wsutil/cmdarg_err.h>
 
 void register_tap_listener_flow(void);
 
 #define STR_FLOW        "flow,"
 #define STR_STANDARD    ",standard"
 #define STR_NETWORK     ",network"
+
+WS_NORETURN static void flow_exit(const char *strp)
+{
+    fprintf(stderr, "tshark: flow - %s\n", strp);
+    exit(1);
+}
 
 static void
 flow_draw(void *arg)
@@ -35,22 +40,10 @@ flow_draw(void *arg)
     sequence_analysis_get_nodes(flow_info);
 
     sequence_analysis_dump_to_file(stdout, flow_info, 0);
-}
 
-static void
-flow_finish(void *arg)
-{
-    seq_analysis_info_t* flow_info = (seq_analysis_info_t*)arg;
     //clean up the data
     sequence_analysis_list_free(flow_info);
     sequence_analysis_info_free(flow_info);
-}
-
-static void
-flow_reset(void *arg)
-{
-    seq_analysis_info_t* flow_info = (seq_analysis_info_t*)arg;
-    sequence_analysis_list_free(flow_info);
 }
 
 static bool flow_arg_strncmp(const char **opt_argp, const char *strp)
@@ -65,7 +58,7 @@ static bool flow_arg_strncmp(const char **opt_argp, const char *strp)
     return false;
 }
 
-static bool
+static void
 flow_arg_mode(const char **opt_argp, seq_analysis_info_t *flow_info)
 {
     if (flow_arg_strncmp(opt_argp, STR_STANDARD))
@@ -78,14 +71,11 @@ flow_arg_mode(const char **opt_argp, seq_analysis_info_t *flow_info)
     }
     else
     {
-        cmdarg_err("Invalid address type.");
-        return false;
+        flow_exit("Invalid address type.");
     }
-
-    return true;
 }
 
-static bool
+static void
 flow_init(const char *opt_argp, void *userdata)
 {
     seq_analysis_info_t *flow_info = g_new0(seq_analysis_info_t, 1);
@@ -96,11 +86,7 @@ flow_init(const char *opt_argp, void *userdata)
     opt_argp += strlen(STR_FLOW);
     opt_argp += strlen(sequence_analysis_get_name(analysis));
 
-    if (!flow_arg_mode(&opt_argp, flow_info)) {
-        g_free(flow_info);
-        return false;
-    }
-
+    flow_arg_mode(&opt_argp, flow_info);
     if (*opt_argp == ',') {
         filter = opt_argp + 1;
     }
@@ -108,19 +94,15 @@ flow_init(const char *opt_argp, void *userdata)
     sequence_analysis_list_free(flow_info);
 
     errp = register_tap_listener(sequence_analysis_get_tap_listener_name(analysis), flow_info, filter, sequence_analysis_get_tap_flags(analysis),
-                                flow_reset, sequence_analysis_get_packet_func(analysis), flow_draw, flow_finish);
+                                NULL, sequence_analysis_get_packet_func(analysis), flow_draw, NULL);
 
     if (errp != NULL)
     {
         sequence_analysis_list_free(flow_info);
         sequence_analysis_info_free(flow_info);
-        cmdarg_err("Couldn't register %s tap: %s",
-            sequence_analysis_get_tap_listener_name(analysis), errp->str);
         g_string_free(errp, TRUE);
-        return false;
+        flow_exit("Error registering tap listener.");
     }
-
-    return true;
 }
 
 static bool

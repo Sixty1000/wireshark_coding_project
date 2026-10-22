@@ -39,7 +39,7 @@ typedef struct _whois_transaction_t {
     uint32_t req_frame;
     uint32_t rep_frame;
     nstime_t req_time;
-    char*  query;
+    uint8_t*  query;
 } whois_transaction_t;
 
 static int
@@ -67,14 +67,15 @@ dissect_whois(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     conversation = find_or_create_conversation(pinfo);
     whois_trans = (whois_transaction_t *)conversation_get_proto_data(conversation, proto_whois);
     if (whois_trans == NULL) {
-        unsigned linelen;
+        int linelen;
         whois_trans = wmem_new0(wmem_file_scope(), whois_transaction_t);
 
         /*
          * Find the end of the first line.
          */
-        tvb_find_line_end_remaining(tvb, 0, &linelen, NULL);
-        whois_trans->query = (char*)tvb_get_string_enc(wmem_file_scope(), tvb, 0, linelen, ENC_ASCII|ENC_NA);
+        linelen = tvb_find_line_end(tvb, 0, -1, NULL, false);
+        if (linelen != -1)
+            whois_trans->query = tvb_get_string_enc(wmem_file_scope(), tvb, 0, linelen, ENC_ASCII|ENC_NA);
         conversation_add_proto_data(conversation, proto_whois, whois_trans);
     }
 
@@ -171,12 +172,12 @@ dissect_whois(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         /*
          * Show the response as text, a line at a time.
          */
-        unsigned offset = 0, next_offset;
+	int offset = 0, next_offset;
         while (tvb_offset_exists(tvb, offset)) {
             /*
              * Find the end of the line.
              */
-            tvb_find_line_end_remaining(tvb, offset, NULL, &next_offset);
+            tvb_find_line_end(tvb, offset, -1, &next_offset, false);
 
             /*
              * Put this line.
@@ -185,7 +186,7 @@ dissect_whois(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                 next_offset - offset, ENC_UTF_8);
             offset = next_offset;
         }
-        proto_tree_add_expert_remaining(whois_tree, pinfo, &ei_whois_encoding, tvb, 0);
+        proto_tree_add_expert(whois_tree, pinfo, &ei_whois_encoding, tvb, 0, -1);
     }
 
     return tvb_captured_length(tvb);
@@ -206,12 +207,12 @@ proto_register_whois(void)
               NULL, HFILL }
         },
         { &hf_whois_answer_in,
-            { "Answer In", "whois.answer_in", FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_RESPONSE),
+            { "Answer In", "whois.answer_in", FT_FRAMENUM, BASE_NONE, NULL,
               0x0, "The answer to this WHOIS query is in this frame",
               HFILL }
         },
         { &hf_whois_answer_to,
-            { "Query In", "whois.answer_to", FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_REQUEST),
+            { "Query In", "whois.answer_to", FT_FRAMENUM, BASE_NONE, NULL,
               0x0, "This is the answer to the WHOIS query in this frame",
               HFILL }
         },

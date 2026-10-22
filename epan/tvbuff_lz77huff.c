@@ -285,7 +285,7 @@ static bool do_uncompress(struct input *input,
 {
 	uint32_t symbol;
 	uint32_t length;
-	unsigned match_offset;
+	int32_t match_offset;
 	int rc;
 	struct hf_tree tree = {0};
 	struct bitstring bstr = {0};
@@ -312,16 +312,15 @@ static bool do_uncompress(struct input *input,
 			wmem_array_append_one(obuf, v);
 		} else {
 			if (symbol == 256) {
-				/* EOF symbol and everything consumed */
-				if (bstr.bitstring_index == bstr.input->size) {
-					return true;
-				}
+				/* EOF symbol */
+				return bstr.bitstring_index == bstr.input->size;
 			}
 			symbol = symbol - 256;
 			length = symbol & 0xF;
 			symbol = symbol >> 4;
 
 			match_offset = (1U << symbol) + bitstring_lookup(&bstr, symbol);
+			match_offset *= -1;
 
 			if (length == 15) {
 				if (bstr.bitstring_index >= bstr.input->size)
@@ -341,24 +340,15 @@ static bool do_uncompress(struct input *input,
 			bitstring_skip(&bstr, symbol);
 
 			length += 3;
-			if (match_offset > wmem_array_get_count(obuf))
-			    return false;
-			ws_assert(match_offset != 0);
-			/* Must call grow first, to realloc the array if needed
-			 * and avoid invalidating the pointers returned from
-			 * wmem_array_index. */
-                        if (!wmem_array_grow(obuf, length))
-                            return false;
-			uint8_t *src;
-			unsigned i;
-			for (i = 0; i < length / match_offset; i++) {
-				src = wmem_array_index(obuf, wmem_array_get_count(obuf) - match_offset);
-				wmem_array_append(obuf, src, match_offset);
-			}
-			for (i *= match_offset; i < length; i++) {
-				src = wmem_array_index(obuf, wmem_array_get_count(obuf) - match_offset);
-				wmem_array_append(obuf, src, 1);
-			}
+			do {
+				uint8_t byte;
+				unsigned elem_count = wmem_array_get_count(obuf)+match_offset;
+
+				if (wmem_array_try_index(obuf, elem_count, &byte))
+					return false;
+				wmem_array_append_one(obuf, byte);
+				length--;
+			} while (length != 0);
 		}
 	}
 	return true;
@@ -366,8 +356,8 @@ static bool do_uncompress(struct input *input,
 
 tvbuff_t *
 tvb_uncompress_lz77huff(tvbuff_t *tvb,
-			const unsigned offset,
-			unsigned input_size)
+			const int offset,
+			int input_size)
 {
 	volatile bool ok;
 	wmem_allocator_t *pool;
@@ -411,7 +401,7 @@ tvb_uncompress_lz77huff(tvbuff_t *tvb,
 }
 
 tvbuff_t *
-tvb_child_uncompress_lz77huff(tvbuff_t *parent, tvbuff_t *tvb, const unsigned offset, unsigned in_size)
+tvb_child_uncompress_lz77huff(tvbuff_t *parent, tvbuff_t *tvb, const int offset, int in_size)
 {
 	tvbuff_t *new_tvb = tvb_uncompress_lz77huff(tvb, offset, in_size);
 	if (new_tvb)

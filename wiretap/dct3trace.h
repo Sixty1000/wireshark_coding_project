@@ -8,17 +8,10 @@
 
 #ifndef __W_DCT3TRACE_H__
 #define __W_DCT3TRACE_H__
-
+#include <glib.h>
 #include "wtap.h"
+#include "ws_symbol_export.h"
 
-/**
- * @brief Open a DCT3 trace file.
- *
- * @param wth Pointer to the wtap structure.
- * @param err Error code if an error occurs.
- * @param err_info Error information if an error occurs.
- * @return wtap_open_return_val The result of opening the file.
- */
 wtap_open_return_val dct3trace_open(wtap *wth, int *err, char **err_info);
 
 #endif

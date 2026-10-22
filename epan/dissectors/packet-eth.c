@@ -14,6 +14,7 @@
 #include <epan/exceptions.h>
 #include <epan/prefs.h>
 #include <epan/etypes.h>
+#include <epan/ipproto.h>
 #include <epan/addr_resolv.h>
 #include <epan/expert.h>
 #include <epan/conversation_table.h>
@@ -36,7 +37,6 @@
 #include "packet-nsh.h"
 #include "packet-acdr.h"
 #include "packet-mctp.h"
-#include <epan/iana-info.h>
 #include <epan/crc32-tvb.h>
 #include <wiretap/erf_record.h>
 
@@ -56,7 +56,7 @@ static bool eth_check_fcs;
 static bool eth_interpret_as_fw1_monitor;
 /* When capturing on a Cisco FEX some frames start with an extra destination mac */
 static bool eth_deduplicate_dmac;
-/* Preference settings defining conditions for which the CCSDS Space Packet dissector is called */
+/* Preference settings defining conditions for which the CCSDS dissector is called */
 static bool ccsds_heuristic_length;
 static bool ccsds_heuristic_version;
 static bool ccsds_heuristic_header;
@@ -111,7 +111,6 @@ static heur_dissector_list_t heur_subdissector_list;
 static heur_dissector_list_t eth_trailer_subdissector_list;
 static dissector_handle_t eth_withoutfcs_handle;
 static dissector_handle_t eth_maybefcs_handle;
-static dissector_handle_t eth_header_only_handle;
 
 
 static int eth_tap;
@@ -237,7 +236,7 @@ capture_eth(const unsigned char *pd, int offset, int len, capture_packet_info_t 
   if (!BYTES_ARE_IN_FRAME(offset, len, ETH_HEADER_SIZE))
     return false;
 
-  etype = pntohu16(&pd[offset+12]);
+  etype = pntoh16(&pd[offset+12]);
 
   if (etype <= IEEE_802_3_MAX_LEN) {
     /* Oh, yuck.  Cisco ISL frames require special interpretation of the
@@ -410,7 +409,7 @@ get_eth_conversation_data(conversation_t *conv, packet_info *pinfo)
 
 static proto_tree *
 dissect_eth_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
-    int fcs_len, bool header_only)
+    int fcs_len)
 {
   proto_item        *ti = NULL;
   eth_hdr           *ehdr;
@@ -454,16 +453,8 @@ dissect_eth_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
    * Ethernet framing, allow heuristic dissectors to take
    * a first look before we assume that it's actually an
    * Ethernet packet.
-   *
-   * Tell the heuristic dissectors what FCS length was reported for
-   * this packet - the non-Ethernet packet might or might not include
-   * the FCS, or might have a different calculation. (Heuristic
-   * dissectors also can't report a number of bytes consumed, so we
-   * can't really handle the "maybefcs" case otherwise.)
    */
-  struct eth_phdr    phdr;
-  phdr.fcs_len = fcs_len;
-  if (dissector_try_heuristic(heur_subdissector_list, tvb, pinfo, parent_tree, &hdtbl_entry, &phdr))
+  if (dissector_try_heuristic(heur_subdissector_list, tvb, pinfo, parent_tree, &hdtbl_entry, NULL))
     return fh_tree;
 
   if (ehdr->type <= IEEE_802_3_MAX_LEN) {
@@ -587,8 +578,6 @@ dissect_eth_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 
     needs_dissector_with_data = true;
   }
-  if (header_only)
-    return fh_tree;
 
   /* if we still did not leave the dissection, try identifying any ETH conversation
    * When deinterlacing was asked and an interface is known, create an _IN conv,
@@ -679,8 +668,8 @@ static bool check_is_802_2(tvbuff_t *tvb, int fcs_len)
     if (tvb_get_ntohs(tvb, 14) == 0xffff) {
         is_802_2 = false;
     }
-    /* Is this a CCSDS Space Packrt payload instead of an 802.2 (LLC)?
-       Check the conditions enabled by the user for Space Packet recognition */
+    /* Is this a CCSDS payload instead of an 802.2 (LLC)?
+       Check the conditions enabled by the user for CCSDS presence */
     else if (ccsds_heuristic_length || ccsds_heuristic_version ||
              ccsds_heuristic_header || ccsds_heuristic_bit) {
       bool CCSDS_len = true;
@@ -715,7 +704,7 @@ static bool check_is_802_2(tvbuff_t *tvb, int fcs_len)
             CCSDS_len = false;
         }
       }
-      /* Check if Space Packet Version number (first 3 bits of payload) is zero */
+      /* Check if CCSDS Version number (first 3 bits of payload) is zero */
       if ((ccsds_heuristic_version) && (tvb_get_bits8(tvb, 8*ETH_HEADER_SIZE, 3)!=0))
         CCSDS_ver = false;
       /* Check if Secondary Header Flag (4th bit of payload) is set to one. */
@@ -1007,14 +996,14 @@ dissect_eth(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     next_tvb = tvb_new_subset_length_caplen(real_tvb, 0,
                               tvb_captured_length(real_tvb) - total_trailer_length,
                               tvb_reported_length(real_tvb) - total_trailer_length);
-    fh_tree = dissect_eth_common(next_tvb, pinfo, tree, 0, false);
+    fh_tree = dissect_eth_common(next_tvb, pinfo, tree, 0);
 
     /* Now handle the ethernet trailer and optional FCS */
     next_tvb = tvb_new_subset_remaining(real_tvb, tvb_captured_length(real_tvb) - total_trailer_length);
     add_ethernet_trailer(pinfo, tree, fh_tree, hf_eth_trailer, real_tvb, next_tvb,
                          fcs_len, ETH_HEADER_SIZE);
   } else {
-    dissect_eth_common(real_tvb, pinfo, tree, fcs_len, false);
+    dissect_eth_common(real_tvb, pinfo, tree, fcs_len);
   }
   return tvb_captured_length(tvb);
 }
@@ -1024,16 +1013,7 @@ dissect_eth(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 static int
 dissect_eth_withoutfcs(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-  dissect_eth_common(tvb, pinfo, tree, 0, false);
-  return tvb_captured_length(tvb);
-}
-
-
-/* Called by other dissectors  This one's for Ethernet packet headers */
-static int
-dissect_eth_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
-{
-  dissect_eth_common(tvb, pinfo, tree, 0, true);
+  dissect_eth_common(tvb, pinfo, tree, 0);
   return tvb_captured_length(tvb);
 }
 
@@ -1041,7 +1021,7 @@ dissect_eth_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 static int
 dissect_eth_withfcs(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-  dissect_eth_common(tvb, pinfo, tree, 4, false);
+  dissect_eth_common(tvb, pinfo, tree, 4);
   return tvb_captured_length(tvb);
 }
 
@@ -1049,7 +1029,7 @@ dissect_eth_withfcs(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
 static int
 dissect_eth_maybefcs(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-  dissect_eth_common(tvb, pinfo, tree, eth_fcs, false);
+  dissect_eth_common(tvb, pinfo, tree, eth_fcs);
   return tvb_captured_length(tvb);
 }
 
@@ -1254,33 +1234,32 @@ proto_register_eth(void)
                                  &eth_deduplicate_dmac);
 
   prefs_register_static_text_preference(eth_module, "ccsds_heuristic",
-                                        "Dissect as CCSDS Space Packrt if",
+                                        "Dissect as CCSDS if",
                                         "These are the conditions to match a payload against in order to determine if this\n"
-                                        "is a CCSDS (Consultative Committee for Space Data Systems) Space Packet within\n"
+                                        "is a CCSDS (Consultative Committee for Space Data Systems) packet within\n"
                                         "an 802.3 packet. A packet is considered as a possible CCSDS packet only if\n"
                                         "one or more of the conditions are checked.");
 
   prefs_register_bool_preference(eth_module, "ccsds_heuristic_length",
-                                 "CCSDS Space Packet Length in header matches payload size",
+                                 "CCSDS Length in header matches payload size",
                                  "Set the condition that must be true for the CCSDS dissector to be called",
                                  &ccsds_heuristic_length);
 
   prefs_register_bool_preference(eth_module, "ccsds_heuristic_version",
-                                 "CCSDS Space Packet Version # is zero",
+                                 "CCSDS Version # is zero",
                                  "Set the condition that must be true for the CCSDS dissector to be called",
                                  &ccsds_heuristic_version);
 
   prefs_register_bool_preference(eth_module, "ccsds_heuristic_header",
-                                 "CCSDS Space Packet Secondary Header Flag is set",
+                                 "CCSDS Secondary Header Flag is set",
                                  "Set the condition that must be true for the CCSDS dissector to be called",
                                  &ccsds_heuristic_header);
 
   prefs_register_bool_preference(eth_module, "ccsds_heuristic_bit",
-                                 "CCSDS Space Packet Spare bit is cleared",
+                                 "CCSDS Spare bit is cleared",
                                  "Set the condition that must be true for the CCSDS dissector to be called",
                                  &ccsds_heuristic_bit);
 
-  eth_header_only_handle = register_dissector("eth_header", dissect_eth_header, proto_eth);
   eth_withoutfcs_handle = register_dissector("eth_withoutfcs", dissect_eth_withoutfcs, proto_eth);
   register_dissector("eth_withfcs", dissect_eth_withfcs, proto_eth);
   eth_maybefcs_handle = register_dissector("eth_maybefcs", dissect_eth_maybefcs, proto_eth);

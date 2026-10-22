@@ -1,14 +1,14 @@
 // Required attributes:
-// css_dir
+// include-dir
 // min-macos-version
 
-include::{css_dir}/attributes.adoc[]
-:stylesheet: {css_dir}/ws.css
+include::{include-dir}/attributes.adoc[]
+:stylesheet: {include-dir}/ws.css
 
 == Before You Begin
 
 This release of Wireshark requires macOS {min-macos-version} or later.
-If you are running an earlier version of macOS, you can install using another packaging system such as Homebrew or MacPorts.
+If you are running an earlier version of macOS you can install using another packaging system such as Homebrew or MacPorts.
 
 == Quick Setup
 

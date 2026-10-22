@@ -9,15 +9,14 @@ SPDX-License-Identifier: GPL-2.0-or-later
 import sys
 import xml.sax
 from xml.sax.saxutils import quoteattr
-
 import cStringIO as StringIO
-
 
 class CaptureFile:
     pass
 
 class FoundItException(Exception):
     """Used internally for exiting a tree search"""
+    pass
 
 class PacketList:
     """Holds Packet objects, and has methods for finding
@@ -141,66 +140,66 @@ class ProtoTreeItem(PacketList):
 
     def dump(self, fh=sys.stdout):
         if self.name:
-            print(f'name={quoteattr(self.name)}', file=fh)
+            print >> fh, " name=%s" % (quoteattr(self.name),),
 
         if self.showname:
-            print(f'showname={quoteattr(self.showname)}', file=fh)
+            print >> fh, "showname=%s" % (quoteattr(self.showname),),
 
         if self.pos:
-            print(f'pos={quoteattr(self.pos)}', file=fh)
+            print >> fh, "pos=%s" % (quoteattr(self.pos),),
 
         if self.size:
-            print(f'size={quoteattr(self.size)}', file=fh)
+            print >> fh, "size=%s" % (quoteattr(self.size),),
 
         if self.value:
-            print(f'value={quoteattr(self.value)}', file=fh)
+            print >> fh, "value=%s" % (quoteattr(self.value),),
 
         if self.show:
-            print(f'show={quoteattr(self.show)}', file=fh)
+            print >> fh, "show=%s" % (quoteattr(self.show),),
 
         if self.hide:
-            print(f'hide={quoteattr(self.hide)}', file=fh)
+            print >> fh, "hide=%s" % (quoteattr(self.hide),),
 
 class Packet(ProtoTreeItem, PacketList):
     def dump(self, fh=sys.stdout, indent=0):
-        print("  " * indent, "<packet>", file=fh)
+        print >> fh, "  " * indent, "<packet>"
         indent += 1
         for child in self.children:
             child.dump(fh, indent)
-        print("  " * indent, "</packet>", file=fh)
+        print >> fh, "  " * indent, "</packet>"
 
 
 class Protocol(ProtoTreeItem):
 
     def dump(self, fh=sys.stdout, indent=0):
-        print("  " * indent, "<proto ", file=fh)
+        print >> fh, "%s<proto " %  ("  " * indent,),
 
         ProtoTreeItem.dump(self, fh)
 
-        print('>', file=fh)
+        print >> fh, '>'
 
         indent += 1
         for child in self.children:
             child.dump(fh, indent)
-        print("  " * indent, "</proto>", file=fh)
+        print >> fh, "  " * indent, "</proto>"
 
 
 class Field(ProtoTreeItem):
 
     def dump(self, fh=sys.stdout, indent=0):
-        print("  " * indent, "<field ", file=fh)
+        print >> fh, "%s<field " % ("  " * indent,),
 
         ProtoTreeItem.dump(self, fh)
 
         if self.children:
-            print(">", file=fh)
+            print >> fh, ">"
             indent += 1
             for child in self.children:
                 child.dump(fh, indent)
-            print("  " * indent, "</field>", file=fh)
+            print >> fh, "  " * indent, "</field>"
 
         else:
-            print("/>", file=fh)
+            print >> fh, "/>"
 
 
 class ParseXML(xml.sax.handler.ContentHandler):

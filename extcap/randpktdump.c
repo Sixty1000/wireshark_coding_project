@@ -22,8 +22,8 @@
 #include <wsutil/socket.h>
 #include <wsutil/please_report_bug.h>
 #include <wsutil/wslog.h>
-#include <app/application_flavor.h>
 
+#include <cli_main.h>
 #include <wsutil/cmdarg_err.h>
 
 #define RANDPKT_EXTCAP_INTERFACE "randpkt"
@@ -127,6 +127,11 @@ static int list_config(char *interface)
 	return EXIT_SUCCESS;
 }
 
+static void randpktdump_cmdarg_err(const char *msg_format, va_list ap)
+{
+	ws_logv(LOG_DOMAIN_CAPCHILD, LOG_LEVEL_WARNING, msg_format, ap);
+}
+
 int main(int argc, char *argv[])
 {
 	char* err_msg;
@@ -148,13 +153,10 @@ int main(int argc, char *argv[])
 	char* help_url;
 	char* help_header = NULL;
 
-	/* Set the program name. */
-	g_set_prgname("randpktdump");
-
-	cmdarg_err_init(extcap_log_cmdarg_err, extcap_log_cmdarg_err);
+	cmdarg_err_init(randpktdump_cmdarg_err, randpktdump_cmdarg_err);
 
 	/* Initialize log handler early so we can have proper logging during startup. */
-	extcap_log_init(extcap_conf);
+	extcap_log_init("randpktdump");
 
 	/*
 	 * Get credential information for later use.
@@ -165,14 +167,14 @@ int main(int argc, char *argv[])
 	 * Attempt to get the pathname of the directory containing the
 	 * executable file.
 	 */
-	err_msg = configuration_init(argv[0], "wireshark");
+	err_msg = configuration_init(argv[0], NULL);
 	if (err_msg != NULL) {
 		ws_warning("Can't get pathname of directory containing the extcap program: %s.",
 			err_msg);
 		g_free(err_msg);
 	}
 
-	help_url = data_file_url("randpktdump.html", application_configuration_environment_prefix());
+	help_url = data_file_url("randpktdump.html");
 	extcap_base_set_util_info(extcap_conf, argv[0], RANDPKTDUMP_VERSION_MAJOR, RANDPKTDUMP_VERSION_MINOR,
 		RANDPKTDUMP_VERSION_RELEASE, help_url);
 	g_free(help_url);
@@ -298,16 +300,12 @@ int main(int argc, char *argv[])
 
 	if (extcap_conf->capture) {
 
-		const struct file_extension_info* file_extensions;
-		unsigned num_extensions;
-
 		if (g_strcmp0(extcap_conf->interface, RANDPKT_EXTCAP_INTERFACE)) {
 			ws_warning("ERROR: invalid interface");
 			goto end;
 		}
 
-		application_file_extensions(&file_extensions, &num_extensions);
-		wtap_init(false, application_configuration_environment_prefix(), file_extensions, num_extensions);
+		wtap_init(false);
 
 		if (file_type_subtype == WTAP_FILE_TYPE_SUBTYPE_UNKNOWN) {
 			file_type_subtype = wtap_pcapng_file_type_subtype();

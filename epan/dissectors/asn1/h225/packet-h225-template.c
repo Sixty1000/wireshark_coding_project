@@ -9,7 +9,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * To quote the author of the previous H323/H225/H245 dissector:
- *   "This is a complete replacement of the previous limited dissector
+ *   "This is a complete replacement of the previous limitied dissector
  * that Ronnie was crazy enough to write by hand. It was a lot of time
  * to hack it by hand, but it is incomplete and buggy and it is good when
  * it will go away."
@@ -44,6 +44,10 @@
 #include "packet-h323.h"
 #include "packet-q931.h"
 #include "packet-tls.h"
+
+#define PNAME  "H323-MESSAGES"
+#define PSNAME "H.225.0"
+#define PFNAME "h225"
 
 #define UDP_PORT_RAS_RANGE "1718-1719"
 #define TCP_PORT_CS   1720
@@ -232,24 +236,6 @@ h225rassrt_packet(void *phs, packet_info *pinfo _U_, epan_dissect_t *edt _U_, co
   return TAP_PACKET_REDRAW;
 }
 
-static void h225_set_cs_type(packet_info *pinfo, h225_packet_info* h225_pi, h225_cs_type cs_type, bool faststart)
-{
-  if (h225_pi == NULL)
-    return;
-
-  h225_pi->cs_type = cs_type;
-  /* XXX - Why not always use contains_faststart or h225_pi->is_faststart
-   * There are some UUIEs (e.g., Facility-UUIE) where a fastStart can be
-   * included but the path adding extra to the label has never been used.
-   * Is that an oversight or intentional?
-   */
-  if (faststart) {
-    h225_pi->frame_label = wmem_strdup_printf(pinfo->pool, "%s OLC (%s)", val_to_str_const(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"), h225_pi->frame_label);
-  } else {
-    h225_pi->frame_label = wmem_strdup(pinfo->pool, val_to_str_const(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"));
-  }
-}
-
 #include "packet-h225-fn.c"
 
 /* Forward declaration we need below */
@@ -360,10 +346,10 @@ dissect_h225_H323UserInformation(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
   h245_list = next_tvb_list_new(pinfo->pool);
   tp_list = next_tvb_list_new(pinfo->pool);
 
-  col_set_str(pinfo->cinfo, COL_PROTOCOL, "H.225.0");
+  col_set_str(pinfo->cinfo, COL_PROTOCOL, PSNAME);
   col_clear(pinfo->cinfo, COL_INFO);
 
-  it=proto_tree_add_protocol_format(tree, proto_h225, tvb, 0, -1, "H.225.0 CS");
+  it=proto_tree_add_protocol_format(tree, proto_h225, tvb, 0, -1, PSNAME" CS");
   tr=proto_item_add_subtree(it, ett_h225);
 
   offset = dissect_H323_UserInformation_PDU(tvb, pinfo, tr, NULL);
@@ -396,9 +382,9 @@ dissect_h225_h225_RasMessage(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
   h245_list = next_tvb_list_new(pinfo->pool);
   tp_list = next_tvb_list_new(pinfo->pool);
 
-  col_set_str(pinfo->cinfo, COL_PROTOCOL, "H.225.0");
+  col_set_str(pinfo->cinfo, COL_PROTOCOL, PSNAME);
 
-  it=proto_tree_add_protocol_format(tree, proto_h225, tvb, offset, -1, "H.225.0 RAS");
+  it=proto_tree_add_protocol_format(tree, proto_h225, tvb, offset, -1, PSNAME" RAS");
   tr=proto_item_add_subtree(it, ett_h225);
 
   offset = dissect_RasMessage_PDU(tvb, pinfo, tr, NULL);
@@ -823,11 +809,11 @@ void proto_register_h225(void) {
 
   { &hf_h225_ras_req_frame,
     { "RAS Request Frame", "h225.ras.reqframe", FT_FRAMENUM, BASE_NONE,
-    FRAMENUM_TYPE(FT_FRAMENUM_REQUEST), 0, NULL, HFILL }},
+    NULL, 0, NULL, HFILL }},
 
   { &hf_h225_ras_rsp_frame,
     { "RAS Response Frame", "h225.ras.rspframe", FT_FRAMENUM, BASE_NONE,
-    FRAMENUM_TYPE(FT_FRAMENUM_RESPONSE), 0, NULL, HFILL }},
+    NULL, 0, NULL, HFILL }},
 
   { &hf_h225_ras_dup,
     { "Duplicate RAS Message", "h225.ras.dup", FT_UINT32, BASE_DEC,
@@ -857,7 +843,7 @@ void proto_register_h225(void) {
   static stat_tap_table_ui h225_stat_table = {
     REGISTER_TELEPHONY_GROUP_UNSORTED,
     "H.225",
-    "h225",
+    PFNAME,
     "h225,counter",
     h225_stat_init,
     h225_stat_packet,
@@ -874,7 +860,7 @@ void proto_register_h225(void) {
   int i, proto_h225_ras;
 
   /* Register protocol */
-  proto_h225 = proto_register_protocol("H323-MESSAGES", "H.225.0", "h225");
+  proto_h225 = proto_register_protocol(PNAME, PSNAME, PFNAME);
 
   /* Create a "fake" protocol to get proper display strings for SRT dialogs */
   proto_h225_ras = proto_register_protocol("H.225 RAS", "H.225 RAS", "h225_ras");
@@ -902,7 +888,7 @@ void proto_register_h225(void) {
     "ON - display tunnelled protocols inside H.225.0 tree, OFF - display tunnelled protocols in root tree after H.225.0",
     &h225_tp_in_tree);
 
-  register_dissector("h225", dissect_h225_H323UserInformation, proto_h225);
+  register_dissector(PFNAME, dissect_h225_H323UserInformation, proto_h225);
   register_dissector("h323ui",dissect_h225_H323UserInformation, proto_h225);
   h225ras_handle = register_dissector("h225.ras", dissect_h225_h225_RasMessage, proto_h225);
 
@@ -916,9 +902,9 @@ void proto_register_h225(void) {
     ras_calls[i] = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), h225ras_call_hash, h225ras_call_equal);
   }
 
-  h225_tap = register_tap("h225");
+  h225_tap = register_tap(PFNAME);
 
-  register_rtd_table(proto_h225_ras, "h225", NUM_RAS_STATS, 1, ras_message_category, h225rassrt_packet, NULL);
+  register_rtd_table(proto_h225_ras, PFNAME, NUM_RAS_STATS, 1, ras_message_category, h225rassrt_packet, NULL);
 
   register_stat_tap_table_ui(&h225_stat_table);
 
@@ -928,8 +914,6 @@ void proto_register_h225(void) {
   oid_add_from_string("Version 4","0.0.8.2250.0.4");
   oid_add_from_string("Version 5","0.0.8.2250.0.5");
   oid_add_from_string("Version 6","0.0.8.2250.0.6");
-
-#include "packet-h225-reg_vs.c"
 }
 
 
@@ -966,7 +950,6 @@ static h225_packet_info* create_h225_packet_info(packet_info *pinfo)
   pi->cs_type = H225_OTHER;
   pi->msg_tag = -1;
   pi->reason = -1;
-  pi->frame_label = wmem_strdup(pinfo->pool, "");
 
   return pi;
 }

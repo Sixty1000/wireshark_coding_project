@@ -23,7 +23,6 @@ set( ASN_FILE_LIST
 	k5.asn
 	RFC3244.asn
 	RFC6113.asn
-	RFC8636.asn
 	SPAKE.asn
 )
 

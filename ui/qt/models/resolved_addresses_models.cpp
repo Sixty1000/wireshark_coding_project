@@ -21,36 +21,41 @@ static void
 serv_port_hash_to_qstringlist(void *key, void *value, void *member_ptr)
 {
     PortsModel *model = static_cast<PortsModel *>(member_ptr);
-    const char *service_name = (const char *)value;
-    serv_port_key_t* custom_key = (serv_port_key_t*)key;
-    unsigned port = custom_key->port;
-    if (service_name == nullptr) {
-        return;
-    }
+    serv_port_t *serv_port = (serv_port_t *)value;
+    unsigned port = GPOINTER_TO_UINT(key);
 
-    QStringList entries;
-    QString port_type_name;
+    if (serv_port->tcp_name) {
+        QStringList entries;
 
-    switch (custom_key->type) {
-    case PT_TCP:
-        port_type_name = "tcp";
-        break;
-    case PT_UDP:
-        port_type_name = "udp";
-        break;
-    case PT_SCTP:
-        port_type_name = "sctp";
-        break;
-    case PT_DCCP:
-        port_type_name = "dccp";
-        break;
-    default:
-        return;
+        entries << serv_port->tcp_name;
+        entries << QString::number(port);
+        entries << "tcp";
+        model->appendRow(entries);
     }
-    entries << service_name;
-    entries << QString::number(port);
-    entries << port_type_name;
-    model->appendRow(entries);
+    if (serv_port->udp_name) {
+        QStringList entries;
+
+        entries << serv_port->udp_name;
+        entries << QString::number(port);
+        entries << "udp";
+        model->appendRow(entries);
+    }
+    if (serv_port->sctp_name) {
+        QStringList entries;
+
+        entries << serv_port->sctp_name;
+        entries << QString::number(port);
+        entries << "sctp";
+        model->appendRow(entries);
+    }
+    if (serv_port->dccp_name) {
+        QStringList entries;
+
+        entries << serv_port->dccp_name;
+        entries << QString::number(port);
+        entries << "dccp";
+        model->appendRow(entries);
+    }
 }
 
 static void
@@ -94,7 +99,7 @@ manuf_hash_to_qstringlist(void *key, void *value, void *sl_ptr)
     unsigned eth_as_uint = GPOINTER_TO_UINT(key);
 
     if (get_hash_manuf_used(manuf)) {
-        QString entry = QStringLiteral("%1:%2:%3")
+        QString entry = QString("%1:%2:%3")
                 .arg((eth_as_uint >> 16 & 0xff), 2, 16, QChar('0'))
                 .arg((eth_as_uint >>  8 & 0xff), 2, 16, QChar('0'))
                 .arg((eth_as_uint & 0xff), 2, 16, QChar('0'));
@@ -111,7 +116,7 @@ wka_hash_to_qstringlist(void *key, void *value, void *sl_ptr)
     uint8_t *eth_addr = (uint8_t*)key;
 
     if (get_hash_wka_used(wkahash)) {
-        QString entry = QStringLiteral("%1:%2:%3:%4:%5:%6")
+        QString entry = QString("%1:%2:%3:%4:%5:%6")
                 .arg(eth_addr[0], 2, 16, QChar('0'))
                 .arg(eth_addr[1], 2, 16, QChar('0'))
                 .arg(eth_addr[2], 2, 16, QChar('0'))

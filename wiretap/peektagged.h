@@ -8,17 +8,10 @@
 
 #ifndef __W_PEEKTAGGED_H__
 #define __W_PEEKTAGGED_H__
-
+#include <glib.h>
+#include "ws_symbol_export.h"
 #include "wtap.h"
 
-/**
- * @brief Opens a file in the tagged format used by Savvius (formerly WildPackets).
- *
- * @param wth Pointer to the wtap structure.
- * @param err Error code if an error occurs.
- * @param err_info Error information if an error occurs.
- * @return wtap_open_return_val The result of opening the file.
- */
 wtap_open_return_val peektagged_open(wtap *wth, int *err, char **err_info);
 
 #endif

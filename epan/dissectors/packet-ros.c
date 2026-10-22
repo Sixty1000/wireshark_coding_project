@@ -26,6 +26,10 @@
 #include "packet-pres.h"
 #include "packet-ros.h"
 
+#define PNAME  "X.880 OSI Remote Operations Service"
+#define PSNAME "ROS"
+#define PFNAME "ros"
+
 void proto_register_ros(void);
 void proto_reg_handoff_ros(void);
 
@@ -211,7 +215,7 @@ ros_try_string(const char *oid, tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
 
 		if(opdissector) {
 
-			opname = val_to_str(pinfo->pool, opcode_lcl, lookup, "Unknown opcode (%d)");
+			opname = val_to_str(opcode_lcl, lookup, "Unknown opcode (%d)");
 
 			col_set_str(pinfo->cinfo, COL_INFO, opname);
 			if(suffix)
@@ -233,7 +237,7 @@ call_ros_oid_callback(const char *oid, tvbuff_t *tvb, int offset, packet_info *p
 	next_tvb = tvb_new_subset_remaining(tvb, offset);
 
 	if(((len = ros_try_string(oid, next_tvb, pinfo, tree, session)) == 0) &&
-	   ((len = dissector_try_string_with_data(ros_oid_dissector_table, oid, next_tvb, pinfo, tree, true, session)) == 0)) {
+	   ((len = dissector_try_string(ros_oid_dissector_table, oid, next_tvb, pinfo, tree, session)) == 0)) {
 		proto_item *item;
 		proto_tree *next_tree;
 
@@ -397,8 +401,8 @@ ros_match_call_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uns
 
 
 
-static unsigned
-dissect_ros_T_present(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_T_present(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &invokeid);
 
@@ -407,8 +411,8 @@ dissect_ros_T_present(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset 
 
 
 
-static unsigned
-dissect_ros_NULL(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_NULL(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_null(implicit_tag, actx, tree, tvb, offset, hf_index);
 
   return offset;
@@ -427,8 +431,8 @@ static const ber_choice_t InvokeId_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-unsigned
-dissect_ros_InvokeId(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+int
+dissect_ros_InvokeId(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  InvokeId_choice, hf_index, ett_ros_InvokeId,
                                  NULL);
@@ -438,8 +442,8 @@ dissect_ros_InvokeId(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _
 
 
 
-static unsigned
-dissect_ros_INTEGER(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_INTEGER(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 NULL);
 
@@ -448,8 +452,8 @@ dissect_ros_INTEGER(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U
 
 
 
-static unsigned
-dissect_ros_OperationCode(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_OperationCode(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &opcode);
 
@@ -458,8 +462,8 @@ dissect_ros_OperationCode(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned off
 
 
 
-static unsigned
-dissect_ros_T_argument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_T_argument(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   char *oid;
   proto_tree* subtree;
   struct SESSION_DATA_STRUCTURE* session = (struct SESSION_DATA_STRUCTURE *)actx->private_data;
@@ -490,8 +494,8 @@ static const ber_sequence_t Invoke_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ros_Invoke(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_Invoke(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    Invoke_sequence, hf_index, ett_ros_Invoke);
 
@@ -500,8 +504,8 @@ dissect_ros_Invoke(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_
 
 
 
-static unsigned
-dissect_ros_OperationResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_OperationResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   char *oid;
   proto_tree* subtree;
   struct SESSION_DATA_STRUCTURE* session = (struct SESSION_DATA_STRUCTURE *)actx->private_data;
@@ -530,8 +534,8 @@ static const ber_sequence_t T_result_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ros_T_result(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_T_result(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    T_result_sequence, hf_index, ett_ros_T_result);
 
@@ -545,8 +549,8 @@ static const ber_sequence_t ReturnResult_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ros_ReturnResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_ReturnResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ReturnResult_sequence, hf_index, ett_ros_ReturnResult);
 
@@ -555,8 +559,8 @@ dissect_ros_ReturnResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offs
 
 
 
-static unsigned
-dissect_ros_ErrorCode(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_ErrorCode(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &opcode);
 
@@ -565,8 +569,8 @@ dissect_ros_ErrorCode(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset 
 
 
 
-static unsigned
-dissect_ros_T_parameter(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_T_parameter(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   char *oid;
   proto_tree* subtree;
   struct SESSION_DATA_STRUCTURE* session = (struct SESSION_DATA_STRUCTURE *)actx->private_data;
@@ -596,8 +600,8 @@ static const ber_sequence_t ReturnError_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ros_ReturnError(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_ReturnError(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ReturnError_sequence, hf_index, ett_ros_ReturnError);
 
@@ -613,15 +617,15 @@ static const value_string ros_GeneralProblem_vals[] = {
 };
 
 
-static unsigned
-dissect_ros_GeneralProblem(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_GeneralProblem(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   uint32_t problem;
 
     offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &problem);
 
 
-  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", val_to_str(actx->pinfo->pool, problem, ros_GeneralProblem_vals, "GeneralProblem(%d)"));
+  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", val_to_str(problem, ros_GeneralProblem_vals, "GeneralProblem(%d)"));
 
 
   return offset;
@@ -641,15 +645,15 @@ static const value_string ros_InvokeProblem_vals[] = {
 };
 
 
-static unsigned
-dissect_ros_InvokeProblem(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_InvokeProblem(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   uint32_t problem;
 
     offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &problem);
 
 
-  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", val_to_str(actx->pinfo->pool, problem, ros_InvokeProblem_vals, "InvokeProblem(%d)"));
+  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", val_to_str(problem, ros_InvokeProblem_vals, "InvokeProblem(%d)"));
 
 
   return offset;
@@ -664,15 +668,15 @@ static const value_string ros_ReturnResultProblem_vals[] = {
 };
 
 
-static unsigned
-dissect_ros_ReturnResultProblem(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_ReturnResultProblem(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   uint32_t problem;
 
     offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &problem);
 
 
-  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", val_to_str(actx->pinfo->pool, problem, ros_ReturnResultProblem_vals, "ReturnResultProblem(%d)"));
+  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", val_to_str(problem, ros_ReturnResultProblem_vals, "ReturnResultProblem(%d)"));
 
 
   return offset;
@@ -689,15 +693,15 @@ static const value_string ros_ReturnErrorProblem_vals[] = {
 };
 
 
-static unsigned
-dissect_ros_ReturnErrorProblem(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_ReturnErrorProblem(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   uint32_t problem;
 
     offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &problem);
 
 
-  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", val_to_str(actx->pinfo->pool, problem, ros_ReturnErrorProblem_vals, "ReturnErrorProblem(%d)"));
+  col_append_fstr(actx->pinfo->cinfo, COL_INFO, " %s", val_to_str(problem, ros_ReturnErrorProblem_vals, "ReturnErrorProblem(%d)"));
 
 
   return offset;
@@ -720,8 +724,8 @@ static const ber_choice_t T_problem_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ros_T_problem(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_T_problem(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  T_problem_choice, hf_index, ett_ros_T_problem,
                                  NULL);
@@ -736,8 +740,8 @@ static const ber_sequence_t Reject_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ros_Reject(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_Reject(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    Reject_sequence, hf_index, ett_ros_Reject);
 
@@ -746,8 +750,8 @@ dissect_ros_Reject(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_
 
 
 
-static unsigned
-dissect_ros_T_reject(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_T_reject(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 	col_set_str(actx->pinfo->cinfo, COL_INFO, "Reject");
 	  offset = dissect_ros_Reject(implicit_tag, tvb, offset, actx, tree, hf_index);
 
@@ -758,8 +762,8 @@ dissect_ros_T_reject(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _
 
 
 
-static unsigned
-dissect_ros_T_bind_invoke(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_T_bind_invoke(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   char *oid;
   struct SESSION_DATA_STRUCTURE* session = (struct SESSION_DATA_STRUCTURE *)actx->private_data;
 
@@ -778,8 +782,8 @@ dissect_ros_T_bind_invoke(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned off
 
 
 
-static unsigned
-dissect_ros_T_bind_result(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_T_bind_result(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   char *oid;
   struct SESSION_DATA_STRUCTURE* session = (struct SESSION_DATA_STRUCTURE *)actx->private_data;
 
@@ -798,8 +802,8 @@ dissect_ros_T_bind_result(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned off
 
 
 
-static unsigned
-dissect_ros_T_bind_error(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_T_bind_error(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   char *oid;
   struct SESSION_DATA_STRUCTURE* session = (struct SESSION_DATA_STRUCTURE *)actx->private_data;
 
@@ -819,8 +823,8 @@ dissect_ros_T_bind_error(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offs
 
 
 
-static unsigned
-dissect_ros_T_unbind_invoke(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_T_unbind_invoke(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   char *oid;
   struct SESSION_DATA_STRUCTURE* session = (struct SESSION_DATA_STRUCTURE *)actx->private_data;
 
@@ -840,8 +844,8 @@ dissect_ros_T_unbind_invoke(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned o
 
 
 
-static unsigned
-dissect_ros_T_unbind_result(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_T_unbind_result(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   char *oid;
   struct SESSION_DATA_STRUCTURE* session = (struct SESSION_DATA_STRUCTURE *)actx->private_data;
 
@@ -860,8 +864,8 @@ dissect_ros_T_unbind_result(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned o
 
 
 
-static unsigned
-dissect_ros_T_unbind_error(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_T_unbind_error(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   char *oid;
   struct SESSION_DATA_STRUCTURE* session = (struct SESSION_DATA_STRUCTURE *)actx->private_data;
 
@@ -907,8 +911,8 @@ static const ber_choice_t ROS_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-unsigned
-dissect_ros_ROS(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+int
+dissect_ros_ROS(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  ROS_choice, hf_index, ett_ros_ROS,
                                  NULL);
@@ -918,8 +922,8 @@ dissect_ros_ROS(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, a
 
 
 
-static unsigned
-dissect_ros_OBJECT_IDENTIFIER(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ros_OBJECT_IDENTIFIER(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_object_identifier(implicit_tag, actx, tree, tvb, offset, hf_index, NULL);
 
   return offset;
@@ -938,8 +942,8 @@ static const ber_choice_t Code_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-unsigned
-dissect_ros_Code(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+int
+dissect_ros_Code(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  Code_choice, hf_index, ett_ros_Code,
                                  NULL);
@@ -954,8 +958,8 @@ dissect_ros_Code(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, 
 static int
 dissect_ros(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* data)
 {
-	unsigned offset = 0;
-	unsigned old_offset;
+	int offset = 0;
+	int old_offset;
 	proto_item *item;
 	proto_tree *tree;
 	proto_tree *next_tree=NULL;
@@ -1018,11 +1022,11 @@ void proto_register_ros(void) {
   {
     { &hf_ros_response_in,
       { "Response In", "ros.response_in",
-	FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_RESPONSE), 0x0,
+	FT_FRAMENUM, BASE_NONE, NULL, 0x0,
 	"The response to this remote operation invocation is in this frame", HFILL }},
     { &hf_ros_response_to,
       { "Response To", "ros.response_to",
-	FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_REQUEST), 0x0,
+	FT_FRAMENUM, BASE_NONE, NULL, 0x0,
 	"This is a response to the remote operation invocation in this frame", HFILL }},
     { &hf_ros_time,
       { "Time", "ros.time",
@@ -1090,7 +1094,7 @@ void proto_register_ros(void) {
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_ros_operationResult,
-      { "result", "ros.operationResult_element",
+      { "result", "ros.result_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "OperationResult", HFILL }},
     { &hf_ros_errcode,
@@ -1110,15 +1114,15 @@ void proto_register_ros(void) {
         FT_INT32, BASE_DEC, VALS(ros_GeneralProblem_vals), 0,
         "GeneralProblem", HFILL }},
     { &hf_ros_invokeProblem,
-      { "invoke", "ros.invokeProblem",
+      { "invoke", "ros.invoke",
         FT_INT32, BASE_DEC, VALS(ros_InvokeProblem_vals), 0,
         "InvokeProblem", HFILL }},
     { &hf_ros_rejectResult,
-      { "returnResult", "ros.rejectResult",
+      { "returnResult", "ros.returnResult",
         FT_INT32, BASE_DEC, VALS(ros_ReturnResultProblem_vals), 0,
         "ReturnResultProblem", HFILL }},
     { &hf_ros_rejectError,
-      { "returnError", "ros.rejectError",
+      { "returnError", "ros.returnError",
         FT_INT32, BASE_DEC, VALS(ros_ReturnErrorProblem_vals), 0,
         "ReturnErrorProblem", HFILL }},
     { &hf_ros_present,
@@ -1171,7 +1175,7 @@ void proto_register_ros(void) {
   expert_module_t* expert_ros;
 
   /* Register protocol */
-  proto_ros = proto_register_protocol("X.880 OSI Remote Operations Service", "ROS", "ros");
+  proto_ros = proto_register_protocol(PNAME, PSNAME, PFNAME);
   ros_handle = register_dissector("ros", dissect_ros, proto_ros);
   /* Register fields and subtrees */
   proto_register_field_array(proto_ros, hf, array_length(hf));

@@ -13,13 +13,15 @@
 # include "config.h"
 
 #include <epan/packet.h>
+#include <epan/sctpppids.h>
 #include <wsutil/array.h>
 
 #include "packet-ber.h"
-#include "packet-sctp.h"
+#include "packet-gdt.h"
 
-void proto_register_gdt(void);
-void proto_reg_handoff_gdt(void);
+#define PNAME  "Generic Data Transfer Protocol"
+#define PSNAME "GDT"
+#define PFNAME "gdt"
 
 /* Initialize the protocol and registered fields */
 static int proto_gdt;
@@ -41,7 +43,7 @@ static int dissect_gdt(tvbuff_t *tvb,
     proto_tree *gdt_tree = NULL;
 
     /* make entry in the Protocol column on summary display */
-    col_set_str(pinfo->cinfo, COL_PROTOCOL, "GDT");
+    col_set_str(pinfo->cinfo, COL_PROTOCOL, PNAME);
 
     /* create the gdt protocol tree */
     if (tree) {
@@ -66,7 +68,7 @@ void proto_register_gdt(void) {
     };
 
     /* Register protocol */
-    proto_gdt = proto_register_protocol("Generic Data Transfer Protocol", "GDT", "gdt");
+    proto_gdt = proto_register_protocol(PNAME, PSNAME, PFNAME);
 
     /* Register fields and subtrees */
     proto_register_field_array(proto_gdt, hf, array_length(hf));

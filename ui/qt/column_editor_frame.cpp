@@ -31,9 +31,8 @@ ColumnEditorFrame::ColumnEditorFrame(QWidget *parent) :
     cur_column_(-1)
 {
     ui->setupUi(this);
-    ui->fieldsNameLineEdit->setType(CustomColumnToEnter);
 
-#ifdef Q_OS_MACOS
+#ifdef Q_OS_MAC
     foreach (QWidget *w, findChildren<QWidget *>()) {
         w->setAttribute(Qt::WA_MacSmallSize, true);
     }
@@ -58,17 +57,17 @@ ColumnEditorFrame::ColumnEditorFrame(QWidget *parent) :
     // This lets the typeComboBox shrink a bit if the width is very small.
     ui->typeComboBox->setMinimumContentsLength(20);
 
-    ui->displayComboBox->addItem(tr("Values"), QVariant(COLUMN_DISPLAY_VALUES));
-    ui->displayComboBox->addItem(tr("Strings"), QVariant(COLUMN_DISPLAY_STRINGS));
-    ui->displayComboBox->addItem(tr("Details"), QVariant(COLUMN_DISPLAY_DETAILS));
-
-    connect(ui->fieldsNameLineEdit, &DisplayFilterEdit::textChanged,
-            ui->fieldsNameLineEdit, &DisplayFilterEdit::checkCustomColumn);
-    connect(ui->fieldsNameLineEdit, &DisplayFilterEdit::textChanged,
+    connect(ui->fieldsNameLineEdit, &FieldFilterEdit::textChanged,
+            ui->fieldsNameLineEdit, &FieldFilterEdit::checkCustomColumn);
+    connect(ui->fieldsNameLineEdit, &FieldFilterEdit::textChanged,
             this, &ColumnEditorFrame::checkCanResolve);
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    connect(ui->typeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            &ColumnEditorFrame::typeChanged);
+#else
     connect(ui->typeComboBox, &QComboBox::currentIndexChanged, this,
             &ColumnEditorFrame::typeChanged);
-
+#endif
 }
 
 ColumnEditorFrame::~ColumnEditorFrame()
@@ -99,6 +98,7 @@ void ColumnEditorFrame::setFields(int index)
         ui->fieldsNameLineEdit->setSyntaxState(SyntaxLineEdit::Empty);
         ui->occurrenceLineEdit->clear();
         ui->occurrenceLineEdit->setSyntaxState(SyntaxLineEdit::Empty);
+        ui->resolvedCheckBox->setEnabled(false);
     }
     ui->buttonBox->button(QDialogButtonBox::Ok)->setEnabled(ok);
 }
@@ -138,7 +138,7 @@ void ColumnEditorFrame::editColumn(int column)
     saved_fields_ = get_column_custom_fields(column);
     saved_occurrence_ = QString::number(get_column_custom_occurrence(column));
     ui->typeComboBox->setCurrentIndex(get_column_format(column));
-    ui->displayComboBox->setCurrentIndex(ui->displayComboBox->findData(get_column_display_format(column)));
+    ui->resolvedCheckBox->setChecked(get_column_resolved(column));
     setFields(ui->typeComboBox->currentIndex());
 }
 
@@ -200,11 +200,10 @@ void ColumnEditorFrame::on_buttonBox_accepted()
             if (!ui->occurrenceLineEdit->text().isEmpty()) {
                 set_column_custom_occurrence(cur_column_, ui->occurrenceLineEdit->text().toInt());
             }
-            if (ui->displayComboBox->isEnabled()) {
-                set_column_display_format(cur_column_, ui->displayComboBox->itemData(ui->displayComboBox->currentIndex()).toInt());
+            if (ui->resolvedCheckBox->isEnabled()) {
+                set_column_resolved(cur_column_, ui->resolvedCheckBox->isChecked());
             }
         }
-        recent_set_column_format(cur_column_, ui->typeComboBox->currentIndex());
         prefs_main_write();
         emit columnEdited();
     }
@@ -235,39 +234,10 @@ void ColumnEditorFrame::keyPressEvent(QKeyEvent *event)
 
 void ColumnEditorFrame::checkCanResolve()
 {
-    bool canResolve = false;
-
-    if (ui->fieldsNameLineEdit->syntaxState() == SyntaxLineEdit::Valid) {
-        bool displayStrings = column_prefs_custom_display_strings(ui->fieldsNameLineEdit->text().toUtf8().constData());
-        int strings_idx = ui->displayComboBox->findData(COLUMN_DISPLAY_STRINGS);
-
-        if (displayStrings && strings_idx == -1) {
-            ui->displayComboBox->insertItem(1, "Strings", QVariant(COLUMN_DISPLAY_STRINGS));
-        } else if (!displayStrings && strings_idx != -1) {
-            ui->displayComboBox->removeItem(strings_idx);
-        }
-
-        bool displayDetails = column_prefs_custom_display_details(ui->fieldsNameLineEdit->text().toUtf8().constData());
-        int details_idx = ui->displayComboBox->findData(COLUMN_DISPLAY_DETAILS);
-
-        if (displayDetails && details_idx == -1) {
-            ui->displayComboBox->addItem("Details", QVariant(COLUMN_DISPLAY_DETAILS));
-        } else if (!displayDetails && details_idx != -1) {
-            ui->displayComboBox->removeItem(details_idx);
-        }
-
-        canResolve = displayStrings || displayDetails;
-    }
-
-    ui->displayLabel->setEnabled(canResolve);
-    ui->displayComboBox->setEnabled(canResolve);
-    if (canResolve) {
-        int idx = ui->displayComboBox->findData(get_column_display_format(cur_column_));
-        if (idx == -1) {
-            idx = 0;
-        }
-        ui->displayComboBox->setCurrentIndex(idx);
-    } else {
-        ui->displayComboBox->setCurrentIndex(-1);
+    if (ui->fieldsNameLineEdit->syntaxState() == SyntaxLineEdit::Valid && column_prefs_custom_resolve(ui->fieldsNameLineEdit->text().toUtf8().constData())) {
+        ui->resolvedCheckBox->setEnabled(true);
+    } else  {
+        ui->resolvedCheckBox->setEnabled(false);
+        ui->resolvedCheckBox->setChecked(false);
     }
 }

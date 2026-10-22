@@ -13,8 +13,6 @@
 
 #include <epan/packet.h>
 #include <epan/expert.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 #include <wiretap/erf_record.h>
 
 void proto_reg_handoff_opa_snc(void);
@@ -165,7 +163,7 @@ static dissector_handle_t opa_9b_handle;
 
 static int dissect_opa_snc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-    unsigned offset = 0;    /* Current Offset */
+    int offset = 0;    /* Current Offset */
 
     bool isBypass = true;  /* Tracks if we are parsing a bypass packet or Not */
     uint8_t Direction = tvb_get_uint8(tvb, offset + 1);
@@ -185,9 +183,9 @@ static int dissect_opa_snc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
     offset += 1;
     proto_tree_add_item(SnC_tree, hf_opa_snc_direction, tvb, offset, 1, ENC_LITTLE_ENDIAN);
     offset += 1;
-    proto_tree_add_item(SnC_tree, hf_opa_snc_Reserved16, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+    proto_tree_add_item(SnC_tree, hf_opa_snc_Reserved16, tvb, offset, 2, ENC_NA);
     offset += 2;
-    proto_tree_add_item(SnC_tree, hf_opa_snc_Reserved32, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+    proto_tree_add_item(SnC_tree, hf_opa_snc_Reserved32, tvb, offset, 4, ENC_NA);
     offset += 4;
 
     RHF_PBC = tvb_get_letoh64(tvb, offset);
@@ -205,7 +203,7 @@ static int dissect_opa_snc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
         isBypass = (((RHF_PBC >> 12) & 7) == 4);
         break;
     case 2:     /* For use with internal debugging tools */
-        proto_tree_add_item(SnC_tree, hf_opa_snc_Reserved64, tvb, offset, 8, ENC_LITTLE_ENDIAN);
+        proto_tree_add_item(SnC_tree, hf_opa_snc_Reserved64, tvb, offset, 8, ENC_NA);
         isBypass = false;
         break;
     default:

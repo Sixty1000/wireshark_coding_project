@@ -27,7 +27,6 @@ RTCMEM
 VAM
 ItsPduHeaderVam
 IMZM
-ParkingInformationMessage
 EvcsnPdu
 DriverLanguage
 ChargingPower
@@ -35,6 +34,7 @@ StatusResponseCode
 CurrentVehicleConfiguration
 TpgLocation
 CS5
+DSRCmsgID
 VehicleLengthV2
 TrailerPresenceInformation
 CartesianAngularAccelerationComponent
@@ -50,76 +50,69 @@ TracesExtended
 RoadConfigurationSection
 RoadConfigurationSectionList
 RoadSectionDefinition
+PathPredictedList
+PathPredicted2
 PathExtended
 PathReferences
 OccupiedLanesWithConfidence
 MapReferences
 IvimReference
 IvimReferences
-IssuerIdentifier
+GeneralizedLanePositions
+UsageIndication
 MapemConfiguration
 MapemElementReference
+BasicLaneConfiguration
 OrdinalNumber1B
 Position1d
 ProviderId
 MapemConnectionList
 MapemLaneList
+GeoPosition
+BasicLaneInformation
 StandardLength2B
+RoadSectionId
 PathId
-$ETSI-ITS-CDD$VehicleHeight
-MultiplicativeFactor
-ParkingSpaceDetailed
-ParkingSpaceBasic
+IssuerIdentifier
 
 #.NO_EMIT
 Code-Units WITHOUT_VALS
 
-#.USE_VALS_EXT
-CauseCodeChoice
-#.END
-
-
 
 #.MODULE
-CAMv1-PDU-Descriptions                                  camv1
-CAM-PDU-Descriptions                                    cam
-DENMv1-PDU-Descriptions                                 denmv1
-DENM-PDU-Description                                    denm
-EVCSN-PDU-Descriptions                                  evcsn
-EV-RechargingSpotReservation-PDU-Descriptions           evrsr
-IVIM-PDU-Descriptions                                   ivim
-TIS-TPG-Transactions-Descriptions                       tistpg
-SPATEM-PDU-Descriptions                                 spatem
-MAPEM-PDU-Descriptions                                  mapem
-SREM-PDU-Descriptions                                   srem
-SSEM-PDU-Descriptions                                   ssem
-AVIAEINumberingAndDataStructures                        anads
-ITS-Container                                           itsv2
-ITS-ContainerV1                                         itsv1
-#ElectronicRegistrationIdentificationVehicleDataModule  erivdm
-#CITSapplMgmtIDs                                        csmid
-EfcDsrcApplication                                      dsrc_app
-IVI                                                     ivi
-GDD                                                     gdd
-DSRC                                                    dsrc
-ETSI-ITS-DSRC                                           dsrc
-ETSI-ITS-DSRC-AddGrpC                                   AddGrpC
-RTCMEM-PDU-Descriptions                                 rtcmem
-ETSI-ITS-CDDv1                                          itsv1
-ETSI-ITS-CDD                                            its
-CPM-OriginatingStationContainers                        cpm
-CPM-PDU-Descriptionsv1                                  cpmv1
-CPM-PDU-Descriptions                                    cpm
-CPM-PerceivedObjectContainer                            cpm
-CPM-PerceptionRegionContainer                           cpm
-CPM-SensorInformationContainer                          cpm
-VAM-PDU-Descriptions                                    vam
-IMZM-PDU-Descriptions                                   imzm
-#VAM-Temp-Imports                                       vam
-PIM-PDU-Descriptions                                    pim
-AVM-Commons                                             avm
-MIM-PDU-Descriptions                                    mim
-MVM-PDU-Descriptions                                    mvm
+CAMv1-PDU-Descriptions					camv1
+CAM-PDU-Descriptions					cam
+DENMv1-PDU-Descriptions					denmv1
+DENM-PDU-Description					denm
+EVCSN-PDU-Descriptions					evcsn
+EV-RechargingSpotReservation-PDU-Descriptions		evrsr
+IVIM-PDU-Descriptions					ivim
+TIS-TPG-Transactions-Descriptions			tistpg
+SPATEM-PDU-Descriptions					spatem
+MAPEM-PDU-Descriptions					mapem
+SREM-PDU-Descriptions					srem
+SSEM-PDU-Descriptions					ssem
+AVIAEINumberingAndDataStructures			anads
+ITS-Container						itsv2
+ITS-ContainerV1						itsv1
+#ElectronicRegistrationIdentificationVehicleDataModule	erivdm
+#CITSapplMgmtIDs						csmid
+EfcDsrcApplication					dsrc_app
+IVI							ivi
+GDD							gdd
+DSRC						dsrc
+RTCMEM-PDU-Descriptions                         rtcmem
+ETSI-ITS-CDDv1                                  itsv1
+ETSI-ITS-CDD                                    its
+CPM-OriginatingStationContainers                cpm
+CPM-PDU-Descriptionsv1                          cpmv1
+CPM-PDU-Descriptions                            cpm
+CPM-PerceivedObjectContainer                    cpm
+CPM-PerceptionRegionContainer                   cpm
+CPM-SensorInformationContainer                  cpm
+VAM-PDU-Descriptions                            vam
+IMZM-PDU-Descriptions                           imzm
+#VAM-Temp-Imports                                vam
 #.END
 
 #.PDU
@@ -153,22 +146,13 @@ SignalStatusPackage-addGrpC
 LaneAttributes-addGrpC
 MovementEvent-addGrpC
 RequestorDescription-addGrpC
-# CpmContainers
+#CpmContainers
 OriginatingVehicleContainer
 OriginatingRsuContainer
 SensorInformationContainer
 PerceptionRegionContainer
 PerceivedObjectContainer
-# CAM Extensioncontainer
-TwoWheelerContainer
-EHorizonLocationSharingContainer
-VeryLowFrequencyContainer
-PathPredictionContainer
-RoadLanePositionsContainer
-VehicleMovementControlContainer
-PimPayload
-MIM
-MVM
+
 #.TYPE_RENAME
 
 # GicPart
@@ -373,7 +357,6 @@ Node-XY-26b/y                     n26bY
 Node-XY-28b/y                     n28bY
 Node-XY-32b/y                     n32bY
 
-ParkingSpaceDetectionMetaData/source stationId
 #.TYPE_ATTR
 Latitude           DISPLAY=BASE_CUSTOM STRINGS=CF_FUNC(its_latitude_fmt)
 Longitude          DISPLAY=BASE_CUSTOM STRINGS=CF_FUNC(its_longitude_fmt)
@@ -844,7 +827,7 @@ CauseCodeType
   // Lets try it that way, regarless of version value...
 %(DEFAULT_BODY)s
   tap_queue_packet(its_tap, actx->pinfo, actx->private_data);
-  tvbuff_t *next_tvb = tvb_new_subset_remaining(tvb, offset >> 3);
+  tvbuff_t *next_tvb = tvb_new_subset_length(tvb, offset >> 3, -1);
   its_header_t *its_hdr = its_get_private_data(actx->pinfo);
   int data_offset = dissector_try_uint(its_msgid_subdissector_table, (its_hdr->version << 16)+its_hdr->msgId, next_tvb, actx->pinfo, tree);
   if (!data_offset) {
@@ -865,13 +848,6 @@ CauseCodeType
 %(DEFAULT_BODY)s
   }
 
-#.FN_BODY ExtensionContainerId VAL_PTR = &ExtensionContainerId
-    uint32_t ExtensionContainerId;
-%(DEFAULT_BODY)s
-    its_header_t *its_hdr = its_get_private_data(actx->pinfo);
-    its_hdr->CamExtensionContainerId = ExtensionContainerId;
-
-#.FN_PARS WrappedExtensionContainer/containerData  FN_VARIANT=_pdu_new  TYPE_REF_FN=dissect_cam_WrappedExtensionContainerData
 
 #.END
 
@@ -1006,7 +982,7 @@ CartesianAngleValue
   pta = wmem_new0(actx->pinfo->pool, its_pt_activation_data_t);
   actx->private_data = pta;
 #.FN_FTR
-  dissector_try_uint_with_data(cam_pt_activation_table, pta->type, pta->data, actx->pinfo, tree, true, NULL);
+  dissector_try_uint_new(cam_pt_activation_table, pta->type, pta->data, actx->pinfo, tree, true, NULL);
   actx->private_data = priv_data;
 #.END
 

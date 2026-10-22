@@ -60,7 +60,7 @@ static int hf_vcdu_bitream_all_data_anomaly;
 static int hf_vcdu_ccsds_continuation_packet;
 
 /* although technically not part of the vcdu header, the
- * first header pointer (for CCSDS Space Packets), and the last bit
+ * first header pointer (for ccsds), and the last bit
  * pointer (for bitstream), are more easily processed by
  * simply adding them to the tail end of the vcdu header
  * branch rather than creating a distinct branch for them
@@ -207,7 +207,7 @@ smex_time_to_string (wmem_allocator_t *pool, int pb5_days_since_midnight_9_10_oc
     static int utcdiff = 0;
     nstime_t t;
 
-    static const int Days[2][13] =
+    static int Days[2][13] =
         {
             { 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 },
             { 0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 }
@@ -250,7 +250,7 @@ smex_time_to_string (wmem_allocator_t *pool, int pb5_days_since_midnight_9_10_oc
 static int
 dissect_vcdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-    unsigned offset           = 0;
+    int offset           = 0;
     bool ccsds_tree_added = false;
 
     proto_item *smex_header;
@@ -394,8 +394,8 @@ dissect_vcdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
         /* process as many ccsds packet headers as we can using the ccsds packet dissector */
         else
         {
-            unsigned packet_boundary;
-            unsigned new_offset;
+            int packet_boundary;
+            int new_offset;
 
             /* compute offset and packet boundary lengths for ccsds dissector loop */
             new_offset = offset + 2 + new_ptr;
@@ -406,7 +406,7 @@ dissect_vcdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 
             while ( ((new_offset-offset+2) < packet_boundary)  &&  ((new_offset-offset+2) >= 4) )
             {
-                unsigned ccsds_len;
+                int ccsds_len;
                 tvbuff_t *new_tvb;
 
                 ccsds_tree_added = true;
@@ -420,7 +420,7 @@ dissect_vcdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 
             if (! ccsds_tree_added)
             {
-                proto_tree_add_expert_remaining(vcdu_tree, pinfo, &ei_vcdu_fhp_too_close_to_end_of_vcdu, tvb, 0);
+                proto_tree_add_expert(vcdu_tree, pinfo, &ei_vcdu_fhp_too_close_to_end_of_vcdu, tvb, 0, -1);
             }
         }
 
@@ -582,8 +582,8 @@ proto_register_vcdu(void)
       { &hf_vcdu_bitream_all_data, { "Bitream ALL Data", "vcdu.bitream.all_data", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
       { &hf_vcdu_bitream_all_data_anomaly, { "Bitream ALL Data (Anomaly)", "vcdu.bitream.all_data_anomaly", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
       { &hf_vcdu_bitream_all_fill, { "Bitream ALL Fill", "vcdu.bitream.all_fill", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
-      { &hf_vcdu_ccsds_all_fill, { "CCSDS Space Paclet ALL Fill", "vcdu.ccsds.all_fill", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
-      { &hf_vcdu_ccsds_continuation_packet, { "CCSDS Space Packet Continuation Packet", "vcdu.ccsds_continuation_packet", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+      { &hf_vcdu_ccsds_all_fill, { "Ccsds ALL Fill", "vcdu.ccsds.all_fill", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+      { &hf_vcdu_ccsds_continuation_packet, { "Ccsds Continuation Packet", "vcdu.ccsds_continuation_packet", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
       { &hf_vcdu_data, { "Data", "vcdu.data", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
 
         /* not really part of the vcdu header, but it's easier this way */

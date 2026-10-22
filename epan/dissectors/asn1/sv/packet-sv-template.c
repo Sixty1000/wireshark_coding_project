@@ -26,6 +26,10 @@
 
 #include "packet-sv.h"
 
+#define PNAME  "IEC61850 Sampled Values"
+#define PSNAME "SV"
+#define PFNAME "sv"
+
 /* see IEC61850-8-1 8.2 */
 #define Q_VALIDITY_GOOD			(0x0U << 0)
 #define Q_VALIDITY_INVALID_BW		(0x1U << 0)
@@ -200,8 +204,8 @@ dissect_PhsMeas1(bool implicit_tag, packet_info *pinfo, proto_tree *tree, tvbuff
 static int
 dissect_sv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* data _U_)
 {
-	unsigned offset = 0;
-	unsigned old_offset;
+	int offset = 0;
+	int old_offset;
 	unsigned sv_length = 0;
 	proto_item *item;
 	proto_tree *tree;
@@ -218,7 +222,7 @@ dissect_sv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* dat
 	item = proto_tree_add_item(parent_tree, proto_sv, tvb, 0, -1, ENC_NA);
 	tree = proto_item_add_subtree(item, ett_sv);
 
-	col_set_str(pinfo->cinfo, COL_PROTOCOL, "IEC61850 Sampled Values");
+	col_set_str(pinfo->cinfo, COL_PROTOCOL, PNAME);
 	col_clear(pinfo->cinfo, COL_INFO);
 
 	/* APPID */
@@ -241,7 +245,7 @@ dissect_sv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* dat
 		old_offset = offset;
 		offset = dissect_sv_SampledValues(false, tvb, offset, &asn1_ctx , tree, -1);
 		if (offset == old_offset) {
-			proto_tree_add_expert_remaining(tree, pinfo, &ei_sv_zero_pdu, tvb, offset);
+			proto_tree_add_expert(tree, pinfo, &ei_sv_zero_pdu, tvb, offset, -1);
 			break;
 		}
 	}
@@ -347,7 +351,7 @@ void proto_register_sv(void) {
 	module_t *sv_module;
 
 	/* Register protocol */
-	proto_sv = proto_register_protocol("IEC61850 Sampled Values", "SV", "sv");
+	proto_sv = proto_register_protocol(PNAME, PSNAME, PFNAME);
 	sv_handle = register_dissector("sv", dissect_sv, proto_sv);
 
 	/* Register fields and subtrees */

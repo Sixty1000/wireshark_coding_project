@@ -19,8 +19,6 @@
 #include <epan/ptvcursor.h>
 #include <epan/tfs.h>
 
-#include "packet-homeplug-av-vendor-vertexcom.h"  // VertexCom
-
 void proto_register_homeplug_av(void);
 void proto_reg_handoff_homeplug_av(void);
 
@@ -687,7 +685,7 @@ static int hf_homeplug_av_st_iotecha_stp_fup_mtype;
 static int hf_homeplug_av_st_iotecha_cpstate_state;
 static int hf_homeplug_av_st_iotecha_cpstate_pwm_duty;
 static int hf_homeplug_av_st_iotecha_cpstate_pwm_freq;
-static int hf_homeplug_av_st_iotecha_cpstate_voltage;
+static int hf_homeplug_av_st_iotecha_cpstate_volatge;
 static int hf_homeplug_av_st_iotecha_cpstate_adc_bitmask;
 static int hf_homeplug_av_st_iotecha_cpstate_adc_voltage_1;
 static int hf_homeplug_av_st_iotecha_cpstate_adc_voltage_2;
@@ -959,10 +957,10 @@ typedef enum {
     HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_MH_CONN_NEW_CNF            = 0x6059,
     HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_EXTENDED_TONEMASK_REQ      = 0x605C,
     HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_EXTENDED_TONEMASK_CNF      = 0x605D,
-    HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_STA_IDENTIFY_REQ           = 0x6060,
-    HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_STA_IDENTIFY_CNF           = 0x6061,
-    HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_STA_IDENTIFY_IND           = 0x6062,
-    HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_STA_IDENTIFY_RSP           = 0x6063,
+    HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_STA_INDENTIFY_REQ          = 0x6060,
+    HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_STA_INDENTIFY_CNF          = 0x6061,
+    HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_STA_INDENTIFY_IND          = 0x6062,
+    HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_STA_INDENTIFY_RSP          = 0x6063,
     HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_SLAC_PARM_REQ              = 0x6064,
     HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_SLAC_PARM_CNF              = 0x6065,
     HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_START_ATTEN_CHAR_IND       = 0x606A,
@@ -1092,7 +1090,6 @@ static const value_string homeplug_av_vendors_oui_vals[] = {
     { HOMEPLUG_AV_OUI_QCA,              "Qualcomm Atheros" },
     { HOMEPLUG_AV_OUI_ST_IOTECHA,       "ST/IoTecha" },
     { HOMEPLUG_AV_OUI_DSPACE,           "dSPACE GmbH" },
-    { HOMEPLUG_AV_OUI_VERTEXCOM,        "VertexCom" },
     { 0, NULL }
 };
 
@@ -1233,10 +1230,10 @@ static const value_string homeplug_av_mmtype_general_vals[] = {
     { HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_MH_CONN_NEW_CNF             , "CM_MH_CONN_NEW.CNF" },
     { HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_EXTENDED_TONEMASK_REQ       , "CM_EXTENDED_TONEMASK.REQ" },
     { HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_EXTENDED_TONEMASK_CNF       , "CM_EXTENDED_TONEMASK.CNF" },
-    { HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_STA_IDENTIFY_REQ            , "CM_STA_IDENTIFY.REQ" },
-    { HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_STA_IDENTIFY_CNF            , "CM_STA_IDENTIFY_CNF" },
-    { HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_STA_IDENTIFY_IND            , "CM_STA_IDENTIFY.IND" },
-    { HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_STA_IDENTIFY_RSP            , "CM_STA_IDENTIFY.RSP" },
+    { HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_STA_INDENTIFY_REQ           , "CM_STA_INDENTIFY.REQ" },
+    { HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_STA_INDENTIFY_CNF           , "CM_STA_INDENTIFY_CNF" },
+    { HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_STA_INDENTIFY_IND           , "CM_STA_INDENTIFY.IND" },
+    { HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_STA_INDENTIFY_RSP           , "CM_STA_INDENTIFY.RSP" },
     { HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_SLAC_PARM_REQ               , "CM_SLAC_PARM.REQ" },
     { HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_SLAC_PARM_CNF               , "CM_SLAC_PARM.CNF" },
     { HOMEPLUG_AV_GP_MMTYPE_GENERAL_CM_START_ATTEN_CHAR_IND        , "CM_START_ATTEN_CHAR.IND" },
@@ -2175,7 +2172,7 @@ static const value_string homeplug_av_cc_set_tei_map_ind_status_vals[] = {
 
 static const value_string homeplug_av_st_iotecha_linkstatus_status_vals[] = {
     { 0x00, "No Link" },
-    { 0x01, "Link with at least 1 device" },
+    { 0x01, "Link with atleast 1 device" },
     { 0, NULL }
 };
 
@@ -2407,7 +2404,7 @@ adc_bitmask_base(char *buf, uint8_t value) {
 #define TVB_LEN_GREATEST  1
 #define TVB_LEN_UNDEF     0
 #define TVB_LEN_SHORTEST -1
-static int check_tvb_length(ptvcursor_t *cursor, const unsigned length)
+static int check_tvb_length(ptvcursor_t *cursor, const int length)
 {
     if (!cursor)
         return TVB_LEN_UNDEF;
@@ -2493,9 +2490,6 @@ dissect_homeplug_av_mmhdr(ptvcursor_t *cursor, uint8_t *homeplug_av_mmver, uint1
             break;
         case HOMEPLUG_AV_OUI_ST_IOTECHA:
             ti_mmtype = ptvcursor_add_no_advance(cursor, hf_homeplug_av_mmhdr_mmtype_st,       2, ENC_LITTLE_ENDIAN);
-            break;
-        case HOMEPLUG_AV_OUI_VERTEXCOM:
-            ti_mmtype = dissect_homeplug_av_mmhdr_mmtype_vertexcom(cursor);
             break;
         default:
             ti_mmtype = ptvcursor_add_no_advance(cursor, hf_homeplug_av_mmhdr_mmtype_general,  2, ENC_LITTLE_ENDIAN);
@@ -4756,6 +4750,25 @@ dissect_homeplug_av_gp_cm_atten_char_ind(ptvcursor_t *cursor, packet_info *pinfo
 
     avg = 0.0f;
 
+    if (!ptvcursor_tree(cursor)) {
+        ptvcursor_advance(cursor, 1);
+        sectype = tvb_get_uint8(ptvcursor_tvbuff(cursor), ptvcursor_current_offset(cursor));
+        ptvcursor_advance(cursor, 1);
+        if (sectype != HOMEPLUG_AV_GP_SECURITY_TYPE_PUBLIC_KEY) {
+            ptvcursor_advance(cursor, 6+8+17+17+1);
+            numgroups = tvb_get_uint8(ptvcursor_tvbuff(cursor), ptvcursor_current_offset(cursor));
+            ptvcursor_advance(cursor, 1);
+            for (Counter_groups = 0; Counter_groups < numgroups; ++Counter_groups) {
+                val = tvb_get_uint8(ptvcursor_tvbuff(cursor), ptvcursor_current_offset(cursor));
+                avg += val;
+                ptvcursor_advance(cursor,1);
+            }
+            avg /= numgroups;
+            col_append_fstr(pinfo->cinfo, COL_INFO, " (Groups = %d, Avg. Attenuation = %.2f dB)", numgroups, avg);
+        }
+        return;
+    }
+
     ptvcursor_add(cursor, hf_homeplug_av_gp_cm_atten_char_apptype, 1, ENC_NA);
     sectype = tvb_get_uint8(ptvcursor_tvbuff(cursor),ptvcursor_current_offset(cursor));
 
@@ -4785,11 +4798,8 @@ dissect_homeplug_av_gp_cm_atten_char_ind(ptvcursor_t *cursor, packet_info *pinfo
                                             ptvcursor_tvbuff(cursor),
                                             ptvcursor_current_offset(cursor), 1, val,
                                             HOMEPLUG_AV_GP_CM_ATTEN_CHAR_AAG_FORMAT, Counter_groups + 1, val );
-                avg += val;
                 ptvcursor_advance(cursor, 1);
             }
-            avg /= numgroups;
-            col_append_fstr(pinfo->cinfo, COL_INFO, " (Groups = %d, Avg. Attenuation = %.2f dB)", numgroups, avg);
         }
         ptvcursor_pop_subtree(cursor);
     }
@@ -5427,7 +5437,7 @@ dissect_homeplug_av_st_iotecha_stp_cpstate_ind(ptvcursor_t *cursor, packet_info 
     ptvcursor_add(cursor, hf_homeplug_av_st_iotecha_cpstate_state, 1, ENC_NA);
     ptvcursor_add(cursor, hf_homeplug_av_st_iotecha_cpstate_pwm_duty, 1, ENC_NA);
     ptvcursor_add(cursor, hf_homeplug_av_st_iotecha_cpstate_pwm_freq, 2, ENC_LITTLE_ENDIAN);
-    ptvcursor_add(cursor, hf_homeplug_av_st_iotecha_cpstate_voltage, 2, ENC_LITTLE_ENDIAN);
+    ptvcursor_add(cursor, hf_homeplug_av_st_iotecha_cpstate_volatge, 2, ENC_LITTLE_ENDIAN);
     bitmask = tvb_get_uint8(ptvcursor_tvbuff(cursor), ptvcursor_current_offset(cursor));
     if (bitmask)
         ptvcursor_add(cursor, hf_homeplug_av_st_iotecha_cpstate_adc_bitmask, 1, ENC_NA);
@@ -5455,28 +5465,40 @@ dissect_homeplug_av_st_iotecha_stp_cpstate_ind(ptvcursor_t *cursor, packet_info 
 static void
 dissect_homeplug_av_st_iotecha_stp_user_message_ind(ptvcursor_t *cursor, packet_info *pinfo) {
 
-    unsigned null_offset;
+    int null_offset;
+
 
     ptvcursor_advance(cursor, 4); // not used fields
     ptvcursor_advance(cursor, 4); // not used fields
 
-    if (tvb_find_uint8_remaining(ptvcursor_tvbuff(cursor), ptvcursor_current_offset(cursor) + 1, 0, &null_offset)) {
+    null_offset = tvb_find_uint8(ptvcursor_tvbuff(cursor), ptvcursor_current_offset(cursor) + 1, -1, 0);
+
+    if (null_offset > -1) {
         col_append_fstr(pinfo->cinfo, COL_INFO, ": %s",
                         tvb_get_stringz_enc(pinfo->pool, ptvcursor_tvbuff(cursor),
                                               ptvcursor_current_offset(cursor),
                                               NULL, ENC_ASCII));
+    }
+
+    if (!ptvcursor_tree(cursor))
+        return;
+
+    if (null_offset > -1) {
         ptvcursor_add(cursor,
                       hf_homeplug_av_st_iotecha_user_message_info,
                       null_offset - ptvcursor_current_offset(cursor),
                       ENC_ASCII);
     }
 
-    if (tvb_find_uint8_remaining(ptvcursor_tvbuff(cursor), ptvcursor_current_offset(cursor) + 1, 0, &null_offset)) {
+    null_offset = tvb_find_uint8(ptvcursor_tvbuff(cursor), ptvcursor_current_offset(cursor) + 1, -1, 0);
+
+    if (null_offset > -1) {
         ptvcursor_add(cursor,
                       hf_homeplug_av_st_iotecha_user_message_details,
                       null_offset - ptvcursor_current_offset(cursor),
                       ENC_ASCII);
     }
+
 }
 
 static void
@@ -5900,9 +5922,6 @@ dissect_homeplug_av_mme(ptvcursor_t *cursor,
         case HOMEPLUG_AV_OUI_ST_IOTECHA:
             dissect_homeplug_av_mme_st_iotecha(cursor, homeplug_av_mmver, homeplug_av_mmtype, pinfo);
             break;
-        case HOMEPLUG_AV_OUI_VERTEXCOM:
-            dissect_homeplug_av_mme_vertexcom(cursor, homeplug_av_mmver, homeplug_av_mmtype, pinfo, ti_vendor);
-            break;
         }
     }
 }
@@ -5917,7 +5936,7 @@ info_column_filler_initial(uint8_t homeplug_av_mmver,
     /* if packet is vendor specific - display vendor OUI */
     if (homeplug_av_oui) {
         col_append_sep_str(pinfo->cinfo, COL_INFO, ", ",
-                           val_to_str(pinfo->pool, homeplug_av_oui, homeplug_av_vendors_oui_vals, "OUI:0x%x"));
+                           val_to_str(homeplug_av_oui, homeplug_av_vendors_oui_vals, "OUI:0x%x"));
     }
 
     /* Info depends on type and oui */
@@ -5925,23 +5944,21 @@ info_column_filler_initial(uint8_t homeplug_av_mmver,
     {
     case HOMEPLUG_AV_OUI_ST_IOTECHA:
         col_append_sep_str(pinfo->cinfo, COL_INFO, ", ",
-                           val_to_str_ext(pinfo->pool, homeplug_av_mmtype,
+                           val_to_str_ext(homeplug_av_mmtype,
                                           &homeplug_av_mmtype_st_iotecha_vals_ext,
                                           "Unknown 0x%x"));
         break;
     case HOMEPLUG_AV_OUI_QCA:
         col_append_sep_str(pinfo->cinfo, COL_INFO, ", ",
-                           val_to_str_ext(pinfo->pool, homeplug_av_mmtype,
+                           val_to_str_ext(homeplug_av_mmtype,
                                           &homeplug_av_mmtype_qualcomm_vals_ext,
                                           "Unknown 0x%x"));
         break;
-    case HOMEPLUG_AV_OUI_VERTEXCOM:
-        homeplug_av_mmtype_column_vertexcom(pinfo, homeplug_av_mmtype);
-        break;
+
     case HOMEPLUG_AV_OUI_NONE:
         /* if oui is unknown, trying to describe as general MME */
         col_append_sep_str(pinfo->cinfo, COL_INFO, ", ",
-                           val_to_str_ext(pinfo->pool, homeplug_av_mmtype,
+                           val_to_str_ext(homeplug_av_mmtype,
                                           &homeplug_av_mmtype_general_vals_ext,
                                           "Unknown 0x%x"));
         break;
@@ -8231,8 +8248,8 @@ proto_register_homeplug_av(void)
           { "PWM Frequency", "homeplug_av.st_iotecha.cpstate.pwm_freq",
             FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL }
         },
-        { &hf_homeplug_av_st_iotecha_cpstate_voltage,
-          { "CP Voltage", "homeplug_av.st_iotecha.cpstate.cp_voltage",
+        { &hf_homeplug_av_st_iotecha_cpstate_volatge,
+          { "CP Voltage", "homeplug_av.st_iotecha.cpstate.cp_volatge",
             FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL }
         },
         { &hf_homeplug_av_st_iotecha_cpstate_adc_bitmask,

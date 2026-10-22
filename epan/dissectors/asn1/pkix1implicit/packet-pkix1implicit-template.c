@@ -19,6 +19,10 @@
 #include "packet-pkix1explicit.h"
 #include "packet-x509ce.h"
 
+#define PNAME  "PKIX1Implicit"
+#define PSNAME "PKIX1IMPLICIT"
+#define PFNAME "pkix1implicit"
+
 void proto_register_pkix1implicit(void);
 void proto_reg_handoff_pkix1implicit(void);
 
@@ -30,14 +34,14 @@ static int proto_pkix1implicit;
 #include "packet-pkix1implicit-ett.c"
 
 
-unsigned
-dissect_pkix1implicit_ReasonFlags(bool implicit_tag _U_, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_) {
+int
+dissect_pkix1implicit_ReasonFlags(bool implicit_tag _U_, tvbuff_t *tvb, int offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_) {
   offset = dissect_x509ce_ReasonFlags(implicit_tag, tvb, offset, actx, tree, hf_index);
 
   return offset;
 }
-unsigned
-dissect_pkix1implicit_GeneralName(bool implicit_tag _U_, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_) {
+int
+dissect_pkix1implicit_GeneralName(bool implicit_tag _U_, tvbuff_t *tvb, int offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_) {
   offset = dissect_x509ce_GeneralName(implicit_tag, tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -60,7 +64,7 @@ void proto_register_pkix1implicit(void) {
   };
 
   /* Register protocol */
-  proto_pkix1implicit = proto_register_protocol("PKIX1Implicit", "PKIX1IMPLICIT", "pkix1implicit");
+  proto_pkix1implicit = proto_register_protocol(PNAME, PSNAME, PFNAME);
 
   /* Register fields and subtrees */
   proto_register_field_array(proto_pkix1implicit, hf, array_length(hf));

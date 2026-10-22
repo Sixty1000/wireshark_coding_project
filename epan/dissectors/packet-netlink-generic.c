@@ -13,7 +13,6 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <wsutil/array.h>
 #include "packet-netlink.h"
 
 /*
@@ -31,7 +30,6 @@ void proto_register_netlink_generic(void);
 void proto_reg_handoff_netlink_generic(void);
 
 typedef struct {
-	packet_info *pinfo;
 	/* Values parsed from the attributes (only valid in this packet). */
 	uint16_t        family_id;
 	const uint8_t  *family_name;
@@ -166,7 +164,7 @@ static int ett_genl_nested_attr;
 /*
  * Maps family IDs (integers) to family names (strings) within a capture file.
  */
-static wmem_multimap_t *genl_family_map;
+static wmem_map_t *genl_family_map;
 
 static int * const genl_ctrl_op_flags_fields[] = {
 	&hf_genl_ctrl_op_flags_admin_perm,
@@ -212,10 +210,9 @@ dissect_genl_ctrl_ops_attrs(tvbuff_t *tvb, void *data _U_, struct packet_netlink
 }
 
 static int
-dissect_genl_ctrl_groups_attrs(tvbuff_t *tvb, void *data, struct packet_netlink_data *nl_data, proto_tree *tree, int nla_type, int offset, int len)
+dissect_genl_ctrl_groups_attrs(tvbuff_t *tvb, void *data _U_, struct packet_netlink_data *nl_data, proto_tree *tree, int nla_type, int offset, int len)
 {
 	enum ws_genl_ctrl_group_attr type = (enum ws_genl_ctrl_group_attr) nla_type;
-	genl_ctrl_info_t* info = (genl_ctrl_info_t*)data;
 	proto_tree *ptree = proto_tree_get_parent_tree(tree);
 	uint32_t value;
 	const uint8_t *strval;
@@ -224,7 +221,7 @@ dissect_genl_ctrl_groups_attrs(tvbuff_t *tvb, void *data, struct packet_netlink_
 	case WS_CTRL_ATTR_MCAST_GRP_UNSPEC:
 		break;
 	case WS_CTRL_ATTR_MCAST_GRP_NAME:
-		proto_tree_add_item_ret_string(tree, hf_genl_ctrl_group_name, tvb, offset, len, ENC_ASCII, info->pinfo->pool, &strval);
+		proto_tree_add_item_ret_string(tree, hf_genl_ctrl_group_name, tvb, offset, len, ENC_ASCII, wmem_packet_scope(), &strval);
 		proto_item_append_text(tree, ": %s", strval);
 		proto_item_append_text(ptree, ", name=%s", strval);
 		offset += len;
@@ -261,7 +258,7 @@ dissect_genl_ctrl_attrs(tvbuff_t *tvb, void *data, struct packet_netlink_data *n
 		}
 		break;
 	case WS_CTRL_ATTR_FAMILY_NAME:
-		proto_tree_add_item_ret_string(tree, hf_genl_ctrl_family_name, tvb, offset, len, ENC_ASCII, info->pinfo->pool, &info->family_name);
+		proto_tree_add_item_ret_string(tree, hf_genl_ctrl_family_name, tvb, offset, len, ENC_ASCII, wmem_packet_scope(), &info->family_name);
 		proto_item_append_text(tree, ": %s", info->family_name);
 		offset += len;
 		break;
@@ -302,7 +299,7 @@ dissect_genl_ctrl_attrs(tvbuff_t *tvb, void *data, struct packet_netlink_data *n
 }
 
 static int
-dissect_genl_ctrl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree _U_, void *data)
+dissect_genl_ctrl(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree _U_, void *data)
 {
 	genl_info_t *genl_info = (genl_info_t *) data;
 	genl_ctrl_info_t info;
@@ -312,7 +309,6 @@ dissect_genl_ctrl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree _U_, void 
 		return 0;
 	}
 
-	info.pinfo = pinfo;
 	info.family_id = 0;
 	info.family_name = NULL;
 
@@ -330,7 +326,7 @@ dissect_genl_ctrl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree _U_, void 
 	 * Do not allow overwriting our control protocol.
 	 */
 	if (info.family_id && info.family_id != WS_GENL_ID_CTRL && info.family_name) {
-		wmem_multimap_insert32(genl_family_map, GUINT_TO_POINTER(info.family_id), pinfo->num, wmem_strdup(wmem_file_scope(), (char*)info.family_name));
+		wmem_map_insert(genl_family_map, GUINT_TO_POINTER(info.family_id), wmem_strdup(wmem_file_scope(), info.family_name));
 	}
 
 	return tvb_captured_length(tvb);
@@ -338,7 +334,7 @@ dissect_genl_ctrl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree _U_, void 
 
 int dissect_genl_header(tvbuff_t *tvb, genl_info_t *genl_info, struct packet_netlink_data *nl_data, int hf_cmd)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	if (hf_cmd <= 0) {
 		hf_cmd = hf_genl_cmd;
@@ -361,9 +357,8 @@ dissect_netlink_generic(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 	proto_tree *nlmsg_tree;
 	proto_item *pi, *pi_type;
 	const char *family_name;
-	uint32_t newfamily_frame_num;
 	tvbuff_t *next_tvb;
-	unsigned offset = 0;
+	int offset = 0;
 
 	DISSECTOR_ASSERT(nl_data && nl_data->magic == PACKET_NETLINK_MAGIC);
 
@@ -374,8 +369,8 @@ dissect_netlink_generic(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 	nlmsg_tree = proto_item_add_subtree(pi, ett_netlink_generic);
 
 	/* Netlink message header (nlmsghdr) */
-	offset = dissect_netlink_header(tvb, pinfo, nlmsg_tree, offset, nl_data->encoding, hf_genl_family_id, &pi_type);
-	family_name = (const char *)wmem_multimap_lookup32_le_full(genl_family_map, GUINT_TO_POINTER(nl_data->type), pinfo->num, &newfamily_frame_num);
+	offset = dissect_netlink_header(tvb, nlmsg_tree, offset, nl_data->encoding, hf_genl_family_id, &pi_type);
+	family_name = (const char *)wmem_map_lookup(genl_family_map, GUINT_TO_POINTER(nl_data->type));
 	proto_item_append_text(pi_type, " (%s)", family_name ? family_name : "Unknown");
 
 	/* Populate info from Generic Netlink message header (genlmsghdr) */
@@ -386,15 +381,9 @@ dissect_netlink_generic(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 	/* Optional user-specific message header and optional message payload. */
 	next_tvb = tvb_new_subset_remaining(tvb, offset);
 	if (family_name) {
-		/* Mark the packet number of the NEWFAMILY message so that if
-		 * this packet is exported the mapping between the dynamic ID
-		 * and family name is preserved. */
-		if (newfamily_frame_num) {
-			mark_frame_as_depended_upon(pinfo->fd, newfamily_frame_num);
-		}
 		int ret;
 		/* Invoke subdissector with genlmsghdr present. */
-		ret = dissector_try_string_with_data(genl_dissector_table, family_name, next_tvb, pinfo, tree, true, &info);
+		ret = dissector_try_string(genl_dissector_table, family_name, next_tvb, pinfo, tree, &info);
 		if (ret) {
 			return ret;
 		}
@@ -414,7 +403,7 @@ static void
 genl_init(void)
 {
 	/* Add fixed family entry (0x10 maps to "nlctrl"). */
-	wmem_multimap_insert32(genl_family_map, GUINT_TO_POINTER(WS_GENL_ID_CTRL), 0, GENL_CTRL_NAME);
+	wmem_map_insert(genl_family_map, GUINT_TO_POINTER(WS_GENL_ID_CTRL), GENL_CTRL_NAME);
 }
 
 void
@@ -557,7 +546,7 @@ proto_register_netlink_generic(void)
 		STRING_CASE_SENSITIVE
 	);
 
-	genl_family_map = wmem_multimap_new_autoreset(wmem_epan_scope(), wmem_file_scope(), g_direct_hash, g_direct_equal);
+	genl_family_map = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), g_direct_hash, g_direct_equal);
 
 	register_init_routine(genl_init);
 }

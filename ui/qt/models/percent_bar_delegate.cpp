@@ -10,13 +10,12 @@
 #include <ui/qt/models/percent_bar_delegate.h>
 
 #include <ui/qt/utils/color_utils.h>
-#include <ui/qt/utils/theme_styler.h>
 
 #include <QApplication>
 #include <QPainter>
 
 static const int bar_em_width_ = 8;
-static const double bar_blend_ = 0.25;
+static const double bar_blend_ = 0.15;
 
 void PercentBarDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option,
                                const QModelIndex &index) const
@@ -46,7 +45,7 @@ void PercentBarDelegate::paint(QPainter *painter, const QStyleOptionViewItem &op
         value = 100.0;
     }
 
-    if (ThemeStyler::baseStyleName().startsWith("windows")) { // windows11, windowsvista
+    if (QApplication::style()->objectName().contains("vista")) {
         // QWindowsVistaStyle::drawControl does this internally. Unfortunately there
         // doesn't appear to be a more general way to do this.
         option_vi.palette.setColor(QPalette::All, QPalette::HighlightedText,
@@ -56,16 +55,14 @@ void PercentBarDelegate::paint(QPainter *painter, const QStyleOptionViewItem &op
     QPalette::ColorGroup cg = option_vi.state & QStyle::State_Enabled
                               ? QPalette::Normal : QPalette::Disabled;
     QColor text_color = option_vi.palette.color(cg, QPalette::Text);
-    QColor bar_color = option_vi.features.testFlag(QStyleOptionViewItem::Alternate) ?
-                       option_vi.palette.color(cg, QPalette::AlternateBase) :
-                       option_vi.palette.color(cg, QPalette::Base);
-    bar_color = ColorUtils::alphaBlend(text_color, bar_color, bar_blend_);
+    QColor bar_color = ColorUtils::alphaBlend(option_vi.palette.windowText(),
+                                              option_vi.palette.window(), bar_blend_);
 
     if (cg == QPalette::Normal && !(option_vi.state & QStyle::State_Active))
         cg = QPalette::Inactive;
     if (option_vi.state & QStyle::State_Selected) {
         text_color = option_vi.palette.color(cg, QPalette::HighlightedText);
-        bar_color = ColorUtils::alphaBlend(text_color,
+        bar_color = ColorUtils::alphaBlend(option_vi.palette.color(cg, QPalette::Window),
                                            option_vi.palette.color(cg, QPalette::Highlight),
                                            bar_blend_);
     }

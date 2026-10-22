@@ -43,7 +43,7 @@ sv_packet(void *prs _U_, packet_info *pinfo, epan_dissect_t *edt _U_, const void
 	return TAP_PACKET_DONT_REDRAW;
 }
 
-static bool
+static void
 svstat_init(const char *opt_arg _U_, void *userdata _U_)
 {
 	GString	*error_string;
@@ -62,9 +62,8 @@ svstat_init(const char *opt_arg _U_, void *userdata _U_)
 		cmdarg_err("Couldn't register sv,stat tap: %s",
 				error_string->str);
 		g_string_free(error_string, TRUE);
-		return false;
+		exit(1);
 	}
-	return true;
 }
 
 static stat_tap_ui svstat_ui = {

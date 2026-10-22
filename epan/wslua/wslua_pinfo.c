@@ -54,35 +54,30 @@ WSLUA_CLASS_DEFINE(PrivateTable,FAIL_ON_NULL_OR_EXPIRED("PrivateTable"));
 /* PrivateTable represents the pinfo->private_table. */
 
 WSLUA_METAMETHOD PrivateTable__tostring(lua_State* L) {
-    /* Returns a short label of the form
-       `PrivateTable: keys={k1, k2, k3}` enumerating the current key
-       set, or `PrivateTable: (expired)` once the underlying
-       packet_info is gone. The previous bare `k1,k2,k3` rendering
-       matched no other wslua __tostring and made the value
-       indistinguishable from a regular comma-separated string in
-       the debugger's Variables view. */
+    /* Gets debugging type information about the private table. */
     PrivateTable priv = toPrivateTable(L,1);
-    if (!priv || !priv->table) {
-        lua_pushstring(L, "PrivateTable: (expired)");
-        WSLUA_RETURN(1);
-    }
+    GString *key_string;
+    GList *keys, *key;
 
-    GString *out = g_string_new("PrivateTable: keys={");
-    GList *keys = g_hash_table_get_keys(priv->table);
-    for (GList *key = g_list_first(keys); key; key = g_list_next(key)) {
-        g_string_append(out, (const char *)key->data);
-        if (g_list_next(key)) {
-            g_string_append(out, ", ");
+    if (!priv) return 0;
+
+    key_string = g_string_new ("");
+    keys = g_hash_table_get_keys (priv->table);
+    key = g_list_first (keys);
+    while (key) {
+        key_string = g_string_append (key_string, (const char *)key->data);
+        key = g_list_next (key);
+        if (key) {
+            key_string = g_string_append_c (key_string, ',');
         }
     }
-    g_string_append_c(out, '}');
 
-    lua_pushstring(L, out->str);
+    lua_pushstring(L,key_string->str);
 
-    g_string_free(out, TRUE);
-    g_list_free(keys);
+    g_string_free (key_string, TRUE);
+    g_list_free (keys);
 
-    WSLUA_RETURN(1); /* A string with all keys in the table. */
+    WSLUA_RETURN(1); /* A string with all keys in the table, mostly for debugging. */
 }
 
 static int PrivateTable__index(lua_State* L) {
@@ -128,66 +123,6 @@ static int PrivateTable__newindex(lua_State* L) {
     return 1;
 }
 
-/* __pairs iterator closure. Snapshots and sorts the hash table keys
- * once at __pairs time and stores the sorted array plus a cursor in
- * closure upvalues (upvalue 1 = keys array, upvalue 2 = next index).
- * Each iterator call just bumps the cursor and looks up the current
- * value in the live table — O(1) per step instead of the O(n log n)
- * a resume-by-key stateless iterator would do. Concurrent inserts
- * during iteration are simply not visited, matching snapshot
- * semantics that users expect. The main consumer is the Lua
- * debugger's Variables view. */
-static int PrivateTable_pairs_iter(lua_State* L) {
-    PrivateTable priv = checkPrivateTable(L, 1);
-    lua_Integer idx = lua_tointeger(L, lua_upvalueindex(2));
-    lua_Integer n = (lua_Integer)lua_rawlen(L, lua_upvalueindex(1));
-
-    if (!priv || !priv->table || idx > n) {
-        lua_pushnil(L);
-        return 1;
-    }
-
-    lua_rawgeti(L, lua_upvalueindex(1), (int)idx);  /* key on top */
-    const char *key = lua_tostring(L, -1);
-    const char *val = key ? (const char *)g_hash_table_lookup(priv->table, key)
-                          : NULL;
-    lua_pushstring(L, val ? val : "");
-
-    /* Advance cursor for the next step. */
-    lua_pushinteger(L, idx + 1);
-    lua_replace(L, lua_upvalueindex(2));
-
-    return 2;
-}
-
-static int PrivateTable__pairs(lua_State* L) {
-    /* __pairs returns (iter, state, control). All iteration state
-     * lives in the iterator closure's upvalues, so we can just pass
-     * nil for state/control. */
-    PrivateTable priv = checkPrivateTable(L, 1);
-
-    /* Build the sorted key snapshot upfront. */
-    lua_createtable(L, priv && priv->table
-                        ? (int)g_hash_table_size(priv->table) : 0, 0);
-    if (priv && priv->table) {
-        GList *keys = g_list_sort(g_hash_table_get_keys(priv->table),
-                                  (GCompareFunc)g_strcmp0);
-        int i = 1;
-        for (GList *node = keys; node; node = node->next, ++i) {
-            lua_pushstring(L, (const char *)node->data);
-            lua_rawseti(L, -2, i);
-        }
-        g_list_free(keys);
-    }
-
-    lua_pushinteger(L, 1);  /* initial cursor */
-    lua_pushcclosure(L, PrivateTable_pairs_iter, 2);
-
-    lua_pushnil(L);         /* state (unused) */
-    lua_pushnil(L);         /* control (unused) */
-    return 3;
-}
-
 /* Gets registered as metamethod automatically by WSLUA_REGISTER_CLASS/META */
 static int PrivateTable__gc(lua_State* L) {
     PrivateTable priv = toPrivateTable(L,1);
@@ -210,7 +145,6 @@ WSLUA_META PrivateTable_meta[] = {
     WSLUA_CLASS_MTREG(PrivateTable,index),
     WSLUA_CLASS_MTREG(PrivateTable,newindex),
     WSLUA_CLASS_MTREG(PrivateTable,tostring),
-    WSLUA_CLASS_MTREG(PrivateTable,pairs),
     { NULL, NULL }
 };
 
@@ -223,28 +157,7 @@ int PrivateTable_register(lua_State* L) {
 WSLUA_CLASS_DEFINE(Pinfo,FAIL_ON_NULL_OR_EXPIRED("Pinfo"));
 /* Packet information. */
 
-/* Bypass checkPinfo (which raises on expired/null) so the debugger
- * Variables view can still render an expired Pinfo as a recognizable
- * label instead of crashing the script when it is hovered. */
-static int Pinfo__tostring(lua_State *L) {
-    Pinfo pinfo = toPinfo(L, 1);
-    if (!pinfo || !pinfo->ws_pinfo || pinfo->expired) {
-        lua_pushstring(L, "Pinfo: (expired)");
-        return 1;
-    }
-    packet_info *pi = pinfo->ws_pinfo;
-    char *src = address_to_display(NULL, &pi->src);
-    char *dst = address_to_display(NULL, &pi->dst);
-    lua_pushfstring(L, "Pinfo: frame=%d src=%s dst=%s proto=%s len=%d",
-                    (int)pi->num,
-                    src ? src : "?",
-                    dst ? dst : "?",
-                    pi->current_proto ? pi->current_proto : "?",
-                    pi->fd ? (int)pi->fd->pkt_len : 0);
-    wmem_free(NULL, src);
-    wmem_free(NULL, dst);
-    return 1;
-}
+static int Pinfo__tostring(lua_State *L) { lua_pushstring(L,"a Pinfo"); return 1; }
 
 #define PINFO_ADDRESS_GETTER(name) \
     WSLUA_ATTRIBUTE_GET(Pinfo,name, { \
@@ -288,32 +201,11 @@ lua_nstime_to_sec(const nstime_t *nstime)
 }
 
 static double
-lua_delta_prev_captured_sec(const Pinfo pinfo, const frame_data *fd)
+lua_delta_nstime_to_sec(const Pinfo pinfo, const frame_data *fd, uint32_t prev_num)
 {
     nstime_t del;
 
-    /*
-     * XXX - there's no way to report "there *is* no delta time,
-     * because either 1) this frame has no time stamp, 2) the
-     * previous frame doesn't exist, or 2) it exists but *it*
-     * has no time stamp.
-     */
-    frame_delta_time_prev_captured(pinfo->ws_pinfo->epan, fd, &del);
-    return lua_nstime_to_sec(&del);
-}
-
-static double
-lua_delta_prev_displayed_sec(const Pinfo pinfo, const frame_data *fd)
-{
-    nstime_t del;
-
-    /*
-     * XXX - there's no way to report "there *is* no delta time,
-     * because either 1) this frame has no time stamp, 2) the
-     * previous frame doesn't exist, or 2) it exists but *it*
-     * has no time stamp.
-     */
-    frame_delta_time_prev_displayed(pinfo->ws_pinfo->epan, fd, &del);
+    frame_delta_abs_time(pinfo->ws_pinfo->epan, fd, prev_num, &del);
     return lua_nstime_to_sec(&del);
 }
 
@@ -337,10 +229,10 @@ WSLUA_ATTRIBUTE_BLOCK_NUMBER_GETTER(Pinfo,abs_ts,lua_nstime_to_sec(&obj->ws_pinf
 WSLUA_ATTRIBUTE_BLOCK_NUMBER_GETTER(Pinfo,rel_ts,lua_nstime_to_sec(&obj->ws_pinfo->rel_ts));
 
 /* WSLUA_ATTRIBUTE Pinfo_delta_ts RO Number of seconds passed since the last captured packet. */
-WSLUA_ATTRIBUTE_BLOCK_NUMBER_GETTER(Pinfo,delta_ts,lua_delta_prev_captured_sec(obj, obj->ws_pinfo->fd));
+WSLUA_ATTRIBUTE_BLOCK_NUMBER_GETTER(Pinfo,delta_ts,lua_delta_nstime_to_sec(obj, obj->ws_pinfo->fd, obj->ws_pinfo->num - 1));
 
 /* WSLUA_ATTRIBUTE Pinfo_delta_dis_ts RO Number of seconds passed since the last displayed packet. */
-WSLUA_ATTRIBUTE_BLOCK_NUMBER_GETTER(Pinfo,delta_dis_ts,lua_delta_prev_displayed_sec(obj, obj->ws_pinfo->fd));
+WSLUA_ATTRIBUTE_BLOCK_NUMBER_GETTER(Pinfo,delta_dis_ts,lua_delta_nstime_to_sec(obj, obj->ws_pinfo->fd, obj->ws_pinfo->fd->prev_dis_num));
 
 /* WSLUA_ATTRIBUTE Pinfo_curr_proto RO Which Protocol are we dissecting. */
 WSLUA_ATTRIBUTE_NAMED_STRING_GETTER(Pinfo,curr_proto,ws_pinfo->current_proto);
@@ -511,15 +403,11 @@ static int Pinfo_get_lo(lua_State *L) {
     return 1;
 }
 
-/* WSLUA_ATTRIBUTE Pinfo_conversation RW
-   On read, returns a <<lua_class_Conversation,``Conversation``>> object (equivalent to ``Conversation.find_from_pinfo(pinfo, 0, True)``)
-
-   On write, sets the <<lua_class_Dissector,``Dissector``>> for the current conversation (shortcut for ``pinfo.conversation.dissector = dissector``). Accepts either a <<lua_class_Dissector,``Dissector``>> object or a <<lua_class_Proto,``Proto``>> object with an assigned dissector */
+/* WSLUA_ATTRIBUTE Pinfo_conversation WO Sets the packet conversation to the given Proto object. */
 static int Pinfo_set_conversation(lua_State *L) {
     Pinfo pinfo = checkPinfo(L,1);
     Proto proto = checkProto(L,2);
     conversation_t  *conversation;
-
 
     if (!proto->handle) {
         luaL_error(L,"Proto %s has no registered dissector", proto->name? proto->name:"<UNKNOWN>");
@@ -531,14 +419,6 @@ static int Pinfo_set_conversation(lua_State *L) {
 
     return 0;
 }
-
-static int Pinfo_get_conversation(lua_State *L) {
-    Pinfo pinfo = checkPinfo(L,1);
-    Conversation conv = find_or_create_conversation(pinfo->ws_pinfo);
-    pushConversation(L, conv);
-    WSLUA_RETURN(1);
-}
-
 
 /* Gets registered as metamethod automatically by WSLUA_REGISTER_CLASS/META */
 static int Pinfo__gc(lua_State* L) {
@@ -592,7 +472,7 @@ WSLUA_ATTRIBUTES Pinfo_attributes[] = {
     WSLUA_ATTRIBUTE_RWREG(Pinfo,in_error_pkt),
     WSLUA_ATTRIBUTE_ROREG(Pinfo,match_uint),
     WSLUA_ATTRIBUTE_ROREG(Pinfo,match_string),
-    WSLUA_ATTRIBUTE_RWREG(Pinfo,conversation),
+    WSLUA_ATTRIBUTE_WOREG(Pinfo,conversation),
     WSLUA_ATTRIBUTE_RWREG(Pinfo,p2p_dir),
     { NULL, NULL, NULL }
 };

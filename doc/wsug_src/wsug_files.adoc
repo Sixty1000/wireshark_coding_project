@@ -1,7 +1,6 @@
 // WSUG Appendix Files
 
 [#AppFiles]
-(None)
 
 [appendix]
 == Files and Folders
@@ -27,7 +26,7 @@ really helpful (e.g., being able to add a comment to a packet such as “the
 problems start here” would be really nice).
 
 In addition to the libpcap format, Wireshark supports several different capture
-file formats. However, the problems described above also apply for these
+file formats. However, the problems described above also applies for these
 formats.
 
 [#ChIOFileContentSection]
@@ -97,9 +96,8 @@ menu.
 
 ==== Folders on Windows
 
-_%APPDATA%_ is the personal application data folder.
-This is usually _C:\Users{backslash}**username**\AppData\Roaming_ .
-Wireshark stores its data in _%APPDATA%\Wireshark_. (more details can be
+_%APPDATA%_ is the personal application data folder, e.g.:
+_C:\Users{backslash}**username**\AppData\Roaming\Wireshark_ (details can be
 found at: <<ChWindowsProfiles>>).
 
 _WIRESHARK_ is the Wireshark program folder, e.g.: _C:\Program
@@ -162,13 +160,12 @@ _/usr/local/etc_.
 |===
 |File/Folder|Description
 |_cfilters_|Capture filters.
-|_coloring_rules.jsonc_|Coloring rules.
+|_colorfilters_|Coloring rules.
 |__dfilter_buttons__|Display filter buttons.
 |_dfilters_|Display filters.
 |__disabled_protos__|Disabled protocols.
 |__dmacros__|Display filter macros.
 |_ethers_|Ethernet name resolution.
-|_fieldurls_|Custom URLs for the _Filter Field Reference_ action.
 |_hosts_|IPv4 and IPv6 name resolution.
 |_ipxnets_|IPX name resolution.
 |_manuf_|Ethernet name resolution.
@@ -178,8 +175,6 @@ _/usr/local/etc_.
 |_services_|Network services.
 |_ss7pcs_|SS7 point code resolution.
 |_subnets_|IPv4 subnet name resolution.
-|_subnetsipv6_|IPv6 subnet name resolution.
-|_tagrules.jsonc_|Tagging rules.
 |_vlans_|VLAN ID name resolution.
 |_wka_|Well-known MAC addresses.
 |===
@@ -207,27 +202,24 @@ all the current capture filters are written to the personal capture
 filters file.
 --
 
-coloring_rules.jsonc::
+colorfilters::
 +
 --
-This file contains all the coloring rules that you have defined and saved.
-It contains an array of JSON objects, each representing a coloring rule, with the following format:
+This file contains all the color filters that you have defined and saved. It
+consists of one or more lines, where each line has the following format:
 
 ----
-{ "Filter name": {
-    "filter": "<display filter string>",
-    "foreground": "#rrggbb or rrggbb",
-    "background": "#rrggbb or rrggbb",
-    "enabled": "<boolean value>"
-    }
-}
+@<filter name>@<filter string>@[<bg RGB(16-bit)>][<fg RGB(16-bit)>]
 ----
 
-At program start, if there is a __coloring_rules.jsonc__ file in the personal configuration folder, only that file is read.
-If it doesn't exist, a legacy __colorfilters__ file in the personal configuration folder, written by versions before Wireshark 5.0, is read instead and converted to __coloring_rules.jsonc__ the next time the coloring rules are saved.
-If neither exists, Wireshark will attempt to read the global __coloring_rules.jsonc__ file.
+At program start, if there is a _colorfilters_ file in the personal
+configuration folder, it is read.  If there isn’t a _colorfilters_ file
+in the personal configuration folder, then, if there is a _colorfilters_
+file in the global configuration folder, it is read.
 
-When you press the Save button in the “Coloring Rules” dialog box, all the current color filters are written to the personal color filters file.
+When you press the Save button in the “Coloring Rules” dialog box,
+all the current color filters are written to the personal color filters
+file.
 --
 
 dfilter_buttons::
@@ -327,99 +319,27 @@ More information about Display Filter Macros is available in
 ethers::
 +
 --
-When Wireshark is trying to translate a hardware MAC or EUI-64 address to
+When Wireshark is trying to translate a hardware MAC address to
 a name, it consults the _ethers_ file in the personal configuration
 folder first.  If the address is not found in that file, Wireshark
 consults the _ethers_ file in the system configuration folder.
 
-This file has a similar format to the _/etc/ethers_ file on some UNIX-like systems.
+This file has a similar format to the _/etc/ethers_ file on some Unix-like systems.
 Each line in these files consists of one hardware address and name separated by
 whitespace (tabs or spaces). The hardware addresses are expressed as pairs
 of hexadecimal digits separated by colons (:), dashes (-), or periods(.), with
 the same separator used in the entire address. A `#` can be used to indicate
 a comment that extends to the rest of the line. NIS lookups, as in some
-UNIX-like systems, are not supported. Both 6 byte MAC and 8 byte EUI-64 addresses
-are supported. The following are some examples:
+UNIX-like systems, are not supported. The following are some examples:
 
 ----
 ff-ff-ff-ff-ff-ff    Broadcast
 c0-00-ff-ff-ff-ff    TR_broadcast
 00.2b.08.93.4b.a1    Freds_machine
-00:00:00:00:00:00:00:00    zb_zero_broadcast
 ----
 
-The settings from this file are read in at program start, and reloaded when
-opening a new capture file or changing the configuration profile, and never
-written by Wireshark.
---
-
-fieldurls::
-+
---
-Wireshark uses the _fieldurls_ file to override the page opened by the
-_Filter Field Reference_ item in the packet details context menu.
-
-The _fieldurls_ file is read from the personal configuration folder only and is
-shared by all configuration profiles.
-
-Each line in this file consists of a field or protocol abbreviation followed by
-a URL, separated by whitespace or tab. Lines beginning with `#` are comments.
-When the menu item is used, an entry for the selected field is used if there is
-one, otherwise an entry for its protocol, otherwise the online display filter
-reference page.
-
-A URL can contain the following placeholders:
-
-* `${fieldname}`: The abbreviation of the selected field with each `.` replaced by `-`, for example `tcp-len`.
-* `${fieldnameraw}`: The abbreviation of the selected field as is, for example `tcp.len`.
-* `${fieldvalue}`: The value of the selected field with each `.` and `:` replaced by `-`, for example `10-0-0-1` for an IPv4 address, percent-encoded.
-* `${fieldvalueraw}`: The value of the selected field, percent-encoded, with `.` kept. A `:` in an IPv6 address becomes `%3A`.
-
-Other text, including unknown `${...}` sequences, is left as is.
-
-Instead of one URL, a line can choose a URL by the value of the selected field.
-After the abbreviation, put one or more rules of the form `{items}=URL`,
-separated by whitespace, optionally followed by a URL to use when no rule
-matches. The first rule whose items match the value is used. If no rule matches
-and there is no final URL, the line is ignored for that field, so the entry for
-the protocol (or the online reference) is used instead.
-
-The items are separated by commas. An item can be a value, such as `443` or
-`GET`, or for numbers an inclusive range such as `8000..8080`. Numbers can be
-decimal or hexadecimal (`0x01bb`).
-
-An item can also be an IPv4 or IPv6 address, an inclusive address range such as
-`10.0.0.5..10.0.0.9`, or a network in CIDR notation such as `10.0.0.0/8` or
-`2700:7a00::/32`. These are compared as addresses, so any spelling of an IPv6
-address matches, and an IPv4 item only matches IPv4 values and an IPv6 item only
-IPv6 values. It does not matter which field is used; a value that is an address
-is compared as one.
-
-An item can also be put in double quotes, which is needed if it contains
-whitespace, a comma, a `}` or a `"` (use `\"` and `\\`) and makes it always match
-as text, so `"80"` is not a number and `"10.0.0.0/8"` is not a network.
-
-Flags can be placed between the `}` and the `=`:
-
-* `i`: ignore case when comparing text.
-* `*`: match if the value contains an item, instead of being equal to it. All
-items are then compared as text, and ranges cannot be used.
-
-A rule that cannot be understood is ignored, and a warning is logged.
-
-An example is:
-----
-tcp.len    https://www.rfc-editor.org/rfc/rfc9293.html
-http       https://example.com/our-http-notes
-ip         https://example.com/fields/${fieldname}?value=${fieldvalueraw}
-tcp.srcport {8000..8080}=http://porteightthousand.com {443,843}=http://tls.com http://else.com
-http.user_agent {"Mozilla Firefox",curl}*i=https://example.com/browsers https://example.com/other
-ip.src {10.0.0.0/8,192.168.0.0/16}=https://example.com/internal/${fieldvalue} https://example.com/external/${fieldvalue}
-ipv6.src {2608:7700::/32}=https://example.com/ipv6/${fieldvalueraw}
-----
-
-The settings from this file are read the first time they are needed, and never
-written by Wireshark.
+The settings from this file are read in when a MAC address is to be
+translated to a name, and never written by Wireshark.
 --
 
 hosts::
@@ -428,22 +348,11 @@ hosts::
 Wireshark uses the entries in the _hosts_ files to translate IPv4 and
 IPv6 addresses into names.
 
-Wireshark reads hosts files from multiple locations in a hierarchical manner:
-
-1. Global hosts file (e.g., `C:\Program Files\Wireshark\hosts` on Windows)
-2. Base personal hosts file (e.g., `%APPDATA%\Wireshark\hosts` on Windows)
-3. Profile hosts file (e.g., `%APPDATA%\Wireshark\profiles\<name>\hosts` on Windows)
-
-All three files are read in sequence. When entries conflict, the last file
-loaded wins, creating a three-tier precedence system:
-- Enterprise/global settings (lowest priority)
-- User-wide personal overrides (medium priority)
-- Profile-specific overrides (highest priority)
-
-The profile hosts file is always loaded when name resolution is enabled. The
-base personal hosts file allows users to maintain user-wide name resolution
-mappings across all profiles without needing write access to system
-directories or duplicating entries in every profile.
+At program start, if there is a _hosts_ file in the global configuration
+folder, it is read first.  Then, if there is a _hosts_ file in the
+personal configuration folder, that is read; if there is an entry for a
+given IP address in both files, the setting in the personal hosts file
+overrides the entry in the global hosts file.
 
 This file has the same format as the usual _/etc/hosts_ file on Unix systems.
 
@@ -454,9 +363,8 @@ An example is:
 192.168.0.1 homeserver
 ----
 
-The settings from these files are read in at program start, and reloaded when
-opening a new capture file or changing the configuration profile, and never
-written by Wireshark.
+The settings from this file are read in at program start and never written by
+Wireshark.
 --
 
 ipxnets::
@@ -499,7 +407,7 @@ Examples are:
 
 ----
 00:00:01        Xerox   Xerox Corporation
-00:50:C2:00:30:00/36      Microsoft        Microsoft
+00:50:C2:00:30:00/36      Microsof        Microsoft
 ----
 
 In earlier versions of Wireshark, official information from the IEEE
@@ -511,9 +419,7 @@ be used to supplement or replace the official data just as the personal
 file does. The compiled-in information can be written out in this format
 as a report with `tshark -G manuf`.
 
-The settings from this file are read in at program start, and reloaded when
-opening a new capture file or changing the configuration profile, and never
-written by Wireshark.
+The settings from this file are read in at program start and never written by Wireshark.
 --
 
 preferences::
@@ -593,8 +499,7 @@ folder it is still read, and can be used to supplement or replace the official
 data just as the personal file does. The compiled-in information can be
 written out in this format as a report with `tshark -G services`.
 
-The settings from this file are read in at program start, and reloaded when
-opening a new capture file or changing the configuration profile, and never
+The settings from these files are read in at program start and never
 written by Wireshark.
 --
 
@@ -613,28 +518,27 @@ An example is:
 2-1234 MyPointCode1
 ----
 
-The settings from this file are read in at program start, and reloaded when
-opening a new capture file opens or changing the configuration profile,
-and never written by Wireshark.
+The settings from this file are read in at program start and never written by
+Wireshark.
 --
 
-subnets and subnetsipv6::
+subnets::
 +
 --
-Wireshark uses the __subnets__ and __subnetsipv6__ files to translate an IP
-address into a subnet name.  If no exact match from a __hosts__ file or from
-DNS is found, Wireshark will attempt a partial match for the subnet of the
+Wireshark uses the __subnets__ file to translate an IPv4 address into a
+subnet name.  If no exact match from a __hosts__ file or from DNS is
+found, Wireshark will attempt a partial match for the subnet of the
 address.
 
-At program start, if there is a _subnets_ or _subnetsipv6_ file in the
-personal configuration folder, it is read first.  Then, if there is a
-_subnets_ or _subnetsipv6_ file in the global configuration folder, that is
-read; if there is a preference set in both files, the setting in the global
-preferences file overrides the setting in the personal preference file.
+At program start, if there is a _subnets_ file in the personal
+configuration folder, it is read first.  Then, if there is a _subnets_
+file in the global configuration folder, that is read; if there is a
+preference set in both files, the setting in the global preferences file
+overrides the setting in the personal preference file.
 
-Each line in one of these files consists of an IP address, a subnet
+Each line in one of these files consists of an IPv4 address, a subnet
 mask length separated only by a “/” and a name separated by whitespace.
-While the address must be a full IP address, any values beyond the
+While the address must be a full IPv4 address, any values beyond the
 mask length are subsequently ignored.
 
 An example is:
@@ -643,19 +547,12 @@ An example is:
 192.168.0.0/24 ws_test_network
 ----
 
-or
-
-----
-2001:DB8::/32   documentation
-----
-
 A partially matched name will be printed as “subnet-name.remaining-address”.
 For example, “192.168.0.1” under the subnet above would be printed as
 “ws_test_network.1”; if the mask length above had been 16 rather than 24, the
 printed address would be “ws_test_network.0.1”.
 
-The settings from these files are read in at program start, and reloaded when
-opening a new capture file or changing the configuration profile, and never
+The settings from these files are read in at program start and never
 written by Wireshark.
 
 The __subnets__ file also changes the behavior of the Endpoints and
@@ -663,28 +560,6 @@ Conversations Statistics dialogs for the IPv4 protocol when the IPv4 user
 preference _Aggregate subnets in Statistics Dialogs_ is enabled. In this
 case, when an IPv4 address matches a subnet, the statistics dialog will
 show this subnet instead of the IPv4 address.
---
-
-tagrules.jsonc::
-+
---
-This file contains all the tagging rules that you have defined and saved in the current configuration profile.
-It contains an array of JSON objects, each representing a tagging rule, with the following format:
-
-----
-{ "Rule name": {
-    "filter": "<display filter string>",
-    "tag": "<emoji or short text shown in the packet list>",
-    "url": "<optional URL opened when the tag is clicked>",
-    "comment": "<optional comment>",
-    "enabled": "<boolean value>"
-    }
-}
-----
-
-An optional object named __prefs_for_tagging_rules__ holds the tag display preferences (__separator__, __emoji_size__ and __click__).
-
-When you press the OK button in the “Tagging Rules” dialog box, all the current tagging rules are written to the personal tagrules.jsonc file.
 --
 
 vlans::
@@ -702,8 +577,8 @@ An example is:
 2049    HR-Client-LAN
 ----
 
-The settings from this file are read in when a VLAN ID is to be translated
-to a name, and never written by Wireshark.
+The settings from this file are read in at program start or when changing
+the active profile and are never written by Wireshark.
 --
 
 wka::
@@ -717,9 +592,7 @@ prefixes into names. The format is that of the _manuf_ file. This file is
 distributed with Wireshark, and contains data assembled from various non IEEE
 but respected sources.
 
-The settings from this file are read in at program start, and reloaded when
-opening a new capture file or changing the configuration profile, and never
-written by Wireshark.
+The settings from this file are read in at program start and never written by Wireshark.
 --
 
 [#ChPluginFolders]
@@ -753,7 +626,7 @@ On Unix-like systems:
 [NOTE]
 ====
 To provide better support for binary plugins this folder changed in Wireshark 2.5.
-It is recommended to use the new folder but *for Lua scripts only* you may
+It is recommended to use the new folder but *for lua scripts only* you may
 continue to use _$XDG_CONFIG_HOME/wireshark/plugins_ for backward-compatibility.
 This is useful to have older versions of Wireshark installed side-by-side. In case
 of duplicate file names between old and new the new folder wins.
@@ -792,7 +665,7 @@ former location. The defaults mentioned here might not apply.
 The following guides you to the right place where to look for Wireshark’s
 profile data.
 
-Windows 11, Windows 10, Windows 8.1, Windows 8, Windows 7, Windows Vista, and associated server editions::
+Windows 10, Windows 8.1, Windows 8, Windows 7, Windows Vista, and associated server editions::
 _C:\Users{backslash}**username**\AppData\Roaming\Wireshark_.
 
 Windows XP and Windows Server 2003 footnote:historical[No longer supported by Wireshark. For historical reference only.]::
@@ -820,7 +693,7 @@ files.
 Wireshark uses the folder which is set by the TMPDIR or TEMP environment
 variable. This variable will be set by the Windows installer.
 
-Windows 11, Windows 10, Windows 8.1, Windows 8, Windows 7, Windows Vista, and associated server editions::
+Windows 10, Windows 8.1, Windows 8, Windows 7, Windows Vista, and associated server editions::
 _C:\Users{backslash}**username**\AppData\Local\Temp_
 
 Windows XP and Windows Server 2003 footnote:historical[]::

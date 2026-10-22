@@ -22,19 +22,17 @@
 static QHash<const QString, register_rtd_t *> cfg_str_to_rtd_;
 
 extern "C" {
-static bool
+static void
 rtd_init(const char *args, void*) {
     QStringList args_l = QString(args).split(',');
     if (args_l.length() > 1) {
-        QString rtd = QStringLiteral("%1,%2").arg(args_l[0]).arg(args_l[1]);
+        QString rtd = QString("%1,%2").arg(args_l[0]).arg(args_l[1]);
         QString filter;
         if (args_l.length() > 2) {
             filter = QStringList(args_l.mid(2)).join(",");
         }
         mainApp->emitTapParameterSignal(rtd, filter, NULL);
     }
-
-    return true;
 }
 }
 
@@ -77,60 +75,58 @@ enum {
 class RtdTimeStatTreeWidgetItem : public QTreeWidgetItem
 {
 public:
-    RtdTimeStatTreeWidgetItem(QTreeWidget *parent, const QString type, const rtd_timestat *rtd_timestat, unsigned timestat_idx = 0) :
+    RtdTimeStatTreeWidgetItem(QTreeWidget *parent, const QString type, const rtd_timestat *timestat) :
         QTreeWidgetItem (parent, rtd_time_stat_type_),
         type_(type),
-        rtd_timestat_(rtd_timestat)
+        timestat_(timestat)
     {
-        Q_ASSERT(timestat_idx < rtd_timestat->num_timestat);
-        timestat_ = &rtd_timestat->rtd[timestat_idx];
         setText(col_type_, type_);
         setHidden(true);
     }
     void draw() {
-        setText(col_messages_, QString::number(timestat_->num));
-        setText(col_min_srt_, QString::number(nstime_to_sec(&timestat_->min), 'f', 6));
-        setText(col_max_srt_, QString::number(nstime_to_sec(&timestat_->max), 'f', 6));
-        setText(col_avg_srt_, QString::number(get_average(&timestat_->tot, timestat_->num) / 1000.0, 'f', 6));
-        setText(col_min_frame_, QString::number(timestat_->min_num));
-        setText(col_max_frame_, QString::number(timestat_->max_num));
-        setText(col_open_requests, QString::number(rtd_timestat_->open_req_num));
-        setText(col_discarded_responses_, QString::number(rtd_timestat_->disc_rsp_num));
-        setText(col_repeated_requests_, QString::number(rtd_timestat_->req_dup_num));
-        setText(col_repeated_responses_, QString::number(rtd_timestat_->rsp_dup_num));
+        setText(col_messages_, QString::number(timestat_->rtd->num));
+        setText(col_min_srt_, QString::number(nstime_to_sec(&timestat_->rtd->min), 'f', 6));
+        setText(col_max_srt_, QString::number(nstime_to_sec(&timestat_->rtd->max), 'f', 6));
+        setText(col_avg_srt_, QString::number(get_average(&timestat_->rtd->tot, timestat_->rtd->num) / 1000.0, 'f', 6));
+        setText(col_min_frame_, QString::number(timestat_->rtd->min_num));
+        setText(col_max_frame_, QString::number(timestat_->rtd->max_num));
+        setText(col_open_requests, QString::number(timestat_->open_req_num));
+        setText(col_discarded_responses_, QString::number(timestat_->disc_rsp_num));
+        setText(col_repeated_requests_, QString::number(timestat_->req_dup_num));
+        setText(col_repeated_responses_, QString::number(timestat_->rsp_dup_num));
 
-        setHidden(timestat_->num < 1);
+        setHidden(timestat_->rtd->num < 1);
     }
-    bool operator< (const QTreeWidgetItem &other) const override
+    bool operator< (const QTreeWidgetItem &other) const
     {
         if (other.type() != rtd_time_stat_type_) return QTreeWidgetItem::operator< (other);
         const RtdTimeStatTreeWidgetItem *other_row = static_cast<const RtdTimeStatTreeWidgetItem *>(&other);
 
         switch (treeWidget()->sortColumn()) {
         case col_messages_:
-            return timestat_->num < other_row->timestat_->num;
+            return timestat_->rtd->num < other_row->timestat_->rtd->num;
         case col_min_srt_:
-            return nstime_cmp(&timestat_->min, &other_row->timestat_->min) < 0;
+            return nstime_cmp(&timestat_->rtd->min, &other_row->timestat_->rtd->min) < 0;
         case col_max_srt_:
-            return nstime_cmp(&timestat_->max, &other_row->timestat_->max) < 0;
+            return nstime_cmp(&timestat_->rtd->max, &other_row->timestat_->rtd->max) < 0;
         case col_avg_srt_:
         {
-            double our_avg = get_average(&timestat_->tot, timestat_->num);
-            double other_avg = get_average(&other_row->timestat_->tot, other_row->timestat_->num);
+            double our_avg = get_average(&timestat_->rtd->tot, timestat_->rtd->num);
+            double other_avg = get_average(&other_row->timestat_->rtd->tot, other_row->timestat_->rtd->num);
             return our_avg < other_avg;
         }
         case col_min_frame_:
-            return timestat_->min_num < other_row->timestat_->min_num;
+            return timestat_->rtd->min_num < other_row->timestat_->rtd->min_num;
         case col_max_frame_:
-            return timestat_->max_num < other_row->timestat_->max_num;
+            return timestat_->rtd->max_num < other_row->timestat_->rtd->max_num;
         case col_open_requests:
-            return rtd_timestat_->open_req_num < other_row->rtd_timestat_->open_req_num;
+            return timestat_->open_req_num < other_row->timestat_->open_req_num;
         case col_discarded_responses_:
-            return rtd_timestat_->disc_rsp_num < other_row->rtd_timestat_->disc_rsp_num;
+            return timestat_->disc_rsp_num < other_row->timestat_->disc_rsp_num;
         case col_repeated_requests_:
-            return rtd_timestat_->req_dup_num < other_row->rtd_timestat_->req_dup_num;
+            return timestat_->req_dup_num < other_row->timestat_->req_dup_num;
         case col_repeated_responses_:
-            return rtd_timestat_->rsp_dup_num < other_row->rtd_timestat_->rsp_dup_num;
+            return timestat_->rsp_dup_num < other_row->timestat_->rsp_dup_num;
         default:
             break;
         }
@@ -138,18 +134,17 @@ public:
         return QTreeWidgetItem::operator< (other);
     }
     QList<QVariant> rowData() {
-        return QList<QVariant>() << type_ << timestat_->num
-                                 << nstime_to_sec(&timestat_->min) << nstime_to_sec(&timestat_->max)
-                                 << get_average(&timestat_->tot, timestat_->num) / 1000.0
-                                 << timestat_->min_num << timestat_->max_num
-                                 << rtd_timestat_->open_req_num << rtd_timestat_->disc_rsp_num
-                                 << rtd_timestat_->req_dup_num << rtd_timestat_->rsp_dup_num;
+        return QList<QVariant>() << type_ << timestat_->rtd->num
+                                 << nstime_to_sec(&timestat_->rtd->min) << nstime_to_sec(&timestat_->rtd->max)
+                                 << get_average(&timestat_->rtd->tot, timestat_->rtd->num) / 1000.0
+                                 << timestat_->rtd->min_num << timestat_->rtd->max_num
+                                 << timestat_->open_req_num << timestat_->disc_rsp_num
+                                 << timestat_->req_dup_num << timestat_->rsp_dup_num;
     }
 
 private:
     const QString type_;
-    const rtd_timestat *rtd_timestat_;
-    const timestat_t *timestat_;
+    const rtd_timestat *timestat_;
 };
 
 ResponseTimeDelayDialog::ResponseTimeDelayDialog(QWidget &parent, CaptureFile &cf, register_rtd *rtd, const QString filter, int help_topic) :
@@ -194,25 +189,9 @@ TapParameterDialog *ResponseTimeDelayDialog::createRtdDialog(QWidget &parent, co
 
 void ResponseTimeDelayDialog::addRtdTable(const _rtd_stat_table *rtd_table)
 {
-    // There are two types of rtd_stat_tables - those with num_rtds == 1 and
-    // num_timestat > 1 on that rtd_timestat, and those with num_rtds > 1 and
-    // num_timestat == 1 on each rtd_timestat.
-    //
-    // XXX - Both MEGACO and MGCP have one row that is a total for all types,
-    // so it might make sense for that row to be the parent of the others.
-    // But in MGCP the "Overall" type has index 0, whereas in MEGACO the
-    // "ALL" types has the last index, 10. They should both be the first or
-    // the last.
-    if (rtd_table->num_rtds == 1) {
-        for (unsigned i = 0; i < rtd_table->time_stats[0].num_timestat; i++) {
-            const QString type = val_to_qstring(i, get_rtd_value_string(rtd_), "Other (%d)");
-            new RtdTimeStatTreeWidgetItem(statsTreeWidget(), type, &rtd_table->time_stats[0], i);
-        }
-    } else {
-        for (unsigned i = 0; i < rtd_table->num_rtds; i++) {
-            const QString type = val_to_qstring(i, get_rtd_value_string(rtd_), "Other (%d)");
-            new RtdTimeStatTreeWidgetItem(statsTreeWidget(), type, &rtd_table->time_stats[i]);
-        }
+    for (unsigned i = 0; i < rtd_table->num_rtds; i++) {
+        const QString type = val_to_qstring(i, get_rtd_value_string(rtd_), "Other (%d)");
+        new RtdTimeStatTreeWidgetItem(statsTreeWidget(), type, &rtd_table->time_stats[i]);
     }
 }
 

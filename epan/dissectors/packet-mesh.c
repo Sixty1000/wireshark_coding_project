@@ -1,4 +1,4 @@
-/* packet-mesh.c
+/* packet-mesh-header.c
  * Routines for Mesh Header dissection
  * Javier Cardona <javier@cozybit.com>
  * Copyright 2007, Marvell Semiconductors Inc.

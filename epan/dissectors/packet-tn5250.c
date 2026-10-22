@@ -23,8 +23,6 @@
 #include <epan/packet.h>
 #include <epan/expert.h>
 #include <epan/conversation.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 #include "packet-tn5250.h"
 
 void proto_register_tn5250(void);
@@ -3043,11 +3041,12 @@ static uint32_t
 dissect_erase_to_address(proto_tree *tn5250_tree, tvbuff_t *tvb, int offset)
 {
   int start = offset;
-  uint8_t i, length = 0;
+  int i, length = 0;
 
   dissect_row_column(tn5250_tree, tvb, offset);
 
-  proto_tree_add_item_ret_uint8(tn5250_tree, hf_tn5250_length, tvb, offset, 1, ENC_BIG_ENDIAN, &length);
+  length = tvb_get_uint8(tvb, offset);
+  proto_tree_add_item(tn5250_tree, hf_tn5250_length, tvb, offset, 1, ENC_BIG_ENDIAN);
   offset++;
 
   for (i=1; i < length; i++) {
@@ -3118,7 +3117,7 @@ static uint32_t
 dissect_twobyte_length_and_data(proto_tree *tn5250_tree, tvbuff_t *tvb, int offset)
 {
   int start = offset;
-  unsigned length = 0;
+  int length = 0;
 
   length = tvb_get_ntohs(tvb, offset);
   proto_tree_add_item(tn5250_tree, hf_tn5250_length_twobyte, tvb, offset, 2,

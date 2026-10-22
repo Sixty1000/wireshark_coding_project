@@ -24,8 +24,6 @@ set(CRYPT_FILES
 	dot11decrypt.c
 	dot11decrypt_tkip.c
 	dot11decrypt_util.c
-	dot11decrypt_wep.c
-	dot11decrypt_ws.c
 	${CUSTOM_CRYPT_SRC}
 )
 

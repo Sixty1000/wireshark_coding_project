@@ -8,12 +8,12 @@ INCLUDE(FindChocolatey)
 
 FIND_PROGRAM(ASCIIDOCTOR_EXECUTABLE
     NAMES
-        asciidoctor.cmd
-        asciidoctor.bat
-        asciidoctor
         asciidoctorj.cmd
         asciidoctorj.bat
         asciidoctorj
+        asciidoctor.cmd
+        asciidoctor.bat
+        asciidoctor
         asciidoctor.ruby2.1
         # XXX Add Asciidoctor.js releases (asciidoctor-linux,
         # asciidoctor-macos, asciidoctor-win) if that ever becomes an option.
@@ -40,35 +40,20 @@ if(ASCIIDOCTOR_EXECUTABLE)
         )
     endfunction(set_asciidoctor_target_properties)
 
-    set (_ad_failure_level_args)
-    if (ENABLE_WERROR)
-        execute_process( COMMAND ${ASCIIDOCTOR_EXECUTABLE} --help OUTPUT_VARIABLE _ad_help )
-        if (_ad_help MATCHES "--failure-level")
-            set (_ad_failure_level_args --failure-level WARN)
-        endif()
-    endif()
-
     set (_asciidoctor_common_args
         # AsciidoctorJ added --failure-level in version 2.5.6
+        # --failure-level=WARN
         # --trace
-        # Unfortunately --quiet suppresses warnings even at --failure-level WARN
-        #--quiet
-        ${_ad_failure_level_args}
+        --quiet
         --attribute build_dir=${CMAKE_BINARY_DIR}/doc
         --attribute css_dir=${CMAKE_SOURCE_DIR}/doc
-        --attribute min-macos-version=${MIN_MACOS_VERSION}
         --require ${CMAKE_SOURCE_DIR}/doc/asciidoctor-macros/ws_utils.rb
         --require ${CMAKE_SOURCE_DIR}/doc/asciidoctor-macros/commaize-block.rb
         --require ${CMAKE_SOURCE_DIR}/doc/asciidoctor-macros/cveidlink-inline-macro.rb
         --require ${CMAKE_SOURCE_DIR}/doc/asciidoctor-macros/manarg-block.rb
         --require ${CMAKE_SOURCE_DIR}/doc/asciidoctor-macros/wsbuglink-inline-macro.rb
-        --require ${CMAKE_SOURCE_DIR}/doc/asciidoctor-macros/wsrepo-inline-macro.rb
         --require ${CMAKE_SOURCE_DIR}/doc/asciidoctor-macros/wssalink-inline-macro.rb
     )
-
-    unset(_ad_full_version)
-    unset(_ad_help)
-    unset(_ad_failure_level_args)
 
     set(_asciidoctor_common_command
         ${CMAKE_COMMAND} -E env TZ=UTC
@@ -113,19 +98,10 @@ if(ASCIIDOCTOR_EXECUTABLE)
         unset(_output_xml)
     ENDMACRO()
 
-    # Single page only, for the release notes and other user-facing documentation.
-    # Man pages are converted separately below.
-    function(ASCIIDOCTOR2HTML _asciidocsource)
-        cmake_parse_arguments(arg "CONVERT_UNDERSCORES" "OUTPUT" "" ${ARGN})
-        get_filename_component(_source_base_name ${_asciidocsource} NAME_WE)
-        if (arg_CONVERT_UNDERSCORES)
-            string(REPLACE "_" " " _source_base_name ${_source_base_name})
-        endif()
-        if (arg_OUTPUT)
-            set(_output_html ${arg_OUTPUT})
-        else()
-            set(_output_html ${_source_base_name}.html)
-        endif()
+    # Single page only, for the release notes and man pages.
+    MACRO( ASCIIDOCTOR2HTML _asciidocsource )
+        GET_FILENAME_COMPONENT( _source_base_name ${_asciidocsource} NAME_WE )
+        set( _output_html ${_source_base_name}.html )
 
         ADD_CUSTOM_COMMAND(
             OUTPUT
@@ -137,12 +113,34 @@ if(ASCIIDOCTOR_EXECUTABLE)
             DEPENDS
                 ${CMAKE_SOURCE_DIR}/doc/attributes.adoc
                 ${CMAKE_CURRENT_SOURCE_DIR}/${_asciidocsource}
-                ${_asciidocsource}
+                ${ARGN}
         )
-        # string(REPLACE " " "_" _output_target ${_source_base_name})
-        # add_custom_target(generate_${_output_target}_html DEPENDS ${_output_html})
-        # set_asciidoctor_target_properties(generate_${_output_target}_html)
-    endfunction()
+        add_custom_target(generate_${_output_html} DEPENDS ${_output_html})
+        set_asciidoctor_target_properties(generate_${_output_html})
+        unset(_output_html)
+    ENDMACRO()
+
+    MACRO( ASCIIDOCTOR2TXT _asciidocsource )
+        GET_FILENAME_COMPONENT( _source_base_name ${_asciidocsource} NAME_WE )
+        set( _input_html ${_source_base_name}.html )
+        set( _output_txt ${_source_base_name}.txt )
+
+        ADD_CUSTOM_COMMAND(
+            OUTPUT
+                ${_output_txt}
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/html2text.py
+                ${_input_html}
+                > ${_output_txt}
+            DEPENDS
+                ${MAN_INCLUDES}
+                ${CMAKE_SOURCE_DIR}/doc/attributes.adoc
+                ${CMAKE_CURRENT_SOURCE_DIR}/${_asciidocsource}
+                ${_input_html}
+                ${ARGN}
+        )
+        unset(_input_html)
+        unset(_output_txt)
+    ENDMACRO()
 
     # Generate one or more ROFF man pages
     function(ASCIIDOCTOR2ROFFMAN _man_section)
@@ -194,9 +192,9 @@ if(ASCIIDOCTOR_EXECUTABLE)
 
     FIND_PROGRAM(ASCIIDOCTOR_PDF_EXECUTABLE
         NAMES
+            asciidoctorj
             asciidoctor-pdf.bat
             asciidoctor-pdf
-            asciidoctorj
         PATHS
             /bin
             /usr/bin
@@ -207,52 +205,11 @@ if(ASCIIDOCTOR_EXECUTABLE)
 
     if(ASCIIDOCTOR_PDF_EXECUTABLE)
 
-        if(NOT DEFINED ASCIIDOCTOR_PDF_OPTIMIZE_WORKS)
-            # The -a optimize option requires that the RGhost gem and
-            # Ghostscript be installed, and that the RGhost gem can find
-            # Ghostscript (tricky on Windows)
-            # https://docs.asciidoctor.org/pdf-converter/latest/optimize-pdf/#rghost
-
-            set(TEST_ADOC_FILE "${CMAKE_BINARY_DIR}/optimize_test.adoc")
-            set(TEST_PDF_FILE "${CMAKE_BINARY_DIR}/optimize_test.pdf")
-            file(WRITE "${TEST_ADOC_FILE}" "= Test\n\nTest optimization.")
-
-            message(CHECK_START "Checking if asciidoctor-pdf optimization works")
-            set(_asciidoctor_pdf_test_command ${ASCIIDOCTOR_PDF_EXECUTABLE}
-                --require asciidoctor-pdf
-                --backend pdf
-                -a optimize
-                -v
-                -o "${TEST_PDF_FILE}"
-                "${TEST_ADOC_FILE}"
-            )
-
-            execute_process(
-                COMMAND ${_asciidoctor_pdf_test_command}
-                RESULT_VARIABLE OPTIMIZE_RESULT
-                OUTPUT_QUIET #or OUTPUT_VARIABLE OPTIMIZE_OUTPUT
-                ERROR_QUIET #or ERROR_VARIABLE OPTIMIZE_ERROR
-            )
-
-            unset (_asciidoctor_pdf_optimize_args)
-            if(OPTIMIZE_RESULT EQUAL 0)
-                set(ASCIIDOCTOR_PDF_OPTIMIZE_WORKS TRUE CACHE INTERNAL "Does asciidoctor-pdf optimize work")
-                set (_asciidoctor_pdf_optimize_args -a optimize)
-                message(CHECK_PASS "success")
-            else()
-                set(ASCIIDOCTOR_PDF_OPTIMIZE_WORKS FALSE CACHE INTERNAL "Does asciidoctor-pdf optimize work")
-                message(CHECK_FAIL "failed") # Could print ${OPTIMIZE_ERROR}
-            endif()
-
-            file(REMOVE "${TEST_ADOC_FILE}" "${TEST_PDF_FILE}")
-        endif()
-
         set(_asciidoctor_pdf_common_command
             ${CMAKE_COMMAND} -E env TZ=UTC "ASCIIDOCTORJ_OPTS=${_asciidoctorj_opts}"
             ${ASCIIDOCTOR_PDF_EXECUTABLE}
             --require asciidoctor-pdf
             --backend pdf
-            ${_asciidoctor_pdf_optimize_args}
             ${_asciidoctor_common_args}
         )
 
@@ -276,8 +233,8 @@ if(ASCIIDOCTOR_EXECUTABLE)
                     ${ARGN}
             VERBATIM
             )
-            #add_custom_target(${_generate_pdf} DEPENDS ${_output_pdf})
-            #set_asciidoctor_target_properties(${_generate_pdf})
+            add_custom_target(${_generate_pdf} DEPENDS ${_output_pdf})
+            set_asciidoctor_target_properties(${_generate_pdf})
             unset(_generate_pdf)
             unset(_output_pdf)
         ENDMACRO()
@@ -291,9 +248,9 @@ if(ASCIIDOCTOR_EXECUTABLE)
 
     FIND_PROGRAM(ASCIIDOCTOR_EPUB_EXECUTABLE
         NAMES
+            asciidoctorj
             asciidoctor-epub3.bat
             asciidoctor-epub3
-            asciidoctorj
         PATHS
             /bin
             /usr/bin
@@ -328,8 +285,8 @@ if(ASCIIDOCTOR_EXECUTABLE)
                     ${ARGN}
             VERBATIM
             )
-            #add_custom_target(${_generate_epub} DEPENDS ${_output_epub})
-            #set_asciidoctor_target_properties(${_generate_epub})
+            add_custom_target(${_generate_epub} DEPENDS ${_output_epub})
+            set_asciidoctor_target_properties(${_generate_epub})
             unset(_generate_epub)
             unset(_output_epub)
         ENDMACRO()

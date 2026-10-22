@@ -78,7 +78,6 @@ FunnelAction::FunnelAction(QString title, funnel_menu_callback callback, void *c
         callback_(callback),
         callback_data_(callback_data),
         retap_(retap),
-        packetCallback_(nullptr),
         packetData_(NULL)
 {
     // Use "&&" to get a real ampersand in the menu item.
@@ -92,7 +91,6 @@ FunnelAction::FunnelAction(QString title, funnel_menu_callback callback, void *c
 FunnelAction::FunnelAction(QString title, funnel_packet_menu_callback callback, void *callback_data, bool retap, const char *packet_required_fields, QObject *parent = nullptr) :
         QAction(parent),
         title_(title),
-        callback_(nullptr),
         callback_data_(callback_data),
         retap_(retap),
         packetCallback_(callback),
@@ -102,7 +100,7 @@ FunnelAction::FunnelAction(QString title, funnel_packet_menu_callback callback, 
     // Use "&&" to get a real ampersand in the menu item.
     title.replace('&', "&&");
 
-    QStringList menuComponents = title.split(QStringLiteral("/"));
+    QStringList menuComponents = title.split(QString("/"));
     // Set the menu's text to the rightmost component, set the path to being everything to the left:
     setText("(empty)");
     packetSubmenu_ = "";
@@ -144,7 +142,11 @@ void FunnelAction::setPacketRequiredFields(const char *required_fields_str) {
     // Also remove leading and trailing spaces, in case someone writes
     // "http, dns" instead of "http,dns"
     QString requiredFieldsJoined = QString(required_fields_str);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
     QStringList requiredFieldsSplit = requiredFieldsJoined.split(",", Qt::SkipEmptyParts);
+#else
+    QStringList requiredFieldsSplit = requiredFieldsJoined.split(",", QString::SkipEmptyParts);
+#endif
     foreach (QString requiredField, requiredFieldsSplit) {
         QString trimmedFieldName = requiredField.trimmed();
         if (! trimmedFieldName.isEmpty()) {
@@ -216,7 +218,7 @@ FunnelConsoleAction::FunnelConsoleAction(QString name,
         callback_data_(callback_data)
 {
     // Use "&&" to get a real ampersand in the menu item.
-    QString title = QStringLiteral("%1 Console").arg(name).replace('&', "&&");
+    QString title = QString("%1 Console").arg(name).replace('&', "&&");
 
     setText(title);
     setObjectName(FunnelStatistics::actionName());
@@ -228,12 +230,9 @@ FunnelConsoleAction::~FunnelConsoleAction()
 
 void FunnelConsoleAction::triggerCallback() {
     if (!dialog_) {
-        MainWindow * mainwindow = mainApp->mainWindow();
-        if (mainwindow == nullptr)
-            return;
-
-        dialog_ = new IOConsoleDialog(*mainwindow, this->text(),
-                                      eval_cb_, open_cb_, close_cb_, callback_data_);
+        dialog_ = new IOConsoleDialog(*qobject_cast<QWidget *>(parent()),
+                                            this->text(),
+                                            eval_cb_, open_cb_, close_cb_, callback_data_);
         dialog_->setAttribute(Qt::WA_DeleteOnClose);
     }
 
@@ -249,6 +248,7 @@ void FunnelConsoleAction::triggerCallback() {
 
 static QHash<int, QList<FunnelAction *> > funnel_actions_;
 const QString FunnelStatistics::action_name_ = "FunnelStatisticsAction";
+static bool menus_registered;
 
 struct _funnel_ops_id_t {
     FunnelStatistics *funnel_statistics;
@@ -299,9 +299,13 @@ FunnelStatistics::FunnelStatistics(QObject *parent, CaptureFile &cf) :
 
 FunnelStatistics::~FunnelStatistics()
 {
-    funnel_set_funnel_ops(nullptr);
-    delete(funnel_ops_id_);
-    delete(funnel_ops_);
+    // At this point we're probably closing the program and will shortly
+    // call epan_cleanup, which calls ProgDlg__gc and TextWindow__gc.
+    // They in turn depend on funnel_ops_ being valid.
+    memset(funnel_ops_id_, 0, sizeof(struct _funnel_ops_id_t));
+    memset(funnel_ops_, 0, sizeof(struct _funnel_ops_t));
+    // delete(funnel_ops_id_);
+    // delete(funnel_ops_);
 }
 
 void FunnelStatistics::retapPackets()
@@ -487,7 +491,7 @@ static void register_menu_cb(const char *name,
                              bool retap)
 {
     FunnelAction *funnel_action = new FunnelAction(name, callback, callback_data, retap, mainApp);
-    if (funnel_menu_registered()) {
+    if (menus_registered) {
         mainApp->appendDynamicMenuGroupItem(group, funnel_action);
     } else {
         mainApp->addDynamicMenuGroupItem(group, funnel_action);
@@ -519,7 +523,7 @@ static void register_packet_menu_cb(const char *name,
                              bool retap)
 {
     FunnelAction *funnel_action = new FunnelAction(name, callback, callback_data, retap, required_fields, mainApp);
-    MainWindow * mainwindow = mainApp->mainWindow();
+    MainWindow * mainwindow = qobject_cast<MainWindow *>(mainApp->mainWindow());
     if (mainwindow) {
         mainwindow->appendPacketMenu(funnel_action);
     }
@@ -541,6 +545,14 @@ static void deregister_menu_cb(funnel_menu_callback callback)
             }
         }
     }
+}
+
+void
+register_tap_listener_qt_funnel(void)
+{
+    funnel_register_all_menus(register_menu_cb);
+    funnel_statistics_load_console_menus();
+    menus_registered = true;
 }
 
 void
@@ -583,7 +595,7 @@ static void register_console_menu_cb(const char *name,
                                                                 close_cb,
                                                                 callback_data,
                                                                 mainApp);
-    if (funnel_menu_registered()) {
+    if (menus_registered) {
         mainApp->appendDynamicMenuGroupItem(REGISTER_TOOLS_GROUP_UNSORTED, funnel_action);
     } else {
         mainApp->addDynamicMenuGroupItem(REGISTER_TOOLS_GROUP_UNSORTED, funnel_action);
@@ -594,9 +606,14 @@ static void register_console_menu_cb(const char *name,
     funnel_actions_[REGISTER_TOOLS_GROUP_UNSORTED] << funnel_action;
 }
 
-} // extern "C"
-
-void FunnelStatistics::loadInitFunnelMenus()
+/*
+ * Loads all registered console menus into the
+ * Wireshark GUI.
+ */
+void
+funnel_statistics_load_console_menus(void)
 {
-    funnel_ops_init(register_menu_cb, register_console_menu_cb);
+    funnel_register_all_console_menus(register_console_menu_cb);
 }
+
+} // extern "C"

@@ -1046,7 +1046,7 @@ static int * const speed_support_fields[] = {
  \brief Returns a register name based on its address
  */
 static const char*
-get_register_name_from_address(uint64_t addr, wmem_allocator_t* scope, bool* is_custom_register, u3v_conv_info_t * u3v_conv_info)
+get_register_name_from_address(uint64_t addr, bool* is_custom_register, u3v_conv_info_t * u3v_conv_info)
 {
     const char* address_string = NULL;
     uint32_t offset_address;
@@ -1074,7 +1074,7 @@ get_register_name_from_address(uint64_t addr, wmem_allocator_t* scope, bool* is_
     }
 
     if (!address_string) {
-        address_string = wmem_strdup_printf(scope, "[Addr:0x%016" PRIX64 "]", addr);
+        address_string = wmem_strdup_printf(wmem_packet_scope(), "[Addr:0x%016" PRIX64 "]", addr);
         if (is_custom_register != NULL) {
             *is_custom_register = true;
         }
@@ -1363,7 +1363,7 @@ dissect_u3v_read_mem_cmd(proto_tree *u3v_telegram_tree, tvbuff_t *tvb, packet_in
     addr = tvb_get_letoh64(tvb, offset);
     gencp_trans->address = addr;
 
-    address_string = get_register_name_from_address(addr, pinfo->pool, &is_custom_register, u3v_conv_info);
+    address_string = get_register_name_from_address(addr, &is_custom_register, u3v_conv_info);
     count = tvb_get_letohs(tvb, offset + 10);   /* Number of bytes to read from memory */
 
     gencp_trans->count = count;
@@ -1409,7 +1409,7 @@ dissect_u3v_write_mem_cmd(proto_tree *u3v_telegram_tree, tvbuff_t *tvb, packet_i
 
     addr = tvb_get_letoh64(tvb, startoffset);
     byte_count = length - 8;
-    address_string = get_register_name_from_address(addr, pinfo->pool, &is_custom_register, u3v_conv_info);
+    address_string = get_register_name_from_address(addr, &is_custom_register, u3v_conv_info);
 
     gencp_trans->address = addr;
     gencp_trans->count = byte_count;
@@ -1439,7 +1439,7 @@ dissect_u3v_write_mem_cmd(proto_tree *u3v_telegram_tree, tvbuff_t *tvb, packet_i
 static void
 dissect_u3v_event_cmd(proto_tree *u3v_telegram_tree, tvbuff_t *tvb, packet_info *pinfo, int startoffset, int length)
 {
-    uint32_t eventid;
+    int32_t eventid;
     int offset = startoffset;
     proto_item *item = NULL;
 
@@ -1456,13 +1456,13 @@ dissect_u3v_event_cmd(proto_tree *u3v_telegram_tree, tvbuff_t *tvb, packet_info 
     offset += 2;
 
     /* Use range to determine type of event */
-    if (eventid <= 0x8000) {
+    if ((eventid >= 0x0000) && (eventid <= 0x8000)) {
         /* Standard ID */
         proto_tree_add_item(u3v_telegram_tree, hf_u3v_eventcmd_id, tvb, offset, 2, ENC_LITTLE_ENDIAN);
-    } else if (eventid <= 0x8FFF) {
+    } else if ((eventid >= 0x8001) && (eventid <= 0x8FFF)) {
         /* Error */
         proto_tree_add_item(u3v_telegram_tree, hf_u3v_eventcmd_error_id, tvb, offset, 2, ENC_LITTLE_ENDIAN);
-    } else if (eventid <= 0xFFFF) {
+    } else if ((eventid >= 0x9000) && (eventid <= 0xFFFF)) {
         /* Device specific */
         proto_tree_add_item(u3v_telegram_tree, hf_u3v_eventcmd_device_specific_id, tvb, offset, 2, ENC_LITTLE_ENDIAN);
     }
@@ -1495,7 +1495,7 @@ dissect_u3v_read_mem_ack(proto_tree *u3v_telegram_tree, tvbuff_t *tvb, packet_in
     addr = gencp_trans->address;
     dissect_u3v_register_bases(addr, tvb, startoffset, u3v_conv_info);
     if (have_address) {
-        address_string = get_register_name_from_address(addr, pinfo->pool, &is_custom_register, u3v_conv_info);
+        address_string = get_register_name_from_address(addr, &is_custom_register, u3v_conv_info);
         /* Fill in Wireshark GUI Info column */
         col_append_str(pinfo->cinfo, COL_INFO, address_string);
     }
@@ -1533,7 +1533,7 @@ dissect_u3v_write_mem_ack(proto_tree *u3v_telegram_tree, tvbuff_t *tvb, packet_i
 
     addr = gencp_trans->address;
     if (have_address) {
-        address_string = get_register_name_from_address(addr, pinfo->pool, &is_custom_register, u3v_conv_info);
+        address_string = get_register_name_from_address(addr, &is_custom_register, u3v_conv_info);
 
         /* Fill in Wireshark GUI Info column */
         col_append_str(pinfo->cinfo, COL_INFO, address_string);
@@ -1607,7 +1607,8 @@ dissect_u3v_stream_leader(proto_tree *u3v_telegram_tree, tvbuff_t *tvb, packet_i
     offset += 2;
 
     /* block id */
-    proto_tree_add_item_ret_uint64(u3v_telegram_tree, hf_u3v_stream_block_id, tvb, offset, 8, ENC_LITTLE_ENDIAN, &block_id);
+    block_id = tvb_get_letoh64(tvb, offset);
+    proto_tree_add_item(u3v_telegram_tree, hf_u3v_stream_block_id, tvb, offset, 8, ENC_LITTLE_ENDIAN);
     offset += 8;
 
     /* reserved field */
@@ -1615,7 +1616,8 @@ dissect_u3v_stream_leader(proto_tree *u3v_telegram_tree, tvbuff_t *tvb, packet_i
     offset += 2;
 
     /* payload type */
-    proto_tree_add_item_ret_uint(u3v_telegram_tree, hf_u3v_stream_payload_type, tvb, offset, 2, ENC_LITTLE_ENDIAN, &payload_type);
+    payload_type = tvb_get_letohs(tvb, offset);
+    proto_tree_add_item(u3v_telegram_tree, hf_u3v_stream_payload_type, tvb, offset, 2, ENC_LITTLE_ENDIAN);
     offset += 2;
 
     /* Add payload type to information string */
@@ -1669,7 +1671,7 @@ dissect_u3v_stream_leader(proto_tree *u3v_telegram_tree, tvbuff_t *tvb, packet_i
 static void
 dissect_u3v_stream_trailer(proto_tree *u3v_telegram_tree, tvbuff_t *tvb, packet_info *pinfo, urb_info_t *urb _U_)
 {
-    unsigned offset = 0;
+    int offset = 0;
     uint64_t block_id;
     proto_item *item = NULL;
 
@@ -1690,7 +1692,8 @@ dissect_u3v_stream_trailer(proto_tree *u3v_telegram_tree, tvbuff_t *tvb, packet_
     offset += 2;
 
     /* block id */
-    proto_tree_add_item_ret_uint64(u3v_telegram_tree, hf_u3v_stream_block_id, tvb, offset, 8, ENC_LITTLE_ENDIAN, &block_id);
+    block_id = tvb_get_letoh64(tvb, offset);
+    proto_tree_add_item(u3v_telegram_tree, hf_u3v_stream_block_id, tvb, offset, 8, ENC_LITTLE_ENDIAN);
     offset += 8;
 
     /* status*/
@@ -1746,7 +1749,7 @@ dissect_u3v_stream_payload(proto_tree *u3v_telegram_tree, tvbuff_t *tvb, packet_
 static int
 dissect_u3v(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 {
-    unsigned offset = 0;
+    int offset = 0;
     proto_tree *u3v_tree = NULL, *ccd_tree_flag, *u3v_telegram_tree = NULL, *ccd_tree = NULL;
     int data_length = 0;
     int req_id = 0;
@@ -1815,7 +1818,7 @@ dissect_u3v(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 
         /* decode CCD ( DCI/DCE command data layout) */
         if ((prefix == U3V_CONTROL_PREFIX || prefix == U3V_EVENT_PREFIX) && ((command_id % 2) == 0)) {
-            command_string = val_to_str(pinfo->pool, command_id,command_names,"Unknown Command (0x%x)");
+            command_string = val_to_str(command_id,command_names,"Unknown Command (0x%x)");
             item = proto_tree_add_item(u3v_tree, hf_u3v_ccd_cmd, tvb, offset, 8, ENC_NA);
             proto_item_append_text(item, ": %s", command_string);
             ccd_tree = proto_item_add_subtree(item, ett_u3v_cmd);
@@ -1832,7 +1835,7 @@ dissect_u3v(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
             offset += 2;
             col_append_fstr(pinfo->cinfo, COL_INFO, "> %s ", command_string);
         } else if (prefix == U3V_CONTROL_PREFIX && ((command_id % 2) == 1)) {
-            command_string = val_to_str(pinfo->pool, command_id,command_names,"Unknown Acknowledge (0x%x)");
+            command_string = val_to_str(command_id,command_names,"Unknown Acknowledge (0x%x)");
             item = proto_tree_add_item(u3v_tree, hf_u3v_ccd_ack, tvb, offset, 8, ENC_NA);
             proto_item_append_text(item, ": %s", command_string);
             ccd_tree = proto_item_add_subtree(item, ett_u3v_ack);
@@ -1847,7 +1850,7 @@ dissect_u3v(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
             offset += 2;
             col_append_fstr(pinfo->cinfo, COL_INFO, "< %s %s",
                     command_string,
-                    val_to_str(pinfo->pool, status, status_names_short, "Unknown status (0x%04X)"));
+                    val_to_str(status, status_names_short, "Unknown status (0x%04X)"));
         } else {
             return 0;
         }
@@ -1905,7 +1908,7 @@ dissect_u3v(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 
         if (!gencp_trans) {
             /* create a "fake" gencp_trans structure */
-            gencp_trans = wmem_new0(pinfo->pool, gencp_transaction_t);
+            gencp_trans = wmem_new0(wmem_packet_scope(), gencp_transaction_t);
             gencp_trans->cmd_frame = 0;
             gencp_trans->ack_frame = 0;
             gencp_trans->cmd_time = pinfo->abs_ts;
@@ -2562,7 +2565,7 @@ static hf_register_info hf[] =
 
     { &hf_u3v_stream_pixel_format,
     { "Pixel Format", "u3v.stream.pixel_format",
-    FT_UINT32, BASE_HEX|BASE_EXT_STRING, &pixel_format_names_ext, 0x0,
+    FT_UINT32, BASE_HEX|BASE_EXT_STRING, VALS_EXT_PTR( &pixel_format_names_ext ), 0x0,
     "U3V Stream Pixel Format", HFILL
     } },
 

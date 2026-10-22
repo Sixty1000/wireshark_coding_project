@@ -24,7 +24,4 @@
 #define NSH_EXPERIMENT_1    254
 #define NSH_EXPERIMENT_2    255
 
-// Alias for last "actual" known protocol
-#define NSH_MAX_PROTOCOL NSH_MPLS
-
 #endif /* __PACKET_NSH_H__ */

@@ -33,8 +33,6 @@
 #include <epan/proto_data.h>
 #include "packet-e164.h"
 #include <epan/asn1.h>
-#include <epan/to_str.h>
-#include <wsutil/time_util.h>
 #include "packet-gsm_sms.h"
 #include "packet-gsm_map.h"
 #include "packet-sip.h"
@@ -63,6 +61,9 @@ void proto_reg_handoff_gsm_sms(void);
             offset, (edc_len)); \
         return; \
     }
+
+static const char *gsm_sms_proto_name = "GSM SMS TPDU (GSM 03.40)";
+static const char *gsm_sms_proto_name_short = "GSM SMS";
 
 /* Initialize the subtree pointers */
 static int ett_gsm_sms;
@@ -189,7 +190,6 @@ static int hf_gsm_sms_formatting_mode_style_italic;
 static int hf_gsm_sms_formatting_mode_style_underlined;
 static int hf_gsm_sms_formatting_mode_style_strikethrough;
 static int hf_gsm_sms_ie_identifier;
-static int hf_gsm_sms_scts;
 static int hf_gsm_sms_scts_year;
 static int hf_gsm_sms_scts_month;
 static int hf_gsm_sms_scts_day;
@@ -197,22 +197,9 @@ static int hf_gsm_sms_scts_hour;
 static int hf_gsm_sms_scts_minutes;
 static int hf_gsm_sms_scts_seconds;
 static int hf_gsm_sms_scts_timezone;
-static int hf_gsm_sms_vp_validity_period_absolute;
-static int hf_gsm_sms_vp_validity_period_year;
-static int hf_gsm_sms_vp_validity_period_month;
-static int hf_gsm_sms_vp_validity_period_day;
 static int hf_gsm_sms_vp_validity_period_hour;
 static int hf_gsm_sms_vp_validity_period_minutes;
 static int hf_gsm_sms_vp_validity_period_seconds;
-static int hf_gsm_sms_vp_validity_period_timezone;
-static int hf_gsm_sms_discharge_time;
-static int hf_gsm_sms_discharge_time_year;
-static int hf_gsm_sms_discharge_time_month;
-static int hf_gsm_sms_discharge_time_day;
-static int hf_gsm_sms_discharge_time_hour;
-static int hf_gsm_sms_discharge_time_minutes;
-static int hf_gsm_sms_discharge_time_seconds;
-static int hf_gsm_sms_discharge_time_timezone;
 
 /* Generated from convert_proto_tree_add_text.pl */
 static int hf_gsm_sms_dis_field_udh_user_data_header_length;
@@ -662,7 +649,7 @@ dis_field_addr(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, uint32_t *of
                                                  (addrlength > MAX_ADDR_SIZE) ? MAX_ADDR_SIZE : addrlength);
         break;
     default:
-        addrstr = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, numdigocts, ENC_KEYPAD_ABC_TBCD|ENC_LITTLE_ENDIAN);
+        addrstr = tvb_get_string_enc(pinfo->pool, tvb, offset, numdigocts, ENC_KEYPAD_ABC_TBCD|ENC_LITTLE_ENDIAN);
         break;
     }
 
@@ -671,7 +658,7 @@ dis_field_addr(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, uint32_t *of
                 offset, numdigocts, addrstr);
         if (((nt_mp >> 4) == 1) && ((nt_mp & 0x0f) == 1)) {
             /* if Type of number international and number plan is E.164*/
-            dissect_e164_msisdn(tvb, pinfo, subtree, offset, numdigocts, E164_ENC_BCD);
+            dissect_e164_msisdn(tvb, subtree, offset, numdigocts, E164_ENC_BCD);
         }
         p_add_proto_data(pinfo->pool, pinfo, proto_gsm_sms, 0,
                          wmem_strdup(pinfo->pool, addrstr));
@@ -680,7 +667,7 @@ dis_field_addr(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, uint32_t *of
                 offset, numdigocts, addrstr);
         if (((nt_mp >> 4) == 1) && ((nt_mp & 0x0f) == 1)) {
             /* if Type of number international and number plan is E.164*/
-            dissect_e164_msisdn(tvb, pinfo, subtree, offset, numdigocts, E164_ENC_BCD);
+            dissect_e164_msisdn(tvb, subtree, offset, numdigocts, E164_ENC_BCD);
         }
         p_add_proto_data(pinfo->pool, pinfo, proto_gsm_sms, 0,
                          wmem_strdup(pinfo->pool, addrstr));
@@ -932,140 +919,53 @@ dis_field_dcs(tvbuff_t *tvb, proto_tree *tree, uint32_t offset, uint8_t oct,
     }
 }
 
-static char *
-tp_scts_values(tvbuff_t *tvb, packet_info *pinfo, uint32_t offset, struct tm *tm_time,
-               nstime_t *abs_time, char *gmtoff_sign, uint16_t *gmtoff_hour, uint16_t *gmtoff_min)
+static void
+dis_field_scts_aux(tvbuff_t *tvb, proto_tree *tree, uint32_t offset)
 {
-    char *time_str;
     uint8_t oct;
+    uint16_t value;
+    char   sign;
 
-    memset(tm_time, 0, sizeof(struct tm));
+    oct = tvb_get_uint8(tvb, offset);
+    value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4);
+    proto_tree_add_uint(tree, hf_gsm_sms_scts_year, tvb, offset, 1, value);
+    offset++;
+    oct = tvb_get_uint8(tvb, offset);
+    value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4);
+    proto_tree_add_uint(tree, hf_gsm_sms_scts_month, tvb, offset, 1, value);
+    offset++;
+    oct = tvb_get_uint8(tvb, offset);
+    value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4);
+    proto_tree_add_uint(tree, hf_gsm_sms_scts_day, tvb, offset, 1, value);
+    offset++;
+    oct = tvb_get_uint8(tvb, offset);
+    value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4);
+    proto_tree_add_uint(tree, hf_gsm_sms_scts_hour, tvb, offset, 1, value);
+    offset++;
+    oct = tvb_get_uint8(tvb, offset);
+    value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4);
+    proto_tree_add_uint(tree, hf_gsm_sms_scts_minutes, tvb, offset, 1, value);
+    offset++;
+    oct = tvb_get_uint8(tvb, offset);
+    value = (oct & 0x0f)*10 + ((oct & 0xf0) >> 4);
+    proto_tree_add_uint(tree, hf_gsm_sms_scts_seconds, tvb, offset, 1, value);
+    offset++;
 
-    oct = tvb_get_uint8(tvb, offset++);
-    tm_time->tm_year = 100 + (oct & 0x0f) * 10 + ((oct & 0xf0) >> 4);
-    oct = tvb_get_uint8(tvb, offset++);
-    tm_time->tm_mon = (oct & 0x0f) * 10 + ((oct & 0xf0) >> 4) - 1;
-    oct = tvb_get_uint8(tvb, offset++);
-    tm_time->tm_mday = (oct & 0x0f) * 10 + ((oct & 0xf0) >> 4);
-    oct = tvb_get_uint8(tvb, offset++);
-    tm_time->tm_hour = (oct & 0x0f) * 10 + ((oct & 0xf0) >> 4);
-    oct = tvb_get_uint8(tvb, offset++);
-    tm_time->tm_min = (oct & 0x0f) * 10 + ((oct & 0xf0) >> 4);
-    oct = tvb_get_uint8(tvb, offset++);
-    tm_time->tm_sec = (oct & 0x0f) * 10 + ((oct & 0xf0) >> 4);
+    oct = tvb_get_uint8(tvb, offset);
 
-    tm_time->tm_isdst = -1;
-
-    oct = tvb_get_uint8(tvb, offset++);
-    *gmtoff_sign = (oct & 0x08) ? '-' : '+';
+    sign = (oct & 0x08)?'-':'+';
     oct = (oct >> 4) + (oct & 0x07) * 10;
-    *gmtoff_hour = oct / 4;
-    *gmtoff_min = oct % 4 * 15;
 
-    time_str = wmem_strdup_printf(pinfo->pool, "%04d-%02d-%02d %02d:%02d:%02d GMT%c%02d:%02d",
-                                  1900 + tm_time->tm_year, tm_time->tm_mon + 1, tm_time->tm_mday,
-                                  tm_time->tm_hour, tm_time->tm_min, tm_time->tm_sec,
-                                  *gmtoff_sign, *gmtoff_hour, *gmtoff_min);
-
-    abs_time->secs = mktime_utc(tm_time);
-    if (*gmtoff_sign == '+') {
-        abs_time->secs -= (*gmtoff_hour * 3600) + (*gmtoff_min * 60);
-    } else {
-        abs_time->secs += (*gmtoff_hour * 3600) + (*gmtoff_min * 60);
-    }
-    abs_time->nsecs = 0;
-
-    return time_str;
-}
-
-static uint32_t
-dis_field_scts_aux(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint32_t offset)
-{
-    proto_item *item;
-    proto_tree *subtree;
-    uint16_t gmtoff_hour, gmtoff_minute;
-    nstime_t abs_time;
-    struct tm tm_time;
-    char gmtoff_sign, *time_str;
-
-    time_str = tp_scts_values(tvb, pinfo, offset, &tm_time, &abs_time, &gmtoff_sign, &gmtoff_hour, &gmtoff_minute);
-    item = proto_tree_add_time_format_value(tree, hf_gsm_sms_scts, tvb, offset, 7, &abs_time, "%s", time_str);
-    subtree = proto_item_add_subtree(item, ett_scts);
-
-    proto_tree_add_uint(subtree, hf_gsm_sms_scts_year, tvb, offset++, 1, tm_time.tm_year - 100);
-    proto_tree_add_uint(subtree, hf_gsm_sms_scts_month, tvb, offset++, 1, tm_time.tm_mon + 1);
-    proto_tree_add_uint(subtree, hf_gsm_sms_scts_day, tvb, offset++, 1, tm_time.tm_mday);
-    proto_tree_add_uint(subtree, hf_gsm_sms_scts_hour, tvb, offset++, 1, tm_time.tm_hour);
-    proto_tree_add_uint(subtree, hf_gsm_sms_scts_minutes, tvb, offset++, 1, tm_time.tm_min);
-    proto_tree_add_uint(subtree, hf_gsm_sms_scts_seconds, tvb, offset++, 1, tm_time.tm_sec);
-
-    uint8_t tz = tvb_get_uint8(tvb, offset);
-    proto_tree_add_uint_format_value(subtree, hf_gsm_sms_scts_timezone, tvb, offset++, 1, tz,
-                                     "GMT %c %d hours %d minutes", gmtoff_sign, gmtoff_hour, gmtoff_minute);
-
-    return offset;
-}
-
-static uint32_t
-dis_field_validity_period_aux(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint32_t offset)
-{
-    proto_item *item;
-    proto_tree *subtree;
-    uint16_t gmtoff_hour, gmtoff_minute;
-    nstime_t abs_time;
-    struct tm tm_time;
-    char gmtoff_sign, *time_str;
-
-    time_str = tp_scts_values(tvb, pinfo, offset, &tm_time, &abs_time, &gmtoff_sign, &gmtoff_hour, &gmtoff_minute);
-    item = proto_tree_add_time_format_value(tree, hf_gsm_sms_vp_validity_period_absolute, tvb, offset, 7, &abs_time, "%s", time_str);
-    subtree = proto_item_add_subtree(item, ett_vp);
-
-    proto_tree_add_uint(subtree, hf_gsm_sms_vp_validity_period_year, tvb, offset++, 1, tm_time.tm_year - 100);
-    proto_tree_add_uint(subtree, hf_gsm_sms_vp_validity_period_month, tvb, offset++, 1, tm_time.tm_mon + 1);
-    proto_tree_add_uint(subtree, hf_gsm_sms_vp_validity_period_day, tvb, offset++, 1, tm_time.tm_mday);
-    proto_tree_add_uint(subtree, hf_gsm_sms_vp_validity_period_hour, tvb, offset++, 1, tm_time.tm_hour);
-    proto_tree_add_uint(subtree, hf_gsm_sms_vp_validity_period_minutes, tvb, offset++, 1, tm_time.tm_min);
-    proto_tree_add_uint(subtree, hf_gsm_sms_vp_validity_period_seconds, tvb, offset++, 1, tm_time.tm_sec);
-
-    uint8_t tz = tvb_get_uint8(tvb, offset);
-    proto_tree_add_uint_format_value(subtree, hf_gsm_sms_vp_validity_period_timezone, tvb, offset++, 1, tz,
-                                     "GMT %c %d hours %d minutes", gmtoff_sign, gmtoff_hour, gmtoff_minute);
-
-    return offset;
-}
-
-static uint32_t
-dis_field_discharge_time_aux(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint32_t offset)
-{
-    proto_item *item;
-    proto_tree *subtree;
-    uint16_t gmtoff_hour, gmtoff_minute;
-    nstime_t abs_time;
-    struct tm tm_time;
-    char gmtoff_sign, *time_str;
-
-    time_str = tp_scts_values(tvb, pinfo, offset, &tm_time, &abs_time, &gmtoff_sign, &gmtoff_hour, &gmtoff_minute);
-    item = proto_tree_add_time_format_value(tree, hf_gsm_sms_discharge_time, tvb, offset, 7, &abs_time, "%s", time_str);
-    subtree = proto_item_add_subtree(item, ett_dt);
-
-    proto_tree_add_uint(subtree, hf_gsm_sms_discharge_time_year, tvb, offset++, 1, tm_time.tm_year - 100);
-    proto_tree_add_uint(subtree, hf_gsm_sms_discharge_time_month, tvb, offset++, 1, tm_time.tm_mon + 1);
-    proto_tree_add_uint(subtree, hf_gsm_sms_discharge_time_day, tvb, offset++, 1, tm_time.tm_mday);
-    proto_tree_add_uint(subtree, hf_gsm_sms_discharge_time_hour, tvb, offset++, 1, tm_time.tm_hour);
-    proto_tree_add_uint(subtree, hf_gsm_sms_discharge_time_minutes, tvb, offset++, 1, tm_time.tm_min);
-    proto_tree_add_uint(subtree, hf_gsm_sms_discharge_time_seconds, tvb, offset++, 1, tm_time.tm_sec);
-
-    uint8_t tz = tvb_get_uint8(tvb, offset);
-    proto_tree_add_uint_format_value(subtree, hf_gsm_sms_discharge_time_timezone, tvb, offset++, 1, tz,
-                                     "GMT %c %d hours %d minutes", gmtoff_sign, gmtoff_hour, gmtoff_minute);
-
-    return offset;
+    proto_tree_add_uint_format_value(tree, hf_gsm_sms_scts_timezone, tvb, offset, 1,
+        oct, "GMT %c %d hours %d minutes",
+        sign, oct / 4, oct % 4 * 15);
 }
 
 /* 9.2.3.11 */
 static void
 dis_field_scts(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, uint32_t *offset_p)
 {
+    proto_tree *subtree;
     uint32_t    offset;
     uint32_t    length;
 
@@ -1084,7 +984,13 @@ dis_field_scts(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, uint32_t *of
         return;
     }
 
-    *offset_p = dis_field_scts_aux(tvb, pinfo, tree, *offset_p);
+    subtree = proto_tree_add_subtree(tree, tvb,
+            offset, 7, ett_scts, NULL,
+            "TP-Service-Centre-Time-Stamp");
+
+    dis_field_scts_aux(tvb, subtree, *offset_p);
+
+    *offset_p += 7;
 }
 
 /* 9.2.3.12 */
@@ -1254,7 +1160,11 @@ dis_field_vp(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, uint32_t *offs
                 return;
             }
 
-            dis_field_validity_period_aux(tvb, pinfo, tree, *offset_p);
+            subtree = proto_tree_add_subtree(tree, tvb,
+                    offset, 7, ett_vp, NULL,
+                    "TP-Validity-Period: absolute");
+
+            dis_field_scts_aux(tvb, subtree, *offset_p);
 
             done = true;
             break;
@@ -1276,6 +1186,7 @@ dis_field_vp(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, uint32_t *offs
 static void
 dis_field_dt(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, uint32_t *offset_p)
 {
+    proto_tree *subtree;
     uint32_t    offset;
     uint32_t    length;
 
@@ -1294,7 +1205,13 @@ dis_field_dt(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, uint32_t *offs
         return;
     }
 
-    *offset_p = dis_field_discharge_time_aux(tvb, pinfo, tree, *offset_p);
+    subtree = proto_tree_add_subtree(tree, tvb,
+            offset, 7, ett_dt, NULL,
+            "TP-Discharge-Time");
+
+    dis_field_scts_aux(tvb, subtree, *offset_p);
+
+    *offset_p += 7;
 }
 
 /* 9.2.3.14 */
@@ -2538,8 +2455,8 @@ dis_msg_deliver_report(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint
     {
         if (length <= (offset - saved_offset))
         {
-            proto_tree_add_expert_remaining(tree, pinfo, &ei_gsm_sms_short_data,
-                tvb, offset);
+            proto_tree_add_expert(tree, pinfo, &ei_gsm_sms_short_data,
+                tvb, offset, -1);
             return;
         }
 
@@ -2553,8 +2470,8 @@ dis_msg_deliver_report(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint
     {
         if (length <= (offset - saved_offset))
         {
-            proto_tree_add_expert_remaining(tree, pinfo, &ei_gsm_sms_short_data,
-                tvb, offset);
+            proto_tree_add_expert(tree, pinfo, &ei_gsm_sms_short_data,
+                tvb, offset, -1);
             return;
         }
 
@@ -2568,8 +2485,8 @@ dis_msg_deliver_report(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint
     {
         if (length <= (offset - saved_offset))
         {
-            proto_tree_add_expert_remaining(tree, pinfo, &ei_gsm_sms_short_data,
-                tvb, offset);
+            proto_tree_add_expert(tree, pinfo, &ei_gsm_sms_short_data,
+                tvb, offset, -1);
             return;
         }
 
@@ -2709,8 +2626,8 @@ dis_msg_submit_report(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint3
 
     if (pi & 0x01) {
         if (length <= (offset - saved_offset)) {
-            proto_tree_add_expert_remaining(tree, pinfo, &ei_gsm_sms_short_data,
-                tvb, offset);
+            proto_tree_add_expert(tree, pinfo, &ei_gsm_sms_short_data,
+                tvb, offset, -1);
             return;
         }
 
@@ -2724,8 +2641,8 @@ dis_msg_submit_report(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint3
     {
         if (length <= (offset - saved_offset))
         {
-            proto_tree_add_expert_remaining(tree, pinfo, &ei_gsm_sms_short_data,
-                tvb, offset);
+            proto_tree_add_expert(tree, pinfo, &ei_gsm_sms_short_data,
+                tvb, offset, -1);
             return;
         }
 
@@ -2739,8 +2656,8 @@ dis_msg_submit_report(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint3
     {
         if (length <= (offset - saved_offset))
         {
-            proto_tree_add_expert_remaining(tree, pinfo, &ei_gsm_sms_short_data,
-                tvb, offset);
+            proto_tree_add_expert(tree, pinfo, &ei_gsm_sms_short_data,
+                tvb, offset, -1);
             return;
         }
 
@@ -2824,8 +2741,8 @@ dis_msg_status_report(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint3
     {
         if (length <= (offset - saved_offset))
         {
-            proto_tree_add_expert_remaining(tree, pinfo, &ei_gsm_sms_short_data,
-                tvb, offset);
+            proto_tree_add_expert(tree, pinfo, &ei_gsm_sms_short_data,
+                tvb, offset, -1);
             return;
         }
 
@@ -2838,8 +2755,8 @@ dis_msg_status_report(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint3
     {
         if (length <= (offset - saved_offset))
         {
-            proto_tree_add_expert_remaining(tree, pinfo, &ei_gsm_sms_short_data,
-                tvb, offset);
+            proto_tree_add_expert(tree, pinfo, &ei_gsm_sms_short_data,
+                tvb, offset, -1);
             return;
         }
 
@@ -2852,8 +2769,8 @@ dis_msg_status_report(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint3
     {
         if (length <= (offset - saved_offset))
         {
-            proto_tree_add_expert_remaining(tree, pinfo, &ei_gsm_sms_short_data,
-                tvb, offset);
+            proto_tree_add_expert(tree, pinfo, &ei_gsm_sms_short_data,
+                tvb, offset, -1);
             return;
         }
 
@@ -2924,7 +2841,7 @@ dis_msg_command(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, uint32_
 static int ett_msgs[NUM_MSGS];
 #endif
 
-static void (* const gsm_sms_msg_fcn[])(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint32_t offset, gsm_sms_data_t *data) = {
+static void (*gsm_sms_msg_fcn[])(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint32_t offset, gsm_sms_data_t *data) = {
     dis_msg_deliver,        /* SMS-DELIVER */
     dis_msg_deliver_report, /* SMS-DELIVER REPORT */
     dis_msg_submit,         /* SMS-SUBMIT */
@@ -2951,7 +2868,7 @@ dissect_gsm_sms(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     /*int          ett_msg_idx;*/
     gsm_sms_data_t *gsm_data = (gsm_sms_data_t*) data;
 
-    col_set_str(pinfo->cinfo, COL_PROTOCOL, "GSM SMS");
+    col_set_str(pinfo->cinfo, COL_PROTOCOL, gsm_sms_proto_name_short);
 
     /* In the interest of speed, if "tree" is NULL, don't do any work not
      * necessary to generate protocol tree items.
@@ -2982,7 +2899,8 @@ dissect_gsm_sms(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
          */
         gsm_sms_item =
             proto_tree_add_protocol_format(tree, proto_gsm_sms, tvb, 0, -1,
-                "GSM SMS TPDU (GSM 03.40) %s",
+                "%s %s",
+                gsm_sms_proto_name,
                 (str == NULL) ? "Unknown message identifier" : str);
 
         gsm_sms_tree =
@@ -3002,8 +2920,8 @@ dissect_gsm_sms(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
         if (msg_fcn == NULL)
         {
-            proto_tree_add_expert_remaining(gsm_sms_tree, pinfo, &ei_gsm_sms_message_dissector_not_implemented,
-                tvb, offset);
+            proto_tree_add_expert(gsm_sms_tree, pinfo, &ei_gsm_sms_message_dissector_not_implemented,
+                tvb, offset, -1);
         }
         else
         {
@@ -3556,11 +3474,6 @@ proto_register_gsm_sms(void)
                 FT_UINT8, BASE_HEX, NULL, 0x0,
                 NULL, HFILL }
             },
-            { &hf_gsm_sms_scts,
-              { "TP-Service-Centre-Time-Stamp", "gsm_sms.scts",
-                FT_ABSOLUTE_TIME, ABSOLUTE_TIME_LOCAL, NULL, 0x0,
-                NULL, HFILL }
-            },
             { &hf_gsm_sms_scts_year,
               { "Year", "gsm_sms.scts.year",
                 FT_UINT8, BASE_DEC, NULL, 0x0,
@@ -3596,26 +3509,6 @@ proto_register_gsm_sms(void)
                 FT_UINT8, BASE_DEC, NULL, 0x0,
                 NULL, HFILL }
             },
-            { &hf_gsm_sms_vp_validity_period_absolute,
-              { "TP-Validity-Period", "gsm_sms.vp.validity_period.absolute",
-                FT_ABSOLUTE_TIME, ABSOLUTE_TIME_LOCAL, NULL, 0x0,
-                NULL, HFILL }
-            },
-            { &hf_gsm_sms_vp_validity_period_year,
-              { "Year", "gsm_sms.vp.validity_period.year",
-                FT_UINT8, BASE_DEC, NULL, 0x0,
-                NULL, HFILL }
-            },
-            { &hf_gsm_sms_vp_validity_period_month,
-              { "Month", "gsm_sms.vp.validity_period.month",
-                FT_UINT8, BASE_DEC, NULL, 0x0,
-                NULL, HFILL }
-            },
-            { &hf_gsm_sms_vp_validity_period_day,
-              { "Day", "gsm_sms.vp.validity_period.day",
-                FT_UINT8, BASE_DEC, NULL, 0x0,
-                NULL, HFILL }
-            },
             { &hf_gsm_sms_vp_validity_period_hour,
               { "Hour", "gsm_sms.vp.validity_period.hour",
                 FT_UINT8, BASE_DEC, NULL, 0x0,
@@ -3628,51 +3521,6 @@ proto_register_gsm_sms(void)
             },
             { &hf_gsm_sms_vp_validity_period_seconds,
               { "Seconds", "gsm_sms.vp.validity_period.seconds",
-                FT_UINT8, BASE_DEC, NULL, 0x0,
-                NULL, HFILL }
-            },
-            { &hf_gsm_sms_vp_validity_period_timezone,
-              { "Timezone", "gsm_sms.vp.validity_period.timezone",
-                FT_UINT8, BASE_DEC, NULL, 0x0,
-                NULL, HFILL }
-            },
-            { &hf_gsm_sms_discharge_time,
-              { "TP-Discharge-Time", "gsm_sms.discharge_time",
-                FT_ABSOLUTE_TIME, ABSOLUTE_TIME_LOCAL, NULL, 0x0,
-                NULL, HFILL }
-            },
-            { &hf_gsm_sms_discharge_time_year,
-              { "Year", "gsm_sms.discharge_time.year",
-                FT_UINT8, BASE_DEC, NULL, 0x0,
-                NULL, HFILL }
-            },
-            { &hf_gsm_sms_discharge_time_month,
-              { "Month", "gsm_sms.discharge_time.month",
-                FT_UINT8, BASE_DEC, NULL, 0x0,
-                NULL, HFILL }
-            },
-            { &hf_gsm_sms_discharge_time_day,
-              { "Day", "gsm_sms.discharge_time.day",
-                FT_UINT8, BASE_DEC, NULL, 0x0,
-                NULL, HFILL }
-            },
-            { &hf_gsm_sms_discharge_time_hour,
-              { "Hour", "gsm_sms.discharge_time.hour",
-                FT_UINT8, BASE_DEC, NULL, 0x0,
-                NULL, HFILL }
-            },
-            { &hf_gsm_sms_discharge_time_minutes,
-              { "Minutes", "gsm_sms.discharge_time.minutes",
-                FT_UINT8, BASE_DEC, NULL, 0x0,
-                NULL, HFILL }
-            },
-            { &hf_gsm_sms_discharge_time_seconds,
-              { "Seconds", "gsm_sms.discharge_time.seconds",
-                FT_UINT8, BASE_DEC, NULL, 0x0,
-                NULL, HFILL }
-            },
-            { &hf_gsm_sms_discharge_time_timezone,
-              { "Timezone", "gsm_sms.discharge_time.timezone",
                 FT_UINT8, BASE_DEC, NULL, 0x0,
                 NULL, HFILL }
             },
@@ -3769,7 +3617,7 @@ proto_register_gsm_sms(void)
 
     /* Register the protocol name and description */
 
-    proto_gsm_sms = proto_register_protocol("GSM SMS TPDU (GSM 03.40)", "GSM SMS", "gsm_sms");
+    proto_gsm_sms = proto_register_protocol(gsm_sms_proto_name, gsm_sms_proto_name_short, "gsm_sms");
 
     proto_register_field_array(proto_gsm_sms, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));

@@ -1,4 +1,4 @@
--- 3GPP TS 37.483 V19.2.0 (2026-03)
+-- 3GPP TS 37.483 V18.2.0 (2024-06)
 -- **************************************************************
 --
 -- Information Element Definitions
@@ -101,16 +101,6 @@ IMPORTS
 	id-MaximumDataBurstVolume,
 	id-PDCPSNGapReport,
 	id-UserPlaneFailureIndication,
-	id-MCBearerContextNGUTnlInfoatNGRANReplaceRequest,
-	id-PduSetDelayBudgetDownlink,
-	id-PduSetDelayBudgetUplink,
-	id-PduSetErrorRateDownlink,
-	id-PduSetErrorRateUplink,
-	id-MonitoringRequestonAvailableBitrate,
-	id-MMSID,
-	id-Remaining-time-based-rLC-retransmission-threshold,
-	id-Remaining-time-based-rLC-polling-threshold,
-	id-DL-PDU-Set-Info-Marking-Support-Ind,
 	maxnoofMBSAreaSessionIDs,
 	maxnoofSharedNG-UTerminations,
 	maxnoofMRBs,
@@ -139,12 +129,7 @@ IMPORTS
 	maxnoofCellsforMBS,
 	maxnoofTAIforMBS,
 	maxnoofMBSServiceAreaInformation,
-	maxnoofDUs,
-	maxnoofUEReports,
-	maxnoofThresholds,
-	maxFailedMeasPerNode
-
-
+	maxnoofDUs
 
 
 FROM E1AP-Constants
@@ -197,18 +182,6 @@ AdditionalPDCPduplicationInformation	::=	ENUMERATED	{
 
 AdditionalRRMPriorityIndex ::= BIT STRING (SIZE(32))
 
-AvailableBitrateReportThresholdList	::= SEQUENCE (SIZE(1..maxnoofThresholds)) OF AvailableBitrateReportThresholdItem
-
-AvailableBitrateReportThresholdItem	::= SEQUENCE {
-	bitRateThreshold				ReportingThreshold,
-	iE-Extensions					ProtocolExtensionContainer { { AvailableBitrateReportThresholdItem-ExtIEs} }	OPTIONAL,
-	...
-}
-
-AvailableBitrateReportThresholdItem-ExtIEs E1AP-PROTOCOL-EXTENSION::= {
-	...
-}
-
 AveragingWindow  ::= INTEGER (0..4095, ...)
 
 AlternativeQoSParaSetList ::= SEQUENCE (SIZE(1..maxnoofQoSParaSets)) OF AlternativeQoSParaSetItem
@@ -224,30 +197,11 @@ AlternativeQoSParaSetItem ::= SEQUENCE {
 }
 
 AlternativeQoSParaSetItem-ExtIEs E1AP-PROTOCOL-EXTENSION ::= {
-		{ ID id-MaximumDataBurstVolume	CRITICALITY ignore	EXTENSION MaxDataBurstVolume		PRESENCE optional		}|
-		{ ID id-PduSetDelayBudgetDownlink 	CRITICALITY ignore	EXTENSION ExtendedPacketDelayBudget		PRESENCE optional		}|
-		{ ID id-PduSetDelayBudgetUplink		CRITICALITY ignore	EXTENSION ExtendedPacketDelayBudget		PRESENCE optional		}|
-		{ ID id-PduSetErrorRateDownlink		CRITICALITY ignore	EXTENSION PacketErrorRate				PRESENCE optional		}|
-		{ ID id-PduSetErrorRateUplink		CRITICALITY ignore	EXTENSION PacketErrorRate				PRESENCE optional		},
+		{ ID id-MaximumDataBurstVolume	CRITICALITY ignore	EXTENSION MaxDataBurstVolume		PRESENCE optional		},
 	...
 }
 
 AssociatedSessionID ::= OCTET STRING
-
-AveragePacketDelay ::= SEQUENCE {
-	uL-AveragePacketDelay		AveragePacketDelayValue,
-	dL-AveragePacketDelay		AveragePacketDelayValue,
-	iE-Extensions		ProtocolExtensionContainer { {AveragePacketDelay-ExtIEs} }	OPTIONAL,
-	...
-}
-
-AveragePacketDelay-ExtIEs E1AP-PROTOCOL-EXTENSION ::= {
-	...
-}
-
-AveragePacketDelayValue ::= INTEGER (0..10000)
-
-
 
 -- B
 
@@ -679,17 +633,6 @@ DAPSRequestInfo-ExtIEs E1AP-PROTOCOL-EXTENSION ::= {
 	...
 }
 
-DataCollectionID ::= SEQUENCE {
-	gNB-CU-CP-Measurement-ID					INTEGER (1..4095, ...),
-	gNB-CU-UP-Measurement-ID					INTEGER (1..4095, ...),
-	iE-Extensions								ProtocolExtensionContainer { { DataCollectionID-ExtIEs} } OPTIONAL,
-	...
-}
-
-DataCollectionID-ExtIEs E1AP-PROTOCOL-EXTENSION ::= {
-	...
-}
-
 Data-Forwarding-Information-Request	::=	SEQUENCE {
 	data-Forwarding-Request					Data-Forwarding-Request,
 	qoS-Flows-Forwarded-On-Fwd-Tunnels	QoS-Flow-Mapping-List			OPTIONAL,
@@ -805,8 +748,6 @@ DLDiscarding ::= SEQUENCE {
 DLDiscarding-ExtIEs E1AP-PROTOCOL-EXTENSION ::= {
 	...
 }
-
-DL-PDU-Set-Info-Marking-Support-Ind	::=	ENUMERATED {true, ...}
 
 DLUPTNLAddressToUpdateItem	::= SEQUENCE {
 	oldTNLAdress						TransportLayerAddress,
@@ -1260,19 +1201,6 @@ DRB-Required-To-Remove-Item-NG-RAN	::=	SEQUENCE {
 }
 
 DRB-Required-To-Remove-Item-NG-RAN-ExtIEs		E1AP-PROTOCOL-EXTENSION ::= {
-	...
-}
-
-DRB-To-Report-List	::= SEQUENCE (SIZE(1.. maxnoofDRBs)) OF DRB-To-Report-Item
-
-DRB-To-Report-Item	::=	SEQUENCE {
-	dRB-ID										DRB-ID,
-	uEPerformance								UEPerformance		OPTIONAL,
-	iE-Extensions							ProtocolExtensionContainer { { DRB-To-Report-Item-ExtIEs } }	OPTIONAL,
-	...
-}
-
-DRB-To-Report-Item-ExtIEs		E1AP-PROTOCOL-EXTENSION ::= {
 	...
 }
 
@@ -1805,8 +1733,7 @@ GBR-QoSFlowInformation::= SEQUENCE {
 }
 
 GBR-QosFlowInformation-ExtIEs E1AP-PROTOCOL-EXTENSION ::= {
-	{ID id-AlternativeQoSParaSetList	CRITICALITY ignore	EXTENSION AlternativeQoSParaSetList	PRESENCE optional}|
-	{ID id-MonitoringRequestonAvailableBitrate			CRITICALITY ignore	EXTENSION MonitoringRequestonAvailableBitrate		PRESENCE optional},
+	{ID id-AlternativeQoSParaSetList	CRITICALITY ignore	EXTENSION AlternativeQoSParaSetList	PRESENCE optional},
 	...
 }
 
@@ -1924,8 +1851,6 @@ IAB-donor-CU-UPPSK	::= OCTET STRING
 
 InactivityInformationRequest ::= ENUMERATED {true, ...}
 
-InactivityMonitoring ::= ENUMERATED { disabled, ...}
-
 
 -- J
 
@@ -1993,9 +1918,6 @@ LocationDependentMBSNGUInformationAtNGRAN-Item ::= SEQUENCE {
 LocationDependentMBSNGUInformationAtNGRAN-Item-ExtIEs		E1AP-PROTOCOL-EXTENSION ::= {
 	...
 }
-
-LTMInitiation	::=		ENUMERATED {true, ...}
-
 
 -- M
 
@@ -2293,8 +2215,7 @@ MCBearerContextToModify-ExtIEs E1AP-PROTOCOL-EXTENSION ::= {
 	{ID id-MCForwardingResourceRelease					CRITICALITY ignore	EXTENSION MCForwardingResourceRelease						PRESENCE optional}|
 	{ID id-MBSSessionAssociatedInfoNonSupportToSupport	CRITICALITY ignore	EXTENSION MBSSessionAssociatedInfoNonSupportToSupport	PRESENCE optional}|
 	{ID id-MCBearerContextInactivityTimer					CRITICALITY ignore	EXTENSION Inactivity-Timer										PRESENCE optional}|
-	{ID id-MCBearerContextStatusChange					CRITICALITY ignore	EXTENSION MCBearerContextStatusChange						PRESENCE optional}|
-	{ID id-MCBearerContextNGUTnlInfoatNGRANReplaceRequest	CRITICALITY reject	EXTENSION MCBearerContextNGUTnlInfoatNGRANRequest					PRESENCE optional},
+	{ID id-MCBearerContextStatusChange					CRITICALITY ignore	EXTENSION MCBearerContextStatusChange						PRESENCE optional},
 	...
 }
 
@@ -2781,26 +2702,6 @@ MBS-ServiceAreaInformationItem-ExtIEs E1AP-PROTOCOL-EXTENSION ::= {
 	...
 }
 
-Measurement-ID	::= INTEGER (1..4095,...)
-
-MonitoringRequestonAvailableBitrate	::= SEQUENCE{
-	monitoringRequest						MonitoringRequest,
-	dlAvailableBitrateReportThresholds		AvailableBitrateReportThresholdList		OPTIONAL,
--- The above IE shall be present if the Monitoring Request IE is set to the value “dl” or “both”
-	ulAvailableBitrateReportThresholds		AvailableBitrateReportThresholdList		OPTIONAL,
--- The above IE shall be present if the Monitoring Request IE is set to the value “ul” or “both”
-	iE-Extensions							ProtocolExtensionContainer { { MonitoringRequestonAvailableBitrate-ExtIEs} }	OPTIONAL,
-	...
-}
-
-MonitoringRequestonAvailableBitrate-ExtIEs E1AP-PROTOCOL-EXTENSION ::= {
-	...
-}
-
-MonitoringRequest ::= ENUMERATED {ul, dl, both, stop,...}
-
-MMSID ::= OCTET STRING (SIZE (1))
-
 -- N
 
 NetworkInstance ::= INTEGER (1..256, ...)
@@ -2929,18 +2830,6 @@ N6JitterInformationExtIEs 	E1AP-PROTOCOL-EXTENSION ::= {
 	...
 }
 
-NodeMeasurementInitiationResult-List ::= SEQUENCE (SIZE(1..maxFailedMeasPerNode)) OF NodeMeasurementInitiationResult-Item
-
-NodeMeasurementInitiationResult-Item ::= SEQUENCE {
-	nodemeasurementFailedReportCharacteristics		BIT STRING(SIZE(32)),
-	cause											Cause,
-	iE-Extensions									ProtocolExtensionContainer { { NodeMeasurementInitiationResult-Item-ExtIEs} } OPTIONAL,
-	...
-}
-
-NodeMeasurementInitiationResult-Item-ExtIEs E1AP-PROTOCOL-EXTENSION ::= {
-	...
-}
 
 
 -- O
@@ -2994,9 +2883,7 @@ PDCP-Configuration-ExtIEs		E1AP-PROTOCOL-EXTENSION ::= {
 	{ ID id-UDC-Parameters								CRITICALITY ignore	EXTENSION UDC-Parameters									PRESENCE optional}|
 	{ ID id-DiscardTimerExtended								CRITICALITY reject	EXTENSION DiscardTimerExtended									PRESENCE optional}|
 	{ ID id-PSIbasedDiscardTimer						CRITICALITY ignore	EXTENSION PSIbasedDiscardTimer								PRESENCE optional}|
-	{ ID id-PDCPSNGapReport						CRITICALITY ignore	EXTENSION PDCPSNGapReport														PRESENCE optional}|
-	{ ID id-Remaining-time-based-rLC-retransmission-threshold	CRITICALITY ignore	EXTENSION Remaining-time-based-rLC-threshold		PRESENCE optional}|
-	{ ID id-Remaining-time-based-rLC-polling-threshold	CRITICALITY ignore	EXTENSION Remaining-time-based-rLC-threshold		PRESENCE optional},
+	{ ID id-PDCPSNGapReport						CRITICALITY ignore	EXTENSION PDCPSNGapReport														PRESENCE optional},
 	...
 }
 
@@ -3267,8 +3154,7 @@ PDU-Session-Resource-To-Modify-Item-ExtIEs		E1AP-PROTOCOL-EXTENSION ::= {
 	{ID id-DataForwardingtoE-UTRANInformationList		CRITICALITY ignore	EXTENSION 	DataForwardingtoE-UTRANInformationList	PRESENCE optional	}|
 	{ID id-SecurityIndicationModify						CRITICALITY ignore	EXTENSION 	SecurityIndication								PRESENCE optional	}|
 	{ID id-Secondary-PDU-Session-Data-Forwarding-Information	CRITICALITY ignore	EXTENSION 	Data-Forwarding-Information		PRESENCE optional	}|
-	{ID id-UserPlaneFailureIndication					CRITICALITY ignore	EXTENSION 	UserPlaneFailureIndication						PRESENCE optional	}|
-	{ID id-SpecialTriggeringPurpose						CRITICALITY ignore	EXTENSION 	SpecialTriggeringPurpose						PRESENCE optional},
+	{ID id-UserPlaneFailureIndication					CRITICALITY ignore	EXTENSION 	UserPlaneFailureIndication						PRESENCE optional	},
 	...
 }
 
@@ -3517,9 +3403,7 @@ QoSFlowLevelQoSParameters-ExtIEs 	E1AP-PROTOCOL-EXTENSION ::= {
 	{ID id-QosMonitoringReportingFrequency	CRITICALITY ignore	EXTENSION QosMonitoringReportingFrequency	PRESENCE optional}|
 	{ID id-QoSMonitoringDisabled			CRITICALITY ignore	EXTENSION QosMonitoringDisabled					PRESENCE optional}|
 	{ID id-DataForwardingSourceIPAddress	CRITICALITY ignore	EXTENSION TransportLayerAddress					PRESENCE optional}|
-	{ID id-PDUSetQoSParameters				CRITICALITY ignore	EXTENSION PDUSetQoSParameters 					PRESENCE optional}|
-	{ID id-MMSID							CRITICALITY ignore	EXTENSION MMSID									PRESENCE optional}|
-	{ID id-DL-PDU-Set-Info-Marking-Support-Ind			CRITICALITY ignore	EXTENSION DL-PDU-Set-Info-Marking-Support-Ind				PRESENCE optional},
+	{ID id-PDUSetQoSParameters				CRITICALITY ignore	EXTENSION PDUSetQoSParameters 					PRESENCE optional},
 	...
 }
 
@@ -3604,23 +3488,13 @@ RegistrationRequest	::=	ENUMERATED	{
 	...
 }
 
-RegistrationRequestForDataCollection ::= ENUMERATED {start, stop, ... }
 
 ReportCharacteristics	::=	BIT STRING (SIZE(36))
-
-ReportCharacteristicsForDataCollection ::= BIT STRING(SIZE(32))
 
 ReportingPeriodicity	::=	ENUMERATED	{
 	ms500, ms1000, ms2000, ms5000, ms10000, ms20000, ms30000, ms40000, ms50000, ms60000, ms70000, ms80000, ms90000, ms100000, ms110000, ms120000,
 	...
 }
-
-ReportingPeriodicityForDataCollection ::= ENUMERATED {
-	ms500, ms1000, ms2000, ms5000, ms10000,
-	...
-}
-
-ReportingThreshold ::= INTEGER(0.. 4000000000, ...)
 
 RequestedAction4AvailNGUTermination ::= ENUMERATED {
 	apply-available-configuration,
@@ -3661,7 +3535,6 @@ ROHC-ExtIEs E1AP-PROTOCOL-EXTENSION ::= {
 	...
 }
 
-Remaining-time-based-rLC-threshold	::= INTEGER(1..64, ...)
 
 -- S
 
@@ -3829,7 +3702,7 @@ TSCAssistanceInformation-ExtIEs 	E1AP-PROTOCOL-EXTENSION ::= {
 	...
 }
 
-Periodicity					::= INTEGER	(0..640000,	...)
+Periodicity					::= INTEGER	(1..640000,	...)
 
 BurstArrivalTime			::= OCTET STRING
 
@@ -3855,11 +3728,7 @@ TraceDepth ::= ENUMERATED {
 	minimumWithoutVendorSpecificExtension,
 	mediumWithoutVendorSpecificExtension,
 	maximumWithoutVendorSpecificExtension,
-	...,
-	minimumOnlyVendorSpecificTraceRecord,
-	mediumOnlyVendorSpecificTraceRecord,
-	maximumOnlyVendorSpecificTraceRecord
-
+	...
 }
 
 TraceID ::= OCTET STRING (SIZE(8))
@@ -3947,19 +3816,6 @@ UE-Activity	::=	ENUMERATED	{
 	...
 }
 
-UEAssociatedInfoResult-List ::= SEQUENCE (SIZE(1..maxnoofUEReports)) OF UEAssociatedInfoResult-Item
-
-UEAssociatedInfoResult-Item ::= SEQUENCE {
-	uEAssistantIdentifier						GNB-CU-CP-UE-E1AP-ID,
-	dRB-To-Report-List							DRB-To-Report-List,
-	iE-Extensions								ProtocolExtensionContainer { { UEAssociatedInfoResult-Item-ExtIEs} } OPTIONAL,
-	...
-}
-
-UEAssociatedInfoResult-Item-ExtIEs E1AP-PROTOCOL-EXTENSION ::= {
-	...
-}
-
 UE-associatedLogicalE1-ConnectionItem ::= SEQUENCE {
 	gNB-CU-CP-UE-E1AP-ID		GNB-CU-CP-UE-E1AP-ID	 OPTIONAL,
 	gNB-CU-UP-UE-E1AP-ID		GNB-CU-UP-UE-E1AP-ID	 OPTIONAL,
@@ -3968,28 +3824,6 @@ UE-associatedLogicalE1-ConnectionItem ::= SEQUENCE {
 }
 
 UE-associatedLogicalE1-ConnectionItemExtIEs E1AP-PROTOCOL-EXTENSION ::= {
-	...
-}
-
-UEPerformance ::= SEQUENCE {
-	uE-AveragePacketDelay						AveragePacketDelay		OPTIONAL,
-	uE-AveragePacketDropDL						INTEGER (0..1000000, ...)		OPTIONAL,
-	uE-AveragePacketLossUL						INTEGER (0..1000000, ...)		OPTIONAL,
-	iE-Extensions								ProtocolExtensionContainer { { UEPerformance-ExtIEs} } OPTIONAL,
-	...
-}
-
-UEPerformance-ExtIEs E1AP-PROTOCOL-EXTENSION ::= {
-	...
-}
-
-UEPerformanceCollectionConfiguration ::= SEQUENCE {
-	collectionTimeDurationForUEPerformance				INTEGER(1..5000, ...),
-	iE-Extensions								ProtocolExtensionContainer { { UEPerformanceCollectionConfiguration-ExtIEs} } OPTIONAL,
-	...
-}
-
-UEPerformanceCollectionConfiguration-ExtIEs E1AP-PROTOCOL-EXTENSION ::= {
 	...
 }
 

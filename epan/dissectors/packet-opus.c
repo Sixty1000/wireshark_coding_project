@@ -16,9 +16,6 @@
 #include <epan/prefs.h>
 #include <epan/expert.h>
 #include <epan/unit_strings.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
-
 #include <ftypes/ftypes.h>
 #include <proto.h>
 #include <stdint.h>
@@ -457,7 +454,11 @@ proto_register_opus(void)
           EXPFILL}},
     };
 
-    proto_opus = proto_register_protocol("Opus Interactive Audio Codec", "OPUS", "opus"); /* name, short name, abbreviation */
+    proto_opus
+        = proto_register_protocol("Opus Interactive Audio Codec", /* name */
+                                  "OPUS", /* short name */
+                                  "opus"  /* abbrev     */
+        );
 
     proto_register_field_array(proto_opus, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));

@@ -1,5 +1,5 @@
 /* tap-stats_tree.c
- * tshark's tap implementation of stats_tree
+ * tshark's tap implememntation of stats_tree
  * 2005, Luis E. G. Ontanon
  *
  * Wireshark - Network traffic analyzer
@@ -17,7 +17,6 @@
 
 #include <wsutil/report_message.h>
 
-#include <epan/prefs.h>
 #include <epan/stats_tree_priv.h>
 #include <epan/stat_tap_ui.h>
 
@@ -42,7 +41,7 @@ draw_stats_tree(void *psp)
 	stats_tree *st = (stats_tree *)psp;
 	GString *s;
 
-	s= stats_tree_format_as_str(st, prefs.st_format, stats_tree_get_default_sort_col(st),
+	s= stats_tree_format_as_str(st, ST_FORMAT_PLAIN, stats_tree_get_default_sort_col(st),
 				    stats_tree_is_default_sort_DESC(st));
 
 	printf("%s", s->str);
@@ -50,13 +49,6 @@ draw_stats_tree(void *psp)
 }
 
 static void
-free_stats_tree(void *psp)
-{
-	stats_tree *st = (stats_tree *)psp;
-	stats_tree_free(st);
-}
-
-static bool
 init_stats_tree(const char *opt_arg, void *userdata _U_)
 {
 	char *abbr = stats_tree_get_abbr(opt_arg);
@@ -78,18 +70,18 @@ init_stats_tree(const char *opt_arg, void *userdata _U_)
 				st = stats_tree_new(cfg, NULL, filter);
 			} else {
 				report_failure("Wrong stats_tree (%s) found when looking at ->init_string", abbr);
-				return false;
+				return;
 			}
 		} else {
 			report_failure("no such stats_tree (%s) found in stats_tree registry", abbr);
-			return false;
+			return;
 		}
 
 		g_free(abbr);
 
 	} else {
 		report_failure("could not obtain stats_tree from arg '%s'", opt_arg);
-		return false;
+		return;
 	}
 
 	error_string = register_tap_listener(st->cfg->tapname,
@@ -99,17 +91,15 @@ init_stats_tree(const char *opt_arg, void *userdata _U_)
 					     stats_tree_reset,
 					     stats_tree_packet,
 					     draw_stats_tree,
-					     free_stats_tree);
+					     NULL);
 
 	if (error_string) {
 		report_failure("stats_tree for: %s failed to attach to the tap: %s", cfg->path, error_string->str);
-		return false;
+		return;
 	}
 
-	if (cfg->init)
-		cfg->init(st);
+	if (cfg->init) cfg->init(st);
 
-	return true;
 }
 
 static void

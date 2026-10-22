@@ -1,5 +1,5 @@
 /* packet-openvpn.c
- * routines for openvpn packet disassembly
+ * routines for openvpn packet dissasembly
  * - http://www.openvpn.net
  * - http://fengnet.com/book/vpns%20illustrated%20tunnels%20%20vpnsand%20ipsec/ch08lev1sec5.html
  *
@@ -19,7 +19,6 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/expert.h>
 #include <epan/prefs.h>
 #include <epan/reassemble.h>
 #include <epan/conversation.h>
@@ -27,6 +26,10 @@
 
 void proto_register_openvpn(void);
 void proto_reg_handoff_openvpn(void);
+
+#define PFNAME "openvpn"
+#define PNAME  "OpenVPN Protocol"
+#define PSNAME "OpenVPN"
 
 #define OPENVPN_PORT 1194
 
@@ -71,9 +74,6 @@ static int hf_openvpn_rsessionid;
 static int hf_openvpn_sessionid;
 static int hf_openvpn_peerid;
 static int proto_openvpn;
-
-static expert_field ei_openvpn_wkc_length_bad;
-static expert_field ei_openvpn_extra_data;
 
 static dissector_handle_t openvpn_udp_handle;
 static dissector_handle_t openvpn_tcp_handle;
@@ -176,7 +176,6 @@ dissect_openvpn_msg_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *openvp
   bool           tls_crypt = false;
   unsigned       openvpn_keyid;
   unsigned       openvpn_opcode;
-  char          *openvpn_message_type;
   uint32_t       msg_sessionid = -1;
   uint8_t        openvpn_predict_tlsauth_arraylength;
   proto_item    *ti2;
@@ -185,17 +184,19 @@ dissect_openvpn_msg_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *openvp
   int            wkc_offset = -1;
 
   /* Clear out stuff in the info column */
-  col_set_str(pinfo->cinfo, COL_PROTOCOL, "OpenVPN");
+  col_set_str(pinfo->cinfo, COL_PROTOCOL, PSNAME);
   col_clear(pinfo->cinfo,COL_INFO);
 
   /* read opcode and write to info column */
   openvpn_opcode = tvb_get_bits8(tvb, offset*8, 5);
-  openvpn_message_type = val_to_str(pinfo->pool, openvpn_opcode, openvpn_message_types, "Unknown (0x%02x)");
+  col_append_fstr(pinfo->cinfo, COL_INFO, "MessageType: %s",
+                  val_to_str_const(openvpn_opcode, openvpn_message_types, "Unknown Messagetype"));
 
-  col_append_fstr(pinfo->cinfo, COL_INFO, "MessageType: %s", openvpn_message_type);
 
   openvpn_keyid = tvb_get_bits8(tvb, offset*8 + 5, 3);
-  proto_item_append_text(openvpn_tree, ", Opcode: %s, Key ID: %d", openvpn_message_type, openvpn_keyid);
+  proto_item_append_text(parent_tree, ", Opcode: %s, Key ID: %d",
+                         val_to_str(openvpn_opcode, openvpn_message_types, "Unknown (0x%02x)"),
+                         openvpn_keyid);
 
   ti2 = proto_tree_add_item(openvpn_tree, hf_openvpn_pdu_type, tvb, offset, 1, ENC_BIG_ENDIAN);
   proto_item_append_text(ti2, " [opcode/key_id]");
@@ -300,42 +301,33 @@ dissect_openvpn_msg_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *openvp
     return tvb_captured_length(tvb);
   }
 
-  uint32_t data_len = msg_length_remaining;
-  uint32_t wkc_len = 0;
-  if (openvpn_opcode == P_CONTROL_HARD_RESET_CLIENT_V3 || openvpn_opcode == P_CONTROL_WKC_V1) {
-    if (msg_length_remaining < 2) {
-      proto_tree_add_expert_format(openvpn_tree, pinfo, &ei_openvpn_wkc_length_bad, tvb, offset, msg_length_remaining, "Packet too short for wrapped client key length (%u bytes remaining)", msg_length_remaining);
-      return tvb_captured_length(tvb);
-    }
+  int data_len = msg_length_remaining;
+  int wkc_len = -1;
+  if ((openvpn_opcode == P_CONTROL_HARD_RESET_CLIENT_V3 || openvpn_opcode == P_CONTROL_WKC_V1)
+      &&  msg_length_remaining >= 2) {
+
     wkc_len = tvb_get_ntohs(tvb, tvb_reported_length(tvb) - 2);
-    if (wkc_len < 2 || wkc_len > msg_length_remaining) {
-      proto_tree_add_expert_format(openvpn_tree, pinfo, &ei_openvpn_wkc_length_bad, tvb, tvb_reported_length(tvb) - 2, 2, "Illegal wrapped client key length: %u (remaining bytes: %u)", wkc_len, msg_length_remaining);
-      return tvb_captured_length(tvb);
-    }
     data_len = msg_length_remaining - wkc_len;
-    if (data_len > 0) {
-      proto_tree_add_expert_format(openvpn_tree, pinfo, &ei_openvpn_extra_data, tvb, offset, data_len, "Unexpected extra data before wrapped client key (%u bytes)", data_len);
-    }
-  } else if (openvpn_opcode == P_ACK_V1) {
-    proto_tree_add_expert_format(openvpn_tree, pinfo, &ei_openvpn_extra_data, tvb, offset, msg_length_remaining, "Unexpected extra data in ACK packet (%u bytes)", msg_length_remaining);
   }
+
   if (openvpn_opcode != P_CONTROL_V1) {
-    if (data_len > 0) {
-      proto_tree *data_tree;
-      data_tree = proto_tree_add_subtree_format(openvpn_tree, tvb, offset, data_len, ett_openvpn_data, NULL, "Data (%u bytes)", data_len);
-      proto_tree_add_item(data_tree, hf_openvpn_data, tvb, offset, data_len, ENC_NA);
-    }
+    proto_tree *data_tree;
+    data_tree = proto_tree_add_subtree_format(openvpn_tree, tvb, offset, data_len,
+                              ett_openvpn_data, NULL, "Data (%d bytes)",
+                              data_len);
+
+    proto_tree_add_item(data_tree, hf_openvpn_data, tvb, offset, data_len, ENC_NA);
 
     if (wkc_len > 0)
     {
       proto_tree *wkc_tree;
       wkc_offset = tvb_reported_length(tvb) - wkc_len;
 
-      wkc_tree = proto_tree_add_subtree_format(openvpn_tree, tvb, wkc_offset, wkc_len,
-                                               ett_openvpn_wkc, NULL, "Wrapped client key (%d bytes)",
-                                               tvb_reported_length_remaining(tvb, wkc_offset));
+      wkc_tree = proto_tree_add_subtree_format(openvpn_tree, tvb, offset, data_len,
+						ett_openvpn_wkc, NULL, "Wrapped client key (%d bytes)",
+						tvb_captured_length_remaining(tvb, wkc_offset));
 
-      proto_tree_add_item(wkc_tree, hf_openvpn_wkc_data, tvb, wkc_offset, wkc_len - 2, ENC_NA);
+      proto_tree_add_item(wkc_tree, hf_openvpn_wkc_data, tvb, wkc_offset, wkc_len, ENC_NA);
       proto_tree_add_item(wkc_tree, hf_openvpn_wkc_length, tvb,  tvb_reported_length(tvb) - 2, 2, ENC_BIG_ENDIAN);
     }
 
@@ -587,18 +579,14 @@ proto_register_openvpn(void)
   };
   module_t *openvpn_module;
 
-  proto_openvpn = proto_register_protocol ("OpenVPN Protocol", "OpenVPN", "openvpn");
-
-  static ei_register_info ei[] = {
-    { &ei_openvpn_wkc_length_bad, { "openvpn.wkc_length.bad", PI_MALFORMED, PI_ERROR, "Illegal wrapped client key length", EXPFILL }},
-    { &ei_openvpn_extra_data, { "openvpn.extra_data", PI_PROTOCOL, PI_WARN, "Unexpected extra data", EXPFILL }}
-  };
-  expert_module_t *expert_openvpn;
+  proto_openvpn = proto_register_protocol (
+    PNAME,   /* name       */
+    PSNAME,  /* short name */
+    PFNAME   /* abbrev     */
+    );
 
   proto_register_field_array(proto_openvpn, hf, array_length(hf));
   proto_register_subtree_array(ett, array_length(ett));
-  expert_openvpn = expert_register_protocol(proto_openvpn);
-  expert_register_field_array(expert_openvpn, ei, array_length(ei));
 
   openvpn_udp_handle = register_dissector("openvpn.udp", dissect_openvpn_udp, proto_openvpn);
   openvpn_tcp_handle = register_dissector("openvpn.tcp", dissect_openvpn_tcp, proto_openvpn);

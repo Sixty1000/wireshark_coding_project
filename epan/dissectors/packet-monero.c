@@ -11,8 +11,7 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
+#include <epan/exceptions.h>
 #include <epan/prefs.h>
 #include <epan/expert.h>
 
@@ -48,9 +47,7 @@ static const value_string monero_commands[] =
   { 2007, "ChainResponse" },
   { 2008, "NewFluffyBlock" },
   { 2009, "FluffyMissingTxsRequest" },
-  { 2010, "GetTxPoolComplement" },
-  { 2011, "TxPoolHash" },
-  { 2012, "RequestTxPoolTxs" },
+  { 2010, "GetTxPoolCompliment" },
   { 0, NULL }
 };
 
@@ -159,11 +156,11 @@ static unsigned
 get_monero_pdu_length(packet_info *pinfo _U_, tvbuff_t *tvb,
                        int offset, void *data _U_)
 {
-  unsigned length;
+  uint32_t length;
   length = MONERO_HEADER_LENGTH;
 
   /* add payload length */
-  length += (unsigned)tvb_get_letoh64(tvb, offset+8);
+  length += tvb_get_letoh64(tvb, offset+8);
 
   return length;
 }
@@ -196,7 +193,7 @@ get_varint(tvbuff_t *tvb, const int offset, uint8_t *length, uint64_t *ret)
 
 static int dissect_encoded_value(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, proto_item *ti, int offset, uint32_t type);
 
-// we check for recursion limits due to nested structs
+// we are parsing generic data structures, recursion is a first class citizen here
 // NOLINTNEXTLINE(misc-no-recursion)
 static int dissect_encoded_dictionary(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset)
 {
@@ -237,7 +234,7 @@ static int dissect_encoded_dictionary(tvbuff_t *tvb, packet_info *pinfo _U_, pro
   return offset;
 }
 
-// we check for recursion limits due to nested structs
+// we are parsing generic data structures, recursion is a first class citizen here
 // NOLINTNEXTLINE(misc-no-recursion)
 static int dissect_encoded_value(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, proto_item *ti, int offset, uint32_t type)
 {
@@ -333,7 +330,7 @@ static int dissect_encoded_value(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tr
       offset += length;
 
       proto_tree_add_item(tree, hf_monero_payload_item_value_string, tvb, offset, (int) string_length, ENC_NA);
-      offset += (int)string_length;
+      offset += string_length;
       break;
 
     case MONERO_PAYLOAD_TYPE_BOOLEAN:
@@ -345,9 +342,7 @@ static int dissect_encoded_value(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tr
       struct_ti   = proto_tree_add_item(tree, hf_monero_payload_item_value_struct, tvb, offset, -1, ENC_NA);
       struct_tree = proto_item_add_subtree(struct_ti, ett_struct);
 
-      increment_dissection_depth_by_n(pinfo, 2);
       offset = dissect_encoded_dictionary(tvb, pinfo, struct_tree, offset);
-      decrement_dissection_depth_by_n(pinfo, 2);
       proto_item_set_end(struct_ti, tvb, offset);
       break;
 
@@ -390,7 +385,7 @@ static int dissect_monero_tcp_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
   proto_tree_add_item(tree,             hf_monero_protocol,     tvb,  29,  4, ENC_LITTLE_ENDIAN);
   offset += MONERO_HEADER_LENGTH;
 
-  command_label = val_to_str(pinfo->pool, command, monero_commands, "[Unknown command %d]");
+  command_label = val_to_str(command, monero_commands, "[Unknown command %d]");
   col_add_str(pinfo->cinfo, COL_INFO, command_label);
 
   /* data payload */

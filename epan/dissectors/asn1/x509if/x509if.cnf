@@ -235,7 +235,7 @@ DistinguishedName B "2.16.840.1.101.2.2.1.188" "id-at-primaryMember"
   actx->external.direct_reference = orig_oid;
 
   /* try and dissect as a string */
-  dissect_ber_octet_string(false, actx, tree, tvb, old_offset, -1, &out_tvb);
+  dissect_ber_octet_string(false, actx, NULL, tvb, old_offset, hf_x509if_any_string, &out_tvb);
 
   /* should also try and dissect as an OID and integer */
   /* of course, if I can look up the syntax .... */
@@ -335,22 +335,20 @@ DistinguishedName B "2.16.840.1.101.2.2.1.188" "id-at-primaryMember"
 
   %(DEFAULT_BODY)s
 
-  if (last_rdn_buf) {
-    /* we've finished - close the bracket */
-    proto_item_append_text(top_of_rdn, " (%%s)", wmem_strbuf_get_str(last_rdn_buf));
+  /* we've finished - close the bracket */
+  proto_item_append_text(top_of_rdn, " (%%s)", wmem_strbuf_get_str(last_rdn_buf));
 
-    /* now append this to the DN */
-    if (last_dn_buf) {
-      if(wmem_strbuf_get_len(last_dn_buf) > 0) {
-        wmem_strbuf_t *temp_dn_buf = wmem_strbuf_new_sized(actx->pinfo->pool, wmem_strbuf_get_len(last_rdn_buf) + wmem_strbuf_get_len(last_dn_buf) + 1);
-        wmem_strbuf_append(temp_dn_buf, wmem_strbuf_get_str(last_rdn_buf));
-        wmem_strbuf_append_c(temp_dn_buf, ',');
-        wmem_strbuf_append(temp_dn_buf, wmem_strbuf_get_str(last_dn_buf));
-        wmem_strbuf_destroy(last_dn_buf);
-        last_dn_buf = temp_dn_buf;
-      } else {
-        wmem_strbuf_append(last_dn_buf, wmem_strbuf_get_str(last_rdn_buf));
-      }
+  /* now append this to the DN */
+  if (last_dn_buf) {
+    if(wmem_strbuf_get_len(last_dn_buf) > 0) {
+      wmem_strbuf_t *temp_dn_buf = wmem_strbuf_new_sized(actx->pinfo->pool, wmem_strbuf_get_len(last_rdn_buf) + wmem_strbuf_get_len(last_dn_buf) + 1);
+      wmem_strbuf_append(temp_dn_buf, wmem_strbuf_get_str(last_rdn_buf));
+      wmem_strbuf_append_c(temp_dn_buf, ',');
+      wmem_strbuf_append(temp_dn_buf, wmem_strbuf_get_str(last_dn_buf));
+      wmem_strbuf_destroy(last_dn_buf);
+      last_dn_buf = temp_dn_buf;
+    } else {
+      wmem_strbuf_append(last_dn_buf, wmem_strbuf_get_str(last_rdn_buf));
     }
   }
 

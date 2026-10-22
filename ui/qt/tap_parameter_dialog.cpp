@@ -23,7 +23,6 @@
 
 #include "tap_parameter_dialog.h"
 #include <ui_tap_parameter_dialog.h>
-#include <ui/qt/widgets/display_filter_edit.h>
 
 #include <errno.h>
 
@@ -49,7 +48,6 @@
 #include <QClipboard>
 #include <QContextMenuEvent>
 #include <QMessageBox>
-#include <QTreeWidgetItemIterator>
 
 // The GTK+ counterpart uses tap_param_dlg, which we don't use. If we
 // need tap parameters we should probably create a TapParameterDialog
@@ -167,11 +165,6 @@ QHBoxLayout *TapParameterDialog::filterLayout()
     return ui->filterLayout;
 }
 
-DisplayFilterEdit *TapParameterDialog::filterEdit() const
-{
-    return ui->displayFilterLineEdit;
-}
-
 QString TapParameterDialog::displayFilter()
 {
     return ui->displayFilterLineEdit->text();
@@ -238,7 +231,7 @@ QString TapParameterDialog::itemDataToPlain(QVariant var, int width)
     }
 
     if (plain_str.length() < width) {
-        plain_str = QStringLiteral("%1").arg(plain_str, width * align_mul);
+        plain_str = QString("%1").arg(plain_str, width * align_mul);
     }
     return plain_str;
 }
@@ -286,7 +279,7 @@ QByteArray TapParameterDialog::getTreeAsString(st_format_type format)
         QByteArray top_separator;
         top_separator.fill('=', plain_header.length());
         top_separator.append('\n');
-        QString file_header = QStringLiteral("%1 - %2:\n").arg(windowSubtitle(), cap_file_.fileDisplayName());
+        QString file_header = QString("%1 - %2:\n").arg(windowSubtitle(), cap_file_.fileDisplayName());
         footer.fill('-', plain_header.length());
         footer.append('\n');
         plain_header.append('\n');
@@ -302,7 +295,7 @@ QByteArray TapParameterDialog::getTreeAsString(st_format_type format)
         QString csv_header;
         QStringList ch_parts;
         for (int col = 0; col < ui->statsTreeWidget->columnCount(); col++) {
-            ch_parts << QStringLiteral("\"%1\"").arg(ui->statsTreeWidget->headerItem()->text(col));
+            ch_parts << QString("\"%1\"").arg(ui->statsTreeWidget->headerItem()->text(col));
         }
         csv_header = ch_parts.join(",");
         csv_header.append('\n');
@@ -314,12 +307,12 @@ QByteArray TapParameterDialog::getTreeAsString(st_format_type format)
         // XXX What's a useful format? This mostly conforms to DocBook.
         ba.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
         QString title = html_escape(windowSubtitle());
-        QString xml_header = QStringLiteral("<table>\n<title>%1</title>\n").arg(title);
+        QString xml_header = QString("<table>\n<title>%1</title>\n").arg(title);
         ba.append(xml_header.toUtf8());
         ba.append("<thead>\n<row>\n");
         for (int col = 0; col < ui->statsTreeWidget->columnCount(); col++) {
             title = html_escape(ui->statsTreeWidget->headerItem()->text(col));
-            title = QStringLiteral("  <entry>%1</entry>\n").arg(title);
+            title = QString("  <entry>%1</entry>\n").arg(title);
             ba.append(title.toUtf8());
         }
         ba.append("</row>\n</thead>\n");
@@ -331,7 +324,7 @@ QByteArray TapParameterDialog::getTreeAsString(st_format_type format)
     {
         QString yaml_header;
         ba.append("---\n");
-        yaml_header = QStringLiteral("Description: \"%1\"\nFile: \"%2\"\nItems:\n").arg(windowSubtitle()).arg(cap_file_.fileDisplayName());
+        yaml_header = QString("Description: \"%1\"\nFile: \"%2\"\nItems:\n").arg(windowSubtitle()).arg(cap_file_.fileDisplayName());
         ba.append(yaml_header.toUtf8());
         break;
     }
@@ -370,7 +363,7 @@ QByteArray TapParameterDialog::getTreeAsString(st_format_type format)
         case ST_FORMAT_CSV:
             foreach (QVariant var, tid) {
                 if (var.userType() == QMetaType::QString) {
-                    parts << QStringLiteral("\"%1\"").arg(var.toString());
+                    parts << QString("\"%1\"").arg(var.toString());
                 } else {
                     parts << var.toString();
                 }
@@ -383,7 +376,7 @@ QByteArray TapParameterDialog::getTreeAsString(st_format_type format)
             line = "<row>\n";
             foreach (QVariant var, tid) {
                 QString entry = html_escape(var.toString());
-                line.append(QStringLiteral("  <entry>%1</entry>\n").arg(entry));
+                line.append(QString("  <entry>%1</entry>\n").arg(entry));
             }
             line.append("</row>\n");
             break;
@@ -395,11 +388,11 @@ QByteArray TapParameterDialog::getTreeAsString(st_format_type format)
             foreach (QVariant var, tid) {
                 QString entry;
                 if (var.userType() == QMetaType::QString) {
-                    entry = QStringLiteral("\"%1\"").arg(var.toString());
+                    entry = QString("\"%1\"").arg(var.toString());
                 } else {
                     entry = var.toString();
                 }
-                line.append(QStringLiteral("  %1 %2: %3\n").arg(indent).arg(ui->statsTreeWidget->headerItem()->text(col), entry));
+                line.append(QString("  %1 %2: %3\n").arg(indent).arg(ui->statsTreeWidget->headerItem()->text(col), entry));
                 indent = " ";
                 col++;
             }
@@ -420,15 +413,7 @@ QByteArray TapParameterDialog::getTreeAsString(st_format_type format)
 
 void TapParameterDialog::drawTreeItems()
 {
-    // ui->statsTreeWidget->model()->rowCount() only counts the number
-    // of children of the root element, not all the nodes
-    int nodeCount = 0;
-    for (QTreeWidgetItemIterator iter(ui->statsTreeWidget); *iter; ++iter) {
-        if (++nodeCount >= expand_all_threshold_) {
-            break;
-        }
-    }
-    if (nodeCount < expand_all_threshold_) {
+    if (ui->statsTreeWidget->model()->rowCount() < expand_all_threshold_) {
         ui->statsTreeWidget->expandAll();
     }
 

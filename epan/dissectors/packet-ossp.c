@@ -17,14 +17,12 @@
 
 #include <epan/packet.h>
 
+#include <epan/slow_protocol_subtypes.h>
 #include <epan/addr_resolv.h>
 #include <epan/oui.h>
 #include <epan/expert.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
-#include <wsutil/str_util.h>
 
-#include "packet-slowprotocols.h"
+#include <wsutil/str_util.h>
 
 /* General declarations */
 void proto_register_ossp(void);
@@ -332,7 +330,8 @@ dissect_itu_ossp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
     tvbuff_t   *ossp_subtype_tvb;
 
     /* ITU-T OSSP Subtype */
-    ti = proto_tree_add_item_ret_uint16(tree, hf_itu_subtype, tvb, 0, 2, ENC_BIG_ENDIAN, &subtype);
+    subtype = tvb_get_ntohs(tvb, 0);
+    ti = proto_tree_add_item(tree, hf_itu_subtype, tvb, 0, 2, ENC_BIG_ENDIAN);
 
     itu_ossp_tree = proto_item_add_subtree(ti, ett_itu_ossp);
 
@@ -365,7 +364,7 @@ dissect_esmc_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *treex)
     int      offset    = 0;
     bool event_flag;
     int      ssm       = 0;
-    unsigned essm      = 0;
+    int      essm      = 0;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "ESMC");
 
@@ -432,7 +431,8 @@ dissect_esmc_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *treex)
                     uint8_t unused;
 
                     /* type */
-                    item_c = proto_tree_add_item_ret_uint8(tree_b, hf_esmc_tlv_type, tvb, offset, 1, ENC_BIG_ENDIAN, &type);
+                    type = tvb_get_uint8(tvb, offset);
+                    item_c = proto_tree_add_item(tree_b, hf_esmc_tlv_type, tvb, offset, 1, ENC_BIG_ENDIAN);
                     if (type != ESMC_QL_TLV_TYPE)
                     {
                         expert_add_info_format(pinfo, item_c, &ei_esmc_tlv_type_ql_type_not_first, "TLV Type must be == 0x%.2x (QL) because QL TLV must be first in the ESMC PDU", ESMC_QL_TLV_TYPE);
@@ -442,7 +442,8 @@ dissect_esmc_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *treex)
                     offset += 1;
 
                     /* length */
-                    item_c = proto_tree_add_item_ret_uint16(tree_b, hf_esmc_tlv_length, tvb, offset, 2, ENC_BIG_ENDIAN, &length);
+                    length = tvb_get_ntohs(tvb, offset);
+                    item_c = proto_tree_add_item(tree_b, hf_esmc_tlv_length, tvb, offset, 2, ENC_BIG_ENDIAN);
                     if (length != ESMC_QL_TLV_LENGTH)
                     {
                         expert_add_info_format(pinfo, item_c, &ei_esmc_tlv_length_bad, "QL TLV Length must be == 0x%.4x", ESMC_QL_TLV_LENGTH);
@@ -496,7 +497,8 @@ dissect_esmc_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *treex)
                         offset += 1;
 
                         /* length */
-                        item_c = proto_tree_add_item_ret_uint16(tree_b, hf_esmc_tlv_length, tvb, offset, 2, ENC_BIG_ENDIAN, &length);
+                        length = tvb_get_ntohs(tvb, offset);
+                        item_c = proto_tree_add_item(tree_b, hf_esmc_tlv_length, tvb, offset, 2, ENC_BIG_ENDIAN);
                         if (length != ESMC_EXTENDED_QL_TLV_LENGTH)
                         {
                             expert_add_info_format(pinfo, item_c, &ei_esmc_tlv_length_bad, "Extended QL TLV Length must be == 0x%.4x", ESMC_EXTENDED_QL_TLV_LENGTH);
@@ -505,7 +507,8 @@ dissect_esmc_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *treex)
                         offset += 2;
 
                         /* Enhanced SSM code */
-                        proto_tree_add_item_ret_uint(tree_b, hf_esmc_tlv_ext_ql_essm, tvb, offset, 1, ENC_BIG_ENDIAN, &essm);
+                        essm = tvb_get_uint8(tvb, offset);
+                        proto_tree_add_item(tree_b, hf_esmc_tlv_ext_ql_essm, tvb, offset, 1, ENC_BIG_ENDIAN);
                         offset += 1;
 
                         /* SyncE clockIdentity */
@@ -735,7 +738,7 @@ proto_register_ossp(void)
 
     /* Register the protocol name and description */
 
-    proto_ossp = proto_register_protocol("Organization Specific Slow Protocol", "OSSP", "ossp");
+    proto_ossp = proto_register_protocol("OSSP", "Organization Specific Slow Protocol", "ossp");
 
     /* Required function calls to register the header fields and subtrees used */
 

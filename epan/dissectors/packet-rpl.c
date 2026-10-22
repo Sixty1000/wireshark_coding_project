@@ -13,6 +13,7 @@
 
 #include <epan/packet.h>
 
+#include <epan/llcsaps.h>
 #include "packet-llc.h"
 
 void proto_register_rpl(void);
@@ -89,11 +90,13 @@ dissect_rpl_container(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 	proto_tree *rpl_container_tree;
 	uint16_t offset;
 	int ett_type;
-	int reported_length;
+	int length, reported_length;
 
-	proto_tree_add_item_ret_uint16(tree, hf_rpl_len, tvb, 0, 2, ENC_BIG_ENDIAN, &len);
+	len = tvb_get_ntohs(tvb, 0);
+	proto_tree_add_item(tree, hf_rpl_len, tvb, 0, 2, ENC_BIG_ENDIAN);
 
-	proto_tree_add_item_ret_uint16(tree, hf_rpl_type, tvb, 2, 2, ENC_BIG_ENDIAN, &type);
+	type = tvb_get_ntohs(tvb, 2);
+	proto_tree_add_item(tree, hf_rpl_type, tvb, 2, 2, ENC_BIG_ENDIAN);
 	offset = 4;
 
 	switch (type) {
@@ -125,12 +128,15 @@ dissect_rpl_container(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 					val_to_str_const(subtyp,
 						rpl_type_vals,
 						"Unknown Type"));
+				length = tvb_captured_length_remaining(tvb, offset);
+				if (length > sublen)
+					length = sublen;
 				reported_length = tvb_reported_length_remaining(tvb, offset);
 				if (reported_length > sublen)
 					reported_length = sublen;
-				if ( reported_length > 0) {
-				  dissect_rpl_container(tvb_new_subset_length(tvb,
-					offset, reported_length),
+				if ( length > 0) {
+				  dissect_rpl_container(tvb_new_subset_length_caplen(tvb,
+					offset, length, reported_length),
 					pinfo, rpl_container_tree);
 				  offset += reported_length;
 				} else {

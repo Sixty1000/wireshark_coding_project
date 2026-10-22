@@ -29,17 +29,20 @@
 #include <epan/asn1.h>
 #include <epan/proto_data.h>
 #include <wsutil/array.h>
-#include <wsutil/time_util.h>
 
 #include "packet-oer.h"
 #include "packet-ieee1609dot2.h"
+
+#define PNAME  "IEEE1609dot2"
+#define PSNAME "IEEE1609dot2"
+#define PFNAME "ieee1609dot2"
 
 void proto_register_ieee1609dot2(void);
 void proto_reg_handoff_ieee1609dot2(void);
 
 /* Initialize the protocol and registered fields */
-static int proto_ieee1609dot2;
-static dissector_handle_t proto_ieee1609dot2_handle;
+int proto_ieee1609dot2;
+dissector_handle_t proto_ieee1609dot2_handle;
 
 /* WSMP PSID range to be passed to IEEE 1609.2 dissector */
 static range_t *global_wsmp_psid_range;
@@ -91,7 +94,7 @@ static int hf_ieee1609dot2_rSig;                  /* EccP256CurvePoint */
 static int hf_ieee1609dot2_sSig;                  /* OCTET_STRING_SIZE_32 */
 static int hf_ieee1609dot2_ecdsap384RSig;         /* EccP384CurvePoint */
 static int hf_ieee1609dot2_ecdsap384SSig;         /* OCTET_STRING_SIZE_48 */
-static int hf_ieee1609dot2_ecsigp256RSig;         /* OCTET_STRING_SIZE_32 */
+static int hf_ieee1609dot2_rSig_01;               /* OCTET_STRING_SIZE_32 */
 static int hf_ieee1609dot2_x_only;                /* OCTET_STRING_SIZE_32 */
 static int hf_ieee1609dot2_fill;                  /* NULL */
 static int hf_ieee1609dot2_compressed_y_0;        /* OCTET_STRING_SIZE_32 */
@@ -157,7 +160,7 @@ static int hf_ieee1609dot2_deltaLinkedCrlWithAlg;  /* ToBeSignedLinkageValueCrlW
 static int hf_ieee1609dot2_crlSerial;             /* Uint32 */
 static int hf_ieee1609dot2_entries;               /* SequenceOfHashBasedRevocationInfo */
 static int hf_ieee1609dot2_SequenceOfHashBasedRevocationInfo_item;  /* HashBasedRevocationInfo */
-static int hf_ieee1609dot2_hashedId;              /* HashedId10 */
+static int hf_ieee1609dot2_id;                    /* HashedId10 */
 static int hf_ieee1609dot2_expiry;                /* Time32 */
 static int hf_ieee1609dot2_iRev;                  /* IValue */
 static int hf_ieee1609dot2_indexWithinI;          /* Uint8 */
@@ -256,7 +259,7 @@ static int hf_ieee1609dot2_sha256AndDigest;       /* HashedId8 */
 static int hf_ieee1609dot2_iiSelf;                /* HashAlgorithm */
 static int hf_ieee1609dot2_sha384AndDigest;       /* HashedId8 */
 static int hf_ieee1609dot2_sm3AndDigest;          /* HashedId8 */
-static int hf_ieee1609dot2_certificateId;         /* CertificateId */
+static int hf_ieee1609dot2_id_01;                 /* CertificateId */
 static int hf_ieee1609dot2_validityPeriod;        /* ValidityPeriod */
 static int hf_ieee1609dot2_region;                /* GeographicRegion */
 static int hf_ieee1609dot2_assuranceLevel;        /* SubjectAssurance */
@@ -286,7 +289,7 @@ static int hf_ieee1609dot2_explicit;              /* SequenceOfPsidSspRange */
 static int hf_ieee1609dot2_verificationKey;       /* PublicVerificationKey */
 static int hf_ieee1609dot2_reconstructionValue;   /* EccP256CurvePoint */
 static int hf_ieee1609dot2_SequenceOfAppExtensions_item;  /* AppExtension */
-static int hf_ieee1609dot2_id;                    /* ExtId */
+static int hf_ieee1609dot2_id_02;                 /* ExtId */
 static int hf_ieee1609dot2_content_03;            /* T_content */
 static int hf_ieee1609dot2_SequenceOfCertIssueExtensions_item;  /* CertIssueExtension */
 static int hf_ieee1609dot2_permissions;           /* T_permissions */
@@ -428,26 +431,14 @@ ieee1609dot2_set_next_default_psid(packet_info *pinfo, uint32_t psid)
 
 /*--- Cyclic dependencies ---*/
 
-/* AppExtension/content -> AppExtension/content */
-static unsigned dissect_ieee1609dot2_T_content(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
-
-/* CertIssueExtension/permissions/specific -> CertIssueExtension/permissions/specific */
-static unsigned dissect_ieee1609dot2_T_specific(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
-
-/* CertRequestExtension/permissions/content -> CertRequestExtension/permissions/content */
-static unsigned dissect_ieee1609dot2_T_content_01(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
-
-/* ContributedExtensionBlock/extns/_item -> ContributedExtensionBlock/extns/_item */
-static unsigned dissect_ieee1609dot2_T_extns_item(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
-
 /* Ieee1609Dot2Data -> Ieee1609Dot2Content -> SignedData -> ToBeSignedData -> SignedDataPayload -> Ieee1609Dot2Data */
-static unsigned dissect_ieee1609dot2_Ieee1609Dot2Data(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+static int dissect_ieee1609dot2_Ieee1609Dot2Data(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
 
 
 
 
-static unsigned
-dissect_ieee1609dot2_Uint8(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_Uint8(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_constrained_integer(tvb, offset, actx, tree, hf_index,
                                                             0U, 255U, NULL, false);
 
@@ -456,8 +447,8 @@ dissect_ieee1609dot2_Uint8(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *a
 
 
 
-static unsigned
-dissect_ieee1609dot2_Uint16(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_Uint16(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_constrained_integer(tvb, offset, actx, tree, hf_index,
                                                             0U, 65535U, NULL, false);
 
@@ -466,8 +457,8 @@ dissect_ieee1609dot2_Uint16(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *
 
 
 
-static unsigned
-dissect_ieee1609dot2_Uint32(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_Uint32(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_constrained_integer(tvb, offset, actx, tree, hf_index,
                                                             0U, 4294967295U, NULL, false);
 
@@ -476,8 +467,8 @@ dissect_ieee1609dot2_Uint32(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *
 
 
 
-static unsigned
-dissect_ieee1609dot2_Uint64(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_Uint64(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_constrained_integer_64b(tvb, offset, actx, tree, hf_index,
                                                             0U, UINT64_C(18446744073709551615), NULL, false);
 
@@ -489,8 +480,8 @@ static const oer_sequence_t SequenceOfUint8_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfUint8_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_Uint8 },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfUint8(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfUint8(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence_of(tvb, offset, actx, tree, hf_index,
                                       ett_ieee1609dot2_SequenceOfUint8, SequenceOfUint8_sequence_of);
 
@@ -502,8 +493,8 @@ static const oer_sequence_t SequenceOfUint16_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfUint16_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_Uint16 },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfUint16(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfUint16(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence_of(tvb, offset, actx, tree, hf_index,
                                       ett_ieee1609dot2_SequenceOfUint16, SequenceOfUint16_sequence_of);
 
@@ -512,8 +503,8 @@ dissect_ieee1609dot2_SequenceOfUint16(tvbuff_t *tvb _U_, uint32_t offset _U_, as
 
 
 
-static unsigned
-dissect_ieee1609dot2_Opaque(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_Opaque(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_octet_string(tvb, offset, actx, tree, hf_index,
                                        NO_BOUND, NO_BOUND, false, NULL);
 
@@ -522,8 +513,8 @@ dissect_ieee1609dot2_Opaque(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *
 
 
 
-static unsigned
-dissect_ieee1609dot2_HashedId3(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_HashedId3(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_octet_string(tvb, offset, actx, tree, hf_index,
                                        3, 3, false, NULL);
 
@@ -535,8 +526,8 @@ static const oer_sequence_t SequenceOfHashedId3_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfHashedId3_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_HashedId3 },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfHashedId3(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfHashedId3(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence_of(tvb, offset, actx, tree, hf_index,
                                       ett_ieee1609dot2_SequenceOfHashedId3, SequenceOfHashedId3_sequence_of);
 
@@ -545,8 +536,8 @@ dissect_ieee1609dot2_SequenceOfHashedId3(tvbuff_t *tvb _U_, uint32_t offset _U_,
 
 
 
-static unsigned
-dissect_ieee1609dot2_HashedId8(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_HashedId8(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_octet_string(tvb, offset, actx, tree, hf_index,
                                        8, 8, false, NULL);
 
@@ -555,8 +546,8 @@ dissect_ieee1609dot2_HashedId8(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_
 
 
 
-static unsigned
-dissect_ieee1609dot2_HashedId10(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_HashedId10(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_octet_string(tvb, offset, actx, tree, hf_index,
                                        10, 10, false, NULL);
 
@@ -565,8 +556,8 @@ dissect_ieee1609dot2_HashedId10(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx
 
 
 
-static unsigned
-dissect_ieee1609dot2_HashedId32(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_HashedId32(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_octet_string(tvb, offset, actx, tree, hf_index,
                                        32, 32, false, NULL);
 
@@ -575,8 +566,8 @@ dissect_ieee1609dot2_HashedId32(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx
 
 
 
-static unsigned
-dissect_ieee1609dot2_HashedId48(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_HashedId48(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_octet_string(tvb, offset, actx, tree, hf_index,
                                        48, 48, false, NULL);
 
@@ -585,8 +576,8 @@ dissect_ieee1609dot2_HashedId48(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx
 
 
 
-static unsigned
-dissect_ieee1609dot2_Time32(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_Time32(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ieee1609dot2_Uint32(tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -594,8 +585,8 @@ dissect_ieee1609dot2_Time32(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *
 
 
 
-static unsigned
-dissect_ieee1609dot2_Time64(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_Time64(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ieee1609dot2_Uint64(tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -624,8 +615,8 @@ static const oer_choice_t Duration_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_Duration(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_Duration(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_Duration, Duration_choice,
                                  NULL);
@@ -640,8 +631,8 @@ static const oer_sequence_t ValidityPeriod_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_ValidityPeriod(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_ValidityPeriod(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_ValidityPeriod, ValidityPeriod_sequence);
 
@@ -650,8 +641,8 @@ dissect_ieee1609dot2_ValidityPeriod(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1
 
 
 
-static unsigned
-dissect_ieee1609dot2_NinetyDegreeInt(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_NinetyDegreeInt(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_constrained_integer(tvb, offset, actx, tree, hf_index,
                                                             -900000000, 900000001U, NULL, false);
 
@@ -660,8 +651,8 @@ dissect_ieee1609dot2_NinetyDegreeInt(tvbuff_t *tvb _U_, uint32_t offset _U_, asn
 
 
 
-static unsigned
-dissect_ieee1609dot2_Latitude(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_Latitude(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ieee1609dot2_NinetyDegreeInt(tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -669,8 +660,8 @@ dissect_ieee1609dot2_Latitude(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t
 
 
 
-static unsigned
-dissect_ieee1609dot2_OneEightyDegreeInt(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_OneEightyDegreeInt(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_constrained_integer(tvb, offset, actx, tree, hf_index,
                                                             -1799999999, 1800000001U, NULL, false);
 
@@ -679,8 +670,8 @@ dissect_ieee1609dot2_OneEightyDegreeInt(tvbuff_t *tvb _U_, uint32_t offset _U_, 
 
 
 
-static unsigned
-dissect_ieee1609dot2_Longitude(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_Longitude(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ieee1609dot2_OneEightyDegreeInt(tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -693,8 +684,8 @@ static const oer_sequence_t TwoDLocation_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_TwoDLocation(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_TwoDLocation(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_TwoDLocation, TwoDLocation_sequence);
 
@@ -708,8 +699,8 @@ static const oer_sequence_t CircularRegion_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_CircularRegion(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_CircularRegion(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_CircularRegion, CircularRegion_sequence);
 
@@ -723,8 +714,8 @@ static const oer_sequence_t RectangularRegion_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_RectangularRegion(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_RectangularRegion(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_RectangularRegion, RectangularRegion_sequence);
 
@@ -736,8 +727,8 @@ static const oer_sequence_t SequenceOfRectangularRegion_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfRectangularRegion_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_RectangularRegion },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfRectangularRegion(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfRectangularRegion(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence_of(tvb, offset, actx, tree, hf_index,
                                       ett_ieee1609dot2_SequenceOfRectangularRegion, SequenceOfRectangularRegion_sequence_of);
 
@@ -749,8 +740,8 @@ static const oer_sequence_t PolygonalRegion_sequence_of[1] = {
   { &hf_ieee1609dot2_PolygonalRegion_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_TwoDLocation },
 };
 
-static unsigned
-dissect_ieee1609dot2_PolygonalRegion(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_PolygonalRegion(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_constrained_sequence_of(tvb, offset, actx, tree, hf_index,
                                                   ett_ieee1609dot2_PolygonalRegion, PolygonalRegion_sequence_of,
                                                   3, NO_BOUND, false);
@@ -760,8 +751,8 @@ dissect_ieee1609dot2_PolygonalRegion(tvbuff_t *tvb _U_, uint32_t offset _U_, asn
 
 
 
-static unsigned
-dissect_ieee1609dot2_UnCountryId(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_UnCountryId(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ieee1609dot2_Uint16(tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -774,8 +765,8 @@ static const oer_sequence_t CountryAndRegions_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_CountryAndRegions(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_CountryAndRegions(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_CountryAndRegions, CountryAndRegions_sequence);
 
@@ -789,8 +780,8 @@ static const oer_sequence_t RegionAndSubregions_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_RegionAndSubregions(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_RegionAndSubregions(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_RegionAndSubregions, RegionAndSubregions_sequence);
 
@@ -802,8 +793,8 @@ static const oer_sequence_t SequenceOfRegionAndSubregions_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfRegionAndSubregions_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_RegionAndSubregions },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfRegionAndSubregions(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfRegionAndSubregions(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence_of(tvb, offset, actx, tree, hf_index,
                                       ett_ieee1609dot2_SequenceOfRegionAndSubregions, SequenceOfRegionAndSubregions_sequence_of);
 
@@ -817,8 +808,8 @@ static const oer_sequence_t CountryAndSubregions_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_CountryAndSubregions(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_CountryAndSubregions(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_CountryAndSubregions, CountryAndSubregions_sequence);
 
@@ -840,8 +831,8 @@ static const oer_choice_t IdentifiedRegion_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_IdentifiedRegion(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_IdentifiedRegion(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_IdentifiedRegion, IdentifiedRegion_choice,
                                  NULL);
@@ -854,8 +845,8 @@ static const oer_sequence_t SequenceOfIdentifiedRegion_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfIdentifiedRegion_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_IdentifiedRegion },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfIdentifiedRegion(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfIdentifiedRegion(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence_of(tvb, offset, actx, tree, hf_index,
                                       ett_ieee1609dot2_SequenceOfIdentifiedRegion, SequenceOfIdentifiedRegion_sequence_of);
 
@@ -879,8 +870,8 @@ static const oer_choice_t GeographicRegion_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_GeographicRegion(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_GeographicRegion(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_GeographicRegion, GeographicRegion_choice,
                                  NULL);
@@ -890,8 +881,8 @@ dissect_ieee1609dot2_GeographicRegion(tvbuff_t *tvb _U_, uint32_t offset _U_, as
 
 
 
-static unsigned
-dissect_ieee1609dot2_Elevation(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_Elevation(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ieee1609dot2_Uint16(tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -905,8 +896,8 @@ static const oer_sequence_t ThreeDLocation_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_ThreeDLocation(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_ThreeDLocation(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_ThreeDLocation, ThreeDLocation_sequence);
 
@@ -915,8 +906,8 @@ dissect_ieee1609dot2_ThreeDLocation(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1
 
 
 
-static unsigned
-dissect_ieee1609dot2_OCTET_STRING_SIZE_32(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_OCTET_STRING_SIZE_32(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_octet_string(tvb, offset, actx, tree, hf_index,
                                        32, 32, false, NULL);
 
@@ -925,8 +916,8 @@ dissect_ieee1609dot2_OCTET_STRING_SIZE_32(tvbuff_t *tvb _U_, uint32_t offset _U_
 
 
 
-static unsigned
-dissect_ieee1609dot2_NULL(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_NULL(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_null(tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -939,8 +930,8 @@ static const oer_sequence_t T_uncompressedP256_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_T_uncompressedP256(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_T_uncompressedP256(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_T_uncompressedP256, T_uncompressedP256_sequence);
 
@@ -966,8 +957,8 @@ static const oer_choice_t EccP256CurvePoint_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_EccP256CurvePoint(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_EccP256CurvePoint(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_EccP256CurvePoint, EccP256CurvePoint_choice,
                                  NULL);
@@ -982,8 +973,8 @@ static const oer_sequence_t EcdsaP256Signature_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_EcdsaP256Signature(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_EcdsaP256Signature(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_EcdsaP256Signature, EcdsaP256Signature_sequence);
 
@@ -992,8 +983,8 @@ dissect_ieee1609dot2_EcdsaP256Signature(tvbuff_t *tvb _U_, uint32_t offset _U_, 
 
 
 
-static unsigned
-dissect_ieee1609dot2_OCTET_STRING_SIZE_48(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_OCTET_STRING_SIZE_48(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_octet_string(tvb, offset, actx, tree, hf_index,
                                        48, 48, false, NULL);
 
@@ -1007,8 +998,8 @@ static const oer_sequence_t T_uncompressedP384_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_T_uncompressedP384(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_T_uncompressedP384(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_T_uncompressedP384, T_uncompressedP384_sequence);
 
@@ -1034,8 +1025,8 @@ static const oer_choice_t EccP384CurvePoint_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_EccP384CurvePoint(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_EccP384CurvePoint(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_EccP384CurvePoint, EccP384CurvePoint_choice,
                                  NULL);
@@ -1050,8 +1041,8 @@ static const oer_sequence_t EcdsaP384Signature_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_EcdsaP384Signature(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_EcdsaP384Signature(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_EcdsaP384Signature, EcdsaP384Signature_sequence);
 
@@ -1060,13 +1051,13 @@ dissect_ieee1609dot2_EcdsaP384Signature(tvbuff_t *tvb _U_, uint32_t offset _U_, 
 
 
 static const oer_sequence_t EcsigP256Signature_sequence[] = {
-  { &hf_ieee1609dot2_ecsigp256RSig, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_OCTET_STRING_SIZE_32 },
+  { &hf_ieee1609dot2_rSig_01, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_OCTET_STRING_SIZE_32 },
   { &hf_ieee1609dot2_sSig   , ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_OCTET_STRING_SIZE_32 },
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_EcsigP256Signature(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_EcsigP256Signature(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_EcsigP256Signature, EcsigP256Signature_sequence);
 
@@ -1092,8 +1083,8 @@ static const oer_choice_t Signature_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_Signature(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_Signature(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_Signature, Signature_choice,
                                  NULL);
@@ -1109,8 +1100,8 @@ static const value_string ieee1609dot2_SymmAlgorithm_vals[] = {
 };
 
 
-static unsigned
-dissect_ieee1609dot2_SymmAlgorithm(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SymmAlgorithm(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_enumerated(tvb, offset, actx, tree, hf_index,
                                      1, NULL, true, 1, NULL);
 
@@ -1126,8 +1117,8 @@ static const value_string ieee1609dot2_HashAlgorithm_vals[] = {
 };
 
 
-static unsigned
-dissect_ieee1609dot2_HashAlgorithm(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_HashAlgorithm(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_enumerated(tvb, offset, actx, tree, hf_index,
                                      1, NULL, true, 2, NULL);
 
@@ -1136,8 +1127,8 @@ dissect_ieee1609dot2_HashAlgorithm(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_
 
 
 
-static unsigned
-dissect_ieee1609dot2_OCTET_STRING_SIZE_16(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_OCTET_STRING_SIZE_16(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_octet_string(tvb, offset, actx, tree, hf_index,
                                        16, 16, false, NULL);
 
@@ -1152,8 +1143,8 @@ static const oer_sequence_t EciesP256EncryptedKey_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_EciesP256EncryptedKey(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_EciesP256EncryptedKey(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_EciesP256EncryptedKey, EciesP256EncryptedKey_sequence);
 
@@ -1168,8 +1159,8 @@ static const oer_sequence_t EcencP256EncryptedKey_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_EcencP256EncryptedKey(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_EcencP256EncryptedKey(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_EcencP256EncryptedKey, EcencP256EncryptedKey_sequence);
 
@@ -1191,8 +1182,8 @@ static const oer_choice_t BasePublicEncryptionKey_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_BasePublicEncryptionKey(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_BasePublicEncryptionKey(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_BasePublicEncryptionKey, BasePublicEncryptionKey_choice,
                                  NULL);
@@ -1207,8 +1198,8 @@ static const oer_sequence_t PublicEncryptionKey_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_PublicEncryptionKey(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_PublicEncryptionKey(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_PublicEncryptionKey, PublicEncryptionKey_sequence);
 
@@ -1228,8 +1219,8 @@ static const oer_choice_t SymmetricEncryptionKey_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_SymmetricEncryptionKey(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SymmetricEncryptionKey(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_SymmetricEncryptionKey, SymmetricEncryptionKey_choice,
                                  NULL);
@@ -1250,8 +1241,8 @@ static const oer_choice_t EncryptionKey_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_EncryptionKey(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_EncryptionKey(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_EncryptionKey, EncryptionKey_choice,
                                  NULL);
@@ -1278,8 +1269,8 @@ static const oer_choice_t PublicVerificationKey_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_PublicVerificationKey(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_PublicVerificationKey(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_PublicVerificationKey, PublicVerificationKey_choice,
                                  NULL);
@@ -1329,7 +1320,6 @@ const val64_string ieee1609dot2_Psid_vals[] = {
   { psid_den_basic_services, "psid-den-basic-services" },
   { psid_misbehavior_reporting_for_common_applications, "psid-misbehavior-reporting-for-common-applications" },
   { psid_vulnerable_road_users_safety_applications, "psid-vulnerable-road-users-safety-applications" },
-  { psid_avm_service, "psid-avm-service" },
   { psid_testings, "psid-testings" },
   { psid_differential_gps_corrections_uncompressed, "psid-differential-gps-corrections-uncompressed" },
   { psid_differential_gps_corrections_compressed, "psid-differential-gps-corrections-compressed" },
@@ -1351,11 +1341,7 @@ const val64_string ieee1609dot2_Psid_vals[] = {
   { psid_maneuver_coordination_service, "psid-maneuver-coordination-service" },
   { psid_certificate_revocation_list_application, "psid-certificate-revocation-list-application" },
   { psid_traffic_light_control_status_service, "psid-traffic-light-control-status-service" },
-  { psid_vru_awareness_basic_service, "psid-vru-awareness-basic-service" },
   { psid_collective_perception_service, "psid-collective-perception-service" },
-  { psid_imz_basic_service, "psid-imz-basic-service" },
-  { psid_mr_service, "psid-mr-service" },
-  { psid_poi_service, "psid-poi-service" },
   { psid_vehicle_initiated_distress_notivication, "psid-vehicle-initiated-distress-notivication" },
   { psid_fast_service_advertisement_protocol, "psid-fast-service-advertisement-protocol" },
   { psid_its_station_internal_management_communications_protocol, "psid-its-station-internal-management-communications-protocol" },
@@ -1374,8 +1360,8 @@ const val64_string ieee1609dot2_Psid_vals[] = {
 };
 
 
-static unsigned
-dissect_ieee1609dot2_Psid(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_Psid(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_constrained_integer_64b_no_ub(tvb, offset, actx, tree, hf_index,
                                                             0U, NO_BOUND, NULL, false);
 
@@ -1384,8 +1370,8 @@ dissect_ieee1609dot2_Psid(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *ac
 
 
 
-static unsigned
-dissect_ieee1609dot2_T_psPsid(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_T_psPsid(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_constrained_integer_64b_no_ub(tvb, offset, actx, tree, hf_index,
                                                0U, NO_BOUND, &((ieee1609_private_data_t*)actx->private_data)->psidssp, false);
 
@@ -1395,8 +1381,8 @@ dissect_ieee1609dot2_T_psPsid(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t
 
 
 
-static unsigned
-dissect_ieee1609dot2_T_opaque(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_T_opaque(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   tvbuff_t *ssp;
   ieee1609_private_data_t *my_private_data = (ieee1609_private_data_t*)actx->private_data;
 
@@ -1414,8 +1400,8 @@ dissect_ieee1609dot2_T_opaque(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t
 
 
 
-static unsigned
-dissect_ieee1609dot2_BitmapSsp(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_BitmapSsp(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_octet_string(tvb, offset, actx, tree, hf_index,
                                        0, 31, false, NULL);
 
@@ -1435,8 +1421,8 @@ static const oer_choice_t ServiceSpecificPermissions_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_ServiceSpecificPermissions(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_ServiceSpecificPermissions(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_ServiceSpecificPermissions, ServiceSpecificPermissions_choice,
                                  NULL);
@@ -1451,8 +1437,8 @@ static const oer_sequence_t PsidSsp_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_PsidSsp(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_PsidSsp(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_PsidSsp, PsidSsp_sequence);
 
@@ -1464,8 +1450,8 @@ static const oer_sequence_t SequenceOfPsidSsp_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfPsidSsp_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_PsidSsp },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfPsidSsp(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfPsidSsp(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence_of(tvb, offset, actx, tree, hf_index,
                                       ett_ieee1609dot2_SequenceOfPsidSsp, SequenceOfPsidSsp_sequence_of);
 
@@ -1474,8 +1460,8 @@ dissect_ieee1609dot2_SequenceOfPsidSsp(tvbuff_t *tvb _U_, uint32_t offset _U_, a
 
 
 
-static unsigned
-dissect_ieee1609dot2_OCTET_STRING_SIZE_0_MAX(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_OCTET_STRING_SIZE_0_MAX(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_octet_string(tvb, offset, actx, tree, hf_index,
                                        0, NO_BOUND, false, NULL);
 
@@ -1487,8 +1473,8 @@ static const oer_sequence_t SequenceOfOctetString_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfOctetString_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_OCTET_STRING_SIZE_0_MAX },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfOctetString(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfOctetString(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_constrained_sequence_of(tvb, offset, actx, tree, hf_index,
                                                   ett_ieee1609dot2_SequenceOfOctetString, SequenceOfOctetString_sequence_of,
                                                   0, NO_BOUND, false);
@@ -1498,8 +1484,8 @@ dissect_ieee1609dot2_SequenceOfOctetString(tvbuff_t *tvb _U_, uint32_t offset _U
 
 
 
-static unsigned
-dissect_ieee1609dot2_OCTET_STRING_SIZE_1_32(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_OCTET_STRING_SIZE_1_32(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_octet_string(tvb, offset, actx, tree, hf_index,
                                        1, 32, false, NULL);
 
@@ -1513,8 +1499,8 @@ static const oer_sequence_t BitmapSspRange_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_BitmapSspRange(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_BitmapSspRange(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_BitmapSspRange, BitmapSspRange_sequence);
 
@@ -1536,8 +1522,8 @@ static const oer_choice_t SspRange_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_SspRange(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SspRange(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_SspRange, SspRange_choice,
                                  NULL);
@@ -1552,8 +1538,8 @@ static const oer_sequence_t PsidSspRange_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_PsidSspRange(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_PsidSspRange(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_PsidSspRange, PsidSspRange_sequence);
 
@@ -1565,8 +1551,8 @@ static const oer_sequence_t SequenceOfPsidSspRange_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfPsidSspRange_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_PsidSspRange },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfPsidSspRange(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfPsidSspRange(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence_of(tvb, offset, actx, tree, hf_index,
                                       ett_ieee1609dot2_SequenceOfPsidSspRange, SequenceOfPsidSspRange_sequence_of);
 
@@ -1575,8 +1561,8 @@ dissect_ieee1609dot2_SequenceOfPsidSspRange(tvbuff_t *tvb _U_, uint32_t offset _
 
 
 
-static unsigned
-dissect_ieee1609dot2_SubjectAssurance(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SubjectAssurance(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_octet_string(tvb, offset, actx, tree, hf_index,
                                        1, 1, false, NULL);
 
@@ -1585,8 +1571,8 @@ dissect_ieee1609dot2_SubjectAssurance(tvbuff_t *tvb _U_, uint32_t offset _U_, as
 
 
 
-static unsigned
-dissect_ieee1609dot2_CrlSeries(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_CrlSeries(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ieee1609dot2_Uint16(tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -1594,8 +1580,8 @@ dissect_ieee1609dot2_CrlSeries(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_
 
 
 
-static unsigned
-dissect_ieee1609dot2_IValue(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_IValue(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ieee1609dot2_Uint16(tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -1603,8 +1589,8 @@ dissect_ieee1609dot2_IValue(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *
 
 
 
-static unsigned
-dissect_ieee1609dot2_Hostname(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_Hostname(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_UTF8String(tvb, offset, actx, tree, hf_index,
                                           0, 255, false);
 
@@ -1613,8 +1599,8 @@ dissect_ieee1609dot2_Hostname(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t
 
 
 
-static unsigned
-dissect_ieee1609dot2_LinkageValue(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_LinkageValue(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_octet_string(tvb, offset, actx, tree, hf_index,
                                        9, 9, false, NULL);
 
@@ -1623,8 +1609,8 @@ dissect_ieee1609dot2_LinkageValue(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_c
 
 
 
-static unsigned
-dissect_ieee1609dot2_OCTET_STRING_SIZE_4(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_OCTET_STRING_SIZE_4(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_octet_string(tvb, offset, actx, tree, hf_index,
                                        4, 4, false, NULL);
 
@@ -1633,8 +1619,8 @@ dissect_ieee1609dot2_OCTET_STRING_SIZE_4(tvbuff_t *tvb _U_, uint32_t offset _U_,
 
 
 
-static unsigned
-dissect_ieee1609dot2_OCTET_STRING_SIZE_9(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_OCTET_STRING_SIZE_9(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_octet_string(tvb, offset, actx, tree, hf_index,
                                        9, 9, false, NULL);
 
@@ -1648,8 +1634,8 @@ static const oer_sequence_t GroupLinkageValue_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_GroupLinkageValue(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_GroupLinkageValue(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_GroupLinkageValue, GroupLinkageValue_sequence);
 
@@ -1658,8 +1644,8 @@ dissect_ieee1609dot2_GroupLinkageValue(tvbuff_t *tvb _U_, uint32_t offset _U_, a
 
 
 
-static unsigned
-dissect_ieee1609dot2_LaId(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_LaId(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_octet_string(tvb, offset, actx, tree, hf_index,
                                        2, 2, false, NULL);
 
@@ -1668,8 +1654,8 @@ dissect_ieee1609dot2_LaId(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *ac
 
 
 
-static unsigned
-dissect_ieee1609dot2_LinkageSeed(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_LinkageSeed(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_octet_string(tvb, offset, actx, tree, hf_index,
                                        16, 16, false, NULL);
 
@@ -1681,8 +1667,8 @@ static const oer_sequence_t SequenceOfLinkageSeed_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfLinkageSeed_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_LinkageSeed },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfLinkageSeed(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfLinkageSeed(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence_of(tvb, offset, actx, tree, hf_index,
                                       ett_ieee1609dot2_SequenceOfLinkageSeed, SequenceOfLinkageSeed_sequence_of);
 
@@ -1696,8 +1682,8 @@ static const value_string ieee1609dot2_ExtId_vals[] = {
 };
 
 
-static unsigned
-dissect_ieee1609dot2_ExtId(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_ExtId(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_constrained_integer(tvb, offset, actx, tree, hf_index,
                                                             0U, 255U, NULL, false);
 
@@ -1706,8 +1692,8 @@ dissect_ieee1609dot2_ExtId(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *a
 
 
 
-static unsigned
-dissect_ieee1609dot2_Uint8_1(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_Uint8_1(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_constrained_integer(tvb, offset, actx, tree, hf_index,
                                                             1U, 1U, NULL, false);
 
@@ -1720,8 +1706,8 @@ static const oer_sequence_t CrlPriorityInfo_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_CrlPriorityInfo(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_CrlPriorityInfo(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_CrlPriorityInfo, CrlPriorityInfo_sequence);
 
@@ -1730,13 +1716,13 @@ dissect_ieee1609dot2_CrlPriorityInfo(tvbuff_t *tvb _U_, uint32_t offset _U_, asn
 
 
 static const oer_sequence_t HashBasedRevocationInfo_sequence[] = {
-  { &hf_ieee1609dot2_hashedId, ASN1_EXTENSION_ROOT    , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_HashedId10 },
+  { &hf_ieee1609dot2_id     , ASN1_EXTENSION_ROOT    , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_HashedId10 },
   { &hf_ieee1609dot2_expiry , ASN1_EXTENSION_ROOT    , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_Time32 },
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_HashBasedRevocationInfo(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_HashBasedRevocationInfo(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_HashBasedRevocationInfo, HashBasedRevocationInfo_sequence);
 
@@ -1748,8 +1734,8 @@ static const oer_sequence_t SequenceOfHashBasedRevocationInfo_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfHashBasedRevocationInfo_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_HashBasedRevocationInfo },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfHashBasedRevocationInfo(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfHashBasedRevocationInfo(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence_of(tvb, offset, actx, tree, hf_index,
                                       ett_ieee1609dot2_SequenceOfHashBasedRevocationInfo, SequenceOfHashBasedRevocationInfo_sequence_of);
 
@@ -1763,8 +1749,8 @@ static const oer_sequence_t ToBeSignedHashIdCrl_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_ToBeSignedHashIdCrl(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_ToBeSignedHashIdCrl(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_ToBeSignedHashIdCrl, ToBeSignedHashIdCrl_sequence);
 
@@ -1778,8 +1764,8 @@ static const oer_sequence_t IndividualRevocation_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_IndividualRevocation(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_IndividualRevocation(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_IndividualRevocation, IndividualRevocation_sequence);
 
@@ -1791,8 +1777,8 @@ static const oer_sequence_t SequenceOfIndividualRevocation_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfIndividualRevocation_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_IndividualRevocation },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfIndividualRevocation(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfIndividualRevocation(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_constrained_sequence_of(tvb, offset, actx, tree, hf_index,
                                                   ett_ieee1609dot2_SequenceOfIndividualRevocation, SequenceOfIndividualRevocation_sequence_of,
                                                   0, NO_BOUND, false);
@@ -1808,8 +1794,8 @@ static const oer_sequence_t IMaxGroup_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_IMaxGroup(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_IMaxGroup(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_IMaxGroup, IMaxGroup_sequence);
 
@@ -1821,8 +1807,8 @@ static const oer_sequence_t SequenceOfIMaxGroup_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfIMaxGroup_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_IMaxGroup },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfIMaxGroup(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfIMaxGroup(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence_of(tvb, offset, actx, tree, hf_index,
                                       ett_ieee1609dot2_SequenceOfIMaxGroup, SequenceOfIMaxGroup_sequence_of);
 
@@ -1837,8 +1823,8 @@ static const oer_sequence_t LAGroup_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_LAGroup(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_LAGroup(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_LAGroup, LAGroup_sequence);
 
@@ -1850,8 +1836,8 @@ static const oer_sequence_t SequenceOfLAGroup_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfLAGroup_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_LAGroup },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfLAGroup(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfLAGroup(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence_of(tvb, offset, actx, tree, hf_index,
                                       ett_ieee1609dot2_SequenceOfLAGroup, SequenceOfLAGroup_sequence_of);
 
@@ -1865,8 +1851,8 @@ static const oer_sequence_t JMaxGroup_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_JMaxGroup(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_JMaxGroup(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_JMaxGroup, JMaxGroup_sequence);
 
@@ -1878,8 +1864,8 @@ static const oer_sequence_t SequenceOfJMaxGroup_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfJMaxGroup_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_JMaxGroup },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfJMaxGroup(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfJMaxGroup(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence_of(tvb, offset, actx, tree, hf_index,
                                       ett_ieee1609dot2_SequenceOfJMaxGroup, SequenceOfJMaxGroup_sequence_of);
 
@@ -1896,8 +1882,8 @@ static const oer_sequence_t GroupCrlEntry_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_GroupCrlEntry(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_GroupCrlEntry(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_GroupCrlEntry, GroupCrlEntry_sequence);
 
@@ -1909,8 +1895,8 @@ static const oer_sequence_t SequenceOfGroupCrlEntry_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfGroupCrlEntry_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_GroupCrlEntry },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfGroupCrlEntry(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfGroupCrlEntry(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence_of(tvb, offset, actx, tree, hf_index,
                                       ett_ieee1609dot2_SequenceOfGroupCrlEntry, SequenceOfGroupCrlEntry_sequence_of);
 
@@ -1925,8 +1911,8 @@ static const oer_sequence_t GroupSingleSeedCrlEntry_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_GroupSingleSeedCrlEntry(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_GroupSingleSeedCrlEntry(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_GroupSingleSeedCrlEntry, GroupSingleSeedCrlEntry_sequence);
 
@@ -1938,8 +1924,8 @@ static const oer_sequence_t SequenceOfGroupSingleSeedCrlEntry_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfGroupSingleSeedCrlEntry_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_GroupSingleSeedCrlEntry },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfGroupSingleSeedCrlEntry(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfGroupSingleSeedCrlEntry(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence_of(tvb, offset, actx, tree, hf_index,
                                       ett_ieee1609dot2_SequenceOfGroupSingleSeedCrlEntry, SequenceOfGroupSingleSeedCrlEntry_sequence_of);
 
@@ -1956,8 +1942,8 @@ static const oer_sequence_t ToBeSignedLinkageValueCrl_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_ToBeSignedLinkageValueCrl(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_ToBeSignedLinkageValueCrl(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_ToBeSignedLinkageValueCrl, ToBeSignedLinkageValueCrl_sequence);
 
@@ -1966,8 +1952,8 @@ dissect_ieee1609dot2_ToBeSignedLinkageValueCrl(tvbuff_t *tvb _U_, uint32_t offse
 
 
 
-static unsigned
-dissect_ieee1609dot2_SeedEvolutionFunctionIdentifier(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SeedEvolutionFunctionIdentifier(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_null(tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -1975,8 +1961,8 @@ dissect_ieee1609dot2_SeedEvolutionFunctionIdentifier(tvbuff_t *tvb _U_, uint32_t
 
 
 
-static unsigned
-dissect_ieee1609dot2_LvGenerationFunctionIdentifier(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_LvGenerationFunctionIdentifier(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_null(tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -1994,8 +1980,8 @@ static const oer_sequence_t ToBeSignedLinkageValueCrlWithAlgIdentifier_sequence[
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_ToBeSignedLinkageValueCrlWithAlgIdentifier(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_ToBeSignedLinkageValueCrlWithAlgIdentifier(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_ToBeSignedLinkageValueCrlWithAlgIdentifier, ToBeSignedLinkageValueCrlWithAlgIdentifier_sequence);
 
@@ -2023,8 +2009,8 @@ static const oer_choice_t TypeSpecificCrlContents_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_TypeSpecificCrlContents(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_TypeSpecificCrlContents(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_TypeSpecificCrlContents, TypeSpecificCrlContents_choice,
                                  NULL);
@@ -2044,8 +2030,8 @@ static const oer_sequence_t CrlContents_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_CrlContents(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_CrlContents(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_CrlContents, CrlContents_sequence);
 
@@ -2063,8 +2049,8 @@ static const oer_choice_t Ieee1609Dot2CrlContent_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_Ieee1609Dot2CrlContent(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_Ieee1609Dot2CrlContent(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_Ieee1609Dot2CrlContent, Ieee1609Dot2CrlContent_choice,
                                  NULL);
@@ -2078,8 +2064,8 @@ static const oer_sequence_t Ieee1609Dot2CrlData_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_Ieee1609Dot2CrlData(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_Ieee1609Dot2CrlData(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_Ieee1609Dot2CrlData, Ieee1609Dot2CrlData_sequence);
 
@@ -2092,8 +2078,8 @@ static const oer_sequence_t CrlSignedDataPayload_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_CrlSignedDataPayload(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_CrlSignedDataPayload(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_CrlSignedDataPayload, CrlSignedDataPayload_sequence);
 
@@ -2102,8 +2088,8 @@ dissect_ieee1609dot2_CrlSignedDataPayload(tvbuff_t *tvb _U_, uint32_t offset _U_
 
 
 
-static unsigned
-dissect_ieee1609dot2_T_hiPsid(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_T_hiPsid(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   uint64_t psid;
   ieee1609_private_data_t *my_private_data = (ieee1609_private_data_t*)actx->private_data;
 
@@ -2127,8 +2113,8 @@ static const oer_sequence_t MissingCrlIdentifier_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_MissingCrlIdentifier(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_MissingCrlIdentifier(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_MissingCrlIdentifier, MissingCrlIdentifier_sequence);
 
@@ -2137,8 +2123,8 @@ dissect_ieee1609dot2_MissingCrlIdentifier(tvbuff_t *tvb _U_, uint32_t offset _U_
 
 
 
-static unsigned
-dissect_ieee1609dot2_Uint8_3(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_Uint8_3(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_constrained_integer(tvb, offset, actx, tree, hf_index,
                                                             3U, 3U, NULL, false);
 
@@ -2153,8 +2139,8 @@ static const value_string ieee1609dot2_CertificateType_vals[] = {
 };
 
 
-static unsigned
-dissect_ieee1609dot2_CertificateType(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_CertificateType(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_enumerated(tvb, offset, actx, tree, hf_index,
                                      2, NULL, true, 0, NULL);
 
@@ -2178,8 +2164,8 @@ static const oer_choice_t IssuerIdentifier_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_IssuerIdentifier(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_IssuerIdentifier(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_IssuerIdentifier, IssuerIdentifier_choice,
                                  NULL);
@@ -2195,8 +2181,8 @@ static const oer_sequence_t LinkageData_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_LinkageData(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_LinkageData(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_LinkageData, LinkageData_sequence);
 
@@ -2205,8 +2191,8 @@ dissect_ieee1609dot2_LinkageData(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ct
 
 
 
-static unsigned
-dissect_ieee1609dot2_OCTET_STRING_SIZE_1_64(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_OCTET_STRING_SIZE_1_64(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_octet_string(tvb, offset, actx, tree, hf_index,
                                        1, 64, false, NULL);
 
@@ -2230,8 +2216,8 @@ static const oer_choice_t CertificateId_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_CertificateId(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_CertificateId(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_CertificateId, CertificateId_choice,
                                  NULL);
@@ -2252,8 +2238,8 @@ static const oer_choice_t SubjectPermissions_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_SubjectPermissions(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SubjectPermissions(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_SubjectPermissions, SubjectPermissions_choice,
                                  NULL);
@@ -2263,8 +2249,8 @@ dissect_ieee1609dot2_SubjectPermissions(tvbuff_t *tvb _U_, uint32_t offset _U_, 
 
 
 
-static unsigned
-dissect_ieee1609dot2_INTEGER(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_INTEGER(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_integer(tvb, offset, actx, tree, hf_index, NULL);
 
   return offset;
@@ -2277,8 +2263,8 @@ static int * const EndEntityType_bits[] = {
   NULL
 };
 
-static unsigned
-dissect_ieee1609dot2_EndEntityType(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_EndEntityType(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_bit_string(tvb, offset, actx, tree, hf_index,
                                      8, 8, false, EndEntityType_bits, 2, NULL, NULL);
 
@@ -2294,8 +2280,8 @@ static const oer_sequence_t PsidGroupPermissions_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_PsidGroupPermissions(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_PsidGroupPermissions(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_PsidGroupPermissions, PsidGroupPermissions_sequence);
 
@@ -2307,8 +2293,8 @@ static const oer_sequence_t SequenceOfPsidGroupPermissions_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfPsidGroupPermissions_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_PsidGroupPermissions },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfPsidGroupPermissions(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfPsidGroupPermissions(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence_of(tvb, offset, actx, tree, hf_index,
                                       ett_ieee1609dot2_SequenceOfPsidGroupPermissions, SequenceOfPsidGroupPermissions_sequence_of);
 
@@ -2328,8 +2314,8 @@ static const oer_choice_t VerificationKeyIndicator_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_VerificationKeyIndicator(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_VerificationKeyIndicator(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_VerificationKeyIndicator, VerificationKeyIndicator_choice,
                                  NULL);
@@ -2343,8 +2329,8 @@ static int * const T_flags_bits[] = {
   NULL
 };
 
-static unsigned
-dissect_ieee1609dot2_T_flags(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_T_flags(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_bit_string(tvb, offset, actx, tree, hf_index,
                                      8, 8, false, T_flags_bits, 1, NULL, NULL);
 
@@ -2353,25 +2339,22 @@ dissect_ieee1609dot2_T_flags(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t 
 
 
 
-static unsigned
-dissect_ieee1609dot2_T_content(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  // AppExtension/content -> AppExtension/content
-  increment_dissection_depth_by_n(actx->pinfo, 1);
+static int
+dissect_ieee1609dot2_T_content(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_open_type(tvb, offset, actx, tree, hf_index, NULL);
 
-  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
 
 static const oer_sequence_t AppExtension_sequence[] = {
-  { &hf_ieee1609dot2_id     , ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_ExtId },
+  { &hf_ieee1609dot2_id_02  , ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_ExtId },
   { &hf_ieee1609dot2_content_03, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_T_content },
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_AppExtension(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_AppExtension(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_AppExtension, AppExtension_sequence);
 
@@ -2383,8 +2366,8 @@ static const oer_sequence_t SequenceOfAppExtensions_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfAppExtensions_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_AppExtension },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfAppExtensions(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfAppExtensions(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_constrained_sequence_of(tvb, offset, actx, tree, hf_index,
                                                   ett_ieee1609dot2_SequenceOfAppExtensions, SequenceOfAppExtensions_sequence_of,
                                                   1, NO_BOUND, false);
@@ -2394,13 +2377,10 @@ dissect_ieee1609dot2_SequenceOfAppExtensions(tvbuff_t *tvb _U_, uint32_t offset 
 
 
 
-static unsigned
-dissect_ieee1609dot2_T_specific(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  // CertIssueExtension/permissions/specific -> CertIssueExtension/permissions/specific
-  increment_dissection_depth_by_n(actx->pinfo, 1);
+static int
+dissect_ieee1609dot2_T_specific(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_open_type(tvb, offset, actx, tree, hf_index, NULL);
 
-  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -2417,8 +2397,8 @@ static const oer_choice_t T_permissions_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_T_permissions(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_T_permissions(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_T_permissions, T_permissions_choice,
                                  NULL);
@@ -2428,13 +2408,13 @@ dissect_ieee1609dot2_T_permissions(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_
 
 
 static const oer_sequence_t CertIssueExtension_sequence[] = {
-  { &hf_ieee1609dot2_id     , ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_ExtId },
+  { &hf_ieee1609dot2_id_02  , ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_ExtId },
   { &hf_ieee1609dot2_permissions, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_T_permissions },
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_CertIssueExtension(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_CertIssueExtension(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_CertIssueExtension, CertIssueExtension_sequence);
 
@@ -2446,8 +2426,8 @@ static const oer_sequence_t SequenceOfCertIssueExtensions_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfCertIssueExtensions_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_CertIssueExtension },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfCertIssueExtensions(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfCertIssueExtensions(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_constrained_sequence_of(tvb, offset, actx, tree, hf_index,
                                                   ett_ieee1609dot2_SequenceOfCertIssueExtensions, SequenceOfCertIssueExtensions_sequence_of,
                                                   1, NO_BOUND, false);
@@ -2457,13 +2437,10 @@ dissect_ieee1609dot2_SequenceOfCertIssueExtensions(tvbuff_t *tvb _U_, uint32_t o
 
 
 
-static unsigned
-dissect_ieee1609dot2_T_content_01(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  // CertRequestExtension/permissions/content -> CertRequestExtension/permissions/content
-  increment_dissection_depth_by_n(actx->pinfo, 1);
+static int
+dissect_ieee1609dot2_T_content_01(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_open_type(tvb, offset, actx, tree, hf_index, NULL);
 
-  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -2480,8 +2457,8 @@ static const oer_choice_t T_permissions_01_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_T_permissions_01(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_T_permissions_01(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_T_permissions_01, T_permissions_01_choice,
                                  NULL);
@@ -2491,13 +2468,13 @@ dissect_ieee1609dot2_T_permissions_01(tvbuff_t *tvb _U_, uint32_t offset _U_, as
 
 
 static const oer_sequence_t CertRequestExtension_sequence[] = {
-  { &hf_ieee1609dot2_id     , ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_ExtId },
+  { &hf_ieee1609dot2_id_02  , ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_ExtId },
   { &hf_ieee1609dot2_permissions_01, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_T_permissions_01 },
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_CertRequestExtension(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_CertRequestExtension(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_CertRequestExtension, CertRequestExtension_sequence);
 
@@ -2509,8 +2486,8 @@ static const oer_sequence_t SequenceOfCertRequestExtensions_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfCertRequestExtensions_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_CertRequestExtension },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfCertRequestExtensions(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfCertRequestExtensions(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_constrained_sequence_of(tvb, offset, actx, tree, hf_index,
                                                   ett_ieee1609dot2_SequenceOfCertRequestExtensions, SequenceOfCertRequestExtensions_sequence_of,
                                                   1, NO_BOUND, false);
@@ -2520,7 +2497,7 @@ dissect_ieee1609dot2_SequenceOfCertRequestExtensions(tvbuff_t *tvb _U_, uint32_t
 
 
 static const oer_sequence_t ToBeSignedCertificate_sequence[] = {
-  { &hf_ieee1609dot2_certificateId, ASN1_EXTENSION_ROOT    , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_CertificateId },
+  { &hf_ieee1609dot2_id_01  , ASN1_EXTENSION_ROOT    , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_CertificateId },
   { &hf_ieee1609dot2_cracaId, ASN1_EXTENSION_ROOT    , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_HashedId3 },
   { &hf_ieee1609dot2_crlSeries, ASN1_EXTENSION_ROOT    , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_CrlSeries },
   { &hf_ieee1609dot2_validityPeriod, ASN1_EXTENSION_ROOT    , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_ValidityPeriod },
@@ -2539,8 +2516,8 @@ static const oer_sequence_t ToBeSignedCertificate_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_ToBeSignedCertificate(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_ToBeSignedCertificate(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_ToBeSignedCertificate, ToBeSignedCertificate_sequence);
 
@@ -2557,8 +2534,8 @@ static const oer_sequence_t CertificateBase_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_CertificateBase(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_CertificateBase(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_CertificateBase, CertificateBase_sequence);
 
@@ -2567,8 +2544,8 @@ dissect_ieee1609dot2_CertificateBase(tvbuff_t *tvb _U_, uint32_t offset _U_, asn
 
 
 
-static unsigned
-dissect_ieee1609dot2_Certificate(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_Certificate(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ieee1609dot2_CertificateBase(tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -2583,8 +2560,8 @@ static const value_string ieee1609dot2_PduFunctionalType_vals[] = {
 };
 
 
-static unsigned
-dissect_ieee1609dot2_PduFunctionalType(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_PduFunctionalType(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_constrained_integer(tvb, offset, actx, tree, hf_index,
                                                             0U, 255U, NULL, false);
 
@@ -2599,8 +2576,8 @@ static const value_string ieee1609dot2_HeaderInfoContributorId_vals[] = {
 };
 
 
-static unsigned
-dissect_ieee1609dot2_HeaderInfoContributorId(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_HeaderInfoContributorId(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_constrained_integer(tvb, offset, actx, tree, hf_index,
                                                             0U, 255U, NULL, false);
 
@@ -2609,13 +2586,10 @@ dissect_ieee1609dot2_HeaderInfoContributorId(tvbuff_t *tvb _U_, uint32_t offset 
 
 
 
-static unsigned
-dissect_ieee1609dot2_T_extns_item(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  // ContributedExtensionBlock/extns/_item -> ContributedExtensionBlock/extns/_item
-  increment_dissection_depth_by_n(actx->pinfo, 1);
+static int
+dissect_ieee1609dot2_T_extns_item(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_open_type(tvb, offset, actx, tree, hf_index, NULL);
 
-  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -2624,8 +2598,8 @@ static const oer_sequence_t T_extns_sequence_of[1] = {
   { &hf_ieee1609dot2_extns_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_T_extns_item },
 };
 
-static unsigned
-dissect_ieee1609dot2_T_extns(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_T_extns(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_constrained_sequence_of(tvb, offset, actx, tree, hf_index,
                                                   ett_ieee1609dot2_T_extns, T_extns_sequence_of,
                                                   1, NO_BOUND, false);
@@ -2640,8 +2614,8 @@ static const oer_sequence_t ContributedExtensionBlock_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_ContributedExtensionBlock(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_ContributedExtensionBlock(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_ContributedExtensionBlock, ContributedExtensionBlock_sequence);
 
@@ -2653,8 +2627,8 @@ static const oer_sequence_t ContributedExtensionBlocks_sequence_of[1] = {
   { &hf_ieee1609dot2_ContributedExtensionBlocks_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_ContributedExtensionBlock },
 };
 
-static unsigned
-dissect_ieee1609dot2_ContributedExtensionBlocks(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_ContributedExtensionBlocks(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_constrained_sequence_of(tvb, offset, actx, tree, hf_index,
                                                   ett_ieee1609dot2_ContributedExtensionBlocks, ContributedExtensionBlocks_sequence_of,
                                                   1, NO_BOUND, false);
@@ -2678,8 +2652,8 @@ static const oer_sequence_t HeaderInfo_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_HeaderInfo(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_HeaderInfo(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_HeaderInfo, HeaderInfo_sequence);
 
@@ -2693,8 +2667,8 @@ static const oer_sequence_t CrlToBeSignedData_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_CrlToBeSignedData(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_CrlToBeSignedData(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_CrlToBeSignedData, CrlToBeSignedData_sequence);
 
@@ -2707,8 +2681,8 @@ static const oer_sequence_t CrlSignedData_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_CrlSignedData(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_CrlSignedData(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_CrlSignedData, CrlSignedData_sequence);
 
@@ -2726,8 +2700,8 @@ static const oer_choice_t SecuredCrlContent_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_SecuredCrlContent(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SecuredCrlContent(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_SecuredCrlContent, SecuredCrlContent_choice,
                                  NULL);
@@ -2741,8 +2715,8 @@ static const oer_sequence_t SecuredCrl_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_SecuredCrl(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SecuredCrl(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_SecuredCrl, SecuredCrl_sequence);
 
@@ -2751,8 +2725,8 @@ dissect_ieee1609dot2_SecuredCrl(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx
 
 
 
-static unsigned
-dissect_ieee1609dot2_T_unsecuredData(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_T_unsecuredData(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   ieee1609_private_data_t *my_private_data = (ieee1609_private_data_t*)actx->private_data;
 
   offset = dissect_oer_octet_string(tvb, offset, actx, tree, hf_index,
@@ -2788,8 +2762,8 @@ static const oer_choice_t HashedData_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_HashedData(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_HashedData(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_HashedData, HashedData_choice,
                                  NULL);
@@ -2805,8 +2779,8 @@ static const oer_sequence_t SignedDataPayload_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_SignedDataPayload(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SignedDataPayload(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_SignedDataPayload, SignedDataPayload_sequence);
 
@@ -2820,8 +2794,8 @@ static const oer_sequence_t ToBeSignedData_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_ToBeSignedData(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_ToBeSignedData(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_ToBeSignedData, ToBeSignedData_sequence);
 
@@ -2833,8 +2807,8 @@ static const oer_sequence_t SequenceOfCertificate_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfCertificate_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_Certificate },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfCertificate(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfCertificate(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence_of(tvb, offset, actx, tree, hf_index,
                                       ett_ieee1609dot2_SequenceOfCertificate, SequenceOfCertificate_sequence_of);
 
@@ -2856,8 +2830,8 @@ static const oer_choice_t SignerIdentifier_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_SignerIdentifier(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SignerIdentifier(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_SignerIdentifier, SignerIdentifier_choice,
                                  NULL);
@@ -2874,8 +2848,8 @@ static const oer_sequence_t SignedData_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_SignedData(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SignedData(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_SignedData, SignedData_sequence);
 
@@ -2884,8 +2858,8 @@ dissect_ieee1609dot2_SignedData(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx
 
 
 
-static unsigned
-dissect_ieee1609dot2_PreSharedKeyRecipientInfo(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_PreSharedKeyRecipientInfo(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ieee1609dot2_HashedId8(tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -2893,8 +2867,8 @@ dissect_ieee1609dot2_PreSharedKeyRecipientInfo(tvbuff_t *tvb _U_, uint32_t offse
 
 
 
-static unsigned
-dissect_ieee1609dot2_OCTET_STRING_SIZE_12(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_OCTET_STRING_SIZE_12(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_octet_string(tvb, offset, actx, tree, hf_index,
                                        12, 12, false, NULL);
 
@@ -2908,8 +2882,8 @@ static const oer_sequence_t One28BitCcmCiphertext_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_One28BitCcmCiphertext(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_One28BitCcmCiphertext(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_One28BitCcmCiphertext, One28BitCcmCiphertext_sequence);
 
@@ -2929,8 +2903,8 @@ static const oer_choice_t SymmetricCiphertext_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_SymmetricCiphertext(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SymmetricCiphertext(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_SymmetricCiphertext, SymmetricCiphertext_choice,
                                  NULL);
@@ -2945,8 +2919,8 @@ static const oer_sequence_t SymmRecipientInfo_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_SymmRecipientInfo(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SymmRecipientInfo(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_SymmRecipientInfo, SymmRecipientInfo_sequence);
 
@@ -2968,8 +2942,8 @@ static const oer_choice_t EncryptedDataEncryptionKey_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_EncryptedDataEncryptionKey(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_EncryptedDataEncryptionKey(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_EncryptedDataEncryptionKey, EncryptedDataEncryptionKey_choice,
                                  NULL);
@@ -2984,8 +2958,8 @@ static const oer_sequence_t PKRecipientInfo_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_PKRecipientInfo(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_PKRecipientInfo(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_PKRecipientInfo, PKRecipientInfo_sequence);
 
@@ -3011,8 +2985,8 @@ static const oer_choice_t RecipientInfo_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_RecipientInfo(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_RecipientInfo(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_RecipientInfo, RecipientInfo_choice,
                                  NULL);
@@ -3025,8 +2999,8 @@ static const oer_sequence_t SequenceOfRecipientInfo_sequence_of[1] = {
   { &hf_ieee1609dot2_SequenceOfRecipientInfo_item, ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_ieee1609dot2_RecipientInfo },
 };
 
-static unsigned
-dissect_ieee1609dot2_SequenceOfRecipientInfo(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_SequenceOfRecipientInfo(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence_of(tvb, offset, actx, tree, hf_index,
                                       ett_ieee1609dot2_SequenceOfRecipientInfo, SequenceOfRecipientInfo_sequence_of);
 
@@ -3040,8 +3014,8 @@ static const oer_sequence_t EncryptedData_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_EncryptedData(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_EncryptedData(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_EncryptedData, EncryptedData_sequence);
 
@@ -3067,8 +3041,8 @@ static const oer_choice_t Ieee1609Dot2Content_choice[] = {
   { 0, NULL, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_Ieee1609Dot2Content(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_Ieee1609Dot2Content(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_oer_choice(tvb, offset, actx, tree, hf_index,
                                  ett_ieee1609dot2_Ieee1609Dot2Content, Ieee1609Dot2Content_choice,
                                  NULL);
@@ -3083,29 +3057,31 @@ static const oer_sequence_t Ieee1609Dot2Data_sequence[] = {
   { NULL, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ieee1609dot2_Ieee1609Dot2Data(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ieee1609dot2_Ieee1609Dot2Data(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   // Ieee1609Dot2Data -> Ieee1609Dot2Content -> SignedData -> ToBeSignedData -> SignedDataPayload -> Ieee1609Dot2Data
-  increment_dissection_depth_by_n(actx->pinfo, 5);
+  actx->pinfo->dissection_depth += 5;
+  increment_dissection_depth(actx->pinfo);
   actx->private_data = (void*)wmem_new0(actx->pinfo->pool, ieee1609_private_data_t);
   offset = dissect_oer_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_ieee1609dot2_Ieee1609Dot2Data, Ieee1609Dot2Data_sequence);
 
-  decrement_dissection_depth_by_n(actx->pinfo, 5);
+  actx->pinfo->dissection_depth -= 5;
+  decrement_dissection_depth(actx->pinfo);
   return offset;
 }
 
 /*--- PDUs ---*/
 
 static int dissect_SecuredCrl_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_OER, true, pinfo);
   offset = dissect_ieee1609dot2_SecuredCrl(tvb, offset, &asn1_ctx, tree, hf_ieee1609dot2_SecuredCrl_PDU);
   return offset;
 }
 static int dissect_Ieee1609Dot2Data_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_OER, true, pinfo);
   offset = dissect_ieee1609dot2_Ieee1609Dot2Data(tvb, offset, &asn1_ctx, tree, hf_ieee1609dot2_Ieee1609Dot2Data_PDU);
@@ -3151,11 +3127,7 @@ static void
 ieee1609dot2_Time32_fmt(char *s, uint32_t v)
 {
   time_t secs = v + 1072915200 - 5;
-  struct tm tm_buf, *tm = ws_gmtime_r(&secs, &tm_buf);
-  if (tm == NULL) {
-    snprintf(s, ITEM_LABEL_LENGTH, "Not representable (%u)", v);
-    return;
-  }
+  struct tm *tm = gmtime(&secs);
   snprintf(s, ITEM_LABEL_LENGTH, "%u-%02u-%02u %02u:%02u:%02u (%u)",
     tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, v
   );
@@ -3166,11 +3138,7 @@ ieee1609dot2_Time64_fmt(char *s, uint64_t v)
 {
   time_t secs = v / 1000000 + 1072915200 - 5;
   uint32_t usecs = v % 1000000;
-  struct tm tm_buf, *tm = ws_gmtime_r(&secs, &tm_buf);
-  if (tm == NULL) {
-    snprintf(s, ITEM_LABEL_LENGTH, "Not representable (%" PRIu64 ")", v);
-    return;
-  }
+  struct tm *tm = gmtime(&secs);
   snprintf(s, ITEM_LABEL_LENGTH, "%u-%02u-%02u %02u:%02u:%02u.%06u (%" PRIu64 ")",
     tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, usecs, v
   );
@@ -3312,7 +3280,7 @@ void proto_register_ieee1609dot2(void) {
         FT_UINT32, BASE_DEC, NULL, 0,
         "SequenceOfRegionAndSubregions", HFILL }},
     { &hf_ieee1609dot2_rasRegion,
-      { "region", "ieee1609dot2.rasRegion",
+      { "region", "ieee1609dot2.region",
         FT_UINT32, BASE_DEC, NULL, 0,
         "Uint8", HFILL }},
     { &hf_ieee1609dot2_subregions,
@@ -3356,15 +3324,15 @@ void proto_register_ieee1609dot2(void) {
         FT_BYTES, BASE_NONE, NULL, 0,
         "OCTET_STRING_SIZE_32", HFILL }},
     { &hf_ieee1609dot2_ecdsap384RSig,
-      { "rSig", "ieee1609dot2.ecdsap384RSig",
+      { "rSig", "ieee1609dot2.rSig",
         FT_UINT32, BASE_DEC, VALS(ieee1609dot2_EccP384CurvePoint_vals), 0,
         "EccP384CurvePoint", HFILL }},
     { &hf_ieee1609dot2_ecdsap384SSig,
-      { "sSig", "ieee1609dot2.ecdsap384SSig",
+      { "sSig", "ieee1609dot2.sSig",
         FT_BYTES, BASE_NONE, NULL, 0,
         "OCTET_STRING_SIZE_48", HFILL }},
-    { &hf_ieee1609dot2_ecsigp256RSig,
-      { "rSig", "ieee1609dot2.ecsigp256RSig",
+    { &hf_ieee1609dot2_rSig_01,
+      { "rSig", "ieee1609dot2.rSig",
         FT_BYTES, BASE_NONE, NULL, 0,
         "OCTET_STRING_SIZE_32", HFILL }},
     { &hf_ieee1609dot2_x_only,
@@ -3396,15 +3364,15 @@ void proto_register_ieee1609dot2(void) {
         FT_BYTES, BASE_NONE, NULL, 0,
         "OCTET_STRING_SIZE_32", HFILL }},
     { &hf_ieee1609dot2_eccp384cpXOnly,
-      { "x-only", "ieee1609dot2.eccp384cpXOnly",
+      { "x-only", "ieee1609dot2.x_only",
         FT_BYTES, BASE_NONE, NULL, 0,
         "OCTET_STRING_SIZE_48", HFILL }},
     { &hf_ieee1609dot2_eccp384cpCompressed_y_0,
-      { "compressed-y-0", "ieee1609dot2.eccp384cpCompressed_y_0",
+      { "compressed-y-0", "ieee1609dot2.compressed_y_0",
         FT_BYTES, BASE_NONE, NULL, 0,
         "OCTET_STRING_SIZE_48", HFILL }},
     { &hf_ieee1609dot2_eccp384cpCompressed_y_1,
-      { "compressed-y-1", "ieee1609dot2.eccp384cpCompressed_y_1",
+      { "compressed-y-1", "ieee1609dot2.compressed_y_1",
         FT_BYTES, BASE_NONE, NULL, 0,
         "OCTET_STRING_SIZE_48", HFILL }},
     { &hf_ieee1609dot2_uncompressedP384,
@@ -3412,11 +3380,11 @@ void proto_register_ieee1609dot2(void) {
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_ieee1609dot2_eccp384cpX,
-      { "x", "ieee1609dot2.eccp384cpX",
+      { "x", "ieee1609dot2.x",
         FT_BYTES, BASE_NONE, NULL, 0,
         "OCTET_STRING_SIZE_48", HFILL }},
     { &hf_ieee1609dot2_eccp384cpY,
-      { "y", "ieee1609dot2.eccp384cpY",
+      { "y", "ieee1609dot2.y",
         FT_BYTES, BASE_NONE, NULL, 0,
         "OCTET_STRING_SIZE_48", HFILL }},
     { &hf_ieee1609dot2_v,
@@ -3492,7 +3460,7 @@ void proto_register_ieee1609dot2(void) {
         FT_BYTES, BASE_NONE, NULL, 0,
         "OCTET_STRING_SIZE_16", HFILL }},
     { &hf_ieee1609dot2_psPsid,
-      { "psid", "ieee1609dot2.psPsid",
+      { "psid", "ieee1609dot2.psid",
         FT_UINT64, BASE_DEC|BASE_VAL64_STRING, VALS64(ieee1609dot2_Psid_vals), 0,
         "T_psPsid", HFILL }},
     { &hf_ieee1609dot2_ssp,
@@ -3627,8 +3595,8 @@ void proto_register_ieee1609dot2(void) {
       { "HashBasedRevocationInfo", "ieee1609dot2.HashBasedRevocationInfo_element",
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
-    { &hf_ieee1609dot2_hashedId,
-      { "id", "ieee1609dot2.hashedId",
+    { &hf_ieee1609dot2_id,
+      { "id", "ieee1609dot2.id",
         FT_BYTES, BASE_NONE, NULL, 0,
         "HashedId10", HFILL }},
     { &hf_ieee1609dot2_expiry,
@@ -3840,7 +3808,7 @@ void proto_register_ieee1609dot2(void) {
         FT_BYTES, BASE_NONE, NULL, 0,
         "HashedId32", HFILL }},
     { &hf_ieee1609dot2_hiPsid,
-      { "psid", "ieee1609dot2.hiPsid",
+      { "psid", "ieee1609dot2.psid",
         FT_UINT64, BASE_DEC|BASE_VAL64_STRING, VALS64(ieee1609dot2_Psid_vals), 0,
         "T_hiPsid", HFILL }},
     { &hf_ieee1609dot2_generationTime,
@@ -3912,7 +3880,7 @@ void proto_register_ieee1609dot2(void) {
         FT_UINT32, BASE_DEC, NULL, 0,
         "SequenceOfCertificate", HFILL }},
     { &hf_ieee1609dot2_siSelf,
-      { "self", "ieee1609dot2.siSelf_element",
+      { "self", "ieee1609dot2.self_element",
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_ieee1609dot2_recipients,
@@ -3952,7 +3920,7 @@ void proto_register_ieee1609dot2(void) {
         FT_BYTES, BASE_NONE, NULL, 0,
         "HashedId8", HFILL }},
     { &hf_ieee1609dot2_sriEncKey,
-      { "encKey", "ieee1609dot2.sriEncKey",
+      { "encKey", "ieee1609dot2.encKey",
         FT_UINT32, BASE_DEC, VALS(ieee1609dot2_SymmetricCiphertext_vals), 0,
         "SymmetricCiphertext", HFILL }},
     { &hf_ieee1609dot2_encKey,
@@ -3960,11 +3928,11 @@ void proto_register_ieee1609dot2(void) {
         FT_UINT32, BASE_DEC, VALS(ieee1609dot2_EncryptedDataEncryptionKey_vals), 0,
         "EncryptedDataEncryptionKey", HFILL }},
     { &hf_ieee1609dot2_edeEciesNistP256,
-      { "eciesNistP256", "ieee1609dot2.edeEciesNistP256_element",
+      { "eciesNistP256", "ieee1609dot2.eciesNistP256_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "EciesP256EncryptedKey", HFILL }},
     { &hf_ieee1609dot2_edekEciesBrainpoolP256r1,
-      { "eciesBrainpoolP256r1", "ieee1609dot2.edekEciesBrainpoolP256r1_element",
+      { "eciesBrainpoolP256r1", "ieee1609dot2.eciesBrainpoolP256r1_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "EciesP256EncryptedKey", HFILL }},
     { &hf_ieee1609dot2_ecencSm2256,
@@ -4012,7 +3980,7 @@ void proto_register_ieee1609dot2(void) {
         FT_BYTES, BASE_NONE, NULL, 0,
         "HashedId8", HFILL }},
     { &hf_ieee1609dot2_iiSelf,
-      { "self", "ieee1609dot2.iiSelf",
+      { "self", "ieee1609dot2.self",
         FT_UINT32, BASE_DEC, VALS(ieee1609dot2_HashAlgorithm_vals), 0,
         "HashAlgorithm", HFILL }},
     { &hf_ieee1609dot2_sha384AndDigest,
@@ -4023,8 +3991,8 @@ void proto_register_ieee1609dot2(void) {
       { "sm3AndDigest", "ieee1609dot2.sm3AndDigest",
         FT_BYTES, BASE_NONE, NULL, 0,
         "HashedId8", HFILL }},
-    { &hf_ieee1609dot2_certificateId,
-      { "id", "ieee1609dot2.certificateId",
+    { &hf_ieee1609dot2_id_01,
+      { "id", "ieee1609dot2.id",
         FT_UINT32, BASE_DEC, VALS(ieee1609dot2_CertificateId_vals), 0,
         "CertificateId", HFILL }},
     { &hf_ieee1609dot2_validityPeriod,
@@ -4056,7 +4024,7 @@ void proto_register_ieee1609dot2(void) {
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_ieee1609dot2_tbscEncryptionKey,
-      { "encryptionKey", "ieee1609dot2.tbscEncryptionKey_element",
+      { "encryptionKey", "ieee1609dot2.encryptionKey_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "PublicEncryptionKey", HFILL }},
     { &hf_ieee1609dot2_verifyKeyIndicator,
@@ -4143,7 +4111,7 @@ void proto_register_ieee1609dot2(void) {
       { "AppExtension", "ieee1609dot2.AppExtension_element",
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
-    { &hf_ieee1609dot2_id,
+    { &hf_ieee1609dot2_id_02,
       { "id", "ieee1609dot2.id",
         FT_UINT32, BASE_DEC, VALS(ieee1609dot2_ExtId_vals), 0,
         "ExtId", HFILL }},
@@ -4305,7 +4273,7 @@ void proto_register_ieee1609dot2(void) {
   };
 
   /* Register protocol */
-  proto_ieee1609dot2 = proto_register_protocol("IEEE1609dot2", "IEEE1609dot2", "ieee1609dot2");
+  proto_ieee1609dot2 = proto_register_protocol(PNAME, PSNAME, PFNAME);
 
   /* Register fields and subtrees */
   proto_register_field_array(proto_ieee1609dot2, hf, array_length(hf));

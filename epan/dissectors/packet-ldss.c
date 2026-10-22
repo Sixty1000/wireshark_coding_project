@@ -474,7 +474,8 @@ dissect_ldss_transfer (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 			transfer_info->req->file = wmem_new0(wmem_file_scope(), ldss_file_t);
 		}
 
-		ti = proto_tree_add_item(tree, proto_ldss, tvb, 0, tvb_reported_length(tvb), ENC_NA);
+		ti = proto_tree_add_item(tree, proto_ldss,
+				tvb, 0, tvb_reported_length(tvb), ENC_NA);
 		ldss_tree = proto_item_add_subtree(ti, ett_ldss_transfer);
 
 		/* Populate digest data into the file struct in the request */
@@ -483,15 +484,15 @@ dissect_ldss_transfer (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 		/* Grab each line from the packet, there should be 4 but lets
 		 * not walk off the end looking for more. */
 		while (tvb_offset_exists(tvb, offset)) {
-			unsigned next_offset;
-			const char *line;
-			unsigned linelen;
+			int next_offset;
+			const uint8_t *line;
+			int linelen;
 			unsigned digest_type_len = 0;
 
-			tvb_find_line_end_remaining(tvb, offset, &linelen, &next_offset);
+			linelen = tvb_find_line_end(tvb, offset, -1, &next_offset, false);
 
 			/* Include new-line in line */
-			line = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, linelen, ENC_ASCII);
+			line = tvb_get_string_enc(pinfo->pool, tvb, offset, linelen, ENC_ASCII);
 
 			line_tree = proto_tree_add_subtree(ldss_tree, tvb, offset, linelen,
 							 ett_ldss_transfer_req, NULL,
@@ -551,7 +552,7 @@ dissect_ldss_transfer (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 
 					digest_bytes = g_byte_array_new();
 					hex_str_to_bytes(
-							(const char*)tvb_get_ptr(tvb, offset+digest_type_len, linelen-digest_type_len),
+							tvb_get_ptr(tvb, offset+digest_type_len, linelen-digest_type_len),
 							digest_bytes, false);
 
 					if(digest_bytes->len >= DIGEST_LEN)
@@ -873,13 +874,13 @@ proto_register_ldss (void) {
 		{   &hf_ldss_response_in,
 		    { "Response In",
 		      "ldss.response_in",
-		      FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_RESPONSE), 0x0,
+		      FT_FRAMENUM, BASE_NONE, NULL, 0x0,
 		      "The response to this file pull request is in this frame", HFILL }
 		},
 		{   &hf_ldss_response_to,
 		    { "Request In",
 		      "ldss.response_to",
-		      FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_REQUEST), 0x0,
+		      FT_FRAMENUM, BASE_NONE, NULL, 0x0,
 		      "This is a response to the file pull request in this frame", HFILL }
 		},
 		{   &hf_ldss_initiated_by,

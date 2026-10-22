@@ -29,7 +29,6 @@ void proto_reg_handoff_wisun(void);
 typedef struct {
     ieee802154_map_rec initiator;
     ieee802154_map_rec target;
-    uint32_t second_fnum;
 } edfe_exchange_t;
 
 // for each exchange, maps both source address and destination address to a
@@ -40,9 +39,6 @@ static wmem_map_t* edfe_byaddr;
 static dissector_handle_t eapol_handle;  // for the eapol relay
 
 static dissector_handle_t ieee802154_nofcs_handle;  // for Netricity Segment Control
-
-static dissector_table_t vhie_dissector_table;
-static dissector_table_t vpie_dissector_table;
 
 static reassembly_table netricity_reassembly_table;
 
@@ -229,7 +225,6 @@ static int hf_wisun_bsie_bcast_schedule_id;
 static int hf_wisun_vpie;
 static int hf_wisun_vpie_vid;
 static int hf_wisun_lcpie;
-static int hf_wisun_lcpie_channel_plan_tag;
 static int hf_wisun_panie;
 static int hf_wisun_panie_size;
 static int hf_wisun_panie_cost;
@@ -373,9 +368,6 @@ static int ett_wisun_netricity_sc;
 static int ett_wisun_netricity_sc_bitmask;
 static int ett_wisun_netricity_scr_segment;
 static int ett_wisun_netricity_scr_segments;
-
-/* Cached protocol identifier */
-static int proto_ieee802154;
 
 static const fragment_items netricity_scr_frag_items = {
         /* Fragment subtrees */
@@ -686,15 +678,9 @@ wisun_add_wbxml_uint(tvbuff_t *tvb, proto_tree *tree, int hf, unsigned offset)
     do {
         b = tvb_get_uint8(tvb, offset + len++);
         val = (val << 7) | (b & 0x7f);
-    } while (b & 0x80 && len < 2);
+    } while (b & 0x80);
     proto_tree_add_uint(tree, hf, tvb, offset, len, val);
-    return val;
-}
-
-static unsigned
-wisun_vidlen(unsigned vid)
-{
-    return vid > 0x7f ? 2 : 1;
+    return len;
 }
 
 static void
@@ -738,11 +724,9 @@ wisun_create_hie_tree(tvbuff_t *tvb, proto_tree *tree, int hf, int ett)
 static int
 dissect_wisun_uttie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset)
 {
-    const char *str = col_get_text(pinfo->cinfo, COL_INFO);
     uint8_t frame_type = tvb_get_uint8(tvb, offset);
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "Wi-SUN");
-    if (str && strncmp(str, "EDFE", 4))
-        col_set_str(pinfo->cinfo, COL_INFO, val_to_str_const(frame_type, wisun_frame_type_vals, "Unknown Wi-SUN Frame"));
+    col_set_str(pinfo->cinfo, COL_INFO, val_to_str_const(frame_type, wisun_frame_type_vals, "Unknown Wi-SUN Frame"));
     proto_tree_add_item(tree, hf_wisun_uttie_type, tvb, offset, 1, ENC_LITTLE_ENDIAN);
     proto_tree_add_item(tree, hf_wisun_uttie_ufsi, tvb, offset+1, 3, ENC_LITTLE_ENDIAN);
     return 4;
@@ -777,27 +761,16 @@ dissect_wisun_fcie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned
     proto_tree_add_item_ret_uint(tree, hf_wisun_fcie_rx, tvb, offset+1, 1, ENC_LITTLE_ENDIAN, &rx);
 
     // EDFE processing
-    ieee802154_hints_t* hints = (ieee802154_hints_t *)p_get_proto_data(wmem_file_scope(), pinfo, proto_ieee802154, 0);
-    if (!packet || !hints || packet->dst_addr_mode != IEEE802154_FCF_ADDR_EXT) {
-        return 2;
-    }
-
-    wmem_tree_t* byframe = (wmem_tree_t *)wmem_map_lookup(edfe_byaddr, &packet->dst64);
-    edfe_exchange_t *ex = NULL;
-    if (byframe) {
-        ex = (edfe_exchange_t *)wmem_tree_lookup32_le(byframe, pinfo->num);
-    }
-
-    if (!ex || ex->initiator.start_fnum == pinfo->num ||
-        (!hints->map_rec && ex->initiator.end_fnum != ~(unsigned)0) ||
-        (ex->second_fnum == ~(unsigned)0 && packet->src64 == ex->initiator.addr64)) {
+    ieee802154_hints_t* hints = (ieee802154_hints_t *)p_get_proto_data(wmem_file_scope(), pinfo,
+                                                                       proto_get_id_by_filter_name(IEEE802154_PROTOABBREV_WPAN), 0);
+    if (packet && hints && packet->dst_addr_mode == IEEE802154_FCF_ADDR_EXT) {
+        // first packet has source address
         if (!hints->map_rec && packet->src_addr_mode == IEEE802154_FCF_ADDR_EXT) {
-            ex = wmem_new(wmem_file_scope(), edfe_exchange_t);
+            edfe_exchange_t* ex = wmem_new(wmem_file_scope(), edfe_exchange_t);
             ex->initiator.proto = "Wi-SUN";
             ex->target.proto = "Wi-SUN";
             ex->initiator.start_fnum = pinfo->num;
             ex->target.start_fnum = pinfo->num;
-            ex->second_fnum = ~(unsigned)0;
             ex->initiator.end_fnum = ~(unsigned)0;
             ex->target.end_fnum = ~(unsigned)0;
 
@@ -805,43 +778,35 @@ dissect_wisun_fcie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned
             ex->target.addr64 = packet->dst64;
             edfe_insert_exchange(&ex->initiator.addr64, ex);
             edfe_insert_exchange(&ex->target.addr64, ex);
-            hints->map_rec = &ex->initiator;
-        }
-    } else {
-        if (!hints->map_rec && pinfo->num <= ex->initiator.end_fnum) {
-            hints->map_rec = ex->initiator.addr64 == packet->dst64 ? &ex->target : &ex->initiator;
-            if (ex->second_fnum == ~(unsigned)0) {
-                ex->second_fnum = pinfo->num;
+        } else if (packet->src_addr_mode == IEEE802154_FCF_ADDR_NONE) {
+            if (!hints->map_rec) {
+                wmem_tree_t* byframe = (wmem_tree_t *)wmem_map_lookup(edfe_byaddr, &packet->dst64);
+                if (byframe) {
+                    edfe_exchange_t *ex = (edfe_exchange_t *)wmem_tree_lookup32_le(byframe, pinfo->num);
+                    if (ex && pinfo->num <= ex->initiator.end_fnum) {
+                        hints->map_rec = ex->initiator.addr64 == packet->dst64 ? &ex->target : &ex->initiator;
+                        if (tx == 0 && rx == 0) {
+                            // last frame
+                            ex->initiator.end_fnum = pinfo->num;
+                        }
+                    }
+                }
             }
-            if (tx == 0 && rx == 0) {
-                // last frame
-                ex->initiator.end_fnum = pinfo->num;
+            if (hints->map_rec) {
+                // Set address to ensure that 6LoWPAN reassembly works
+                // Adapted from packet-ieee802.15.4.c
+                uint64_t *p_addr = wmem_new(pinfo->pool, uint64_t);
+                /* Copy and convert the address to network byte order. */
+                *p_addr = pntoh64(&(hints->map_rec->addr64));
+                set_address(&pinfo->dl_src, AT_EUI64, 8, p_addr);
+                copy_address_shallow(&pinfo->src, &pinfo->dl_src);
+                proto_item* src = proto_tree_add_eui64(tree, hf_wisun_fcie_src, tvb, 0, 0, hints->map_rec->addr64);
+                proto_item_set_generated(src);
+                proto_item* frm = proto_tree_add_uint(tree, hf_wisun_fcie_initial_frame, tvb, 0, 0, hints->map_rec->start_fnum);
+                proto_item_set_generated(frm);
+            } else {
+                expert_add_info(pinfo, tree, &ei_wisun_edfe_start_not_found);
             }
-        }
-        if (hints->map_rec) {
-            // Set address to ensure that 6LoWPAN reassembly works
-            // Adapted from packet-ieee802.15.4.c
-            uint64_t *p_addr = wmem_new(pinfo->pool, uint64_t);
-            /* Copy and convert the address to network byte order. */
-            *p_addr = pntohu64(&(hints->map_rec->addr64));
-            set_address(&pinfo->dl_src, AT_EUI64, 8, p_addr);
-            copy_address_shallow(&pinfo->src, &pinfo->dl_src);
-            proto_item* src = proto_tree_add_eui64(tree, hf_wisun_fcie_src, tvb, 0, 0, hints->map_rec->addr64);
-            proto_item_set_generated(src);
-            proto_item* frm = proto_tree_add_uint(tree, hf_wisun_fcie_initial_frame, tvb, 0, 0, hints->map_rec->start_fnum);
-            proto_item_set_generated(frm);
-        } else {
-            expert_add_info(pinfo, tree, &ei_wisun_edfe_start_not_found);
-        }
-    }
-
-    if (ex) {
-        if (pinfo->num == ex->initiator.start_fnum) {
-            col_set_str(pinfo->cinfo, COL_INFO, "EDFE Initial Frame");
-        } else if (pinfo->num == ex->initiator.end_fnum) {
-            col_set_str(pinfo->cinfo, COL_INFO, "EDFE Final Frame");
-        } else {
-            col_set_str(pinfo->cinfo, COL_INFO, "EDFE Response Frame");
         }
     }
 
@@ -865,11 +830,8 @@ dissect_wisun_rslie(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, uns
 static int
 dissect_wisun_vhie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset)
 {
-    unsigned vid = wisun_add_wbxml_uint(tvb, tree, hf_wisun_vhie_vid, offset);
-    if (!dissector_try_uint(vhie_dissector_table, vid,
-                            tvb_new_subset_remaining(tvb, offset + wisun_vidlen(vid)),
-                            pinfo, tree))
-        call_data_dissector(tvb_new_subset_remaining(tvb, offset + wisun_vidlen(vid)), pinfo, tree);
+    unsigned vidlen = wisun_add_wbxml_uint(tvb, tree, hf_wisun_vhie_vid, offset);
+    call_data_dissector(tvb_new_subset_remaining(tvb, offset + vidlen), pinfo, tree);
     return tvb_reported_length(tvb);
 }
 
@@ -883,11 +845,9 @@ dissect_wisun_eaie(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsi
 static int
 dissect_wisun_luttie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset)
 {
-    const char *str = col_get_text(pinfo->cinfo, COL_INFO);
     uint8_t frame_type = tvb_get_uint8(tvb, offset);
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "Wi-SUN");
-    if (str && strncmp(str, "EDFE", 4))
-        col_set_str(pinfo->cinfo, COL_INFO, val_to_str_const(frame_type, wisun_frame_type_vals, "Unknown LFN Wi-SUN Frame"));
+    col_set_str(pinfo->cinfo, COL_INFO, val_to_str_const(frame_type, wisun_frame_type_vals, "Unknown LFN Wi-SUN Frame"));
     proto_tree_add_item(tree, hf_wisun_uttie_type, tvb, offset, 1, ENC_LITTLE_ENDIAN);
     proto_tree_add_item(tree, hf_wisun_luttie_usn, tvb, offset+1, 2, ENC_LITTLE_ENDIAN);
     proto_tree_add_item(tree, hf_wisun_luttie_uio, tvb, offset+3, 3, ENC_LITTLE_ENDIAN);
@@ -1173,7 +1133,7 @@ dissect_wisun_schedule_common(tvbuff_t *tvb, packet_info *pinfo, unsigned offset
             &hf_wisun_usie_explicit_reserved,
             NULL
     };
-    uint8_t     count;
+    int count;
     proto_item *ti;
 
     uint8_t control = tvb_get_uint8(tvb, offset);
@@ -1220,7 +1180,8 @@ dissect_wisun_schedule_common(tvbuff_t *tvb, packet_info *pinfo, unsigned offset
             break;
 
         case WISUN_CHANNEL_FUNCTION_VENDOR:
-            proto_tree_add_item_ret_uint8(tree, hf_wisun_usie_hop_count, tvb, offset, 1, ENC_LITTLE_ENDIAN, &count);
+            count = tvb_get_uint8(tvb, offset);
+            proto_tree_add_item(tree, hf_wisun_usie_hop_count, tvb, offset, 1, ENC_LITTLE_ENDIAN);
             offset++;
             while (count--) {
                 proto_tree_add_item(tree, hf_wisun_usie_hop_list, tvb, offset, 1, ENC_LITTLE_ENDIAN);
@@ -1235,7 +1196,8 @@ dissect_wisun_schedule_common(tvbuff_t *tvb, packet_info *pinfo, unsigned offset
 
     switch ((control & WISUN_CHANNEL_EXCLUDE) >> 6) {
         case WISUN_CHANNEL_EXCLUDE_RANGE:
-            proto_tree_add_item_ret_uint8(tree, hf_wisun_usie_number_ranges, tvb, offset, 1, ENC_LITTLE_ENDIAN, &count);
+            count = tvb_get_uint8(tvb, offset);
+            proto_tree_add_item(tree, hf_wisun_usie_number_ranges, tvb, offset, 1, ENC_LITTLE_ENDIAN);
             offset++;
             while (count) {
                 proto_tree_add_item(tree, hf_wisun_usie_exclude_range_start, tvb, offset, 2, ENC_LITTLE_ENDIAN);
@@ -1320,16 +1282,13 @@ dissect_wisun_vpie(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void
 {
     proto_item *item;
     proto_tree *subtree;
-    unsigned vid;
+    unsigned vidlen;
 
     item = proto_tree_add_item(tree, hf_wisun_vpie, tvb, 0, tvb_reported_length(tvb), ENC_NA);
     subtree = proto_item_add_subtree(item, ett_wisun_vpie);
 
-    vid = wisun_add_wbxml_uint(tvb, subtree, hf_wisun_vpie_vid, 2);
-    if (!dissector_try_uint(vpie_dissector_table, vid,
-                            tvb_new_subset_remaining(tvb, 2 + wisun_vidlen(vid)),
-                            pinfo, subtree))
-        call_data_dissector(tvb_new_subset_remaining(tvb, 2 + wisun_vidlen(vid)), pinfo, subtree);
+    vidlen = wisun_add_wbxml_uint(tvb, subtree, hf_wisun_vpie_vid, 2);
+    call_data_dissector(tvb_new_subset_remaining(tvb, 2 + vidlen), pinfo, subtree);
     return tvb_reported_length(tvb);
 }
 
@@ -1346,7 +1305,7 @@ dissect_wisun_lcpie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *d
     proto_tree_add_bitmask(subtree, tvb, offset, hf_wisun_wsie, ett_wisun_wsie_bitmap, wisun_format_nested_ie, ENC_LITTLE_ENDIAN);
     offset += 2;
 
-    proto_tree_add_item(subtree, hf_wisun_lcpie_channel_plan_tag, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+    proto_tree_add_item(subtree, hf_wisun_lusie_channel_plan_tag, tvb, offset, 1, ENC_LITTLE_ENDIAN);
     offset += 1;
 
     return dissect_wisun_schedule_common(tvb, pinfo, offset, subtree);
@@ -1947,7 +1906,7 @@ void proto_register_wisun(void)
         },
 
         { &hf_wisun_vhie_vid,
-          { "Vendor ID", "wisun.vhie.vid", FT_UINT16, BASE_DEC, NULL, 0x0,
+          { "Vendor ID", "wisun.vhie.vid", FT_UINT32, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
         },
 
@@ -2017,12 +1976,12 @@ void proto_register_wisun(void)
         },
 
         { &hf_wisun_nrie_listening_interval_min,
-          { "Listening Interval Min", "wisun.nrie.listening_interval_min", FT_UINT24, BASE_DEC, NULL, 0x0,
+          { "Listening Interval Min", "wisun.nriw.listening_interval_min", FT_UINT24, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
         },
 
         { &hf_wisun_nrie_listening_interval_max,
-          { "Listening Interval Max", "wisun.nrie.listening_interval_max", FT_UINT24, BASE_DEC, NULL, 0x0,
+          { "Listening Interval Max", "wisun.nriw.listening_interval_max", FT_UINT24, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
         },
 
@@ -2288,7 +2247,7 @@ void proto_register_wisun(void)
         },
 
         { &hf_wisun_usie_hop_count,
-          { "Channel Hop Count", "wisun.usie.hop_count", FT_UINT8, BASE_DEC, NULL, 0x0,
+          { "Chanel Hop Count", "wisun.usie.hop_count", FT_UINT8, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
         },
 
@@ -2338,18 +2297,13 @@ void proto_register_wisun(void)
         },
 
         { &hf_wisun_vpie_vid,
-          { "Vendor ID", "wisun.vpie.vid", FT_UINT16, BASE_DEC, NULL, 0x0,
+          { "Vendor ID", "wisun.vpie.vid", FT_UINT32, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
         },
 
         { &hf_wisun_lcpie,
           { "LCP-IE", "wisun.lcpie", FT_NONE, BASE_NONE, NULL, 0x0,
             "LFN Channel Plan IE", HFILL }
-        },
-
-        { &hf_wisun_lcpie_channel_plan_tag,
-          { "Channel Plan Tag", "wisun.lcpie.channeltag", FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
         },
 
         { &hf_wisun_panie,
@@ -2759,8 +2713,6 @@ void proto_register_wisun(void)
         &ett_wisun_bsie,
         &ett_wisun_vpie,
         &ett_wisun_lcpie,
-        &ett_wisun_usie_channel_control,
-        &ett_wisun_usie_explicit,
         &ett_wisun_panie,
         &ett_wisun_panie_flags,
         &ett_wisun_netnameie,
@@ -2834,11 +2786,6 @@ void proto_register_wisun(void)
 
     register_dissector("wisun.netricity.sc", dissect_wisun_netricity_sc, proto_wisun_netricity_sc);
     reassembly_table_register(&netricity_reassembly_table, &addresses_reassembly_table_functions);
-
-    vhie_dissector_table = register_dissector_table("wisun.vhie.vid", "Wi-SUN Vendor Header IEs",
-                                                    proto_wisun, FT_UINT16, BASE_DEC);
-    vpie_dissector_table = register_dissector_table("wisun.vpie.vid", "Wi-SUN Vendor Payload IEs",
-                                                    proto_wisun, FT_UINT16, BASE_DEC);
 }
 
 void proto_reg_handoff_wisun(void)
@@ -2855,8 +2802,6 @@ void proto_reg_handoff_wisun(void)
 
     // For Netricity reassembly
     ieee802154_nofcs_handle = find_dissector("wpan_nofcs");
-
-    proto_ieee802154 = proto_get_id_by_filter_name(IEEE802154_PROTOABBREV_WPAN);
 }
 
 /*

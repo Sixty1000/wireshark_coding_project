@@ -13,8 +13,7 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
+
 #include "packet-ipmi.h"
 
 void proto_register_ipmi_transport(void);
@@ -1309,7 +1308,7 @@ lan_80(tvbuff_t *tvb, proto_tree *tree)
 	}
 }
 
-static const struct {
+static struct {
 	void (*intrp)(tvbuff_t *tvb, proto_tree *tree);
 	const char *name;
 } lan_options[] = {
@@ -2100,7 +2099,7 @@ serial_53(tvbuff_t *tvb, proto_tree *tree)
 	proto_tree_add_item(tree, hf_ipmi_trn_serial53_chan_name, tvb, 1, 16, ENC_NA);
 }
 
-static const struct {
+static struct {
 	void (*intrp)(tvbuff_t *tvb, proto_tree *tree);
 	const char *name;
 } serial_options[] = {

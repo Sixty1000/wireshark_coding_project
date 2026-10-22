@@ -67,7 +67,7 @@ static const value_string plugin_proto_checksum_vals[] = {
 static tvbuff_t *
 unescape_data(tvbuff_t *tvb, packet_info *pinfo)
 {
-	if (tvb_find_uint8_remaining(tvb, 0, SIR_CE, NULL) == false) {
+	if (tvb_find_uint8(tvb, 0, -1, SIR_CE) == -1) {
 		return tvb;
 	} else {
 		unsigned length = tvb_captured_length(tvb);
@@ -110,19 +110,16 @@ checksum_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 static int
 dissect_sir(tvbuff_t *tvb, packet_info *pinfo, proto_tree *root, void* data _U_)
 {
-	unsigned offset = 0;
-	unsigned bof_offset;
-	unsigned eof_offset;
-	bool bof_found, eof_found;
+	int offset = 0;
+	int bof_offset;
+	int eof_offset;
 
 	while (tvb_reported_length_remaining(tvb, offset) > 0) {
-		bof_found = tvb_find_uint8_remaining(tvb, offset, SIR_BOF, &bof_offset);
-		if (bof_found == false) {
-			eof_found = false;
-		} else {
-			eof_found = tvb_find_uint8_remaining(tvb, bof_offset, SIR_EOF, &eof_offset);
-		}
-		if (bof_found == false || eof_found == false) {
+		bof_offset = tvb_find_uint8(tvb, offset, -1, SIR_BOF);
+		eof_offset = (bof_offset == -1) ? -1 :
+			tvb_find_uint8(tvb, bof_offset, -1, SIR_EOF);
+
+		if (bof_offset == -1 || eof_offset == -1) {
 			if (pinfo->can_desegment) {
 				pinfo->desegment_offset = offset;
 				pinfo->desegment_len = 1;
@@ -130,9 +127,9 @@ dissect_sir(tvbuff_t *tvb, packet_info *pinfo, proto_tree *root, void* data _U_)
 			return tvb_captured_length(tvb);
 		} else {
 			unsigned preamble_len = bof_offset - offset;
-			unsigned data_offset = bof_offset + 1;
-			tvbuff_t* next_tvb = tvb_new_subset_length(tvb,
-				data_offset, eof_offset - data_offset);
+			int data_offset = bof_offset + 1;
+			tvbuff_t* next_tvb = tvb_new_subset_length_caplen(tvb,
+				data_offset, eof_offset - data_offset, -1);
 			next_tvb = unescape_data(next_tvb, pinfo);
 			if (root) {
 				unsigned data_len = tvb_reported_length(next_tvb) < 2 ? 0 :

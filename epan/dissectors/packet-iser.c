@@ -308,7 +308,11 @@ proto_register_iser(void)
         &ett_iser_flags
     };
 
-    proto_iser = proto_register_protocol ("iSCSI Extensions for RDMA", "iSER", "iser");
+    proto_iser = proto_register_protocol (
+        "iSCSI Extensions for RDMA", /* name       */
+        "iSER",      /* short name */
+        "iser"       /* abbrev     */
+        );
 
     proto_register_field_array(proto_iser, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));

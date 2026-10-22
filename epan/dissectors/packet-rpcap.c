@@ -20,13 +20,15 @@
 #include <epan/expert.h>
 #include <epan/exceptions.h>
 #include <epan/show_exception.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 #include <wsutil/str_util.h>
 
 #include "packet-frame.h"
 #include "packet-pcap_pktdata.h"
 #include "packet-tcp.h"
+
+#define PNAME  "Remote Packet Capture"
+#define PSNAME "RPCAP"
+#define PFNAME "rpcap"
 
 #define RPCAP_MSG_ERROR               0x01
 #define RPCAP_MSG_FINDALLIF_REQ       0x02
@@ -484,7 +486,8 @@ dissect_rpcap_ifaddr (tvbuff_t *tvb, packet_info *pinfo,
   ti = proto_tree_add_item (parent_tree, hf_id, tvb, offset, 128, ENC_BIG_ENDIAN);
   tree = proto_item_add_subtree (ti, ett_ifaddr);
 
-  proto_tree_add_item_ret_uint16 (tree, hf_if_af, tvb, offset, 2, ENC_BIG_ENDIAN, &af);
+  af = tvb_get_ntohs (tvb, offset);
+  proto_tree_add_item (tree, hf_if_af, tvb, offset, 2, ENC_BIG_ENDIAN);
   offset += 2;
 
   switch (af) {
@@ -587,16 +590,19 @@ dissect_rpcap_findalldevs_if (tvbuff_t *tvb, packet_info *pinfo _U_,
   ti = proto_tree_add_item (parent_tree, hf_findalldevs_if, tvb, offset, -1, ENC_NA);
   tree = proto_item_add_subtree (ti, ett_findalldevs_if);
 
-  proto_tree_add_item_ret_uint16 (tree, hf_namelen, tvb, offset, 2, ENC_BIG_ENDIAN, &namelen);
+  namelen = tvb_get_ntohs (tvb, offset);
+  proto_tree_add_item (tree, hf_namelen, tvb, offset, 2, ENC_BIG_ENDIAN);
   offset += 2;
 
-  proto_tree_add_item_ret_uint16 (tree, hf_desclen, tvb, offset, 2, ENC_BIG_ENDIAN, &desclen);
+  desclen = tvb_get_ntohs (tvb, offset);
+  proto_tree_add_item (tree, hf_desclen, tvb, offset, 2, ENC_BIG_ENDIAN);
   offset += 2;
 
   proto_tree_add_item (tree, hf_if_flags, tvb, offset, 4, ENC_BIG_ENDIAN);
   offset += 4;
 
-  proto_tree_add_item_ret_uint16 (tree, hf_naddr, tvb, offset, 2, ENC_BIG_ENDIAN, &naddr);
+  naddr = tvb_get_ntohs (tvb, offset);
+  proto_tree_add_item (tree, hf_naddr, tvb, offset, 2, ENC_BIG_ENDIAN);
   offset += 2;
 
   proto_tree_add_item (tree, hf_dummy, tvb, offset, 2, ENC_BIG_ENDIAN);
@@ -615,12 +621,12 @@ dissect_rpcap_findalldevs_if (tvbuff_t *tvb, packet_info *pinfo _U_,
   }
 
   for (i = 0; i < naddr; i++) {
-    if (tvb_reported_length_remaining (tvb, offset) == 0) {
+    offset = dissect_rpcap_findalldevs_ifaddr (tvb, pinfo, tree, offset);
+    if (tvb_reported_length_remaining (tvb, offset) < 0) {
       /* No more data in packet */
       expert_add_info(pinfo, ti, &ei_no_more_data);
       break;
     }
-    offset = dissect_rpcap_findalldevs_ifaddr (tvb, pinfo, tree, offset);
   }
 
   proto_item_set_len (ti, offset - boffset);
@@ -641,12 +647,12 @@ dissect_rpcap_findalldevs_reply (tvbuff_t *tvb, packet_info *pinfo _U_,
   tree = proto_item_add_subtree (ti, ett_findalldevs_reply);
 
   for (i = 0; i < no_devs; i++) {
-    if (tvb_reported_length_remaining (tvb, offset) == 0) {
+    offset = dissect_rpcap_findalldevs_if (tvb, pinfo, tree, offset);
+    if (tvb_reported_length_remaining (tvb, offset) < 0) {
       /* No more data in packet */
       expert_add_info(pinfo, ti, &ei_no_more_data);
       break;
     }
-    offset = dissect_rpcap_findalldevs_if (tvb, pinfo, tree, offset);
   }
 
   proto_item_append_text (ti, ", %d item%s", no_devs, plurality (no_devs, "", "s"));
@@ -725,16 +731,17 @@ dissect_rpcap_filter (tvbuff_t *tvb, packet_info *pinfo,
   proto_tree_add_item (tree, hf_dummy, tvb, offset, 2, ENC_BIG_ENDIAN);
   offset += 2;
 
-  proto_tree_add_item_ret_uint (tree, hf_nitems, tvb, offset, 4, ENC_BIG_ENDIAN, &nitems);
+  nitems = tvb_get_ntohl (tvb, offset);
+  proto_tree_add_item (tree, hf_nitems, tvb, offset, 4, ENC_BIG_ENDIAN);
   offset += 4;
 
   for (i = 0; i < nitems; i++) {
-    if (tvb_reported_length_remaining (tvb, offset) == 0) {
+    offset = dissect_rpcap_filterbpf_insn (tvb, pinfo, tree, offset);
+    if (tvb_reported_length_remaining (tvb, offset) < 0) {
       /* No more data in packet */
       expert_add_info(pinfo, ti, &ei_no_more_data);
       break;
     }
-    offset = dissect_rpcap_filterbpf_insn (tvb, pinfo, tree, offset);
   }
 }
 
@@ -750,16 +757,19 @@ dissect_rpcap_auth_request (tvbuff_t *tvb, packet_info *pinfo _U_,
   ti = proto_tree_add_item (parent_tree, hf_auth_request, tvb, offset, -1, ENC_NA);
   tree = proto_item_add_subtree (ti, ett_auth_request);
 
-  proto_tree_add_item_ret_uint16 (tree, hf_auth_type, tvb, offset, 2, ENC_BIG_ENDIAN, &type);
+  type = tvb_get_ntohs (tvb, offset);
+  proto_tree_add_item (tree, hf_auth_type, tvb, offset, 2, ENC_BIG_ENDIAN);
   offset += 2;
 
   proto_tree_add_item (tree, hf_dummy, tvb, offset, 2, ENC_BIG_ENDIAN);
   offset += 2;
 
-  proto_tree_add_item_ret_uint16 (tree, hf_auth_slen1, tvb, offset, 2, ENC_BIG_ENDIAN, &slen1);
+  slen1 = tvb_get_ntohs (tvb, offset);
+  proto_tree_add_item (tree, hf_auth_slen1, tvb, offset, 2, ENC_BIG_ENDIAN);
   offset += 2;
 
-  proto_tree_add_item_ret_uint16 (tree, hf_auth_slen2, tvb, offset, 2, ENC_BIG_ENDIAN, &slen2);
+  slen2 = tvb_get_ntohs (tvb, offset);
+  proto_tree_add_item (tree, hf_auth_slen2, tvb, offset, 2, ENC_BIG_ENDIAN);
   offset += 2;
 
   if (type == RPCAP_RMTAUTH_NULL) {
@@ -936,7 +946,8 @@ dissect_rpcap_sampling_request (tvbuff_t *tvb, packet_info *pinfo _U_,
   ti = proto_tree_add_item (parent_tree, hf_sampling_request, tvb, offset, -1, ENC_NA);
   tree = proto_item_add_subtree (ti, ett_sampling_request);
 
-  proto_tree_add_item_ret_uint8 (tree, hf_sampling_method, tvb, offset, 1, ENC_BIG_ENDIAN, &method);
+  method = tvb_get_uint8 (tvb, offset);
+  proto_tree_add_item (tree, hf_sampling_method, tvb, offset, 1, ENC_BIG_ENDIAN);
   offset += 1;
 
   proto_tree_add_item (tree, hf_sampling_dummy1, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -945,7 +956,8 @@ dissect_rpcap_sampling_request (tvbuff_t *tvb, packet_info *pinfo _U_,
   proto_tree_add_item (tree, hf_sampling_dummy2, tvb, offset, 2, ENC_BIG_ENDIAN);
   offset += 2;
 
-  proto_tree_add_item_ret_uint (tree, hf_sampling_value, tvb, offset, 4, ENC_BIG_ENDIAN, &value);
+  value = tvb_get_ntohl (tvb, offset);
+  proto_tree_add_item (tree, hf_sampling_value, tvb, offset, 4, ENC_BIG_ENDIAN);
   offset += 4;
 
   switch (method) {
@@ -981,13 +993,16 @@ dissect_rpcap_packet (tvbuff_t *tvb, packet_info *pinfo, proto_tree *top_tree,
   proto_tree_add_item(tree, hf_timestamp, tvb, offset, 8, ENC_TIME_SECS_USECS|ENC_BIG_ENDIAN);
   offset += 8;
 
-  ti = proto_tree_add_item_ret_uint (tree, hf_caplen, tvb, offset, 4, ENC_BIG_ENDIAN, &caplen);
+  caplen = tvb_get_ntohl (tvb, offset);
+  ti = proto_tree_add_item (tree, hf_caplen, tvb, offset, 4, ENC_BIG_ENDIAN);
   offset += 4;
 
-  proto_tree_add_item_ret_uint (tree, hf_len, tvb, offset, 4, ENC_BIG_ENDIAN, &len);
+  len = tvb_get_ntohl (tvb, offset);
+  proto_tree_add_item (tree, hf_len, tvb, offset, 4, ENC_BIG_ENDIAN);
   offset += 4;
 
-  proto_tree_add_item_ret_uint (tree, hf_npkt, tvb, offset, 4, ENC_BIG_ENDIAN, &frame_no);
+  frame_no = tvb_get_ntohl (tvb, offset);
+  proto_tree_add_item (tree, hf_npkt, tvb, offset, 4, ENC_BIG_ENDIAN);
   offset += 4;
 
   proto_item_append_text (ti, ", Frame %u", frame_no);
@@ -1039,11 +1054,10 @@ dissect_rpcap (tvbuff_t *tvb, packet_info *pinfo, proto_tree *top_tree, void* da
   proto_item *ti;
   tvbuff_t *new_tvb;
   int len, offset = 0;
-  uint32_t msg_type;
+  uint8_t msg_type;
   uint16_t msg_value;
-  char* str_message_type;
 
-  col_set_str (pinfo->cinfo, COL_PROTOCOL, "RPCAP");
+  col_set_str (pinfo->cinfo, COL_PROTOCOL, PSNAME);
 
   col_clear(pinfo->cinfo, COL_INFO);
 
@@ -1053,13 +1067,14 @@ dissect_rpcap (tvbuff_t *tvb, packet_info *pinfo, proto_tree *top_tree, void* da
   proto_tree_add_item (tree, hf_version, tvb, offset, 1, ENC_BIG_ENDIAN);
   offset++;
 
-  proto_tree_add_item_ret_uint(tree, hf_type, tvb, offset, 1, ENC_BIG_ENDIAN, &msg_type);
+  msg_type = tvb_get_uint8 (tvb, offset);
+  proto_tree_add_item (tree, hf_type, tvb, offset, 1, ENC_BIG_ENDIAN);
   offset++;
 
-  str_message_type = val_to_str(pinfo->pool, msg_type, message_type, "Unknown: 0x%02x");
-  col_append_str (pinfo->cinfo, COL_INFO, str_message_type);
+  col_append_str (pinfo->cinfo, COL_INFO,
+                     val_to_str (msg_type, message_type, "Unknown: 0x%02x"));
 
-  proto_item_append_text (ti, ", %s", str_message_type);
+  proto_item_append_text (ti, ", %s", val_to_str (msg_type, message_type, "Unknown: 0x%02x"));
 
   msg_value = tvb_get_ntohs (tvb, offset);
   if (msg_type == RPCAP_MSG_ERROR) {
@@ -1511,13 +1526,13 @@ proto_register_rpcap (void)
       { "Name length", "rpcap.namelen", FT_UINT16, BASE_DEC,
         NULL, 0x0, NULL, HFILL } },
     { &hf_desclen,
-      { "Description length", "rpcap.desclen", FT_UINT16, BASE_DEC,
+      { "Description length", "rpcap.desclen", FT_UINT32, BASE_DEC,
         NULL, 0x0, NULL, HFILL } },
     { &hf_if_flags,
       { "Interface flags", "rpcap.if.flags", FT_UINT32, BASE_DEC,
         NULL, 0x0, NULL, HFILL } },
     { &hf_naddr,
-      { "Number of addresses", "rpcap.naddr", FT_UINT16, BASE_DEC,
+      { "Number of addresses", "rpcap.naddr", FT_UINT32, BASE_DEC,
         NULL, 0x0, NULL, HFILL } },
     { &hf_if_name,
       { "Name", "rpcap.ifname", FT_STRING, BASE_NONE,
@@ -1616,9 +1631,9 @@ proto_register_rpcap (void)
   module_t *rpcap_module;
   expert_module_t* expert_rpcap;
 
-  proto_rpcap = proto_register_protocol ("Remote Packet Capture", "RPCAP", "rpcap");
-  register_dissector ("rpcap", dissect_rpcap, proto_rpcap);
-  rpcap_tcp_handle = register_dissector("rpcap.tcp", dissect_rpcap_tcp, proto_rpcap);
+  proto_rpcap = proto_register_protocol (PNAME, PSNAME, PFNAME);
+  register_dissector (PFNAME, dissect_rpcap, proto_rpcap);
+  rpcap_tcp_handle = register_dissector(PFNAME ".tcp", dissect_rpcap_tcp, proto_rpcap);
   expert_rpcap = expert_register_protocol(proto_rpcap);
   expert_register_field_array(expert_rpcap, ei, array_length(ei));
 
@@ -1644,7 +1659,7 @@ proto_register_rpcap (void)
                                   "Default link-layer type",
                                   "Default link-layer type to use if an Open Reply packet"
                                   " has not been captured.",
-                                  10, (unsigned*)&global_linktype);
+                                  10, &global_linktype);
 }
 
 void

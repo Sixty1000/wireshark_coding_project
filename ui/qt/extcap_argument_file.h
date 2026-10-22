@@ -17,68 +17,29 @@
 #include <extcap_parser.h>
 #include <extcap_argument.h>
 
-/**
- * @brief Represents an extcap argument that provides a file or folder selection UI.
- */
 class ExtcapArgumentFileSelection : public ExtcapArgument
 {
     Q_OBJECT
 
 public:
-    /**
-     * @brief Constructs an ExtcapArgumentFileSelection.
-     * @param argument Pointer to the core extcap_arg structure.
-     * @param parent The parent QObject, defaults to Q_NULLPTR.
-     */
     ExtcapArgumentFileSelection(extcap_arg * argument, QObject * parent = Q_NULLPTR);
-
-    /**
-     * @brief Destroys the ExtcapArgumentFileSelection.
-     */
     virtual ~ExtcapArgumentFileSelection();
 
-    /**
-     * @brief Creates the file selection editor widget.
-     * @param parent The parent widget for the editor.
-     * @return A pointer to the created file selection widget.
-     */
-    virtual QWidget * createEditor(QWidget * parent) override;
+    virtual QWidget * createEditor(QWidget * parent);
 
-    /**
-     * @brief Retrieves the selected file path.
-     * @return The selected file path string.
-     */
-    virtual QString value() override;
+    virtual QString value();
 
-    /**
-     * @brief Checks if the current file selection is valid.
-     * @return True if valid, false otherwise.
-     */
-    virtual bool isValid() override;
+    virtual bool isValid();
 
-    /**
-     * @brief Sets the file selection to its default value.
-     */
-    virtual void setDefaultValue() override;
+    virtual void setDefaultValue();
 
 protected:
-    /** The line edit widget displaying the selected file path. */
     QLineEdit * textBox;
 
 private slots:
-    /**
-     * @brief Opens the file dialog.
-     */
+    /* opens the file dialog */
     void openFileDialog();
-
-    /**
-     * @brief Opens the folder dialog.
-     */
-    void openFolderDialog();
-
-    /**
-     * @brief Clears the previously entered filename.
-     */
+    /* clears previously entered filename */
     void clearFilename();
 };
 

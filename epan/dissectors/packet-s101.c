@@ -1,4 +1,4 @@
-/* packet-s101.c
+/* packet-S101.c
  * Routines for S101 dissection
  * Copyright 2018, Gilles Dufour <dufour.gilles@gmail.com>
  *

@@ -76,7 +76,7 @@ QString MenuEditAction::text() const {
 
 
 TrafficTreeHeaderView::TrafficTreeHeaderView(GList ** recentColumnList, QWidget * parent):
-    AdaptiveHeaderView(Qt::Horizontal, parent)
+    QHeaderView(Qt::Horizontal, parent)
 {
     _recentColumnList = recentColumnList;
 
@@ -276,17 +276,10 @@ void TrafficDataFilterProxy::filterForColumn(int column, int filterOn, QString f
     if (filterOn < 0 || filterOn > TrafficDataFilterProxy::TRAFFIC_DATA_EQUAL)
         column = -1;
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
-    beginFilterChange();
-#endif
     _filterColumn = mapToSourceColumn(column);
     _filterOn = filterOn;
     _filterText = filterText;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-    endFilterChange(QSortFilterProxyModel::Direction::Rows);
-#else
     invalidateFilter();
-#endif
 }
 
 int TrafficDataFilterProxy::mapToSourceColumn(int proxyColumn) const
@@ -325,7 +318,7 @@ bool TrafficDataFilterProxy::filterAcceptsRow(int source_row, const QModelIndex 
     ATapDataModel * dataModel = qobject_cast<ATapDataModel *>(sourceModel());
     if (dataModel) {
         bool isFiltered = dataModel->data(dataModel->index(source_row, 0), ATapDataModel::ROW_IS_FILTERED).toBool();
-        if (isFiltered)
+        if (isFiltered && dataModel->filter().length() > 0)
             return false;
         /* XXX: What if the filter column is now hidden? Should the filter
          * still apply or should it be cleared? Right now it is still applied.
@@ -339,6 +332,7 @@ bool TrafficDataFilterProxy::filterAcceptsRow(int source_row, const QModelIndex 
             /* QVariant comparisons coerce to the first parameter type, so
              * putting data first and converting the string to it is important.
              */
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
             /* QVariant::compare coerces strings to numeric types, but does
              * not try to automatically convert them to datetime related types.
              */
@@ -367,6 +361,79 @@ bool TrafficDataFilterProxy::filterAcceptsRow(int source_row, const QModelIndex 
                 filtered = result > 0;
             else if (_filterOn == TrafficDataFilterProxy::TRAFFIC_DATA_EQUAL)
                 filtered = result == 0;
+#else
+            /* The comparisons are deprecated in 5.15. This is most of the
+             * implementation of QAbstractItemModelPrivate::isVariantLessThan
+             * from the Qt source.
+             */
+            if (_filterText.isEmpty())
+                filtered = true;
+            else if (data.isNull())
+                filtered = false;
+            else {
+                switch (data.userType()) {
+                case QMetaType::Int:
+                case QMetaType::UInt:
+                case QMetaType::LongLong:
+                    if (_filterOn == TrafficDataFilterProxy::TRAFFIC_DATA_LESS)
+                        filtered = data.toLongLong() < _filterText.toLongLong();
+                    else if (_filterOn == TrafficDataFilterProxy::TRAFFIC_DATA_GREATER)
+                        filtered = data.toLongLong() > _filterText.toLongLong();
+                    else if (_filterOn == TrafficDataFilterProxy::TRAFFIC_DATA_EQUAL)
+                        filtered = data.toLongLong() == _filterText.toLongLong();
+                    break;
+                case QMetaType::Float:
+                case QMetaType::Double:
+                    if (_filterOn == TrafficDataFilterProxy::TRAFFIC_DATA_LESS)
+                        filtered = data.toDouble() < _filterText.toDouble();
+                    else if (_filterOn == TrafficDataFilterProxy::TRAFFIC_DATA_GREATER)
+                        filtered = data.toDouble() > _filterText.toDouble();
+                    else if (_filterOn == TrafficDataFilterProxy::TRAFFIC_DATA_EQUAL)
+                        filtered = data.toDouble() == _filterText.toDouble();
+                    break;
+                case QMetaType::QDateTime:
+                {
+                    /* Try to parse with a date included, and fall back to time
+                     * only if that fails.
+                     */
+                    QDateTime filter_dt = QDateTime::fromString(_filterText, Qt::ISODateWithMs);
+                    if (filter_dt.isValid()) {
+                        if (_filterOn == TrafficDataFilterProxy::TRAFFIC_DATA_LESS)
+                            filtered = data.toDateTime() < filter_dt;
+                        else if (_filterOn == TrafficDataFilterProxy::TRAFFIC_DATA_GREATER)
+                            filtered = data.toDateTime() > filter_dt;
+                        else if (_filterOn == TrafficDataFilterProxy::TRAFFIC_DATA_EQUAL)
+                            filtered = data.toDateTime() == filter_dt;
+                        break;
+                    }
+                }
+                /* FALLTHROUGH */
+                case QMetaType::QTime:
+                {
+                    QTime filter_t = QTime::fromString(_filterText, Qt::ISODateWithMs);
+                    if (_filterOn == TrafficDataFilterProxy::TRAFFIC_DATA_LESS)
+                        filtered = data.toTime() < filter_t;
+                    else if (_filterOn == TrafficDataFilterProxy::TRAFFIC_DATA_GREATER)
+                        filtered = data.toTime() > filter_t;
+                    else if (_filterOn == TrafficDataFilterProxy::TRAFFIC_DATA_EQUAL)
+                        filtered = data.toTime() == filter_t;
+                    break;
+                }
+                case QMetaType::QString:
+                default:
+                    /* XXX: We don't do UTF-8 aware coallating in Packet List
+                     * (because it's slow), but possibly could here.
+                     */
+                    if (_filterOn == TrafficDataFilterProxy::TRAFFIC_DATA_LESS)
+                        filtered = data.toString() < _filterText;
+                    else if (_filterOn == TrafficDataFilterProxy::TRAFFIC_DATA_GREATER)
+                        filtered = data.toString() > _filterText;
+                    else if (_filterOn == TrafficDataFilterProxy::TRAFFIC_DATA_EQUAL)
+                        filtered = data.toString() == _filterText;
+                    break;
+                }
+            }
+#endif
 
             if (!filtered)
                 return false;
@@ -505,7 +572,7 @@ bool TrafficDataFilterProxy::filterAcceptsColumn(int source_column, const QModel
                 (source_column == ConversationDataModel::CONV_COLUMN_SRC_PORT || source_column == ConversationDataModel::CONV_COLUMN_DST_PORT))
                 return false;
         }
-        if (! model->isFilterApplied()) {
+        if (! model->showTotalColumn()) {
             if (qobject_cast<EndpointDataModel *>(model) &&
                 (source_column == EndpointDataModel::ENDP_COLUMN_PACKETS_TOTAL || source_column == EndpointDataModel::ENDP_COLUMN_BYTES_TOTAL))
                 return false;
@@ -525,17 +592,10 @@ bool TrafficDataFilterProxy::filterAcceptsColumn(int source_column, const QModel
 
 void TrafficDataFilterProxy::setColumnVisibility(int column, bool visible)
 {
-#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
-    beginFilterChange();
-#endif
     hideColumns_.removeAll(column);
     if (!visible)
         hideColumns_.append(column);
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-    endFilterChange(QSortFilterProxyModel::Direction::Columns);
-#else
     invalidateFilter();
-#endif
 }
 
 bool TrafficDataFilterProxy::columnVisible(int column) const
@@ -553,6 +613,7 @@ TrafficTree::TrafficTree(QString baseName, GList ** recentColumnList, QWidget *p
     _exportRole = ATapDataModel::UNFORMATTED_DISPLAYDATA;
     _header = nullptr;
 
+    setAlternatingRowColors(true);
     setRootIsDecorated(false);
     setSortingEnabled(true);
     setContextMenuPolicy(Qt::CustomContextMenu);
@@ -566,24 +627,14 @@ TrafficTree::TrafficTree(QString baseName, GList ** recentColumnList, QWidget *p
 
 void TrafficTree::setModel(QAbstractItemModel * model)
 {
-    QTreeView::setModel(model);
-
-    if (this->model()) {
-        TrafficDataFilterProxy * proxy = qobject_cast<TrafficDataFilterProxy *>(model);
-        if (proxy) {
-            disconnect(_header, &TrafficTreeHeaderView::filterOnColumn, proxy, &TrafficDataFilterProxy::filterForColumn);
-            disconnect(proxy, &TrafficDataFilterProxy::dataChanged, this, &TrafficTree::handleDataChanged);
-            disconnect(proxy, &TrafficDataFilterProxy::layoutChanged, this, &TrafficTree::handleLayoutChanged);
-        }
-    }
     if (model) {
         TrafficDataFilterProxy * proxy = qobject_cast<TrafficDataFilterProxy *>(model);
         if (proxy) {
             connect(_header, &TrafficTreeHeaderView::filterOnColumn, proxy, &TrafficDataFilterProxy::filterForColumn);
-            connect(proxy, &TrafficDataFilterProxy::dataChanged, this, &TrafficTree::handleDataChanged);
-            connect(proxy, &TrafficDataFilterProxy::layoutChanged, this, &TrafficTree::handleLayoutChanged);
         }
     }
+
+    QTreeView::setModel(model);
 }
 
 void TrafficTree::tapListenerEnabled(bool enable)
@@ -674,20 +725,20 @@ QMenu * TrafficTree::createActionSubMenu(FilterAction::Action cur_action, QModel
                 QString filter;
                 switch (conv_item->ctype) {
                 case CONVERSATION_TCP:
-                    filter = QStringLiteral("%1.stream eq %2").arg("tcp").arg(conv_item->conv_id);
+                    filter = QString("%1.stream eq %2").arg("tcp").arg(conv_item->conv_id);
                     break;
                 case CONVERSATION_UDP:
-                    filter = QStringLiteral("%1.stream eq %2").arg("udp").arg(conv_item->conv_id);
+                    filter = QString("%1.stream eq %2").arg("udp").arg(conv_item->conv_id);
                     break;
                 case CONVERSATION_IP:
-                    filter = QStringLiteral("%1.stream eq %2").arg("ip").arg(conv_item->conv_id);
+                    filter = QString("%1.stream eq %2").arg("ip").arg(conv_item->conv_id);
                     break;
                 case CONVERSATION_IPV6:
-                    filter = QStringLiteral("%1.stream eq %2").arg("ipv6").arg(conv_item->conv_id);
+                    filter = QString("%1.stream eq %2").arg("ipv6").arg(conv_item->conv_id);
                     break;
                 case CONVERSATION_ETH:
                 default:
-                    filter = QStringLiteral("%1.stream eq %2").arg("eth").arg(conv_item->conv_id);
+                    filter = QString("%1.stream eq %2").arg("eth").arg(conv_item->conv_id);
                     break;
                 }
                 FilterAction * act = new FilterAction(subsubmenu, cur_action, at, tr("Filter on stream id"));
@@ -697,7 +748,7 @@ QMenu * TrafficTree::createActionSubMenu(FilterAction::Action cur_action, QModel
             }
             foreach (FilterAction::ActionDirection ad, FilterAction::actionDirections()) {
                 FilterAction *fa = new FilterAction(subsubmenu, cur_action, at, ad);
-                QString filter = gchar_free_to_qstring(get_conversation_filter(conv_item, (conv_direction_e) fad_to_cd_[fa->actionDirection()]));
+                QString filter = get_conversation_filter(conv_item, (conv_direction_e) fad_to_cd_[fa->actionDirection()]);
                 fa->setProperty("filter", filter);
                 subsubmenu->addAction(fa);
                 connect(fa, &QAction::triggered, this, &TrafficTree::useFilterAction);
@@ -750,10 +801,8 @@ void TrafficTree::useFilterAction()
     QString filter = fa->property("filter").toString();
     if (filter.length() > 0)
     {
-        MainWindow * mainWin = mainApp->mainWindow();
-        if (mainWin) {
-            mainWin->setDisplayFilter(filter, fa->action(), fa->actionType());
-        }
+        MainWindow * mainWin = (MainWindow *)(mainApp->mainWindow());
+        mainWin->setDisplayFilter(filter, fa->action(), fa->actionType());
     }
 }
 
@@ -785,22 +834,6 @@ void TrafficTree::widenColumnToContents(int col)
     if (content_width > columnWidth(col)) {
         setColumnWidth(col, content_width);
     }
-}
-
-
-void TrafficTree::handleDataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight, const QList<int>)
-{
-    for (int col = topLeft.column(); col <= bottomRight.column(); ++col) {
-        widenColumnToContents(col);
-    }
-}
-
-void TrafficTree::handleLayoutChanged(const QList<QPersistentModelIndex>, QAbstractItemModel::LayoutChangeHint)
-{
-    for (int col = 0; col < model()->columnCount(); ++col) {
-        widenColumnToContents(col);
-    }
-    scrollTo(currentIndex());
 }
 
 void TrafficTree::toggleSaveRawAction()
@@ -836,7 +869,7 @@ void TrafficTree::copyToClipboard(eTrafficTreeClipboard type)
                 if (!v.isValid()) {
                     rdsl << "\"\"";
                 } else if (v.userType() == QMetaType::QString) {
-                    rdsl << QStringLiteral("\"%1\"").arg(v.toString());
+                    rdsl << QString("\"%1\"").arg(v.toString());
                 } else {
                     rdsl << v.toString();
                 }

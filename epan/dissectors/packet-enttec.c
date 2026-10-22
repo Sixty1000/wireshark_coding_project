@@ -314,7 +314,7 @@ dissect_enttec_reset(tvbuff_t *tvb _U_, unsigned offset, proto_tree *tree _U_)
 static int
 dissect_enttec_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	uint32_t head = 0;
 	proto_tree *ti, *enttec_tree;
 
@@ -349,7 +349,7 @@ dissect_enttec_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
 
 	/* Clear out stuff in the info column */
 	col_add_str(pinfo->cinfo, COL_INFO,
-				val_to_str(pinfo->pool, head, enttec_head_vals, "Unknown (0x%08x)"));
+				val_to_str(head, enttec_head_vals, "Unknown (0x%08x)"));
 
 	ti = proto_tree_add_item(tree, proto_enttec, tvb, offset, -1, ENC_NA);
 	enttec_tree = proto_item_add_subtree(ti, ett_enttec);
@@ -386,7 +386,7 @@ dissect_enttec_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
 static int
 dissect_enttec_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	uint32_t head = 0;
 	proto_tree *ti,*enttec_tree;
 
@@ -413,7 +413,7 @@ dissect_enttec_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
 
 	/* Clear out stuff in the info column */
 	col_add_str(pinfo->cinfo, COL_INFO,
-				val_to_str(pinfo->pool, head, enttec_head_vals, "Unknown (0x%08x)"));
+				val_to_str(head, enttec_head_vals, "Unknown (0x%08x)"));
 
 	ti = proto_tree_add_item(tree, proto_enttec, tvb, offset, -1, ENC_NA);
 	enttec_tree = proto_item_add_subtree(ti, ett_enttec);

@@ -20,8 +20,6 @@
 #include <epan/expert.h>
 #include <epan/packet.h>
 #include <epan/prefs.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 #include <wsutil/inet_addr.h>
 #include <wsutil/nstime.h>
 #include <wsutil/wsjson.h>
@@ -78,19 +76,6 @@ static int hf_zabbix_proxy_no_config_change;
 static int hf_zabbix_proxy_tasks;
 static int hf_zabbix_sender;
 static int hf_zabbix_sender_name;
-static int hf_zabbix_frontend;
-static int hf_zabbix_frontend_sysinfo;
-static int hf_zabbix_frontend_queueinfo;
-static int hf_zabbix_frontend_historypush;
-static int hf_zabbix_frontend_itemtest;
-static int hf_zabbix_frontend_mediatest;
-static int hf_zabbix_frontend_reporttest;
-static int hf_zabbix_frontend_expressioneval;
-static int hf_zabbix_frontend_scriptexec;
-static int hf_zabbix_frontend_deviceinit;
-static int hf_zabbix_frontend_deviceoffboard;
-static int hf_zabbix_frontend_ceprulereset;
-static int hf_zabbix_metrics;
 static int hf_zabbix_request;
 static int hf_zabbix_response;
 static int hf_zabbix_success;
@@ -118,7 +103,7 @@ static const char ZABBIX_ZBX_NOTSUPPORTED[] = "ZBX_NOTSUPPORTED";
 typedef struct _zabbix_conv_info_t {
     uint32_t req_framenum;
     nstime_t req_timestamp;
-    uint32_t oper_flags;         /* ZABBIX_T_XXX macros below */
+    uint16_t oper_flags;         /* ZABBIX_T_XXX macros below */
     const char *host_name;
 } zabbix_conv_info_t;
 
@@ -140,7 +125,7 @@ typedef struct _zabbix_conv_info_t {
 #define ZABBIX_RESPONSE_NOCHANGE    0x10
 
 /* Flags for saving and comparing operation types,
- * max 32 bits as defined in zabbix_conv_info_t above */
+ * max 16 bits as defined in zabbix_conv_info_t above */
 #define ZABBIX_T_REQUEST            0x00000001
 #define ZABBIX_T_RESPONSE           0x00000002
 #define ZABBIX_T_ACTIVE             0x00000004
@@ -153,22 +138,9 @@ typedef struct _zabbix_conv_info_t {
 #define ZABBIX_T_TASKS              0x00000200
 #define ZABBIX_T_HEARTBEAT          0x00000400
 #define ZABBIX_T_LEGACY             0x00000800   /* pre-7.0 non-JSON protocol */
-#define ZABBIX_T_FRONTEND           0x00001000
-#define ZABBIX_T_SYSINFO            0x00002000
-#define ZABBIX_T_QUEUEINFO          0x00004000
-#define ZABBIX_T_HISTORYPUSH        0x00008000
-#define ZABBIX_T_ITEMTEST           0x00010000
-#define ZABBIX_T_MEDIATEST          0x00020000
-#define ZABBIX_T_REPORTTEST         0x00040000
-#define ZABBIX_T_METRICS            0x00080000
-#define ZABBIX_T_EXPRESSIONEVAL     0x00100000
-#define ZABBIX_T_SCRIPTEXEC         0x00200000
-#define ZABBIX_T_DEVICEINIT         0x00400000
-#define ZABBIX_T_DEVICEOFFBOARD     0x00800000
-#define ZABBIX_T_CEPRULERESET       0x01000000
 
 #define ADD_ZABBIX_T_FLAGS(flags)       (zabbix_info->oper_flags |= (flags))
-#define CLEAR_ZABBIX_T_FLAGS(flags)     (zabbix_info->oper_flags &= (0xffffffff-(flags)))
+#define CLEAR_ZABBIX_T_FLAGS(flags)     (zabbix_info->oper_flags &= (0xffff-(flags)))
 #define IS_ZABBIX_T_FLAGS(flags)        ((zabbix_info->oper_flags & (flags)) == (flags))
 
 #define CONV_IS_ZABBIX_REQUEST(zabbix_info,pinfo)           ((zabbix_info)->req_framenum == (pinfo)->fd->num)
@@ -230,7 +202,7 @@ zabbix_add_expert_info_if_too_large(packet_info *pinfo, proto_tree *tree_item,
 static int
 dissect_zabbix_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-    unsigned offset = 0;
+    int offset = 0;
     int agent_hb_freq = 0;
     unsigned oper_response = 0;
     proto_item *ti;
@@ -280,7 +252,7 @@ dissect_zabbix_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
     col_clear(pinfo->cinfo, COL_INFO);
 
     if ((tvb_reported_length(tvb) < ZABBIX_HDR_MIN_LEN) ||
-        (tvb_strneql(tvb, offset, ZABBIX_HDR_SIGNATURE, 4) != 0)) {
+        (tvb_memeql(tvb, offset, ZABBIX_HDR_SIGNATURE, 4) == -1)) {
         /* Encrypted or not Zabbix at all */
         return 0;
     }
@@ -373,14 +345,13 @@ dissect_zabbix_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
      * Note that json_str is modified when using json_get_xxx() functions below!
      * So don't use it to anything else (make a wmem_strdup() if needed, see below)
      */
-    json_str = (char*)tvb_get_string_enc(pinfo->pool, next_tvb, offset, (int)datalen, ENC_UTF_8);
+    json_str = tvb_get_string_enc(pinfo->pool, next_tvb, offset, (int)datalen, ENC_UTF_8);
     /* First check if this is a pre-7.0 passive agent.
      * Note that even pre-7.0 passive agent *responses* can be JSON, so don't just check
      * for JSON validation but check the conversation data!
      */
-    int token_count = json_parse(json_str, NULL, 0);
     if (
-        token_count < 0 ||
+        !json_validate(json_str, datalen) ||
         (
             CONV_IS_ZABBIX_RESPONSE(zabbix_info, pinfo) &&
             IS_ZABBIX_T_FLAGS(ZABBIX_T_AGENT | ZABBIX_T_PASSIVE | ZABBIX_T_LEGACY)
@@ -401,6 +372,13 @@ dissect_zabbix_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
         passive_agent_data_str = wmem_strndup(pinfo->pool, json_str, (size_t)datalen);
         /* Don't do content-based searches for pre-7.0 passive agents */
         goto show_agent_outputs;
+    }
+    /* Parse JSON, first get the token count */
+    int token_count = json_parse(json_str, NULL, 0);
+    if (token_count <= 0) {
+        temp_ti = proto_tree_add_item(zabbix_tree, hf_zabbix_data, next_tvb, 0, (int)datalen, ENC_UTF_8);
+        expert_add_info_format(pinfo, temp_ti, &ei_zabbix_json_error, "Error in initial JSON parse");
+        goto final_outputs;
     }
     jsmntok_t *tokens = wmem_alloc_array(pinfo->pool, jsmntok_t, token_count);
     int ret = json_parse(json_str, tokens, token_count);
@@ -501,12 +479,6 @@ dissect_zabbix_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
             proto_item_set_text(ti, "Zabbix Server/proxy request for passive agent checks");
             col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Server/proxy request for passive agent checks");
         }
-        else if (strcmp(request_type, "zabbix.stats") == 0) {
-            /* Agent requesting server/proxy internal metrics, since Zabbix 4.0.5 */
-            ADD_ZABBIX_T_FLAGS(ZABBIX_T_AGENT | ZABBIX_T_METRICS);
-            proto_item_set_text(ti, "Zabbix Server/proxy internal metrics request");
-            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Server/proxy internal metrics request");
-        }
         else if (strcmp(request_type, "sender data") == 0) {
             /* Sender/trapper */
             ADD_ZABBIX_T_FLAGS(ZABBIX_T_SENDER);
@@ -583,73 +555,6 @@ dissect_zabbix_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
             proto_item_set_text(ti, "Zabbix Proxy heartbeat from \"%s\"", proxy_name);
             col_add_fstr(pinfo->cinfo, COL_INFO, "Zabbix Proxy heartbeat from \"%s\"", proxy_name);
         }
-        /* UI/API-specific requests */
-        else if (strcmp(request_type, "status.get") == 0) {
-            /* System information report */
-            ADD_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND | ZABBIX_T_SYSINFO);
-            proto_item_set_text(ti, "Zabbix System information request");
-            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix System information request");
-        }
-        else if (strcmp(request_type, "queue.get") == 0) {
-            /* Queue information request */
-            ADD_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND | ZABBIX_T_QUEUEINFO);
-            proto_item_set_text(ti, "Zabbix Queue information request");
-            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Queue information request");
-        }
-        else if (strcmp(request_type, "history.push") == 0) {
-            /* history.push API call, since Zabbix 7.0 */
-            ADD_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND | ZABBIX_T_HISTORYPUSH);
-            proto_item_set_text(ti, "Zabbix History push request");
-            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix History push request");
-        }
-        else if (strcmp(request_type, "item.test") == 0) {
-            /* Item test in the frontend */
-            ADD_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND | ZABBIX_T_ITEMTEST);
-            proto_item_set_text(ti, "Zabbix Item test request");
-            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Item test request");
-        }
-        else if (strcmp(request_type, "alert.send") == 0) {
-            /* Media test in the frontend */
-            ADD_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND | ZABBIX_T_MEDIATEST);
-            proto_item_set_text(ti, "Zabbix Media test request");
-            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Media test request");
-        }
-        else if (strcmp(request_type, "report.test") == 0) {
-            /* Report test in the frontend */
-            ADD_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND | ZABBIX_T_REPORTTEST);
-            proto_item_set_text(ti, "Zabbix Report test request");
-            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Report test request");
-        }
-        else if (strcmp(request_type, "expressions.evaluate") == 0) {
-            /* Trigger expression evaluation test in the frontend */
-            ADD_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND | ZABBIX_T_EXPRESSIONEVAL);
-            proto_item_set_text(ti, "Zabbix Expression evaluation request");
-            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Expression evaluation request");
-        }
-        else if (strcmp(request_type, "command") == 0) {
-            /* Script execution from the frontend */
-            ADD_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND | ZABBIX_T_SCRIPTEXEC);
-            proto_item_set_text(ti, "Zabbix Script execution request");
-            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Script execution request");
-        }
-        else if (strcmp(request_type, "device.init") == 0) {
-            /* Device initialization from the frontend, since Zabbix 8.0 */
-            ADD_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND | ZABBIX_T_DEVICEINIT);
-            proto_item_set_text(ti, "Zabbix Device initialization request");
-            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Device initialization request");
-        }
-        else if (strcmp(request_type, "device.offboard") == 0) {
-            /* Device offboarding from the frontend, since Zabbix 8.0 */
-            ADD_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND | ZABBIX_T_DEVICEOFFBOARD);
-            proto_item_set_text(ti, "Zabbix Device offboarding request");
-            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Device offboarding request");
-        }
-        else if (strcmp(request_type, "cep.rule.reset") == 0) {
-            /* CEP rule reset from the frontend, since Zabbix 8.0 */
-            ADD_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND | ZABBIX_T_CEPRULERESET);
-            proto_item_set_text(ti, "Zabbix CEP rule reset request");
-            col_set_str(pinfo->cinfo, COL_INFO, "Zabbix CEP rule reset request");
-        }
     }
     /* There was no "request" field match, continue with other ways to recognize the packet */
     else if (json_get_object(json_str, tokens, "globalmacro")) {
@@ -713,10 +618,6 @@ dissect_zabbix_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
                 col_add_fstr(pinfo->cinfo, COL_INFO,
                     "Zabbix Server/proxy response for agent data for \"%s\" (%s)", ZABBIX_NAME_OR_UNKNOWN(agent_name), response_status);
             }
-            else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_METRICS)) {
-                proto_item_set_text(ti, "Zabbix Server/proxy internal metrics response");
-                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Server/proxy internal metrics response");
-            }
         }
         else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_PROXY)) {
             proxy_name = zabbix_info->host_name;
@@ -763,52 +664,6 @@ dissect_zabbix_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
                 "Zabbix Server/proxy response for sender data for \"%s\" (%s)", ZABBIX_NAME_OR_UNKNOWN(sender_name), response_status);
             col_add_fstr(pinfo->cinfo, COL_INFO,
                 "Zabbix Server/proxy response for sender data for \"%s\" (%s)", ZABBIX_NAME_OR_UNKNOWN(sender_name), response_status);
-        }
-        else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND)) {
-            if (IS_ZABBIX_T_FLAGS(ZABBIX_T_SYSINFO)) {
-                proto_item_set_text(ti, "Zabbix System information response");
-                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix System information response");
-            }
-            else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_QUEUEINFO)) {
-                proto_item_set_text(ti, "Zabbix Queue information response");
-                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Queue information response");
-            }
-            else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_HISTORYPUSH)) {
-                proto_item_set_text(ti, "Zabbix History push response");
-                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix History push response");
-            }
-            else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_ITEMTEST)) {
-                proto_item_set_text(ti, "Zabbix Item test response");
-                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Item test response");
-            }
-            else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_MEDIATEST)) {
-                proto_item_set_text(ti, "Zabbix Media test response");
-                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Media test response");
-            }
-            else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_REPORTTEST)) {
-                proto_item_set_text(ti, "Zabbix Report test response");
-                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Report test response");
-            }
-            else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_EXPRESSIONEVAL)) {
-                proto_item_set_text(ti, "Zabbix Expression evaluation response");
-                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Expression evaluation response");
-            }
-            else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_SCRIPTEXEC)) {
-                proto_item_set_text(ti, "Zabbix Script execution response");
-                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Script execution response");
-            }
-            else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_DEVICEINIT)) {
-                proto_item_set_text(ti, "Zabbix Device initialization response");
-                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Device initialization response");
-            }
-            else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_DEVICEOFFBOARD)) {
-                proto_item_set_text(ti, "Zabbix Device offboarding response");
-                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix Device offboarding response");
-            }
-            else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_CEPRULERESET)) {
-                proto_item_set_text(ti, "Zabbix CEP rule reset response");
-                col_set_str(pinfo->cinfo, COL_INFO, "Zabbix CEP rule reset response");
-            }
         }
     }
     else if (version && data_array) {
@@ -907,11 +762,6 @@ show_agent_outputs:
         proto_item_set_text(temp_ti, "This is a sender connection");
         proto_item_set_generated(temp_ti);
     }
-    else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND)) {
-        temp_ti = proto_tree_add_boolean(zabbix_tree, hf_zabbix_frontend, NULL, 0, 0, true);
-        proto_item_set_text(temp_ti, "This is a frontend connection");
-        proto_item_set_generated(temp_ti);
-    }
     if (oper_response & ZABBIX_RESPONSE_SUCCESS) {
         proto_tree_add_boolean(zabbix_tree, hf_zabbix_success, NULL, 0, 0, true);
     }
@@ -959,9 +809,6 @@ show_agent_outputs:
         if (commands_array) {
             proto_tree_add_boolean(zabbix_tree, hf_zabbix_agent_commands, NULL, 0, 0, true);
         }
-        if (IS_ZABBIX_T_FLAGS(ZABBIX_T_METRICS)) {
-            proto_tree_add_boolean(zabbix_tree, hf_zabbix_metrics, NULL, 0, 0, true);
-        }
     }
     else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_PROXY)) {
         if (proxy_name) {
@@ -992,32 +839,6 @@ show_agent_outputs:
         }
         else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_HEARTBEAT)) {
             proto_tree_add_boolean(zabbix_tree, hf_zabbix_proxy_hb, NULL, 0, 0, true);
-        }
-    }
-    else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_FRONTEND)) {
-        if (IS_ZABBIX_T_FLAGS(ZABBIX_T_SYSINFO)) {
-            proto_tree_add_boolean(zabbix_tree, hf_zabbix_frontend_sysinfo, NULL, 0, 0, true);
-        }
-        else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_QUEUEINFO)) {
-            proto_tree_add_boolean(zabbix_tree, hf_zabbix_frontend_queueinfo, NULL, 0, 0, true);
-        }
-        else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_HISTORYPUSH)) {
-            proto_tree_add_boolean(zabbix_tree, hf_zabbix_frontend_historypush, NULL, 0, 0, true);
-        }
-        else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_ITEMTEST)) {
-            proto_tree_add_boolean(zabbix_tree, hf_zabbix_frontend_itemtest, NULL, 0, 0, true);
-        }
-        else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_MEDIATEST)) {
-            proto_tree_add_boolean(zabbix_tree, hf_zabbix_frontend_mediatest, NULL, 0, 0, true);
-        }
-        else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_REPORTTEST)) {
-            proto_tree_add_boolean(zabbix_tree, hf_zabbix_frontend_reporttest, NULL, 0, 0, true);
-        }
-        else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_EXPRESSIONEVAL)) {
-            proto_tree_add_boolean(zabbix_tree, hf_zabbix_frontend_expressioneval, NULL, 0, 0, true);
-        }
-        else if (IS_ZABBIX_T_FLAGS(ZABBIX_T_SCRIPTEXEC)) {
-            proto_tree_add_boolean(zabbix_tree, hf_zabbix_frontend_scriptexec, NULL, 0, 0, true);
         }
     }
     else if (sender_name) {
@@ -1129,7 +950,7 @@ dissect_zabbix(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         /* Not enough data */
         return 0;
     }
-    if (tvb_strneql(tvb, 0, ZABBIX_HDR_SIGNATURE, 4) != 0) {
+    if (tvb_memeql(tvb, 0, ZABBIX_HDR_SIGNATURE, 4)) {
         /* Encrypted or not Zabbix at all */
         return 0;
     }
@@ -1311,7 +1132,7 @@ proto_register_zabbix(void)
         },
         { &hf_zabbix_agent_listenport,
             { "Agent listen port", "zabbix.agent.listen_port",
-            FT_UINT16, BASE_PT_TCP, NULL, 0,
+            FT_UINT16, BASE_DEC, NULL, 0,
             NULL, HFILL }
         },
         { &hf_zabbix_agent_variant,
@@ -1392,71 +1213,6 @@ proto_register_zabbix(void)
         { &hf_zabbix_hostmap_revision,
             { "Hostmap revision", "zabbix.hostmap_revision",
             FT_INT64, BASE_DEC, NULL, 0,
-            NULL, HFILL }
-        },
-        { &hf_zabbix_metrics,
-            { "Server/proxy internal metrics", "zabbix.stats",
-            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
-            NULL, HFILL }
-        },
-        { &hf_zabbix_frontend,
-            { "Zabbix frontend", "zabbix.frontend",
-            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
-            NULL, HFILL }
-        },
-        { &hf_zabbix_frontend_sysinfo,
-            { "System information", "zabbix.frontend.sysinfo",
-            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
-            NULL, HFILL }
-        },
-        { &hf_zabbix_frontend_queueinfo,
-            { "Queue information", "zabbix.frontend.queueinfo",
-            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
-            NULL, HFILL }
-        },
-        { &hf_zabbix_frontend_historypush,
-            { "History push", "zabbix.frontend.historypush",
-            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
-            NULL, HFILL }
-        },
-        { &hf_zabbix_frontend_itemtest,
-            { "Item test", "zabbix.frontend.itemtest",
-            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
-            NULL, HFILL }
-        },
-        { &hf_zabbix_frontend_mediatest,
-            { "Media test", "zabbix.frontend.mediatest",
-            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
-            NULL, HFILL }
-        },
-        { &hf_zabbix_frontend_reporttest,
-            { "Report test", "zabbix.frontend.reporttest",
-            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
-            NULL, HFILL }
-        },
-        { &hf_zabbix_frontend_expressioneval,
-            { "Expression evaluation", "zabbix.frontend.expressioneval",
-            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
-            NULL, HFILL }
-        },
-        { &hf_zabbix_frontend_scriptexec,
-            { "Script execution", "zabbix.frontend.scriptexec",
-            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
-            NULL, HFILL }
-        },
-        { &hf_zabbix_frontend_deviceinit,
-            { "Device initialization", "zabbix.frontend.deviceinit",
-            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
-            NULL, HFILL }
-        },
-        { &hf_zabbix_frontend_deviceoffboard,
-            { "Device offboarding", "zabbix.frontend.deviceoffboard",
-            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
-            NULL, HFILL }
-        },
-        { &hf_zabbix_frontend_ceprulereset,
-            { "CEP rule reset", "zabbix.frontend.ceprulereset",
-            FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
             NULL, HFILL }
         },
     };

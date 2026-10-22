@@ -131,8 +131,9 @@ dissect_hpfeeds_auth_pdu(tvbuff_t *tvb, proto_tree *tree, unsigned offset)
 {
     uint8_t len = 0;
 
-    proto_tree_add_item_ret_uint8(tree, hf_hpfeeds_ident_len, tvb,
-                    offset, 1, ENC_BIG_ENDIAN, &len);
+    len = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item(tree, hf_hpfeeds_ident_len, tvb,
+                    offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
     proto_tree_add_item(tree, hf_hpfeeds_ident, tvb,
                     offset, len, ENC_ASCII);
@@ -171,11 +172,13 @@ dissect_hpfeeds_publish_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     const uint8_t *channelname = NULL;
     const char* save_match_string = NULL;
 
-    proto_tree_add_item_ret_uint8(tree, hf_hpfeeds_ident_len, tvb, offset, 1, ENC_BIG_ENDIAN, &len);
+    len = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item(tree, hf_hpfeeds_ident_len, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
     proto_tree_add_item(tree, hf_hpfeeds_ident, tvb, offset, len, ENC_ASCII);
     offset += len;
-    proto_tree_add_item_ret_uint8(tree, hf_hpfeeds_chan_len, tvb, offset, 1, ENC_BIG_ENDIAN, &len);
+    len = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item(tree, hf_hpfeeds_chan_len, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
 
     /* get the channel name as ephemeral string to pass it to the heuristic decoders */
@@ -241,7 +244,7 @@ static tap_packet_status hpfeeds_stats_tree_packet(stats_tree* st _U_, packet_in
     }
 
     stats_tree_tick_pivot(st, st_node_opcodes,
-            val_to_str(pinfo->pool, pi->opcode, opcode_vals, "Unknown opcode (%d)"));
+            val_to_str(pi->opcode, opcode_vals, "Unknown opcode (%d)"));
     return TAP_PACKET_REDRAW;
 }
 
@@ -250,8 +253,9 @@ dissect_hpfeeds_subscribe_pdu(tvbuff_t *tvb, proto_tree *tree, unsigned offset)
 {
     uint8_t len = 0;
     /* get length of ident field */
-    proto_tree_add_item_ret_uint8(tree, hf_hpfeeds_ident_len, tvb, offset, 1,
-        ENC_BIG_ENDIAN, &len);
+    len = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item(tree, hf_hpfeeds_ident_len, tvb, offset, 1,
+        ENC_BIG_ENDIAN);
     offset += 1;
 
     proto_tree_add_item(tree, hf_hpfeeds_ident, tvb, offset, len,
@@ -298,7 +302,7 @@ dissect_hpfeeds_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
 
     /* Clear out stuff in the info column */
     col_add_fstr(pinfo->cinfo, COL_INFO, "Type %s",
-        val_to_str(pinfo->pool, opcode, opcode_vals, "Unknown (0x%02x)"));
+        val_to_str(opcode, opcode_vals, "Unknown (0x%02x)"));
 
     ti = proto_tree_add_item(hpfeeds_tree, hf_hpfeeds_opcode, tvb, offset,
             1, ENC_BIG_ENDIAN);
@@ -444,7 +448,11 @@ proto_register_hpfeeds(void)
     module_t *hpfeeds_module;
     expert_module_t* expert_hpfeeds;
 
-    proto_hpfeeds = proto_register_protocol ("HPFEEDS HoneyPot Feeds Protocol", "HPFEEDS", "hpfeeds");
+    proto_hpfeeds = proto_register_protocol (
+        "HPFEEDS HoneyPot Feeds Protocol", /* name */
+        "HPFEEDS",      /* short name */
+        "hpfeeds"       /* abbrev     */
+        );
 
     heur_subdissector_list = register_heur_dissector_list_with_description("hpfeeds", "HPFEEDS Publish payload", proto_hpfeeds);
 

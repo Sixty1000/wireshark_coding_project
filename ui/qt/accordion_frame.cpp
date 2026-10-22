@@ -12,7 +12,7 @@
 #include "accordion_frame.h"
 
 #include "ui/util.h"
-#include <ui/qt/utils/theme_manager.h>
+#include <ui/qt/utils/color_utils.h>
 
 #include <QLayout>
 #include <QPropertyAnimation>
@@ -24,8 +24,6 @@ AccordionFrame::AccordionFrame(QWidget *parent) :
     frame_height_(0)
 {
     updateStyleSheet();
-    connect(ThemeManager::instance(), &ThemeManager::themeChanged,
-            this, &AccordionFrame::updateStyleSheet);
 
     animation_ = new QPropertyAnimation(this, "maximumHeight", this);
     animation_->setDuration(duration_);
@@ -88,5 +86,21 @@ void AccordionFrame::animationFinished()
 
 void AccordionFrame::updateStyleSheet()
 {
-    setStyleSheet(ThemeManager::styleSheet(QStringLiteral("widgets/accordion-frame")));
+    QString style_sheet(
+        "QLineEdit#goToLineEdit {"
+        "  max-width: 5em;"
+        "}"
+    );
+
+#ifdef Q_OS_MAC
+    style_sheet += QString(
+        "QLineEdit {"
+        "  border: 1px solid palette(%1);"
+        "  border-radius: 3px;"
+        "  padding: 1px;"
+        "}"
+    ).arg(ColorUtils::themeIsDark() ? QString("light") : QString("dark"));
+#endif
+
+    setStyleSheet(style_sheet);
 }

@@ -13,22 +13,14 @@ import hashlib
 import os
 import socket
 import subprocess
+import subprocesstest
+from subprocesstest import cat_dhcp_command, cat_cap_file_command, count_output, grep_output, check_packet_count
 import sys
-import sysconfig
 import threading
 import time
 import uuid
-
+import sysconfig
 import pytest
-
-import subprocesstest
-from subprocesstest import (
-    cat_cap_file_command,
-    cat_dhcp_command,
-    check_packet_count,
-    grep_output,
-)
-from suite_text2pcap import check_capinfos_info
 
 capture_duration = 5
 
@@ -40,13 +32,12 @@ class UdpTrafficGenerator(threading.Thread):
     def __init__(self):
         super().__init__(daemon=True)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.destination = ('127.0.0.1', 9)
         self.stopped = False
 
     def run(self):
         while not self.stopped:
             time.sleep(.05)
-            self.sock.sendto(b'Wireshark test\n', self.destination)
+            self.sock.sendto(b'Wireshark test\n', ('127.0.0.1', 9))
 
     def stop(self):
         if not self.stopped:
@@ -83,7 +74,7 @@ def wireshark_k(wireshark_command):
 
 def capture_command(*args, shell=False, quoted=False):
     cmd_args = list(args)
-    if type(cmd_args[0]) is not str:
+    if type(cmd_args[0]) != str:
         # Assume something like ['wireshark', '-k']
         cmd_args = list(cmd_args[0]) + list(cmd_args)[1:]
     if shell:
@@ -101,12 +92,12 @@ def check_capture_10_packets(capture_interface, cmd_capinfos, traffic_generator,
         stop_traffic = start_traffic()
         if to_stdout:
             subprocesstest.check_run(capture_command(cmd,
-                '-i', f'"{capture_interface}"',
+                '-i', '"{}"'.format(capture_interface),
                 '-p',
                 '-w', '-',
                 '-c', '10',
-                '-a', f'duration:{capture_duration}',
-                '-f', f'"{cfilter}"',
+                '-a', 'duration:{}'.format(capture_duration),
+                '-f', '"{}"'.format(cfilter),
                 '>', testout_file,
                 shell=True
             ),
@@ -117,7 +108,7 @@ def check_capture_10_packets(capture_interface, cmd_capinfos, traffic_generator,
                 '-p',
                 '-w', testout_file,
                 '-c', '10',
-                '-a', f'duration:{capture_duration}',
+                '-a', 'duration:{}'.format(capture_duration),
                 '-f', cfilter,
             ), env=env)
         stop_traffic()
@@ -142,13 +133,13 @@ def check_capture_fifo(cmd_capinfos, result_file):
         os.mkfifo(fifo_file)
         slow_dhcp_cmd = cat_dhcp_command('slow')
         fifo_proc = subprocess.Popen(
-            (f'{slow_dhcp_cmd} > {fifo_file}'),
+            ('{0} > {1}'.format(slow_dhcp_cmd, fifo_file)),
             shell=True)
         subprocesstest.check_run(capture_command(cmd,
             '-i', fifo_file,
             '-p',
             '-w', testout_file,
-            '-a', f'duration:{capture_duration}',
+            '-a', 'duration:{}'.format(capture_duration),
         ), env=env)
         fifo_proc.kill()
         assert os.path.isfile(testout_file)
@@ -167,20 +158,21 @@ def check_capture_stdin(cmd_capinfos, result_file):
         capture_cmd = capture_command(cmd,
             '-i', '-',
             '-w', f'"{testout_file}"',
-            '-a', f'duration:{capture_duration}',
+            '-a', 'duration:{}'.format(capture_duration),
             shell=True
         )
-        is_gui = type(cmd) is not str and '-k' in cmd[1:]
+        is_gui = type(cmd) != str and '-k' in cmd[0]
         if is_gui:
             capture_cmd += ' --log-level=info'
         if sysconfig.get_platform().startswith('mingw'):
             pytest.skip('FIXME Pipes are broken with the MSYS2 shell')
         pipe_proc = subprocesstest.check_run(slow_dhcp_cmd + ' | ' + capture_cmd, shell=True, capture_output=True, env=env)
         if is_gui:
-            # N.B. console_file() in wsutil/wslog.c determines stderr vs stdout
+            # Wireshark uses stdout and not stderr for diagnostic messages
+            # XXX: Confirm this
             assert grep_output(pipe_proc.stdout, 'Wireshark is up and ready to go'), 'No startup message.'
-            assert grep_output(pipe_proc.stderr, 'Capture started'), 'No capture start message.'
-            assert grep_output(pipe_proc.stderr, 'Capture stopped'), 'No capture stop message.'
+            assert grep_output(pipe_proc.stdout, 'Capture started'), 'No capture start message.'
+            assert grep_output(pipe_proc.stdout, 'Capture stopped'), 'No capture stop message.'
         assert os.path.isfile(testout_file)
         check_packet_count(cmd_capinfos, 8, testout_file)
     return check_capture_stdin_real
@@ -200,7 +192,7 @@ def check_capture_read_filter(capture_interface, traffic_generator, cmd_capinfos
             '-2',
             '-R', 'dcerpc.cn_call_id==123456', # Something unlikely.
             '-c', '10',
-            '-a', f'duration:{capture_duration}',
+            '-a', 'duration:{}'.format(capture_duration),
             '-f', cfilter,
         ), env=env)
         stop_traffic()
@@ -219,7 +211,7 @@ def check_capture_snapshot_len(capture_interface, cmd_tshark, traffic_generator,
             '-p',
             '-w', testout_file,
             '-s', str(snapshot_len),
-            '-a', f'duration:{capture_duration}',
+            '-a', 'duration:{}'.format(capture_duration),
             '-f', cfilter,
         ), env=env)
         stop_traffic()
@@ -231,7 +223,7 @@ def check_capture_snapshot_len(capture_interface, cmd_tshark, traffic_generator,
         subprocesstest.check_run((cmd_tshark,
             '-r', testout_file,
             '-w', testout2_file,
-            '-Y', f'frame.cap_len>{snapshot_len}',
+            '-Y', 'frame.cap_len>{}'.format(snapshot_len),
         ), env=env)
         check_packet_count(cmd_capinfos, 0, testout2_file)
     return check_capture_snapshot_len_real
@@ -246,13 +238,13 @@ def check_dumpcap_autostop_stdin(cmd_dumpcap, cmd_capinfos, result_file):
         condition='oops:invalid'
 
         if packets is not None:
-            condition = f'packets:{packets}'
+            condition = 'packets:{}'.format(packets)
         elif filesize is not None:
-            condition = f'filesize:{filesize}'
+            condition = 'filesize:{}'.format(filesize)
         else:
             raise AssertionError('Need one of packets or filesize')
 
-        cmd_ = f'"{cmd_dumpcap}"'
+        cmd_ = '"{}"'.format(cmd_dumpcap)
         capture_cmd = ' '.join((cmd_,
             '-i', '-',
             '-w', testout_file,
@@ -276,19 +268,19 @@ def check_dumpcap_ringbuffer_stdin(cmd_dumpcap, cmd_capinfos, result_file):
     def check_dumpcap_ringbuffer_stdin_real(self, packets=None, filesize=None, env=None):
         # Similar to check_capture_stdin.
         rb_unique = 'dhcp_rb_' + uuid.uuid4().hex[:6] # Random ID
-        testout_file = result_file(f'testout.{rb_unique}.pcapng')
-        testout_glob = result_file(f'testout.{rb_unique}_*.pcapng')
+        testout_file = result_file('testout.{}.pcapng'.format(rb_unique))
+        testout_glob = result_file('testout.{}_*.pcapng'.format(rb_unique))
         cat100_dhcp_cmd = cat_dhcp_command('cat100')
         condition='oops:invalid'
 
         if packets is not None:
-            condition = f'packets:{packets}'
+            condition = 'packets:{}'.format(packets)
         elif filesize is not None:
-            condition = f'filesize:{filesize}'
+            condition = 'filesize:{}'.format(filesize)
         else:
             raise AssertionError('Need one of packets or filesize')
 
-        cmd_ = f'"{cmd_dumpcap}"'
+        cmd_ = '"{}"'.format(cmd_dumpcap)
         capture_cmd = ' '.join((cmd_,
             '-i', '-',
             '-w', testout_file,
@@ -316,38 +308,14 @@ def check_dumpcap_ringbuffer_stdin(cmd_dumpcap, cmd_capinfos, result_file):
 def check_dumpcap_pcapng_sections(cmd_dumpcap, cmd_tshark, cmd_capinfos, capture_file, result_file):
     if sys.platform == 'win32':
         pytest.skip('Test requires OS fifo support.')
-    def check_dumpcap_pcapng_sections_real(self, multi_input=False, multi_output=False, mixed_endian=False, be_first=False, env=None):
-
-        # many_interfaces.pcapng.1 : 64 packets written by "Passthrough test #1"
-        # many_interfaces.pcapng.2 : 15 packets written by "Passthrough test #2"
-        # many_interfaces.pcapng.3 : 9 packets written by "Passthrough test #3"
-        # Each has 11 interfaces and is Little Endian.
-        # dhcp_big_endian.pcapng : 4 packets, Big Endian, 1 IDB UA "pcap_writer.lua"
-        # aka Big Endian test001.pcapng from https://github.com/hadrielk/pcapng-test-generator/
-        # All of these source files have a single SHB and the IDBs immediately
-        # after the SHB and before and EPBs.
-
-        # It would be good to add another (longer) Big Endian file, to test
-        # Big Endian-only multiple inputs.
-
+    def check_dumpcap_pcapng_sections_real(self, multi_input=False, multi_output=False, env=None):
         # Make sure we always test multiple SHBs in an input.
         in_files_l = [ [
             capture_file('many_interfaces.pcapng.1'),
             capture_file('many_interfaces.pcapng.2')
             ] ]
-
-        # Currently byte swapped SHBs are only supported as passthrough;
-        # i.e., with a single input. So with multi_input we add a third
-        # Little Endian file.
         if multi_input:
             in_files_l.append([ capture_file('many_interfaces.pcapng.3') ])
-
-        if mixed_endian:
-            if be_first:
-                in_files_l[0].insert(0, capture_file('dhcp_big_endian.pcapng'))
-            else:
-                in_files_l[0].append(capture_file('dhcp_big_endian.pcapng'))
-
         fifo_files = []
         fifo_procs = []
         # Default values for our validity tests
@@ -355,78 +323,97 @@ def check_dumpcap_pcapng_sections(cmd_dumpcap, cmd_tshark, cmd_capinfos, capture
             'filename': None,
             'packet_count': 0,
             'idb_count': 0,
-            'userappl_list': [],
+            'ua_pt1_count': 0,
+            'ua_pt2_count': 0,
+            'ua_pt3_count': 0,
+            'ua_dc_count': 0,
         }
-        check_vals = [ check_val_d.copy() ]
-
-        autostop_packets = 40
+        check_vals = [ check_val_d ]
 
         for in_files in in_files_l:
-            fifo_file = result_file(f'dumpcap_pcapng_sections_{len(fifo_files) + 1}.fifo')
+            fifo_file = result_file('dumpcap_pcapng_sections_{}.fifo'.format(len(fifo_files) + 1))
             fifo_files.append(fifo_file)
             # If a previous test left its fifo laying around, e.g. from a failure, remove it.
             try:
                 os.unlink(fifo_file)
-            except Exception:
-                pass
+            except Exception: pass
             os.mkfifo(fifo_file)
             cat_cmd = cat_cap_file_command(in_files)
-            fifo_procs.append(subprocess.Popen((f'{cat_cmd} > {fifo_file}'), shell=True))
-
-            for in_file in in_files:
-                cap_info = check_capinfos_info(cmd_capinfos, in_file)
-                check_vals[-1]['packet_count'] += cap_info['packets']
-                check_vals[-1]['idb_count'] += cap_info['interfaces']
-                if not multi_input:
-                    check_vals[-1]['userappl_list'].extend(cap_info.get('userappl', []))
-                if multi_output and check_vals[-1]['packet_count'] >= autostop_packets:
-                    # XXX - We happen to know for each of our input files there
-                    # is but one SHB and all IDBs appear before any EPBs, thus
-                    # all IDBs (and User Application opts, for SHB passthrough)
-                    # should be present if any of its packets are in a given
-                    # output file. With more complicated pcapng files, at best
-                    # for output files before the last we could only set bounds
-                    # for the number of IDBs and User Application options.
-                    check_vals.append(check_val_d.copy())
-                    check_vals[-1]['packet_count'] = check_vals[-2]['packet_count'] - autostop_packets
-                    check_vals[-2]['packet_count'] = autostop_packets
-                    if multi_input:
-                        check_vals[-1]['idb_count'] = check_vals[-2]['idb_count']
-                    else:
-                        check_vals[-1]['idb_count'] = cap_info['interfaces']
-                        check_vals[-1]['userappl_list'] = cap_info.get('userappl', [])
+            fifo_procs.append(subprocess.Popen(('{0} > {1}'.format(cat_cmd, fifo_file)), shell=True))
 
         if multi_output:
             rb_unique = 'sections_rb_' + uuid.uuid4().hex[:6] # Random ID
-            testout_file = result_file(f'testout.{rb_unique}.pcapng')
-            testout_glob = result_file(f'testout.{rb_unique}_*.pcapng')
+            testout_file = result_file('testout.{}.pcapng'.format(rb_unique))
+            testout_glob = result_file('testout.{}_*.pcapng'.format(rb_unique))
+            check_vals.append(check_val_d.copy())
             # check_vals[]['filename'] will be filled in below
         else:
             testout_file = result_file(testout_pcapng)
             check_vals[0]['filename'] = testout_file
 
         # Capture commands
-        capture_cmd_args = ['-w', testout_file]
-        for fifo_file in fifo_files:
-            capture_cmd_args.append('-i')
-            capture_cmd_args.append(fifo_file)
-        if multi_output:
-            capture_cmd_args.append('-b')
-            capture_cmd_args.append(f'packets:{autostop_packets}')
+        if not multi_input and not multi_output:
+            # Passthrough SHBs, single output file
+            capture_cmd_args = (
+                '-i', fifo_files[0],
+                '-w', testout_file
+            )
+            check_vals[0]['packet_count'] = 79
+            check_vals[0]['idb_count'] = 22
+            check_vals[0]['ua_pt1_count'] = 1
+            check_vals[0]['ua_pt2_count'] = 1
+        elif not multi_input and multi_output:
+            # Passthrough SHBs, multiple output files
+            capture_cmd_args = (
+                '-i', fifo_files[0],
+                '-w', testout_file,
+                '-a', 'files:2',
+                '-b', 'packets:53'
+            )
+            check_vals[0]['packet_count'] = 53
+            check_vals[0]['idb_count'] = 11
+            check_vals[0]['ua_pt1_count'] = 1
+            check_vals[1]['packet_count'] = 26
+            check_vals[1]['idb_count'] = 22
+            check_vals[1]['ua_pt1_count'] = 1
+            check_vals[1]['ua_pt2_count'] = 1
+        elif multi_input and not multi_output:
+            # Dumpcap SHBs, single output file
+            capture_cmd_args = (
+                '-i', fifo_files[0],
+                '-i', fifo_files[1],
+                '-w', testout_file
+            )
+            check_vals[0]['packet_count'] = 88
+            check_vals[0]['idb_count'] = 33
+            check_vals[0]['ua_dc_count'] = 1
+        else:
+            # Dumpcap SHBs, multiple output files
+            capture_cmd_args = (
+                '-i', fifo_files[0],
+                '-i', fifo_files[1],
+                '-w', testout_file,
+                '-a', 'files:2',
+                '-b', 'packets:53'
+            )
+            check_vals[0]['packet_count'] = 53
+            check_vals[0]['idb_count'] = 11
+            check_vals[0]['ua_dc_count'] = 1
+            check_vals[1]['packet_count'] = 35
+            check_vals[1]['idb_count'] = 33
+            check_vals[1]['ua_dc_count'] = 1
 
         capture_cmd = capture_command(cmd_dumpcap, *capture_cmd_args)
 
         subprocesstest.check_run(capture_cmd, env=env)
-        for fifo_proc in fifo_procs:
-            fifo_proc.kill()
+        for fifo_proc in fifo_procs: fifo_proc.kill()
 
         rb_files = []
         if multi_output:
             rb_files = sorted(glob.glob(testout_glob))
-            # zip(strict=True) keyword arg added in Python 3.10
-            assert len(rb_files) == len(check_vals)
-            for check_val, rb_file in zip(check_vals, rb_files):
-                check_val['filename'] = rb_file
+            assert len(rb_files) == 2
+            check_vals[0]['filename'] = rb_files[0]
+            check_vals[1]['filename'] = rb_files[1]
 
         for rbf in rb_files:
             assert os.path.isfile(rbf)
@@ -445,38 +432,42 @@ def check_dumpcap_pcapng_sections(cmd_dumpcap, cmd_tshark, cmd_capinfos, capture
                 out_hash.update(f.read())
             assert in_hash.hexdigest() == out_hash.hexdigest()
 
-        last = True
-        for check_val in reversed(check_vals):
-            # Iterate in reversed order; if there multiple outputs, the last
-            # file is special (i.e., is guaranteed to have all the IDBs and
-            # other non-packet blocks and options.)
+        # many_interfaces.pcapng.1 : 64 packets written by "Passthrough test #1"
+        # many_interfaces.pcapng.2 : 15 packets written by "Passthrough test #2"
+        # many_interfaces.pcapng.3 : 9 packets written by "Passthrough test #3"
+        # Each has 11 interfaces.
+        idb_compare_eq = True
+        if multi_input and multi_output:
+            # Having multiple inputs forces the use of threads. In our
+            # case this means that non-packet block counts in the first
+            # file in is nondeterministic.
+            idb_compare_eq = False
+        for check_val in check_vals:
             check_packet_count(cmd_capinfos, check_val['packet_count'], check_val['filename'])
 
-            cap_out_info = check_capinfos_info(cmd_capinfos, check_val['filename'])
-            assert check_val['packet_count'] == cap_out_info['packets']
-
-            if multi_input and multi_output and not last:
-                # Having multiple inputs forces the use of threads. In our
-                # case this means that non-packet block counts in files before
-                # the last is nondeterministic. We also expect any non-packet
-                # blocks before the first packet block to be read in each
-                # input as part of the initial pcapng_open.
-                assert cap_out_info['interfaces'] >= check_val['idb_count']
-            else:
-                assert cap_out_info['interfaces'] == check_val['idb_count']
-
-            if multi_input:
-                # Multiple inputs, so dumpcap written SHB with its own User
-                # Application option (including the version number, so check
-                # a substring.)
-                assert len(cap_out_info['userappl']) == 1
-                assert 'Dumpcap (Wireshark)' in cap_out_info['userappl'][0]
-            else:
-                assert cap_out_info['userappl'] == check_val['userappl_list']
-
+            tshark_proc = subprocesstest.check_run(capture_command(cmd_tshark,
+                '-r', check_val['filename'],
+                '-V',
+                '-X', 'read_format:MIME Files Format'
+            ), capture_output=True, env=env)
             # XXX Are there any other sanity checks we should run?
-            last = False
+            if idb_compare_eq:
+                assert count_output(tshark_proc.stdout, r'Block \d+: Interface Description Block \d+') \
+                        == check_val['idb_count']
+            else:
+                assert count_output(tshark_proc.stdout, r'Block \d+: Interface Description Block \d+') \
+                        >= check_val['idb_count']
+                idb_compare_eq = True
+            assert count_output(tshark_proc.stdout, r'Option: User Application = Passthrough test #1') \
+                        == check_val['ua_pt1_count']
+            assert count_output(tshark_proc.stdout, r'Option: User Application = Passthrough test #2') \
+                        == check_val['ua_pt2_count']
+            assert count_output(tshark_proc.stdout, r'Option: User Application = Passthrough test #3') \
+                        == check_val['ua_pt3_count']
+            assert count_output(tshark_proc.stdout, r'Option: User Application = Dumpcap \(Wireshark\)') \
+                        == check_val['ua_dc_count']
     return check_dumpcap_pcapng_sections_real
+
 
 class TestWiresharkCapture:
     def test_wireshark_capture_10_packets_to_file(self, request, wireshark_k, check_capture_10_packets, make_screenshot_on_error, test_env):
@@ -488,9 +479,9 @@ class TestWiresharkCapture:
             check_capture_10_packets(self, cmd=wireshark_k, env=test_env)
 
     # Wireshark doesn't currently support writing to stdout while capturing.
-    # def test_wireshark_capture_10_packets_to_stdout(self, wireshark_k, check_capture_10_packets, test_env):
+    # def test_wireshark_capture_10_packets_to_stdout(self, wireshark_k, check_capture_10_packets):
     #     '''Capture 10 packets from the network to stdout using Wireshark'''
-    #     check_capture_10_packets(self, cmd=wireshark_k, to_stdout=True, env=test_env)
+    #     check_capture_10_packets(self, cmd=wireshark_k, to_stdout=True)
 
     def test_wireshark_capture_from_fifo(self, request, wireshark_k, check_capture_fifo, make_screenshot_on_error, test_env):
         '''Capture from a fifo using Wireshark'''
@@ -515,45 +506,6 @@ class TestWiresharkCapture:
             pytest.skip('GUI tests are disabled via --disable-gui')
         with make_screenshot_on_error():
             check_capture_snapshot_len(self, cmd=wireshark_k, env=test_env)
-
-
-class TestWiresharkCaptureProcessInfo:
-    '''Wireshark records processes as its capture.process_info preference
-    says, which must never make a capture fail.'''
-    def check(self, request, wireshark_k, check_capture_process_info, make_screenshot_on_error, test_env, **kwargs):
-        if request.config.getoption('--disable-gui', default=False):
-            pytest.skip('GUI tests are disabled via --disable-gui')
-        # Where processes can't be looked up Wireshark records none, rather than fail.
-        cmd_dumpcap = request.getfixturevalue('cmd_dumpcap')
-        proc = subprocesstest.run((cmd_dumpcap, '--process-info', '-D'), capture_output=True, env=test_env)
-        if proc.returncode != 0 and 'not supported' in proc.stderr:
-            pytest.skip('Process information is not supported on this platform')
-        with make_screenshot_on_error():
-            check_capture_process_info(self, cmd=wireshark_k, env=test_env, **kwargs)
-
-    def test_wireshark_capture_process_info_default(self, request, wireshark_k, check_capture_process_info, make_screenshot_on_error, test_env):
-        '''By default Wireshark records what identifies the processes'''
-        self.check(request, wireshark_k, check_capture_process_info, make_screenshot_on_error, test_env, option=())
-
-    def test_wireshark_capture_process_info_pref_full(self, request, wireshark_k, check_capture_process_info, make_screenshot_on_error, test_env):
-        '''The preference can ask for everything about the processes'''
-        self.check(request, wireshark_k, check_capture_process_info, make_screenshot_on_error, test_env,
-                   option=('-o', 'capture.process_info:FULL'), full=True)
-
-    def test_wireshark_capture_process_info_pref_none(self, request, wireshark_k, check_capture_process_info, make_screenshot_on_error, test_env):
-        '''The preference can turn it off'''
-        self.check(request, wireshark_k, check_capture_process_info, make_screenshot_on_error, test_env,
-                   option=('-o', 'capture.process_info:NONE'), none=True)
-
-    def test_wireshark_capture_process_info_option_over_pref(self, request, wireshark_k, check_capture_process_info, make_screenshot_on_error, test_env):
-        '''The command line wins over the preference'''
-        self.check(request, wireshark_k, check_capture_process_info, make_screenshot_on_error, test_env,
-                   option=('-o', 'capture.process_info:FULL', '--process-info=basic'))
-
-    def test_wireshark_capture_process_info_pcap(self, request, wireshark_k, check_capture_process_info, make_screenshot_on_error, test_env):
-        '''A pcap file has no room for processes; the capture must work all the same'''
-        self.check(request, wireshark_k, check_capture_process_info, make_screenshot_on_error, test_env,
-                   option=('-F', 'pcap'), none=True)
 
 
 class TestTsharkCapture:
@@ -625,10 +577,14 @@ class TestDumpcapRingbuffer:
 class TestDumpcapPcapngSections:
     def test_dumpcap_pcapng_single_in_single_out(self, check_dumpcap_pcapng_sections, base_env):
         '''Capture from a single pcapng source using Dumpcap and write a single file'''
+        if sys.byteorder == 'big':
+            pytest.skip('this test is supported on little endian only')
         check_dumpcap_pcapng_sections(self, env=base_env)
 
     def test_dumpcap_pcapng_single_in_multi_out(self, check_dumpcap_pcapng_sections, base_env):
         '''Capture from a single pcapng source using Dumpcap and write two files'''
+        if sys.byteorder == 'big':
+            pytest.skip('this test is supported on little endian only')
         check_dumpcap_pcapng_sections(self, multi_output=True, env=base_env)
 
     def test_dumpcap_pcapng_multi_in_single_out(self, check_dumpcap_pcapng_sections, base_env):
@@ -642,174 +598,3 @@ class TestDumpcapPcapngSections:
         if sys.byteorder == 'big':
             pytest.skip('this test is supported on little endian only')
         check_dumpcap_pcapng_sections(self, multi_input=True, multi_output=True, env=base_env)
-
-class TestDumpcapPcapngMixedEndian:
-    def test_dumpcap_pcapng_single_in_single_out(self, check_dumpcap_pcapng_sections, base_env):
-        '''Capture from a single pcapng source using Dumpcap and write a single file'''
-        check_dumpcap_pcapng_sections(self, mixed_endian=True, env=base_env)
-
-    def test_dumpcap_pcapng_single_in_multi_out(self, check_dumpcap_pcapng_sections, base_env):
-        '''Capture from a single pcapng source using Dumpcap and write two files'''
-        check_dumpcap_pcapng_sections(self, multi_output=True, mixed_endian=True, env=base_env)
-
-    def test_dumpcap_pcapng_single_in_single_out_be(self, check_dumpcap_pcapng_sections, base_env):
-        '''Capture from a single pcapng source using Dumpcap and write a single file'''
-        check_dumpcap_pcapng_sections(self, mixed_endian=True, be_first=True, env=base_env)
-
-    def test_dumpcap_pcapng_single_in_multi_out_be(self, check_dumpcap_pcapng_sections, base_env):
-        '''Capture from a single pcapng source using Dumpcap and write two files'''
-        check_dumpcap_pcapng_sections(self, multi_output=True, mixed_endian=True, be_first=True, env=base_env)
-
-    # dumpcap doesn't support capturing from mixed-endian pipes with multiple
-    # inputs (i.e., when not just passing through the SHBs and IDBs).
-    # def test_dumpcap_pcapng_multi_in_single_out(self, check_dumpcap_pcapng_sections, base_env):
-    #     '''Capture from a single pcapng source using Dumpcap and write a single file'''
-    #     check_dumpcap_pcapng_sections(self, multi_input=True, mixed_endian=True, env=base_env)
-
-
-class BoundUdpTrafficGenerator(UdpTrafficGenerator):
-    '''UDP traffic from a known port, so that a capture filter can pick out
-    this process's traffic when tests run in parallel.'''
-    def __init__(self):
-        super().__init__()
-        self.sock.bind(('0.0.0.0', 0))
-        self.port = self.sock.getsockname()[1]
-
-
-@pytest.fixture
-def check_capture_process_info(capture_interface, cmd_tshark, cmd_capinfos, result_file):
-    def check_capture_process_info_real(self, cmd=None, env=None, option='--process-info', full=False, none=False):
-        assert cmd is not None
-        options = (option,) if isinstance(option, str) else tuple(option)
-        testout_file = result_file(testout_pcapng)
-        generator = BoundUdpTrafficGenerator()
-        generator.start()
-        try:
-            proc = subprocesstest.run(capture_command(cmd,
-                '-i', capture_interface,
-                '-p',
-                '-w', testout_file,
-                '-c', '10',
-                '-a', f'duration:{capture_duration}',
-                '-f', f'udp src port {generator.port} and udp dst port 9',
-                *options,
-            ), capture_output=True, env=env)
-        finally:
-            generator.stop()
-        if proc.returncode != 0 and 'not supported' in proc.stderr:
-            pytest.skip('Process information is not supported on this platform')
-        assert proc.returncode == 0, proc.stderr
-        check_packet_count(cmd_capinfos, 10, testout_file)
-
-        # The traffic comes from this very process, so every packet must be
-        # attributed to it, and the file must describe it: with what
-        # identifies it, and with the rest only if that was asked for.
-        proc = subprocesstest.check_run((cmd_tshark, '-r', testout_file,
-            '-T', 'fields',
-            '-e', 'frame.process.pid',
-            '-e', 'frame.process.name',
-            '-e', 'frame.process.start_time',
-            '-e', 'frame.process.path',
-            '-e', 'frame.process.cmdline',
-            '-e', 'frame.process.ppid',
-            '-e', 'frame.process.user',
-        ), capture_output=True, env=env)
-        lines = proc.stdout.splitlines()
-        assert len(lines) == 10
-        for line in lines:
-            pid, name, start_time, path, cmdline, ppid, user = line.split('\t')
-            if none:
-                assert line.strip() == '', line
-                continue
-            assert pid == str(os.getpid()), line
-            assert 'python' in name.lower() or 'pytest' in name.lower(), line
-            assert start_time != '', line
-            if full:
-                assert path != '' and cmdline != '' and ppid != '' and user != '', line
-            else:
-                assert (path, cmdline, ppid, user) == ('', '', '', ''), line
-    return check_capture_process_info_real
-
-
-class TestCaptureProcessInfo:
-    def test_dumpcap_capture_process_info(self, cmd_dumpcap, check_capture_process_info, base_env):
-        '''Capture with dumpcap, recording what identifies the processes the
-        packets belong to, which is what the option does by default'''
-        check_capture_process_info(self, cmd=cmd_dumpcap, env=base_env)
-
-    def test_dumpcap_capture_process_info_full(self, cmd_dumpcap, check_capture_process_info, base_env):
-        '''Capture with dumpcap, recording everything about the processes'''
-        check_capture_process_info(self, cmd=cmd_dumpcap, env=base_env, option='--process-info=full', full=True)
-
-    def test_tshark_capture_process_info(self, cmd_tshark, check_capture_process_info, test_env):
-        '''Capture with TShark, which has to pass the level on to dumpcap'''
-        check_capture_process_info(self, cmd=cmd_tshark, env=test_env, option='--process-info=basic')
-
-    def test_tshark_capture_process_info_full(self, cmd_tshark, check_capture_process_info, test_env):
-        '''Capture with TShark, recording everything about the processes'''
-        check_capture_process_info(self, cmd=cmd_tshark, env=test_env, option='--process-info=full', full=True)
-
-    def test_dumpcap_process_info_bad_level(self, cmd_dumpcap, base_env):
-        '''A level that does not exist is refused.'''
-        proc = subprocesstest.run((cmd_dumpcap, '--process-info=everything', '-D'), capture_output=True, env=base_env)
-        assert proc.returncode != 0
-        if 'not supported' in proc.stderr:
-            pytest.skip('Process information is not supported on this platform')
-        assert 'must be "basic" or "full"' in proc.stderr, proc.stderr
-
-    def test_dumpcap_capture_process_info_receivers(self, cmd_dumpcap, cmd_tshark, capture_interface, result_file, base_env):
-        '''A datagram to a port that two other processes have a socket on is
-        attributed to this process, the sender, and to both of them.'''
-        receiver_script = (
-            'import socket, sys\n'
-            's = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)\n'
-            's.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n'
-            "if hasattr(socket, 'SO_REUSEPORT'):\n"
-            '    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)\n'
-            "s.bind(('0.0.0.0', int(sys.argv[1])))\n"
-            "print('ready', flush=True)\n"
-            'while True:\n'
-            '    s.recv(1500)\n'
-        )
-        testout_file = result_file(testout_pcapng)
-        # A port for the receivers; it is free again by the time they bind it.
-        probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        probe.bind(('0.0.0.0', 0))
-        port = probe.getsockname()[1]
-        probe.close()
-        receivers = [subprocess.Popen((sys.executable, '-c', receiver_script, str(port)),
-                                      stdout=subprocess.PIPE, encoding='utf-8')
-                     for _ in range(2)]
-        try:
-            for receiver in receivers:
-                assert receiver.stdout.readline().strip() == 'ready'
-            sender = BoundUdpTrafficGenerator()
-            sender.destination = ('127.0.0.1', port)
-            sender.start()
-            try:
-                proc = subprocesstest.run(capture_command(cmd_dumpcap,
-                    '-i', capture_interface,
-                    '-p',
-                    '-w', testout_file,
-                    '-c', '10',
-                    '-a', f'duration:{capture_duration}',
-                    '-f', f'udp src port {sender.port} and udp dst port {port}',
-                    '--process-info',
-                ), capture_output=True, env=base_env)
-            finally:
-                sender.stop()
-            if proc.returncode != 0 and 'not supported' in proc.stderr:
-                pytest.skip('Process information is not supported on this platform')
-            assert proc.returncode == 0, proc.stderr
-            proc = subprocesstest.check_run((cmd_tshark, '-r', testout_file,
-                '-T', 'fields', '-e', 'frame.process.pid',
-            ), capture_output=True, env=base_env)
-            lines = proc.stdout.splitlines()
-            assert len(lines) == 10
-            expected = {str(os.getpid())} | {str(receiver.pid) for receiver in receivers}
-            for line in lines:
-                assert set(line.split(',')) == expected, line
-        finally:
-            for receiver in receivers:
-                receiver.kill()
-                receiver.wait()

@@ -229,7 +229,6 @@ ftype_register_ipv6(void)
 		ipv6_hash,
 		is_zero,
 		NULL,
-		NULL,
 		len,
 		(FvalueSlice)slice,
 		bitwise_and,

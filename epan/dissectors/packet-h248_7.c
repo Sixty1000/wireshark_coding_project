@@ -18,6 +18,10 @@
 
 void proto_register_h248_7(void);
 
+#define PNAME  "H.248.7"
+#define PSNAME "H248AN"
+#define PFNAME "h248.an"
+
 static int proto_h248_an;
 
 static int hf_h248_an_apf;
@@ -149,7 +153,7 @@ void proto_register_h248_7(void) {
 		&ett_h248_an_apv
 	};
 
-	proto_h248_an = proto_register_protocol("H.248.7", "H248AN", "h248.an");
+	proto_h248_an = proto_register_protocol(PNAME, PSNAME, PFNAME);
 
 	proto_register_field_array(proto_h248_an, hf, array_length(hf));
 

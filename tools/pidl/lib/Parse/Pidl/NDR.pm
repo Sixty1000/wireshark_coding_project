@@ -1032,11 +1032,6 @@ sub ContainsString($)
 	{
 		return 1;
 	}
-	if (exists($e->{LEVELS}) and $e->{LEVELS}->[0]->{TYPE} eq "DATA" and
-		($e->{LEVELS}->[0]->{DATA_TYPE} eq "string"))
-	{
-		return 1;
-	}
 
 	foreach my $l (@{$e->{LEVELS}}) {
 		return 1 if ($l->{TYPE} eq "ARRAY" and $l->{IS_ZERO_TERMINATED});

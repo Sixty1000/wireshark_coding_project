@@ -24,6 +24,10 @@
 
 #include "packet-ber.h"
 
+#define PNAME  "Q.932 Operations Service Element"
+#define PSNAME "Q932.ROS"
+#define PFNAME "q932.ros"
+
 void proto_register_q932_ros(void);
 void proto_reg_handoff_q932_ros(void);
 
@@ -81,32 +85,20 @@ static char problem_str[64];
 static tvbuff_t *arg_next_tvb, *res_next_tvb, *err_next_tvb;
 
 
-/*--- Cyclic dependencies ---*/
-
-/* Invoke/argument -> Invoke/argument */
-static unsigned dissect_q932_ros_InvokeArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
-
-/* ReturnResult/result/result -> ReturnResult/result/result */
-static unsigned dissect_q932_ros_ResultArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
-
-/* ReturnError/parameter -> ReturnError/parameter */
-static unsigned dissect_q932_ros_T_parameter(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
 
 
-
-
-static unsigned
-dissect_q932_ros_T_local(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_q932_ros_T_local(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
-                                                (uint32_t*)&actx->rose_ctx->d.code_local);
+                                                &actx->rose_ctx->d.code_local);
 
   return offset;
 }
 
 
 
-static unsigned
-dissect_q932_ros_T_global(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_q932_ros_T_global(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_object_identifier_str(implicit_tag, actx, tree, tvb, offset, hf_index, &actx->rose_ctx->d.code_global);
 
   return offset;
@@ -125,8 +117,8 @@ static const ber_choice_t Code_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_q932_ros_Code(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_q932_ros_Code(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  Code_choice, hf_index, ett_q932_ros_Code,
                                  &actx->rose_ctx->d.code);
@@ -137,8 +129,8 @@ dissect_q932_ros_Code(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset 
 
 
 
-static unsigned
-dissect_q932_ros_INTEGER(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_q932_ros_INTEGER(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 NULL);
 
@@ -147,8 +139,8 @@ dissect_q932_ros_INTEGER(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offs
 
 
 
-static unsigned
-dissect_q932_ros_NULL(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_q932_ros_NULL(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_null(implicit_tag, actx, tree, tvb, offset, hf_index);
 
   return offset;
@@ -167,8 +159,8 @@ static const ber_choice_t InvokeId_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_q932_ros_InvokeId(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_q932_ros_InvokeId(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  InvokeId_choice, hf_index, ett_q932_ros_InvokeId,
                                  NULL);
@@ -178,8 +170,8 @@ dissect_q932_ros_InvokeId(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned off
 
 
 
-static unsigned
-dissect_q932_ros_InvokeId_present(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_q932_ros_InvokeId_present(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 NULL);
 
@@ -188,8 +180,8 @@ dissect_q932_ros_InvokeId_present(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsi
 
 
 
-static unsigned
-dissect_q932_ros_T_linkedIdPresent(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_q932_ros_T_linkedIdPresent(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_q932_ros_InvokeId_present(implicit_tag, tvb, offset, actx, tree, hf_index);
 
   return offset;
@@ -208,8 +200,8 @@ static const ber_choice_t T_linkedId_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_q932_ros_T_linkedId(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_q932_ros_T_linkedId(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  T_linkedId_choice, hf_index, ett_q932_ros_T_linkedId,
                                  NULL);
@@ -219,10 +211,8 @@ dissect_q932_ros_T_linkedId(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned o
 
 
 
-static unsigned
-dissect_q932_ros_InvokeArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  // Invoke/argument -> Invoke/argument
-  increment_dissection_depth_by_n(actx->pinfo, 1);
+static int
+dissect_q932_ros_InvokeArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   int len;
 
   len = tvb_reported_length_remaining(tvb, offset);
@@ -232,7 +222,6 @@ dissect_q932_ros_InvokeArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsign
 
   offset += tvb_reported_length_remaining(tvb, offset);
 
-  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -245,8 +234,8 @@ static const ber_sequence_t Invoke_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_q932_ros_Invoke(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_q932_ros_Invoke(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   dissector_handle_t arg_handle = NULL;
   const char *descr = "";
 
@@ -282,7 +271,7 @@ dissect_q932_ros_Invoke(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offse
     (void) g_strlcat(actx->rose_ctx->fillin_ptr, descr, actx->rose_ctx->fillin_buf_size);
 
   if (!arg_next_tvb) {  /* empty argument */
-    arg_next_tvb = tvb_new_subset_length(tvb, (actx->encoding==ASN1_ENC_PER)?offset>>3:offset, 0);
+    arg_next_tvb = tvb_new_subset_length_caplen(tvb, (actx->encoding==ASN1_ENC_PER)?offset>>3:offset, 0, 0);
   }
 
   call_dissector_with_data((arg_handle)?arg_handle:data_handle, arg_next_tvb, actx->pinfo, tree, actx->rose_ctx);
@@ -294,10 +283,8 @@ dissect_q932_ros_Invoke(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offse
 
 
 
-static unsigned
-dissect_q932_ros_ResultArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  // ReturnResult/result/result -> ReturnResult/result/result
-  increment_dissection_depth_by_n(actx->pinfo, 1);
+static int
+dissect_q932_ros_ResultArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   int len;
 
   len = tvb_reported_length_remaining(tvb, offset);
@@ -308,7 +295,6 @@ dissect_q932_ros_ResultArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsign
   offset += tvb_reported_length_remaining(tvb, offset);
 
 
-  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -319,8 +305,8 @@ static const ber_sequence_t T_result_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_q932_ros_T_result(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_q932_ros_T_result(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    T_result_sequence, hf_index, ett_q932_ros_T_result);
 
@@ -334,8 +320,8 @@ static const ber_sequence_t ReturnResult_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_q932_ros_ReturnResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_q932_ros_ReturnResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   dissector_handle_t res_handle = NULL;
   const char *descr = "";
 
@@ -373,7 +359,7 @@ dissect_q932_ros_ReturnResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned
 
   if (actx->rose_ctx->d.code != -1) {
     if (!res_next_tvb) {  /* empty result */
-      res_next_tvb = tvb_new_subset_length(tvb, (actx->encoding==ASN1_ENC_PER)?offset>>3:offset, 0);
+      res_next_tvb = tvb_new_subset_length_caplen(tvb, (actx->encoding==ASN1_ENC_PER)?offset>>3:offset, 0, 0);
     }
 
     call_dissector_with_data((res_handle)?res_handle:data_handle, res_next_tvb, actx->pinfo, tree, actx->rose_ctx);
@@ -386,10 +372,8 @@ dissect_q932_ros_ReturnResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned
 
 
 
-static unsigned
-dissect_q932_ros_T_parameter(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  // ReturnError/parameter -> ReturnError/parameter
-  increment_dissection_depth_by_n(actx->pinfo, 1);
+static int
+dissect_q932_ros_T_parameter(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
   int len;
 
@@ -400,7 +384,6 @@ dissect_q932_ros_T_parameter(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned 
 
   offset += tvb_reported_length_remaining(tvb, offset);
 
-  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -412,8 +395,8 @@ static const ber_sequence_t ReturnError_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_q932_ros_ReturnError(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_q932_ros_ReturnError(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   dissector_handle_t err_handle = NULL;
   const char *descr = "";
 
@@ -449,7 +432,7 @@ dissect_q932_ros_ReturnError(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned 
     (void) g_strlcat(actx->rose_ctx->fillin_ptr, descr, actx->rose_ctx->fillin_buf_size);
 
   if (!err_next_tvb) {  /* empty error */
-    err_next_tvb = tvb_new_subset_length(tvb, (actx->encoding==ASN1_ENC_PER)?offset>>3:offset, 0);
+    err_next_tvb = tvb_new_subset_length_caplen(tvb, (actx->encoding==ASN1_ENC_PER)?offset>>3:offset, 0, 0);
   }
 
   call_dissector_with_data((err_handle)?err_handle:data_handle, err_next_tvb, actx->pinfo, tree, actx->rose_ctx);
@@ -468,8 +451,8 @@ static const value_string q932_ros_GeneralProblem_vals[] = {
 };
 
 
-static unsigned
-dissect_q932_ros_GeneralProblem(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_q932_ros_GeneralProblem(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &problem_val);
 
@@ -491,8 +474,8 @@ static const value_string q932_ros_InvokeProblem_vals[] = {
 };
 
 
-static unsigned
-dissect_q932_ros_InvokeProblem(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_q932_ros_InvokeProblem(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &problem_val);
 
@@ -509,8 +492,8 @@ static const value_string q932_ros_ReturnResultProblem_vals[] = {
 };
 
 
-static unsigned
-dissect_q932_ros_ReturnResultProblem(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_q932_ros_ReturnResultProblem(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &problem_val);
 
@@ -529,8 +512,8 @@ static const value_string q932_ros_ReturnErrorProblem_vals[] = {
 };
 
 
-static unsigned
-dissect_q932_ros_ReturnErrorProblem(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_q932_ros_ReturnErrorProblem(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &problem_val);
 
@@ -555,8 +538,8 @@ static const ber_choice_t T_problem_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_q932_ros_T_problem(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_q932_ros_T_problem(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  T_problem_choice, hf_index, ett_q932_ros_T_problem,
                                  NULL);
@@ -571,8 +554,8 @@ static const ber_sequence_t Reject_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_q932_ros_Reject(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_q932_ros_Reject(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   const char *descr;
 
   problem_str[0] = '\0';
@@ -607,8 +590,8 @@ static const ber_choice_t ROS_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_q932_ros_ROS(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_q932_ros_ROS(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   /* will be moved to ROS_PDU when PDU function can be alternated from conformance file */
   actx->rose_ctx = rose_ctx_tmp;
   rose_ctx_clean_data(actx->rose_ctx);
@@ -622,7 +605,7 @@ dissect_q932_ros_ROS(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _
 /*--- PDUs ---*/
 
 static int dissect_ROS_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_q932_ros_ROS(false, tvb, offset, &asn1_ctx, tree, hf_q932_ros_ROS_PDU);
@@ -682,7 +665,7 @@ void proto_register_q932_ros(void) {
         FT_UINT32, BASE_DEC, VALS(q932_ros_T_linkedId_vals), 0,
         NULL, HFILL }},
     { &hf_q932_ros_linkedIdPresent,
-      { "present", "q932.ros.linkedIdPresent",
+      { "present", "q932.ros.present",
         FT_INT32, BASE_DEC, NULL, 0,
         "T_linkedIdPresent", HFILL }},
     { &hf_q932_ros_absent,
@@ -702,7 +685,7 @@ void proto_register_q932_ros(void) {
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_q932_ros_resultArgument,
-      { "result", "q932.ros.resultArgument",
+      { "result", "q932.ros.result",
         FT_BYTES, BASE_NONE, NULL, 0,
         "ResultArgument", HFILL }},
     { &hf_q932_ros_errcode,
@@ -722,15 +705,15 @@ void proto_register_q932_ros(void) {
         FT_INT32, BASE_DEC, VALS(q932_ros_GeneralProblem_vals), 0,
         "GeneralProblem", HFILL }},
     { &hf_q932_ros_invokeProblem,
-      { "invoke", "q932.ros.invokeProblem",
+      { "invoke", "q932.ros.invoke",
         FT_INT32, BASE_DEC, VALS(q932_ros_InvokeProblem_vals), 0,
         "InvokeProblem", HFILL }},
     { &hf_q932_ros_returnResultProblem,
-      { "returnResult", "q932.ros.returnResultProblem",
+      { "returnResult", "q932.ros.returnResult",
         FT_INT32, BASE_DEC, VALS(q932_ros_ReturnResultProblem_vals), 0,
         "ReturnResultProblem", HFILL }},
     { &hf_q932_ros_returnErrorProblem,
-      { "returnError", "q932.ros.returnErrorProblem",
+      { "returnError", "q932.ros.returnError",
         FT_INT32, BASE_DEC, VALS(q932_ros_ReturnErrorProblem_vals), 0,
         "ReturnErrorProblem", HFILL }},
     { &hf_q932_ros_present,
@@ -764,7 +747,7 @@ void proto_register_q932_ros(void) {
   expert_module_t* expert_q932_ros;
 
   /* Register protocol and dissector */
-  proto_q932_ros = proto_register_protocol("Q.932 Operations Service Element", "Q932.ROS", "q932.ros");
+  proto_q932_ros = proto_register_protocol(PNAME, PSNAME, PFNAME);
   proto_set_cant_toggle(proto_q932_ros);
 
   /* Register fields and subtrees */
@@ -773,7 +756,7 @@ void proto_register_q932_ros(void) {
   expert_q932_ros = expert_register_protocol(proto_q932_ros);
   expert_register_field_array(expert_q932_ros, ei, array_length(ei));
 
-  register_dissector("q932.ros", dissect_q932_ros, proto_q932_ros);
+  register_dissector(PFNAME, dissect_q932_ros, proto_q932_ros);
 }
 
 /*--- proto_reg_handoff_q932_ros --------------------------------------------*/

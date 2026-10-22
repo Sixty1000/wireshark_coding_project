@@ -681,7 +681,8 @@ dissect_bmControl(proto_tree *tree, tvbuff_t *tvb, int offset,
 {
     uint8_t bm_size = 0;
 
-    proto_tree_add_item_ret_uint8(tree, hf_usb_vid_bControlSize, tvb, offset, 1, ENC_LITTLE_ENDIAN, &bm_size);
+    bm_size = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item(tree, hf_usb_vid_bControlSize, tvb, offset, 1, ENC_LITTLE_ENDIAN);
     ++offset;
 
     if (bm_size > 0)
@@ -809,7 +810,8 @@ dissect_usb_video_selector_unit(proto_tree *tree, tvbuff_t *tvb, int offset)
 {
     uint8_t num_inputs;
 
-    proto_tree_add_item_ret_uint8(tree, hf_usb_vid_num_inputs, tvb, offset, 1, ENC_LITTLE_ENDIAN, &num_inputs);
+    num_inputs = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item(tree, hf_usb_vid_num_inputs, tvb, offset, 1, ENC_LITTLE_ENDIAN);
     ++offset;
 
     if (num_inputs > 0)
@@ -835,7 +837,8 @@ dissect_usb_video_extension_unit(proto_tree *tree, tvbuff_t *tvb, int offset)
     proto_tree_add_item(tree, hf_usb_vid_exten_num_controls, tvb, offset+16,  1, ENC_LITTLE_ENDIAN);
     offset += 17;
 
-    proto_tree_add_item_ret_uint8(tree, hf_usb_vid_num_inputs,   tvb, offset,  1, ENC_LITTLE_ENDIAN, &num_inputs);
+    num_inputs = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item(tree, hf_usb_vid_num_inputs,   tvb, offset,  1, ENC_LITTLE_ENDIAN);
     ++offset;
 
     if (num_inputs > 0)
@@ -844,7 +847,8 @@ dissect_usb_video_extension_unit(proto_tree *tree, tvbuff_t *tvb, int offset)
         offset += num_inputs;
     }
 
-    proto_tree_add_item_ret_uint8(tree, hf_usb_vid_bControlSize, tvb, offset, 1, ENC_LITTLE_ENDIAN, &control_size);
+    control_size = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item(tree, hf_usb_vid_bControlSize, tvb, offset, 1, ENC_LITTLE_ENDIAN);
     ++offset;
 
     if (control_size > 0)
@@ -902,7 +906,7 @@ dissect_usb_video_control_interface_descriptor(proto_tree *parent_tree, tvbuff_t
     {
         const char *subtype_str;
 
-        subtype_str = val_to_str_ext(pinfo->pool, subtype, &vc_if_descriptor_subtypes_ext, "Unknown (0x%x)");
+        subtype_str = val_to_str_ext(subtype, &vc_if_descriptor_subtypes_ext, "Unknown (0x%x)");
 
         tree = proto_tree_add_subtree_format(parent_tree, tvb, offset, descriptor_len,
                                    ett_descriptor_video_control, &item, "VIDEO CONTROL INTERFACE DESCRIPTOR [%s]",
@@ -1071,7 +1075,8 @@ dissect_usb_video_streaming_input_header(proto_tree *tree, tvbuff_t *tvb, int of
 
     DISSECTOR_ASSERT(array_length(control_bits) == (1+array_length(hf_usb_vid_streaming_control_D)));
 
-    proto_tree_add_item_ret_uint8(tree, hf_usb_vid_streaming_ifdesc_bNumFormats, tvb, offset,   1, ENC_LITTLE_ENDIAN, &num_formats);
+    num_formats = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item(tree, hf_usb_vid_streaming_ifdesc_bNumFormats, tvb, offset,   1, ENC_LITTLE_ENDIAN);
     proto_tree_add_item(tree, hf_usb_vid_ifdesc_wTotalLength,          tvb, offset+1, 2, ENC_LITTLE_ENDIAN);
     offset += 3;
 
@@ -1100,7 +1105,8 @@ dissect_usb_video_streaming_input_header(proto_tree *tree, tvbuff_t *tvb, int of
     /* NOTE: Can't use dissect_bmControl here because there's only one size
      *       field for (potentially) multiple bmControl fields
      */
-    proto_tree_add_item_ret_uint8(tree, hf_usb_vid_bControlSize, tvb, offset, 1, ENC_LITTLE_ENDIAN, &bm_size);
+    bm_size = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item(tree, hf_usb_vid_bControlSize, tvb, offset, 1, ENC_LITTLE_ENDIAN);
     ++offset;
 
     if (bm_size > 0)
@@ -1131,7 +1137,7 @@ dissect_usb_video_streaming_input_header(proto_tree *tree, tvbuff_t *tvb, int of
  * @return   offset within tvb at which dissection should continue
  */
 static int
-dissect_usb_video_format(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, int offset,
+dissect_usb_video_format(proto_tree *tree, tvbuff_t *tvb, int offset,
                          uint8_t subtype)
 {
     static int * const interlace_bits[] = {
@@ -1157,7 +1163,7 @@ dissect_usb_video_format(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, in
     if ((subtype == VS_FORMAT_UNCOMPRESSED) || (subtype == VS_FORMAT_FRAME_BASED))
     {
         /* Augment the descriptor root item with the format's four-character-code */
-        proto_item_append_text(desc_item, ": %s", tvb_format_text(pinfo->pool, tvb, offset, 4));
+        proto_item_append_text(desc_item, ": %s", tvb_format_text(wmem_packet_scope(), tvb, offset, 4));
 
         proto_tree_add_item(tree, hf_usb_vid_format_guid, tvb, offset,   16, ENC_LITTLE_ENDIAN);
         proto_tree_add_item(tree, hf_usb_vid_format_bits_per_pixel,        tvb, offset+16, 1, ENC_LITTLE_ENDIAN);
@@ -1233,7 +1239,8 @@ dissect_usb_video_frame(proto_tree *tree, tvbuff_t *tvb, int offset,
     uint16_t    frame_width;
     uint16_t    frame_height;
 
-    proto_tree_add_item_ret_uint8(tree, hf_usb_vid_frame_index, tvb, offset, 1, ENC_LITTLE_ENDIAN, &frame_index);
+    frame_index = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item(tree, hf_usb_vid_frame_index, tvb, offset, 1, ENC_LITTLE_ENDIAN);
     offset++;
 
     proto_tree_add_bitmask(tree, tvb, offset, hf_usb_vid_frame_capabilities,
@@ -1327,7 +1334,7 @@ dissect_usb_video_colorformat(proto_tree *tree, tvbuff_t *tvb, int offset)
  * @return   offset within tvb at which dissection should continue
  */
 static int
-dissect_usb_video_streaming_interface_descriptor(proto_tree *parent_tree, packet_info* pinfo, tvbuff_t *tvb,
+dissect_usb_video_streaming_interface_descriptor(proto_tree *parent_tree, tvbuff_t *tvb,
                                                  uint8_t descriptor_len)
 {
     proto_tree  *tree;
@@ -1337,7 +1344,7 @@ dissect_usb_video_streaming_interface_descriptor(proto_tree *parent_tree, packet
 
     subtype = tvb_get_uint8(tvb, offset+2);
 
-    subtype_str = val_to_str_ext(pinfo->pool, subtype, &vs_if_descriptor_subtypes_ext, "Unknown (0x%x)");
+    subtype_str = val_to_str_ext(subtype, &vs_if_descriptor_subtypes_ext, "Unknown (0x%x)");
     tree = proto_tree_add_subtree_format(parent_tree, tvb, offset, descriptor_len,
             ett_descriptor_video_streaming, NULL, "VIDEO STREAMING INTERFACE DESCRIPTOR [%s]",
             subtype_str);
@@ -1355,7 +1362,7 @@ dissect_usb_video_streaming_interface_descriptor(proto_tree *parent_tree, packet
         case VS_FORMAT_UNCOMPRESSED:
         case VS_FORMAT_MJPEG:
         case VS_FORMAT_FRAME_BASED:
-            offset = dissect_usb_video_format(tree, pinfo, tvb, offset, subtype);
+            offset = dissect_usb_video_format(tree, tvb, offset, subtype);
             break;
 
         /* @todo MPEG2, H.264, VP8, Still Image Frame */
@@ -1395,7 +1402,7 @@ dissect_usb_video_streaming_interface_descriptor(proto_tree *parent_tree, packet
  * @return   offset within tvb at which dissection should continue
  */
 static int
-dissect_usb_video_endpoint_descriptor(proto_tree *parent_tree, packet_info* pinfo, tvbuff_t *tvb,
+dissect_usb_video_endpoint_descriptor(proto_tree *parent_tree, tvbuff_t *tvb,
                                       uint8_t descriptor_len)
 {
     proto_tree *tree   = NULL;
@@ -1408,7 +1415,7 @@ dissect_usb_video_endpoint_descriptor(proto_tree *parent_tree, packet_info* pinf
     {
         const char* subtype_str;
 
-        subtype_str = val_to_str(pinfo->pool, subtype, vc_ep_descriptor_subtypes, "Unknown (0x%x)");
+        subtype_str = val_to_str(subtype, vc_ep_descriptor_subtypes, "Unknown (0x%x)");
         tree = proto_tree_add_subtree_format(parent_tree, tvb, offset, descriptor_len,
                 ett_descriptor_video_endpoint, NULL, "VIDEO CONTROL ENDPOINT DESCRIPTOR [%s]",
                 subtype_str);
@@ -1450,6 +1457,7 @@ dissect_usb_vid_descriptor(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
     int    offset = 0;
     uint8_t descriptor_len;
     uint8_t descriptor_type;
+    int    bytes_available;
     urb_info_t  *urb = (urb_info_t *)data;
 
     tvbuff_t         *desc_tvb;
@@ -1457,11 +1465,13 @@ dissect_usb_vid_descriptor(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
     descriptor_len  = tvb_get_uint8(tvb, offset);
     descriptor_type = tvb_get_uint8(tvb, offset+1);
 
-    desc_tvb = tvb_new_subset_length(tvb, 0, descriptor_len);
+    bytes_available = tvb_captured_length_remaining(tvb, offset);
+    desc_tvb = tvb_new_subset_length_caplen(tvb, 0, bytes_available, descriptor_len);
 
     if (descriptor_type == CS_ENDPOINT)
     {
-        offset = dissect_usb_video_endpoint_descriptor(tree, pinfo, desc_tvb, descriptor_len);
+        offset = dissect_usb_video_endpoint_descriptor(tree, desc_tvb,
+                                                       descriptor_len);
     }
     else if (descriptor_type == CS_INTERFACE)
     {
@@ -1473,7 +1483,7 @@ dissect_usb_vid_descriptor(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
         }
         else if (urb && urb->conv && urb->conv->interfaceSubclass == SC_VIDEOSTREAMING)
         {
-            offset = dissect_usb_video_streaming_interface_descriptor(tree, pinfo, desc_tvb,
+            offset = dissect_usb_video_streaming_interface_descriptor(tree, desc_tvb,
                                                                       descriptor_len);
         }
     }
@@ -1991,7 +2001,7 @@ dissect_usb_vid_control(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "USBVIDEO");
     col_add_fstr(pinfo->cinfo, COL_INFO, "%s %s",
-                val_to_str(pinfo->pool, usb_trans_info->setup.request, setup_request_names_vals, "Unknown type %x"),
+                val_to_str(usb_trans_info->setup.request, setup_request_names_vals, "Unknown type %x"),
                 is_request?"Request ":"Response");
 
     if (is_request)
@@ -3197,7 +3207,7 @@ proto_register_usb_vid(void)
             },
     };
 
-    static int *usb_vid_ett[] = {
+    static int *usb_vid_subtrees[] = {
             &ett_usb_vid,
             &ett_descriptor_video_endpoint,
             &ett_descriptor_video_control,
@@ -3225,7 +3235,7 @@ proto_register_usb_vid(void)
 
     proto_usb_vid = proto_register_protocol("USB Video", "USBVIDEO", "usbvideo");
     proto_register_field_array(proto_usb_vid, hf, array_length(hf));
-    proto_register_subtree_array(usb_vid_ett, array_length(usb_vid_ett));
+    proto_register_subtree_array(usb_vid_subtrees, array_length(usb_vid_subtrees));
     expert_usb_vid = expert_register_protocol(proto_usb_vid);
     expert_register_field_array(expert_usb_vid, ei, array_length(ei));
 

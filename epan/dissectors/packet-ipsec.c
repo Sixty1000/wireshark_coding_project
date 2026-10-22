@@ -56,11 +56,11 @@ ADD: Additional generic (non-checked) ICV length of 128, 192 and 256.
 */
 
 #include "config.h"
-#define WS_LOG_DOMAIN "packet-ipsec"
-#include <wireshark.h>
+
 
 #include <epan/packet.h>
 #include <epan/addr_resolv.h>
+#include <epan/ipproto.h>
 #include <epan/prefs.h>
 #include <epan/expert.h>
 #include <epan/tap.h>
@@ -68,11 +68,9 @@ ADD: Additional generic (non-checked) ICV length of 128, 192 and 256.
 #include <epan/proto_data.h>
 #include <epan/decode_as.h>
 #include <epan/capture_dissectors.h>
-#include <epan/secrets.h>
-#include <wiretap/secrets-types.h>
+
 #include <stdio.h>    /* for sscanf() */
-#include <epan/uat-int.h>
-#include <epan/iana-info.h>
+#include <epan/uat.h>
 #include <wsutil/str_util.h>
 #include <wsutil/wsgcrypt.h>
 #include <wsutil/pint.h>
@@ -130,8 +128,6 @@ static dissector_handle_t data_handle;
 
 static dissector_table_t ip_dissector_table;
 
-static wmem_map_t *esp_used_sa_map;
-
 /* Encryption algorithms defined in RFC 4305 */
 #define IPSEC_ENCRYPT_NULL 0
 #define IPSEC_ENCRYPT_3DES_CBC 1
@@ -149,15 +145,6 @@ static wmem_map_t *esp_used_sa_map;
 #define IPSEC_ENCRYPT_AES_GCM_8   9
 #define IPSEC_ENCRYPT_AES_GCM_12  10
 #define IPSEC_ENCRYPT_AES_GCM_16  11
-
-/* Encryption algorithm defined in RFC 4106 & RFC 8750 */
-#define IPSEC_ENCRYPT_AES_GCM_16_IIV 12
-
-/* Encryption algorithm defined in RFC 7634 */
-#define IPSEC_ENCRYPT_CHACHA20_POLY1305 13
-
-/* Encryption algorithm defined in RFC 7634 & RFC 8750 */
-#define IPSEC_ENCRYPT_CHACHA20_POLY1305_IIV 14
 
 /* Authentication algorithms defined in RFC 4305 */
 #define IPSEC_AUTH_NULL 0
@@ -186,7 +173,6 @@ static wmem_map_t *esp_used_sa_map;
 #define IPSEC_STRLEN_IPV4 8
 #define IPSEC_SA_IPV4 1
 #define IPSEC_SA_IPV6 2
-#define IPSEC_SA_ANY 3
 #define IPSEC_SA_UNKNOWN -1
 #define IPSEC_SA_WILDCARDS_ANY '*'
 /* the maximum number of bytes (10)(including the terminating nul character(11)) */
@@ -226,9 +212,6 @@ static const value_string esp_encryption_type_vals[] = {
   { IPSEC_ENCRYPT_AES_GCM_8,  "AES-GCM with 8 octet ICV [RFC4106]" },
   { IPSEC_ENCRYPT_AES_GCM_12, "AES-GCM with 12 octet ICV [RFC4106]" },
   { IPSEC_ENCRYPT_AES_GCM_16, "AES-GCM with 16 octet ICV [RFC4106]" },
-  { IPSEC_ENCRYPT_AES_GCM_16_IIV, "AES-GCM with IIV and 16 octet ICV [RFC4106 & RFC8750]" },
-  { IPSEC_ENCRYPT_CHACHA20_POLY1305, "ChaCha20 with Poly1305 [RFC7634]" },
-  { IPSEC_ENCRYPT_CHACHA20_POLY1305_IIV, "ChaCha20 with Poly1305 and IIV [RFC7634 & RFC8750]" },
   { 0x00, NULL }
 };
 
@@ -794,7 +777,7 @@ static int get_ipv6_suffix(char* ipv6_suffix, char *ipv6_address)
             will be "3FFE000000000000000000000000****" and the function will return 0
 */
 static int
-get_full_ipv6_addr(wmem_allocator_t* scope, char* ipv6_addr_expanded, char *ipv6_addr)
+get_full_ipv6_addr(char* ipv6_addr_expanded, char *ipv6_addr)
 {
   char suffix[IPSEC_STRLEN_IPV6 + 1];
   char prefix[IPSEC_STRLEN_IPV6 + 1];
@@ -838,7 +821,7 @@ get_full_ipv6_addr(wmem_allocator_t* scope, char* ipv6_addr_expanded, char *ipv6
 
   if(suffix_len <  IPSEC_STRLEN_IPV6)
     {
-      prefix_addr = wmem_strndup(scope, ipv6_addr,strlen(ipv6_addr) - suffix_cpt);
+      prefix_addr = wmem_strndup(wmem_packet_scope(), ipv6_addr,strlen(ipv6_addr) - suffix_cpt);
       prefix_remaining = get_ipv6_suffix(prefix,prefix_addr);
       prefix_len = (int) strlen(prefix);
       memcpy(ipv6_addr_expanded,prefix,prefix_len);
@@ -892,8 +875,8 @@ get_full_ipv6_addr(wmem_allocator_t* scope, char* ipv6_addr_expanded, char *ipv6
 static bool
 get_full_ipv4_addr(char* ipv4_address_expanded, char *ipv4_address)
 {
-  char addr_byte_string_tmp[12];
-  char addr_byte_string[12];
+  char addr_byte_string_tmp[4];
+  char addr_byte_string[4];
 
   unsigned addr_byte = 0;
   unsigned i = 0;
@@ -947,9 +930,9 @@ get_full_ipv4_addr(char* ipv4_address_expanded, char *ipv4_address)
             return false;
 
           if(addr_byte < 16)
-            snprintf(addr_byte_string,11,"0%X",addr_byte);
+            snprintf(addr_byte_string,4,"0%X",addr_byte);
           else
-            snprintf(addr_byte_string,11,"%X",addr_byte);
+            snprintf(addr_byte_string,4,"%X",addr_byte);
           for(i = 0; i < strlen(addr_byte_string); i++)
           {
             ipv4_address_expanded[cpt] = addr_byte_string[i];
@@ -976,9 +959,9 @@ get_full_ipv4_addr(char* ipv4_address_expanded, char *ipv4_address)
             return false;
 
           if(addr_byte < 16)
-            snprintf(addr_byte_string,11,"0%X",addr_byte);
+            snprintf(addr_byte_string,4,"0%X",addr_byte);
           else
-            snprintf(addr_byte_string,11,"%X",addr_byte);
+            snprintf(addr_byte_string,4,"%X",addr_byte);
           for(i = 0; i < strlen(addr_byte_string); i++)
           {
             ipv4_address_expanded[cpt] = addr_byte_string[i];
@@ -1038,7 +1021,7 @@ get_full_ipv4_addr(char* ipv4_address_expanded, char *ipv4_address)
       - int typ : the Address type : either IPv6 or IPv4 (IPSEC_SA_IPV6, IPSEC_SA_IPV4)
 */
 static bool
-filter_address_match(wmem_allocator_t* scope, char *addr, char *filter, int typ)
+filter_address_match(char *addr, char *filter, int typ)
 {
   unsigned i;
   char addr_hex[IPSEC_STRLEN_IPV6 + 1];
@@ -1046,24 +1029,16 @@ filter_address_match(wmem_allocator_t* scope, char *addr, char *filter, int typ)
   unsigned addr_len;
   unsigned filter_len;
 
-  switch(typ) {
-      case IPSEC_SA_ANY:
-        return true;
-      case IPSEC_SA_IPV4:
-        if (!get_full_ipv4_addr(addr_hex, addr))
-            return false;
-        if (!get_full_ipv4_addr(filter_hex, filter))
-            return false;
-        break;
-      case IPSEC_SA_IPV6:
-        if (get_full_ipv6_addr(scope, addr_hex, addr))
-            return false;
-        if (get_full_ipv6_addr(scope, filter_hex, filter))
-            return false;
-        break;
-      case IPSEC_SA_UNKNOWN:
-      default:
-        return false;
+  if (typ == IPSEC_SA_IPV4) {
+      if (!get_full_ipv4_addr(addr_hex, addr))
+          return false;
+      if (!get_full_ipv4_addr(filter_hex, filter))
+          return false;
+  } else {
+      if (get_full_ipv6_addr(addr_hex, addr))
+          return false;
+      if (get_full_ipv6_addr(filter_hex, filter))
+          return false;
   }
 
   addr_len = (unsigned)strlen(addr_hex);
@@ -1167,8 +1142,7 @@ filter_spi_match(unsigned spi, char *filter)
 
 */
 static bool
-get_esp_sa(wmem_allocator_t* scope,
-           int protocol_typ, char *src,  char *dst,  unsigned spi,
+get_esp_sa(int protocol_typ, char *src,  char *dst,  unsigned spi,
            int *encryption_algo,
            int *authentication_algo,
            char **encryption_key,
@@ -1201,9 +1175,9 @@ get_esp_sa(wmem_allocator_t* scope,
       record = &uat_esp_sa_records[i++];
     }
 
-    if((protocol_typ == record->protocol || record->protocol == IPSEC_SA_ANY)
-       && (filter_address_match(scope, src, record->srcIP, protocol_typ) || record->protocol == IPSEC_SA_ANY)
-       && (filter_address_match(scope, dst, record->dstIP, protocol_typ) || record->protocol == IPSEC_SA_ANY)
+    if((protocol_typ == record->protocol)
+       && filter_address_match(src, record->srcIP, protocol_typ)
+       && filter_address_match(dst, record->dstIP, protocol_typ)
        && filter_spi_match(spi, record->spi))
     {
       found = true;
@@ -1240,9 +1214,6 @@ get_esp_sa(wmem_allocator_t* scope,
 
       *sn_length = record->sn_length;
       *sn_upper = record->sn_upper;
-
-      if (found && !wmem_map_lookup(esp_used_sa_map, record))
-        wmem_map_insert(esp_used_sa_map, record, NULL);
     }
   }
 
@@ -1329,12 +1300,9 @@ esp_null_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *esp_tree)
     /* Make sure the packet is not truncated before the fields
      * we need to read to determine the encapsulated protocol.
      */
-    if (esp_packet_len >= (esp_icv_len + 2))
+    if (tvb_bytes_exist(tvb, -(esp_icv_len + 2), 2))
     {
       offset = esp_packet_len - (esp_icv_len + 2);
-      if (!tvb_bytes_exist(tvb, offset, 2)) {
-        continue;
-      }
       esp_pad_len = tvb_get_uint8(tvb, offset);
       encapsulated_protocol = tvb_get_uint8(tvb, offset + 1);
       dissector_handle = dissector_get_uint_handle(ip_dissector_table, encapsulated_protocol);
@@ -1535,7 +1503,7 @@ dissect_esp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
   int esp_pad_len = 0;
 
 
-  /* Variables for decryption and authentication checking used for libgcrypt */
+  /* Variables for decryption and authentication checking used for libgrypt */
   gcry_md_hd_t md_hd;
   int md_len = 0;
   gcry_error_t err = 0;
@@ -1544,7 +1512,6 @@ dissect_esp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
   int auth_algo_libgcrypt = 0;
   char *esp_icv_expected = NULL; /* as readable hex string, for error messages */
   unsigned char ctr_block[16];
-  unsigned char nonce[12]; /* nonce for decrypting ChaCha20-Poly1305 */
 
 
   uint32_t sequence_number;
@@ -1621,7 +1588,7 @@ dissect_esp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
       be called every times an ESP Payload is found.
     */
 
-    if((sad_is_present = get_esp_sa(pinfo->pool, protocol_typ, ip_src, ip_dst, spi,
+    if((sad_is_present = get_esp_sa(protocol_typ, ip_src, ip_dst, spi,
                                     &esp_encr_algo, &esp_auth_algo,
                                     &esp_encr_key, &esp_encr_key_len, &esp_auth_key, &esp_auth_key_len,
                                     &cipher_hd, &cipher_hd_created, &sn_length, &sn_upper)))
@@ -1825,7 +1792,7 @@ dissect_esp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
               if (sn_length == IPSEC_SA_ESN) {
                 uint8_t sn_bytes[4];
-                phtonu32(sn_bytes, sn_upper);
+                phton32(sn_bytes, sn_upper);
                 for (int i = 0; i < 4; i++) {
                   gcry_md_putc(md_hd, sn_bytes[i]);
                 }
@@ -2083,86 +2050,6 @@ dissect_esp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
           break;
 
-        case IPSEC_ENCRYPT_AES_GCM_16_IIV:
-          esp_iv_len = 0; // Implicit IV - First Byte after SEQ is Data
-          esp_icv_len = 16; // ICV is 16 bytes long
-          crypt_mode_libgcrypt = GCRY_CIPHER_MODE_GCM;
-
-          /* The key includes a 4 byte nonce following the key, which is used as the salt */
-          esp_salt_len = 4;
-          esp_encr_key_len -= esp_salt_len;
-
-          switch(esp_encr_key_len * 8)
-          {
-          case 128:
-            crypt_algo_libgcrypt = GCRY_CIPHER_AES128;
-            decrypt_using_libgcrypt = true;
-            break;
-
-          case 192:
-            crypt_algo_libgcrypt = GCRY_CIPHER_AES192;
-            decrypt_using_libgcrypt = true;
-            break;
-
-          case 256:
-            crypt_algo_libgcrypt = GCRY_CIPHER_AES256;
-            decrypt_using_libgcrypt = true;
-            break;
-
-          default:
-            REPORT_DISSECTOR_BUG("<ESP Preferences> Error in Encryption Algorithm AES_GCM16: Bad Keylen (%u Bits)\n",
-                                 esp_encr_key_len * 8);
-            decrypt_ok = false;
-          }
-
-          break;
-
-        case IPSEC_ENCRYPT_CHACHA20_POLY1305:
-          esp_iv_len = 8; // IV is 8 byte long
-          esp_icv_len = 16; // AEAD Mode - ICV is Associated Data
-          crypt_algo_libgcrypt = GCRY_CIPHER_CHACHA20;
-          crypt_mode_libgcrypt = GCRY_CIPHER_MODE_POLY1305;
-          icv_type = ICV_TYPE_AEAD;
-          auth_algo_libgcrypt = GCRY_MAC_POLY1305;
-
-          /* The key includes a 4 byte nonce following the key, which is used as the salt */
-          esp_salt_len = 4;
-          esp_encr_key_len -= esp_salt_len;
-
-          if (esp_encr_key_len != gcry_cipher_get_algo_keylen (crypt_algo_libgcrypt))
-          {
-            REPORT_DISSECTOR_BUG("<ESP Preferences> Error in Encryption Algorithm CHACHA20_POLY1305: Bad Keylen (%u Bits, need %lu)\n",
-                                 esp_encr_key_len * 8, (unsigned long) gcry_cipher_get_algo_keylen (crypt_algo_libgcrypt) * 8);
-            decrypt_ok = false;
-          }
-          else
-            decrypt_using_libgcrypt = true;
-
-          break;
-
-        case IPSEC_ENCRYPT_CHACHA20_POLY1305_IIV:
-          esp_iv_len = 0; // Implicit IV - First Byte after SEQ is Data
-          esp_icv_len = 16; // AEAD Mode - ICV is Associated Data
-          crypt_algo_libgcrypt = GCRY_CIPHER_CHACHA20;
-          crypt_mode_libgcrypt = GCRY_CIPHER_MODE_POLY1305;
-          icv_type = ICV_TYPE_AEAD;
-          auth_algo_libgcrypt = GCRY_MAC_POLY1305;
-
-          /* The counter mode key includes a 4 byte nonce following the key, which is used as the salt */
-          esp_salt_len = 4;
-          esp_encr_key_len -= esp_salt_len;
-
-          if (esp_encr_key_len != gcry_cipher_get_algo_keylen (crypt_algo_libgcrypt))
-          {
-            REPORT_DISSECTOR_BUG("<ESP Preferences> Error in Encryption Algorithm CHACHA20_POLY1305_IIV: Bad Keylen (%u Bits, need %lu)\n",
-                                 esp_encr_key_len * 8, (unsigned long) gcry_cipher_get_algo_keylen (crypt_algo_libgcrypt) * 8);
-            decrypt_ok = false;
-          }
-          else
-            decrypt_using_libgcrypt = true;
-
-          break;
-
         case IPSEC_ENCRYPT_NULL :
         default :
           /* Fix parameters */
@@ -2170,11 +2057,10 @@ dissect_esp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
           esp_block_len = 1;
 
           /* Allocate buffer for decrypted data  */
-          if (esp_encr_data_len < esp_icv_len) {
-            return esp_packet_len;
-          }
           esp_decr_data_len = esp_encr_data_len - esp_icv_len;
-          esp_decr_data = tvb_memdup(pinfo->pool, tvb, ESP_HEADER_LEN, esp_decr_data_len);
+          esp_decr_data = (uint8_t *)wmem_alloc(pinfo->pool, esp_decr_data_len);
+
+          tvb_memcpy(tvb, esp_decr_data, ESP_HEADER_LEN, esp_decr_data_len);
 
           decrypt_ok = true;
 
@@ -2255,8 +2141,10 @@ dissect_esp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
           /*
            * Allocate buffer for decrypted data.
            */
+          esp_decr_data = (unsigned char*)wmem_alloc(pinfo->pool, esp_encr_data_len);
           esp_decr_data_len = esp_encr_data_len;
-          esp_decr_data = tvb_memdup(pinfo->pool, tvb, ESP_HEADER_LEN, esp_decr_data_len);
+
+          tvb_memcpy(tvb, esp_decr_data, ESP_HEADER_LEN,  esp_encr_data_len);
 
           /* (Lazily) create the cipher_hd */
           if (!(*cipher_hd_created)) {
@@ -2308,29 +2196,6 @@ dissect_esp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
               err = gcry_cipher_setiv(*cipher_hd, ctr_block, esp_salt_len + esp_iv_len);
             }
           }
-          else if (esp_encr_algo == IPSEC_ENCRYPT_CHACHA20_POLY1305_IIV || esp_encr_algo == IPSEC_ENCRYPT_AES_GCM_16_IIV)
-          {
-            // Implicit IV, see https://www.rfc-editor.org/rfc/rfc8750.html
-            unsigned int nonce_size = sizeof(nonce);
-            memset(nonce, 0, nonce_size);
-            memcpy(nonce, esp_encr_key + esp_encr_key_len, esp_salt_len);
-            nonce[8] = (sequence_number >> 24) & 0xff;
-            nonce[9] = (sequence_number >> 16) & 0xff;
-            nonce[10] = (sequence_number >> 8) & 0xff;
-            nonce[11] = sequence_number & 0xff;
-            err = gcry_cipher_setiv(*cipher_hd, nonce, 12);
-          }
-          else if (esp_encr_algo == IPSEC_ENCRYPT_CHACHA20_POLY1305)
-          {
-            // see https://www.rfc-editor.org/rfc/rfc7634.html
-            unsigned int nonce_size = sizeof(nonce);
-
-            memset(nonce, 0, nonce_size);
-            memcpy(nonce, esp_encr_key + esp_encr_key_len, esp_salt_len);
-            memcpy(nonce + esp_salt_len, esp_iv, esp_iv_len);
-
-            err = gcry_cipher_setiv(*cipher_hd, nonce, esp_salt_len + esp_iv_len);
-          }
           else
           {
             err = gcry_cipher_setiv(*cipher_hd, esp_iv, esp_iv_len);
@@ -2354,7 +2219,7 @@ dissect_esp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
             } else {
               uint8_t *aad = wmem_alloc(pinfo->pool, ESP_HEADER_LEN + 4);
               tvb_memcpy(tvb, aad, 0, 4);
-              phtonu32(&aad[4], sn_upper);
+              phton32(&aad[4], sn_upper);
               tvb_memcpy(tvb, &aad[ESP_HEADER_LEN], 4, ESP_HEADER_LEN);
               err = gcry_cipher_authenticate(*cipher_hd, aad, ESP_HEADER_LEN + 4);
             }
@@ -2386,10 +2251,10 @@ dissect_esp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
               unsigned char *esp_icv_computed;
               int tag_len;
 
-	      tag_len = (auth_algo_libgcrypt == GCRY_MAC_POLY1305) ? 16 : (int)gcry_cipher_get_algo_blklen(crypt_algo_libgcrypt);
+              tag_len = (int)gcry_cipher_get_algo_blklen(crypt_algo_libgcrypt);
 
               if (tag_len < esp_icv_len) {
-                ws_warning("<IPsec/ESP Dissector> Error in Algorithm %s, tag length (%d) is less than icv length (%d)",
+                fprintf (stderr, "<IPsec/ESP Dissector> Error in Algorithm %s, tag length (%d) is less than icv length (%d)\n",
                          gcry_md_algo_name(crypt_algo_libgcrypt), tag_len, esp_icv_len);
               }
 
@@ -2506,11 +2371,9 @@ dissect_esp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
   */
   if(!g_esp_enable_encryption_decode && g_esp_enable_authentication_check && sad_is_present)
   {
-    if ((esp_packet_len - ESP_HEADER_LEN) > esp_icv_len) {
-      next_tvb = tvb_new_subset_length(tvb, ESP_HEADER_LEN, esp_packet_len - ESP_HEADER_LEN - esp_icv_len);
-      export_ipsec_pdu(data_handle, pinfo, next_tvb);
-      call_dissector(data_handle, next_tvb, pinfo, esp_tree);
-    }
+    next_tvb = tvb_new_subset_length_caplen(tvb, ESP_HEADER_LEN, esp_packet_len - ESP_HEADER_LEN - esp_icv_len, -1);
+    export_ipsec_pdu(data_handle, pinfo, next_tvb);
+    call_dissector(data_handle, next_tvb, pinfo, esp_tree);
   }
   /* The packet does not belong to a security association and the field g_esp_enable_null_encryption_decode_heuristic is set */
   else if(null_encryption_decode_heuristic)
@@ -2611,7 +2474,7 @@ dissect_ipcomp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dissec
     proto_tree_add_item(ipcomp_tree, hf_ipcomp_flags, tvb, 1, 1, ENC_NA);
     proto_tree_add_item_ret_uint(ipcomp_tree, hf_ipcomp_cpi, tvb, 2, 2, ENC_BIG_ENDIAN, &comp_cpi);
 
-    col_add_fstr(pinfo->cinfo, COL_INFO, "IPComp (CPI=%s)", val_to_str(pinfo->pool, comp_cpi, cpi2val, "0x%04x"));
+    col_add_fstr(pinfo->cinfo, COL_INFO, "IPComp (CPI=%s)", val_to_str(comp_cpi, cpi2val, "0x%04x"));
 
     data = tvb_new_subset_remaining(tvb, 4);
     export_ipsec_pdu(data_handle, pinfo, data);
@@ -2652,54 +2515,6 @@ static void ipsec_cleanup_protocol(void)
   g_free(extra_esp_sa_records.records);
   extra_esp_sa_records.records = NULL;
   extra_esp_sa_records.num_records = 0;
-}
-
-static void
-esp_secrets_block_callback(const void *secrets, unsigned size _U_)
-{
-  char *err;
-
-  if (!uat_load_str(esp_uat, (const char *)secrets, &err))
-    g_free(err);
-}
-
-static void
-esp_print_record(void *key, void *value _U_, void *user_data)
-{
-  char *str = uat_record_tostr(esp_uat, key);
-
-  wmem_strbuf_append_printf((wmem_strbuf_t *)user_data, "%s\n", str);
-  g_free(str);
-}
-
-static unsigned
-esp_export_secret_count(void)
-{
-  return wmem_map_size(esp_used_sa_map);
-}
-
-static bool
-esp_export_dsb(wtap* wth)
-{
-  wtap_block_t block;
-  wtapng_dsb_mandatory_t *dsb;
-  wmem_strbuf_t *secrets;
-
-  if (!wmem_map_size(esp_used_sa_map))
-    return false;
-
-  secrets = wmem_strbuf_create(NULL);
-  wmem_map_foreach(esp_used_sa_map, esp_print_record, secrets);
-
-  block = wtap_block_create(WTAP_BLOCK_DECRYPTION_SECRETS);
-  dsb = (wtapng_dsb_mandatory_t *)wtap_block_get_mandatory_data(block);
-
-  dsb->secrets_type = SECRETS_TYPE_ESP;
-  dsb->secrets_data = (uint8_t*)wmem_strbuf_finalize(secrets);
-  dsb->secrets_len = (uint32_t)strlen((char*)dsb->secrets_data);
-
-  wtap_file_add_decryption_secrets(wth, block);
-  return true;
 }
 
 void
@@ -2799,7 +2614,6 @@ proto_register_ipsec(void)
   static const value_string esp_proto_type_vals[] = {
     { IPSEC_SA_IPV4, "IPv4" },
     { IPSEC_SA_IPV6, "IPv6" },
-    { IPSEC_SA_ANY, "Any" },
     { 0x00, NULL }
   };
 
@@ -2826,7 +2640,7 @@ proto_register_ipsec(void)
   static build_valid_func ah_da_build_value[1] = {ah_value};
   static decode_as_value_t ah_da_values = {ah_prompt, 1, ah_da_build_value};
   static decode_as_t ah_da = {"ah", "ip.proto", 1, 0, &ah_da_values, NULL, NULL,
-                                  decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL, NULL, NULL };
+                                  decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL};
 
   module_t *ah_module;
   module_t *esp_module;
@@ -2923,11 +2737,6 @@ proto_register_ipsec(void)
   ah_cap_handle = register_capture_dissector("ah", capture_ah, proto_ah);
 
   register_decode_as(&ah_da);
-
-  secrets_register_type(SECRETS_TYPE_ESP, esp_secrets_block_callback);
-  secrets_register_inject_type("ESP", esp_export_secret_count, esp_export_dsb, NULL);
-
-  esp_used_sa_map = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), g_direct_hash, g_direct_equal);
 }
 
 void

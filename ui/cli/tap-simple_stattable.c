@@ -96,7 +96,7 @@ static void simple_finish(void *tapdata)
 	g_free(stat_data->user_data);
 }
 
-static bool
+static void
 init_stat_table(stat_tap_table_ui *stat_tap, const char *filter)
 {
 	GString *error_string;
@@ -116,13 +116,11 @@ init_stat_table(stat_tap_table_ui *stat_tap, const char *filter)
 /*		free_rtd_table(&ui->rtd.stat_table); */
 		cmdarg_err("Couldn't register tap: %s", error_string->str);
 		g_string_free(error_string, TRUE);
-		return false;
+		exit(1);
 	}
-
-	return true;
 }
 
-static bool
+static void
 simple_stat_init(const char *opt_arg, void* userdata)
 {
 	stat_tap_table_ui *stat_tap = (stat_tap_table_ui*)userdata;
@@ -134,10 +132,10 @@ simple_stat_init(const char *opt_arg, void* userdata)
 	{
 		cmdarg_err("%s", err);
 		g_free(err);
-		return false;
+		exit(1);
 	}
 
-	return init_stat_table(stat_tap, filter);
+	init_stat_table(stat_tap, filter);
 }
 
 bool

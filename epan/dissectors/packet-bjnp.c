@@ -13,6 +13,9 @@
 #include "config.h"
 
 #include <epan/packet.h>
+#define PNAME  "Canon BJNP"
+#define PSNAME "BJNP"
+#define PFNAME "bjnp"
 
 #define BJNP_PORT_RANGE    "8611-8614"
 
@@ -80,7 +83,7 @@ static int dissect_bjnp (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
   if(!g_ascii_isprint(tvb_get_uint8(tvb, 0)))
     return 0;
 
-  col_set_str (pinfo->cinfo, COL_PROTOCOL, "BJNP");
+  col_set_str (pinfo->cinfo, COL_PROTOCOL, PSNAME);
   col_clear (pinfo->cinfo, COL_INFO);
 
   ti = proto_tree_add_item (tree, proto_bjnp, tvb, offset, -1, ENC_NA);
@@ -89,15 +92,17 @@ static int dissect_bjnp (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
   proto_tree_add_item (bjnp_tree, hf_bjnp_id, tvb, offset, 4, ENC_ASCII);
   offset += 4;
 
-  proto_tree_add_item_ret_uint8 (bjnp_tree, hf_dev_type, tvb, offset, 1, ENC_BIG_ENDIAN, &dev_type);
+  dev_type = tvb_get_uint8 (tvb, offset);
+  proto_tree_add_item (bjnp_tree, hf_dev_type, tvb, offset, 1, ENC_BIG_ENDIAN);
   offset++;
 
-  proto_tree_add_item_ret_uint8 (bjnp_tree, hf_cmd_code, tvb, offset, 1, ENC_BIG_ENDIAN, &cmd_code);
+  cmd_code = tvb_get_uint8 (tvb, offset);
+  proto_tree_add_item (bjnp_tree, hf_cmd_code, tvb, offset, 1, ENC_BIG_ENDIAN);
   offset++;
 
   info = wmem_strdup_printf(pinfo->pool, "%s: %s",
-                            val_to_str(pinfo->pool, dev_type, dev_type_vals, "Unknown type (%d)"),
-                            val_to_str(pinfo->pool, cmd_code, cmd_code_vals, "Unknown code (%d)"));
+                            val_to_str (dev_type, dev_type_vals, "Unknown type (%d)"),
+                            val_to_str (cmd_code, cmd_code_vals, "Unknown code (%d)"));
 
   proto_item_append_text (ti, ", %s", info);
   col_add_str (pinfo->cinfo, COL_INFO, info);
@@ -108,7 +113,8 @@ static int dissect_bjnp (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
   proto_tree_add_item (bjnp_tree, hf_session_id, tvb, offset, 2, ENC_BIG_ENDIAN);
   offset += 2;
 
-  proto_tree_add_item_ret_uint (bjnp_tree, hf_payload_len, tvb, offset, 4, ENC_BIG_ENDIAN, &payload_len);
+  payload_len = tvb_get_ntohl (tvb, offset);
+  proto_tree_add_item (bjnp_tree, hf_payload_len, tvb, offset, 4, ENC_BIG_ENDIAN);
   offset += 4;
 
   if (payload_len > 0) {
@@ -149,9 +155,9 @@ void proto_register_bjnp (void)
     &ett_bjnp
   };
 
-  proto_bjnp = proto_register_protocol ("Canon BJNP", "BJNP", "bjnp");
+  proto_bjnp = proto_register_protocol (PNAME, PSNAME, PFNAME);
 
-  bjnp_handle = register_dissector ("bjnp", dissect_bjnp, proto_bjnp);
+  bjnp_handle = register_dissector (PFNAME, dissect_bjnp, proto_bjnp);
 
   proto_register_field_array (proto_bjnp, hf, array_length (hf));
   proto_register_subtree_array (ett, array_length (ett));

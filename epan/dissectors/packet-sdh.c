@@ -61,7 +61,7 @@ static dissector_handle_t sdh_handle;
 static int sdh_data_rate = 1;
 
 static const enum_val_t data_rates[] = {
-  {"Guess", "Attempt to guess", -1},
+  {"Attempt to guess", "Attempt to guess", -1},
   {"OC-3",  "OC-3",   1},
   {"OC-12", "OC-12",  4},
   {"OC-24", "OC-24",  8},

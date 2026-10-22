@@ -632,10 +632,6 @@ static int hf_gsm_a_bssmap_trace_reference;
 static int hf_gsm_a_bssmap_trace_omc_id;
 static int hf_gsm_a_bssmap_be_rnc_id;
 static int hf_gsm_a_bssmap_apdu_protocol_id;
-static int hf_gsm_a_bssmap_segmentation_spare_bits;
-static int hf_gsm_a_bssmap_segment_number;
-static int hf_gsm_a_bssmap_msg_id;
-static int hf_gsm_a_bssmap_segmentation_info;
 static int hf_gsm_a_bssmap_periodicity;
 static int hf_gsm_a_bssmap_sm;
 static int hf_gsm_a_bssmap_tarr;
@@ -1823,7 +1819,7 @@ be_cell_id_type(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t of
             proto_tree_add_item(tree, hf_gsm_a_bssmap_sac, tvb, curr_offset, 2, ENC_BIG_ENDIAN);
             if (add_string) {
                 char *str = ws_strdup_printf("%s/SAC (%u)", add_string, value);
-                (void) g_strlcpy(add_string, str, string_len);
+                g_strlcpy(add_string, str, string_len);
                 g_free(str);
             }
             curr_offset += 2;
@@ -1856,10 +1852,7 @@ be_cell_id_type(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t of
                     g_free(str);
                 }
             }
-            if (disc != 0x0c) {
-                break;
-            }
-            /* FALLTHRU */
+            break;
         }
 
         if ((disc == 0x04) || (disc == 0x05) || (disc == 0x08)) break;
@@ -2751,7 +2744,9 @@ be_cct_pool(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t of
 
     curr_offset = offset;
 
-    ti = proto_tree_add_item_ret_uint8(tree, hf_gsm_a_bssmap_circuit_pool_number, tvb, curr_offset, 1, ENC_NA, &oct);
+    oct = tvb_get_uint8(tvb, curr_offset);
+
+    ti = proto_tree_add_item(tree, hf_gsm_a_bssmap_circuit_pool_number, tvb, curr_offset, 1, ENC_NA);
     if (oct <= 50)
     {
         /* No extra string */
@@ -3040,7 +3035,8 @@ be_loc_type(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t of
     curr_offset = offset;
 
     /* Extract the location information and add to protocol tree */
-    proto_tree_add_item_ret_uint8(tree, hf_gsm_a_bssmap_location_type_location_information, tvb, offset, 1, ENC_BIG_ENDIAN, &location_information);
+    location_information = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item(tree, hf_gsm_a_bssmap_location_type_location_information, tvb, offset, 1, ENC_BIG_ENDIAN);
     curr_offset++;
 
     if (location_information == 1 || location_information == 2)
@@ -3159,7 +3155,8 @@ be_apdu(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, un
      * equivalent octet in the APDU element of 3GPP TS 49.031 BSSAP-LE.
      */
 
-    proto_tree_add_item_ret_uint8(tree, hf_gsm_a_bssmap_apdu_protocol_id, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &apdu_protocol_id);
+    apdu_protocol_id = tvb_get_uint8(tvb,curr_offset);
+    proto_tree_add_item(tree, hf_gsm_a_bssmap_apdu_protocol_id, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
     curr_offset++;
     len--;
 
@@ -3252,32 +3249,14 @@ be_ret_err_cause(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t o
  * 3.2.2.74 Segmentation
  * Segmentation element of 3GPP TS 49.031 BSSAP-LE.
  */
-
-static const true_false_string tfs_gsm_a_bssmap_segmented = { "non-final segment of a segmented message", "final segment of a segmented message" };
-
 static uint16_t
-be_seg(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len, char *add_string _U_, int string_len _U_)
+be_seg(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len _U_, char *add_string _U_, int string_len _U_)
 {
     uint32_t curr_offset;
 
     curr_offset = offset;
-    /* There are two options for the coding of the Segmentation and Message Information portion;
-     * 1 octet containing segmentation information only and 3 octets containing segmentation and message information.
-     */
-    /* Octet 3	Spare	S	Segment Number */
-    static int* const oct3_flags[] = {
-        &hf_gsm_a_bssmap_segmentation_spare_bits,
-        &hf_gsm_a_bssmap_segmentation_info,
-        &hf_gsm_a_bssmap_segment_number,
-        NULL
-    };
-    proto_tree_add_bitmask_list(tree, tvb, curr_offset, 1, oct3_flags, ENC_NA);
-    curr_offset++;
-    if (len >= 3) {
-        /* Octet 4-5	Message ID */
-        proto_tree_add_item(tree, hf_gsm_a_bssmap_msg_id, tvb, curr_offset, 2, ENC_BIG_ENDIAN);
-        //curr_offset += 2;
-    }
+
+    proto_tree_add_expert(tree, pinfo, &ei_gsm_a_bssmap_not_decoded_yet, tvb, curr_offset, len);
 
     return len;
 }
@@ -3888,7 +3867,8 @@ be_aoip_trans_lay_add(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint3
             proto_tree_add_expert_format(tree, pinfo, &ei_gsm_a_bssmap_bogus_length, tvb, curr_offset, len, "Bogus length %u",len);
             return len;
     }
-    proto_tree_add_item_ret_uint16(tree, hf_gsm_a_bssmap_aoip_trans_port, tvb, curr_offset, 2, ENC_BIG_ENDIAN, &rtp_port);
+    proto_tree_add_item(tree, hf_gsm_a_bssmap_aoip_trans_port, tvb, curr_offset, 2, ENC_BIG_ENDIAN);
+    rtp_port = tvb_get_ntohs(tvb,curr_offset);
     curr_offset+=2;
 
     switch (addr_type) {
@@ -4607,7 +4587,7 @@ be_osmocom_osmux_cid(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, ui
 }
 
 
-uint16_t (* const bssmap_elem_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string, int string_len) = {
+uint16_t (*bssmap_elem_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string, int string_len) = {
     NULL,               /* Undefined */
     be_cic,             /* Circuit Identity Code */
     NULL,               /* Reserved */
@@ -5079,7 +5059,7 @@ be_fe_source_cell_id(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo _U_, ui
 }
 
 
-static uint16_t (* const bssmap_bss_to_bss_element_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string _U_, int string_len _U_) = {
+static uint16_t (*bssmap_bss_to_bss_element_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string _U_, int string_len _U_) = {
     be_fe_extra_info,              /* { 0x01,       "Extra information" }, */
     be_fe_cur_chan_type2,          /* { 0x02,       "Current Channel Type 2" }, */
     be_fe_target_radio_cell_info,  /* { 0x03,       "Target cell radio information" }, */
@@ -6908,14 +6888,7 @@ bssmap_conn_oriented(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32
     ELEM_MAND_TLV_E(BE_APDU, GSM_A_PDU_TYPE_BSSMAP, BE_APDU, NULL, ei_gsm_a_bssmap_missing_mandatory_element);
 
     ELEM_OPT_TLV(BE_SEG, GSM_A_PDU_TYPE_BSSMAP, BE_SEG, NULL);
-    /* Multilateration Positioning Method	Multilateration Positioning Method	C (Note 2)	TLV	2
-     * Cell Identifier 	Cell Identifier	C (Note 3)	TLV	7
-     * Multilateration Timing Advance	Multilateration Timing Advance	C (Note 3)	TV	3
-     * MS Sync Accuracy	MS Sync Accuracy	C (Note 4)	TV	2
-     * BTS Reception Accuracy Level	BTS Reception Accuracy Level	C (Note 3)	TV	2
-     * Short ID	Short ID	C (Note 5)	TV	2
-     * Random ID	Random ID	C (Note 4)	TV	3
-     */
+
     EXTRANEOUS_DATA_CHECK(curr_len, 0, pinfo, &ei_gsm_a_bssmap_extraneous_data);
 }
 
@@ -7413,7 +7386,7 @@ bssmap_lcls_notif(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t 
 #define NUM_GSM_BSSMAP_MSG (int)array_length(gsm_a_bssmap_msg_strings)
 static int ett_gsm_bssmap_msg[NUM_GSM_BSSMAP_MSG];
 
-static void (* const bssmap_msg_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len) = {
+static void (*bssmap_msg_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len) = {
     bssmap_ass_req,                     /* Assignment Request */
     bssmap_ass_complete,                /* Assignment Complete */
     bssmap_ass_failure,                 /* Assignment Failure */
@@ -7595,9 +7568,10 @@ dissect_bssmap(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
     str = try_val_to_str_idx_ext((uint32_t) oct, &gsm_a_bssmap_msg_strings_ext, &idx);
 
     if (sccp_msg_p && !sccp_msg_p->data.co.label) {
-        sccp_msg_p->data.co.label = val_to_str_ext(wmem_file_scope(), (uint32_t)oct,
+        sccp_msg_p->data.co.label = wmem_strdup(wmem_file_scope(),
+                                                val_to_str_ext((uint32_t)oct,
                                                 &gsm_a_bssmap_msg_strings_ext,
-                                                "BSSMAP (0x%02x)");
+                                                "BSSMAP (0x%02x)"));
     }
 
     /*
@@ -7875,26 +7849,6 @@ proto_register_gsm_a_bssmap(void)
         FT_UINT8, BASE_DEC, VALS(gsm_a_apdu_protocol_id_strings), 0x0,
         "APDU embedded protocol id", HFILL }
     },
-    { &hf_gsm_a_bssmap_segmentation_spare_bits ,
-        { "Spare bits", "gsm_a.bssmap.segmentation_spare_bits",
-        FT_UINT8, BASE_HEX, NULL, 0xe0,
-        NULL, HFILL }
-    },
-    { &hf_gsm_a_bssmap_segmentation_info,
-        { "Segmentation indicator", "gsm_a.bssmap.segmentation_indicator",
-        FT_BOOLEAN, 8, TFS(&tfs_gsm_a_bssmap_segmented), 0x10,
-        NULL, HFILL }
-    },
-    { &hf_gsm_a_bssmap_segment_number,
-        { "Segment Number", "gsm_a.bssmap.segment_number",
-        FT_UINT8, BASE_DEC, NULL, 0x0f,
-        NULL, HFILL }
-    },
-    { &hf_gsm_a_bssmap_msg_id,
-        { "Message ID", "gsm_a.bssmap.msg_id",
-        FT_UINT16, BASE_DEC, NULL, 0x0,
-        NULL, HFILL }
-    },
     { &hf_gsm_a_bssmap_periodicity,
         { "Periodicity", "gsm_a.bssmap.periodicity",
         FT_UINT8, BASE_DEC, NULL, 0x0,
@@ -8108,17 +8062,17 @@ proto_register_gsm_a_bssmap(void)
     },
     { &hf_gsm_a_bssmap_aoip_trans_ipv4,
         { "Transport Layer Address (IPv4)","gsm_a.bssmap.aoip_trans_ipv4",
-        FT_IPv4, BASE_NONE, NULL, 0x0,
+        FT_IPv4,BASE_NONE,  NULL, 0x0,
         NULL, HFILL }
     },
     { &hf_gsm_a_bssmap_aoip_trans_ipv6,
         { "Transport Layer Address (IPv6)","gsm_a.bssmap.aoip_trans_ipv6",
-        FT_IPv6, BASE_NONE,NULL, 0x0,
+        FT_IPv6,BASE_NONE,  NULL, 0x0,
         NULL, HFILL }
     },
     { &hf_gsm_a_bssmap_aoip_trans_port,
         { "UDP Port","gsm_a.bssmap.aoip_trans_port",
-        FT_UINT16, BASE_PT_UDP, NULL, 0x0,
+        FT_UINT16, BASE_DEC,NULL, 0x0,
         NULL, HFILL }
     },
     { &hf_gsm_a_bssmap_fi,
@@ -8466,7 +8420,7 @@ proto_register_gsm_a_bssmap(void)
     expert_module_t* expert_gsm_a_bssmap;
 
     static ei_register_info ei[] = {
-        { &ei_gsm_a_bssmap_extraneous_data, { "gsm_a_bssmap.extraneous_data", PI_PROTOCOL, PI_NOTE, "Extraneous Data, dissector bug or later version spec (report to wireshark.org)", EXPFILL }},
+        { &ei_gsm_a_bssmap_extraneous_data, { "gsm_a_bssmap.extraneous_data", PI_PROTOCOL, PI_NOTE, "Extraneous Data, dissector bug or later version spec(report to wireshark.org)", EXPFILL }},
         { &ei_gsm_a_bssmap_not_decoded_yet, { "gsm_a_bssmap.not_decoded_yet", PI_UNDECODED, PI_WARN, "Not decoded yet", EXPFILL }},
         { &ei_gsm_a_bssap_unknown_codec, { "gsm_a_bssmap.unknown_codec", PI_PROTOCOL, PI_WARN, "Unknown codec - the rest of the dissection my be suspect", EXPFILL }},
         { &ei_gsm_a_bssmap_bogus_length, { "gsm_a_bssmap.bogus_length", PI_PROTOCOL, PI_WARN, "Bogus length", EXPFILL }},

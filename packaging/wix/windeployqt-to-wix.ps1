@@ -92,14 +92,7 @@ try {
       <ComponentGroup Id=`"CG.QtDependencies`">
 "
     foreach ($entry in $wdqtList) {
-        if ((Split-Path $entry -Leaf) -eq "icuuc.dll") {
-            Write-Host "Skipping system library: $($entry)"
-            continue
-        }
-
         $dir = Split-Path -Parent $entry
-        $wix_name = $entry -ireplace "[^a-z0-9]", "_"
-
         if ($dir) {
             if ($dir -ne $currentDir) {
                 if ($currentDir -ne "") { # for everything but first directory found
@@ -115,6 +108,7 @@ try {
                 $currentDir = $dir
             }
 
+            $wix_name = $entry -replace "[\\|\.]", "_"
             $currentDirList += "           <Component Id=`"cmp$wix_name`" Guid=`"*`">
               <File Id=`"fil$wix_name`" KeyPath=`"yes`" Source=`"`$(var.Staging.Dir)\$entry`" />
            </Component>
@@ -122,11 +116,12 @@ try {
             $componentGroup += "         <ComponentRef Id=`"cmp$wix_name`" />
 "
         } else {
-            $dllList += "       <Component Id=`"cmp$wix_name`" Guid=`"*`">
-          <File Id=`"fil$wix_name`" KeyPath=`"yes`" Source=`"`$(var.Staging.Dir)\$entry`" />
+
+            $dllList += "       <Component Id=`"cmp$entry`" Guid=`"*`">
+          <File Id=`"fil$entry`" KeyPath=`"yes`" Source=`"`$(var.Staging.Dir)\$entry`" />
        </Component>
 "
-            $componentGroup += "         <ComponentRef Id=`"cmp$wix_name`" />
+            $componentGroup += "         <ComponentRef Id=`"cmp$entry`" />
 "
         }
     }

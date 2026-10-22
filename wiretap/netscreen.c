@@ -12,7 +12,7 @@
 
 #include "config.h"
 #include "netscreen.h"
-#include "wtap_module.h"
+#include "wtap-int.h"
 #include "file_wrappers.h"
 
 #include <stdlib.h>
@@ -52,13 +52,14 @@ static int64_t netscreen_seek_next_packet(wtap *wth, int *err, char **err_info,
 	char *hdr);
 static bool netscreen_check_file_type(wtap *wth, int *err,
 	char **err_info);
-static bool netscreen_read(wtap *wth, wtap_rec *rec,
+static bool netscreen_read(wtap *wth, wtap_rec *rec, Buffer *buf,
 	int *err, char **err_info, int64_t *data_offset);
 static bool netscreen_seek_read(wtap *wth, int64_t seek_off,
-	wtap_rec *rec, int *err, char **err_info);
+	wtap_rec *rec, Buffer *buf, int *err, char **err_info);
 static bool parse_netscreen_packet(FILE_T fh, wtap_rec *rec,
-	char *line, int *err, char **err_info);
-static int parse_single_hex_dump_line(char* rec, Buffer *buf);
+	Buffer* buf, char *line, int *err, char **err_info);
+static int parse_single_hex_dump_line(char* rec, uint8_t *buf,
+	unsigned byte_offset, unsigned pkt_len);
 
 /* Error returns from parse_single_hex_dump_line() */
 #define PARSE_LINE_INVALID_CHARACTER	-1
@@ -177,7 +178,7 @@ wtap_open_return_val netscreen_open(wtap *wth, int *err, char **err_info)
 }
 
 /* Find the next packet and parse it; called from wtap_read(). */
-static bool netscreen_read(wtap *wth, wtap_rec *rec,
+static bool netscreen_read(wtap *wth, wtap_rec *rec, Buffer *buf,
     int *err, char **err_info, int64_t *data_offset)
 {
 	int64_t		offset;
@@ -189,7 +190,7 @@ static bool netscreen_read(wtap *wth, wtap_rec *rec,
 		return false;
 
 	/* Parse the header and convert the ASCII hex dump to binary data */
-	if (!parse_netscreen_packet(wth->fh, rec, line, err, err_info))
+	if (!parse_netscreen_packet(wth->fh, rec, buf, line, err, err_info))
 		return false;
 
 	/*
@@ -213,7 +214,7 @@ static bool netscreen_read(wtap *wth, wtap_rec *rec,
 
 /* Used to read packets in random-access fashion */
 static bool
-netscreen_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
+netscreen_seek_read(wtap *wth, int64_t seek_off,	wtap_rec *rec, Buffer *buf,
 	int *err, char **err_info)
 {
 	char		line[NETSCREEN_LINE_LENGTH];
@@ -230,7 +231,7 @@ netscreen_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
 		return false;
 	}
 
-	return parse_netscreen_packet(wth->random_fh, rec, line,
+	return parse_netscreen_packet(wth->random_fh, rec, buf, line,
 	    err, err_info);
 }
 
@@ -266,7 +267,7 @@ netscreen_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
  *   <length> is the length of the packet on the network;
  *
  *   <llinfo>, at least for Ethernet, appears to be a source MAC
- *     address, followed by "->", followed by a destination MAC
+ *     address, folowed by "->", folowed by a destination MAC
  *     address, followed by a sequence of Ethertypes, each
  *     preceded by a "/" (multiple Ethertypes if there are VLAN
  *     tags and the like), possibly followed by ", tag <tag>".
@@ -279,8 +280,8 @@ netscreen_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
  * packet, with 16 octets per line.
  */
 static bool
-parse_netscreen_packet(FILE_T fh, wtap_rec *rec, char *line,
-    int *err, char **err_info)
+parse_netscreen_packet(FILE_T fh, wtap_rec *rec, Buffer* buf,
+    char *line, int *err, char **err_info)
 {
 	unsigned		pkt_len;
 	int		sec;
@@ -289,13 +290,13 @@ parse_netscreen_packet(FILE_T fh, wtap_rec *rec, char *line,
 	char		direction[2];
 	char		cap_src[13];
 	char		cap_dst[13];
-	const uint8_t	*pd;
+	uint8_t		*pd;
 	char		*p;
 	int		n, i = 0;
 	int		offset = 0;
 	char		dststr[13];
 
-	wtap_setup_packet_rec(rec, WTAP_ENCAP_UNKNOWN);
+	rec->rec_type = REC_TYPE_PACKET;
 	rec->block = wtap_block_create(WTAP_BLOCK_PACKET);
 	rec->presence_flags = WTAP_HAS_TS|WTAP_HAS_CAP_LEN;
 	/* Suppress compiler warnings */
@@ -306,7 +307,7 @@ parse_netscreen_packet(FILE_T fh, wtap_rec *rec, char *line,
 		   &sec, &dsec, cap_int, direction, &pkt_len, cap_src, cap_dst) < 5) {
 		*err = WTAP_ERR_BAD_FILE;
 		*err_info = g_strdup("netscreen: Can't parse packet-header");
-		return false;
+		return -1;
 	}
 	if (pkt_len > WTAP_MAX_PACKET_SIZE_STANDARD) {
 		/*
@@ -329,7 +330,8 @@ parse_netscreen_packet(FILE_T fh, wtap_rec *rec, char *line,
 	rec->rec_header.packet_header.len = pkt_len;
 
 	/* Make sure we have enough room for the packet */
-	ws_buffer_assure_space(&rec->data, pkt_len);
+	ws_buffer_assure_space(buf, pkt_len);
+	pd = ws_buffer_start_ptr(buf);
 
 	while(1) {
 
@@ -353,7 +355,7 @@ parse_netscreen_packet(FILE_T fh, wtap_rec *rec, char *line,
 			break;
 		}
 
-		n = parse_single_hex_dump_line(p, &rec->data);
+		n = parse_single_hex_dump_line(p, pd, offset, pkt_len);
 
 		/*
 		 * The smallest packet has a length of 6 bytes.
@@ -427,7 +429,6 @@ parse_netscreen_packet(FILE_T fh, wtap_rec *rec, char *line,
 	 * XXX	convert this to a 'case' structure when adding more
 	 *	(non-ethernet) interfacetypes
 	 */
-	pd = ws_buffer_start_ptr(&rec->data);
 	if (strncmp(cap_int, "adsl", 4) == 0) {
 		/* The ADSL interface can be bridged with or without
 		 * PPP encapsulation. Check whether the first six bytes
@@ -453,20 +454,17 @@ parse_netscreen_packet(FILE_T fh, wtap_rec *rec, char *line,
 }
 
 /* Take a string representing one line from a hex dump, with leading white
- * space removed, and converts the text to binary data. We append the bytes
- * to the Buffer. The Buffer should already be large enough to contain the
- * entire packet data, i.e. ws_buffer_assure_space(buf, pkt_len) has been
- * called.
+ * space removed, and converts the text to binary data. We place the bytes
+ * in the buffer at the specified offset.
  *
  * Returns number of bytes successfully read, -1 if bad.  */
 static int
-parse_single_hex_dump_line(char* rec, Buffer *buf)
+parse_single_hex_dump_line(char* rec, uint8_t *buf, unsigned byte_offset, unsigned pkt_len)
 {
-	unsigned num_items_scanned;
+	int num_items_scanned;
 	uint8_t character;
 	uint8_t byte;
-	size_t buf_available = buf->allocated - buf->first_free;
-	uint8_t *pd = ws_buffer_end_ptr(buf);
+
 
 	for (num_items_scanned = 0; num_items_scanned < 16; num_items_scanned++) {
 		character = *rec++;
@@ -496,12 +494,11 @@ parse_single_hex_dump_line(char* rec, Buffer *buf)
 		 * header, then there must be an error in the file; quit
 		 * now, as adding this byte will overflow the buffer.
 		 */
-		if (num_items_scanned >= buf_available) {
+		if (byte_offset + num_items_scanned >= pkt_len) {
 			return PARSE_LINE_TOO_MANY_BYTES_SEEN;
 		}
 
-		pd[num_items_scanned] = byte;
-		ws_buffer_increase_length(buf, 1);
+		buf[byte_offset + num_items_scanned] = byte;
 		character = *rec++ & 0xFF;
 		if (character == '\0' || character == '\r' || character == '\n') {
 			/* Nothing more to parse */

@@ -6,7 +6,8 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "config.h"
+#include <config.h>
+
 #define WS_LOG_DOMAIN LOG_DOMAIN_WIRETAP
 
 #include "wtap.h"
@@ -17,16 +18,12 @@
 #include <sys/types.h>
 
 #include "wtap_opttypes.h"
-#include "file_wrappers.h"
-#include "wtap_module.h"
 
-#include <wsutil/array.h>
+#include "file_wrappers.h"
 #include <wsutil/file_util.h>
 #include <wsutil/buffer.h>
 #include <wsutil/ws_assert.h>
 #include <wsutil/exported_pdu_tlvs.h>
-#include <wsutil/pint.h>
-#include <wsutil/please_report_bug.h>
 #ifdef HAVE_PLUGINS
 #include <wsutil/plugins.h>
 #endif
@@ -122,18 +119,6 @@ int
 wtap_file_tsprec(wtap *wth)
 {
 	return wth->file_tsprec;
-}
-
-const nstime_t*
-wtap_file_start_ts(wtap *wth)
-{
-	return &wth->file_start_ts;
-}
-
-const nstime_t*
-wtap_file_end_ts(wtap *wth)
-{
-	return &wth->file_end_ts;
 }
 
 unsigned
@@ -291,125 +276,6 @@ void
 wtap_add_idb(wtap *wth, wtap_block_t idb)
 {
 	g_array_append_val(wth->interface_data, idb);
-}
-
-unsigned
-wtap_file_get_num_pibs(wtap *wth)
-{
-	if (!wth->pibs) {
-		return 0;
-	}
-	return wth->pibs->len;
-}
-
-wtap_block_t
-wtap_file_get_pib(wtap *wth, unsigned pib_num)
-{
-	if ((wth == NULL) || (wth->pibs == NULL) || (pib_num >= wth->pibs->len))
-		return NULL;
-
-	return g_array_index(wth->pibs, wtap_block_t, pib_num);
-}
-
-#define NS_PER_S 1000000000U
-
-static void
-wtap_pib_index_free(void *pib_nums)
-{
-	g_array_free((GArray *)pib_nums, true);
-}
-
-void
-wtap_add_pib(wtap *wth, wtap_block_t pib, int64_t offset)
-{
-	wtapng_process_info_mandatory_t *pib_mand;
-	GArray *pib_nums;
-	unsigned pib_num;
-
-	pib_num = wth->pibs->len;
-	g_array_append_val(wth->pibs, pib);
-	if (wth->pib_offsets == NULL)
-		wth->pib_offsets = g_array_new(false, false, sizeof(int64_t));
-	g_array_append_val(wth->pib_offsets, offset);
-
-	/*
-	 * Index the block by its process ID, as packets refer to a process
-	 * by its ID.
-	 */
-	if (wth->pibs_by_pid == NULL) {
-		wth->pibs_by_pid = g_hash_table_new_full(g_direct_hash,
-		    g_direct_equal, NULL, wtap_pib_index_free);
-	}
-	pib_mand = (wtapng_process_info_mandatory_t *)wtap_block_get_mandatory_data(pib);
-	pib_nums = (GArray *)g_hash_table_lookup(wth->pibs_by_pid,
-	    GUINT_TO_POINTER(pib_mand->process_id));
-	if (pib_nums == NULL) {
-		pib_nums = g_array_new(false, false, sizeof(unsigned));
-		g_hash_table_insert(wth->pibs_by_pid,
-		    GUINT_TO_POINTER(pib_mand->process_id), pib_nums);
-	}
-	g_array_append_val(pib_nums, pib_num);
-}
-
-bool
-wtap_file_find_pib(wtap *wth, uint32_t process_id, const nstime_t *ts,
-    int64_t file_off, unsigned *pib_num)
-{
-	GArray *pib_nums;
-	unsigned i, count, num = 0;
-	wtap_block_t pib;
-	uint64_t start_time;
-	nstime_t start_ts;
-
-	if (wth == NULL || wth->pibs_by_pid == NULL)
-		return false;
-	pib_nums = (GArray *)g_hash_table_lookup(wth->pibs_by_pid,
-	    GUINT_TO_POINTER(process_id));
-	if (pib_nums == NULL)
-		return false;
-
-	/*
-	 * Consider only the blocks that precede the packet in the file: a
-	 * writer describes a process before the first packet it attributes
-	 * to it, so a later block describes a later process with the same
-	 * ID.  If no block precedes the packet, because the writer put them
-	 * at the end or the packet's position is not known, consider them
-	 * all.
-	 */
-	count = pib_nums->len;
-	if (file_off >= 0 && wth->pib_offsets != NULL) {
-		while (count > 0 &&
-		    g_array_index(wth->pib_offsets, int64_t,
-		        g_array_index(pib_nums, unsigned, count - 1)) > file_off)
-			count--;
-		if (count == 0)
-			count = pib_nums->len;
-	}
-
-	/*
-	 * Search backwards, so that the most recent block for a process ID
-	 * that was reused wins, skipping the blocks for processes that
-	 * started after the given time.  If every block has a later start
-	 * time, the clocks probably disagree; take the last of them, as its
-	 * position in the file is the evidence left.
-	 */
-	for (i = count; i > 0; i--) {
-		num = g_array_index(pib_nums, unsigned, i - 1);
-		if (ts == NULL)
-			break;
-		pib = g_array_index(wth->pibs, wtap_block_t, num);
-		if (wtap_block_get_uint64_option_value(pib, OPT_PIB_STARTTIME,
-		    &start_time) != WTAP_OPTTYPE_SUCCESS)
-			break;
-		start_ts.secs = (time_t)(start_time / NS_PER_S);
-		start_ts.nsecs = (int)(start_time % NS_PER_S);
-		if (nstime_cmp(&start_ts, ts) <= 0)
-			break;
-	}
-	if (i == 0)
-		num = g_array_index(pib_nums, unsigned, count - 1);
-	*pib_num = num;
-	return true;
 }
 
 static wtap_block_t
@@ -692,7 +558,6 @@ wtap_dump_params_init(wtap_dump_params *params, wtap *wth)
 	params->nrbs_growing = wth->nrbs;
 	params->dsbs_growing = wth->dsbs;
 	params->mevs_growing = wth->meta_events;
-	params->pibs_growing = wth->pibs;
 	params->dont_copy_idbs = false;
 }
 
@@ -718,8 +583,6 @@ wtap_dump_params_init_no_idbs(wtap_dump_params *params, wtap *wth)
 	params->shb_iface_to_global = wth->shb_iface_to_global;
 	params->nrbs_growing = wth->nrbs;
 	params->dsbs_growing = wth->dsbs;
-	params->mevs_growing = wth->meta_events;
-	params->pibs_growing = wth->pibs;
 	params->dont_copy_idbs = true;
 }
 
@@ -743,12 +606,6 @@ wtap_dump_params_discard_meta_events(wtap_dump_params *params)
 }
 
 void
-wtap_dump_params_discard_process_info(wtap_dump_params *params)
-{
-	params->pibs_growing = NULL;
-}
-
-void
 wtap_dump_params_cleanup(wtap_dump_params *params)
 {
 	wtap_block_array_free(params->shb_hdrs);
@@ -769,7 +626,7 @@ struct encap_type_info {
 	const char *description;
 };
 
-static const struct encap_type_info encap_table_base[] = {
+static struct encap_type_info encap_table_base[] = {
 	/* WTAP_ENCAP_UNKNOWN */
 	{ "unknown", "Unknown" },
 
@@ -1447,27 +1304,10 @@ static const struct encap_type_info encap_table_base[] = {
 
 	/* WTAP_ENCAP_DECT_NR */
 	{ "dect_nr", "DECT-2020 New Radio (NR) MAC layer" },
-
-	/* WTAP_ENCAP_MMODULE */
-	{ "m_module", "Bachmann M-Module file" },
-
-	/* WTAP_ENCAP_PROCMON */
-	{ "procmon", "Microsoft Process Monitor file"},
-
-	/* WTAP_ENCAP_ZWAVE_TAP */
-	{ "zwave-tap", "Z-Wave Wireless with TAP pseudo-header" },
-
-	/* WTAP_ENCAP_DECT_NR_TAP */
-	{ "dect_nr_tap", "DECT-2020 New Radio (NR) TAP header" },
-
-	/* WTAP_ENCAP_GSMTAP_UM */
-	{ "gsmtap_um", "GSMTAP Um" },
-
-	/* WTAP_ENCAP_DEKTEC_SDI */
-	{ "dektec-sdi", "DekTec SDI frame" },
 };
 
-static int wtap_num_encap_types = array_length(encap_table_base);
+WS_DLL_LOCAL
+int wtap_num_encap_types = array_length(encap_table_base);
 static GArray* encap_table_arr;
 
 #define encap_table_entry(encap)	\
@@ -1552,7 +1392,7 @@ wtap_name_to_encap(const char *name)
 /*
  * For precision values that correspond to a specific precision.
  */
-static const char * const precnames[NUM_WS_TSPREC_VALS] = {
+static const char *precnames[NUM_WS_TSPREC_VALS] = {
 	"seconds",
 	"100 milliseconds (deciseconds)",
 	"10 milliseconds (centiseconds)",
@@ -1580,7 +1420,7 @@ wtap_tsprec_string(int tsprec)
 	return s;
 }
 
-static const char * const wtap_errlist[] = {
+static const char *wtap_errlist[] = {
 	/* WTAP_ERR_NOT_REGULAR_FILE */
 	"The file isn't a plain file or pipe",
 
@@ -1636,9 +1476,6 @@ static const char * const wtap_errlist[] = {
 	NULL,
 
 	/* WTAP_ERR_CANT_SEEK_COMPRESSED */
-	/* This indicates a bug in the file format's module, because
-	 * the module should have set writing_must_seek to true in its
-	 * file_type_subtype_info */
 	NULL,
 
 	/* WTAP_ERR_DECOMPRESS */
@@ -1670,7 +1507,7 @@ static const char * const wtap_errlist[] = {
 const char *
 wtap_strerror(int err)
 {
-	static WS_THREAD_LOCAL char errbuf[128];
+	static char errbuf[128];
 	unsigned int wtap_errlist_index;
 
 	if (err < 0) {
@@ -1753,11 +1590,6 @@ wtap_close(wtap *wth)
 	wtap_block_array_free(wth->interface_data);
 	wtap_block_array_free(wth->dsbs);
 	wtap_block_array_free(wth->meta_events);
-	wtap_block_array_free(wth->pibs);
-	if (wth->pibs_by_pid != NULL)
-		g_hash_table_destroy(wth->pibs_by_pid);
-	if (wth->pib_offsets != NULL)
-		g_array_free(wth->pib_offsets, true);
 
 	g_free(wth);
 }
@@ -1792,7 +1624,7 @@ wtapng_process_nrb_ipv6(wtap *wth, wtap_block_t nrb)
 	if (wth->add_new_ipv6) {
 		for (GList *elem = nrb_mand->ipv6_addr_list; elem != NULL; elem = elem->next) {
 			hashipv6_t *tp = elem->data;
-			wth->add_new_ipv6((ws_in6_addr *)tp->addr, tp->name, false);
+			wth->add_new_ipv6(tp->addr, tp->name, false);
 		}
 	}
 }
@@ -1870,130 +1702,46 @@ wtapng_process_dsb(wtap *wth, wtap_block_t dsb)
 		wth->add_new_secrets(dsb_mand->secrets_type, dsb_mand->secrets_data, dsb_mand->secrets_len);
 }
 
-void wtap_set_cb_pcapng_block(wtap *wth, wtap_pcapng_block_callback_t callback, void *user_data) {
-	if (!wth) {
-		return;
-	}
-
-	wth->pcapng_block_cb = callback;
-	wth->pcapng_block_cb_data = user_data;
-
-	/*
-	 * Replay all meta events that were read so far to the new callback.
-	 */
-	if (wth->meta_events) {
-		for (unsigned i = 0; i < wth->meta_events->len; i++) {
-			wtap_block_t block = g_array_index(wth->meta_events, wtap_block_t, i);
-			const wtapng_meta_event_mandatory_t *mev_mand =
-				(const wtapng_meta_event_mandatory_t*)wtap_block_get_mandatory_data(block);
-			callback(mev_mand->mev_block_type, mev_mand->mev_data,
-			         mev_mand->mev_data_len, user_data);
-		}
-	}
-}
-
-/*
- * Reset a wtap_rec to an initialized state, making it ready for a
- * new record.
- */
+/* Perform per-packet initialization */
 static void
-wtap_reset_rec(wtap *wth, wtap_rec *rec)
+wtap_init_rec(wtap *wth, wtap_rec *rec)
 {
-	wtap_rec_reset(rec);
 	/*
-	 * Set the time stamp precision to the file's time stamp
-	 * precision value, as a default. If it's per-packet,
-	 * the read routine must override it.
+	 * Set the packet encapsulation to the file's encapsulation
+	 * value; if that's not WTAP_ENCAP_PER_PACKET, it's the
+	 * right answer (and means that the read routine for this
+	 * capture file type doesn't have to set it), and if it
+	 * *is* WTAP_ENCAP_PER_PACKET, the caller needs to set it
+	 * anyway.
+	 *
+	 * Do the same for the packet time stamp resolution.
 	 */
+	rec->rec_header.packet_header.pkt_encap = wth->file_encap;
 	rec->tsprec = wth->file_tsprec;
-}
+	rec->block = NULL;
+	rec->block_was_modified = false;
 
-
-/**
- * Return an error string for WTAP_ERR_UNWRITABLE_REC_TYPE.
- */
-char *
-wtap_unwritable_rec_type_err_string(const wtap_rec *rec)
-{
-	return g_strdup_printf("%s records aren't supported by this file type",
-	    rec->rec_type_name);
-}
-
-/**
- * Set up a wtap_rec for a packet (REC_TYPE_PACKET).
- */
-void
-wtap_setup_packet_rec(wtap_rec *rec, int encap)
-{
-	rec->rec_type = REC_TYPE_PACKET;
-	rec->rec_type_name = "Packet";
-	rec->rec_header.packet_header.pkt_encap = encap;
-}
-
-/**
- * Set up a wtap_rec for a file-type specific event
- * (REC_TYPE_FT_SPECIFIC_EVENT);
- */
-void
-wtap_setup_ft_specific_event_rec(wtap_rec *rec, int file_type_subtype,
-                                 unsigned record_type)
-{
-	rec->rec_type = REC_TYPE_FT_SPECIFIC_EVENT;
-	rec->rec_type_name = "Event";
-	rec->rec_header.ft_specific_header.file_type_subtype = file_type_subtype;
-	rec->rec_header.ft_specific_header.record_type = record_type;
-}
-
-/**
- * Set up a wtap_rec for a file-type specific report
- * (REC_TYPE_FT_SPECIFIC_REPORT);
- */
-void
-wtap_setup_ft_specific_report_rec(wtap_rec *rec, int file_type_subtype,
-                                 unsigned record_type)
-{
-	rec->rec_type = REC_TYPE_FT_SPECIFIC_REPORT;
-	rec->rec_type_name = "Report";
-	rec->rec_header.ft_specific_header.file_type_subtype = file_type_subtype;
-	rec->rec_header.ft_specific_header.record_type = record_type;
-}
-
-/**
- * Set up a wtap_rec for a systemd journal export entry
- * (REC_TYPE_SYSTEMD_JOURNAL_EXPORT).
- */
-void
-wtap_setup_systemd_journal_export_rec(wtap_rec *rec)
-{
-	rec->rec_type = REC_TYPE_SYSTEMD_JOURNAL_EXPORT;
-	rec->rec_type_name = "Systemd Journal Entry";
-}
-
-/**
- * Set up a wtap_rec for a custom block (REC_TYPE_CUSTOM_BLOCK).
- */
-void
-wtap_setup_custom_block_rec(wtap_rec *rec, uint32_t pen,
-                            uint32_t payload_length, bool copy_allowed)
-{
-	rec->rec_type = REC_TYPE_CUSTOM_BLOCK;
-	rec->rec_type_name = "PCAPNG Custom Block";
-	rec->rec_header.custom_block_header.pen = pen;
-	rec->rec_header.custom_block_header.length = payload_length;
-	rec->rec_header.custom_block_header.copy_allowed = copy_allowed;
+	/*
+	 * Assume the file has only one section; the module for the
+	 * file type needs to indicate the section number if there's
+	 * more than one section.
+	 */
+	rec->section_number = 0;
 }
 
 bool
-wtap_read(wtap *wth, wtap_rec *rec, int *err, char **err_info, int64_t *offset)
+wtap_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err,
+	char **err_info, int64_t *offset)
 {
 	/*
-	 * Reset the record to default values.
+	 * Initialize the record to default values.
 	 */
-	wtap_reset_rec(wth, rec);
+	wtap_init_rec(wth, rec);
+	ws_buffer_clean(buf);
 
 	*err = 0;
 	*err_info = NULL;
-	if (!wth->subtype_read(wth, rec, err, err_info, offset)) {
+	if (!wth->subtype_read(wth, rec, buf, err, err_info, offset)) {
 		/*
 		 * If we didn't get an error indication, we read
 		 * the last packet.  See if there's any deferred
@@ -2027,49 +1775,6 @@ wtap_read(wtap *wth, wtap_rec *rec, int *err, char **err_info, int64_t *offset)
 		 */
 		ws_assert(rec->rec_header.packet_header.pkt_encap != WTAP_ENCAP_PER_PACKET);
 		ws_assert(rec->rec_header.packet_header.pkt_encap != WTAP_ENCAP_NONE);
-	}
-
-	size_t cap_len;
-	switch (rec->rec_type) {
-
-	case REC_TYPE_PACKET:
-		cap_len = rec->rec_header.packet_header.caplen;
-		break;
-	case REC_TYPE_FT_SPECIFIC_EVENT:
-	case REC_TYPE_FT_SPECIFIC_REPORT:
-		cap_len = rec->rec_header.ft_specific_header.record_len;
-		break;
-	case REC_TYPE_SYSCALL:
-		cap_len = rec->rec_header.syscall_header.event_data_len;
-		break;
-	case REC_TYPE_SYSTEMD_JOURNAL_EXPORT:
-		cap_len = rec->rec_header.systemd_journal_export_header.record_len;
-		break;
-	case REC_TYPE_CUSTOM_BLOCK:
-		cap_len = rec->rec_header.custom_block_header.length;
-		break;
-	default:
-		cap_len = 0;
-	}
-
-	if (cap_len > ws_buffer_length(&rec->data)) {
-		/* XXX - fdata->cap_len *should* match ws_buffer_length(&rec->data),
-		 * if the record was set up correctly. Why not just use that? Some
-		 * wiretap modules, including some of the main distribution until
-		 * recently, assure Buffer space and write to it directly, but fail
-		 * to update the length afterwards. */
-		ws_critical("Length of record buffer (%zu) less than claimed captured length (%zu)!\n%s\n"
-			    "This may be from a third-party libwiretap plugin instead.\n"
-			    "In such case, please report it to the plugin developers.",
-			    ws_buffer_length(&rec->data), cap_len, please_report_bug());
-		/* XXX - If the caller copied the data manually but forgot to
-		 * call ws_buffer_increase_length, and there's room at the start,
-		 * i.e., ws_buffer_remove_start was called (why?), this messes up
-		 * dissection. (Too bad, you lose, the module needs to be fixed.)
-		 * Otherwise, this possibly allocates extra data but it's better
-		 * than a buffer overflow. Note this doesn't zero newly allocated
-		 * space. */
-		ws_buffer_assure_space((Buffer *)&rec->data, cap_len - ws_buffer_length(&rec->data));
 	}
 
 	return true;	/* success */
@@ -2108,36 +1813,6 @@ wtap_read_bytes_or_eof(FILE_T fh, void *buf, unsigned int count, int *err,
 }
 
 /*
- * Read a given number of bytes from a file into a Buffer, growing
- * the buffer if necessary.
- *
- * If we succeed, return true.
- *
- * If we get an EOF, return false with *err set to 0, reporting this
- * as an EOF.
- *
- * If we get fewer bytes than the specified number, return false with
- * *err set to WTAP_ERR_SHORT_READ, reporting this as a short read
- * error.
- *
- * If we get a read error, return false with *err and *err_info set
- * appropriately.
- */
-bool
-wtap_read_bytes_or_eof_buffer(FILE_T fh, Buffer *buf, unsigned length, int *err,
-    char **err_info)
-{
-	bool rv;
-	ws_buffer_assure_space(buf, length);
-	rv = wtap_read_bytes_or_eof(fh, ws_buffer_end_ptr(buf), length, err,
-	    err_info);
-	if (rv) {
-		ws_buffer_increase_length(buf, length);
-	}
-	return rv;
-}
-
-/*
  * Read a given number of bytes from a file into a buffer or, if
  * buf is NULL, just discard them.
  *
@@ -2145,10 +1820,7 @@ wtap_read_bytes_or_eof_buffer(FILE_T fh, Buffer *buf, unsigned length, int *err,
  *
  * If we get fewer bytes than the specified number, including getting
  * an EOF, return false with *err set to WTAP_ERR_SHORT_READ, reporting
- * this as a short read error.  (The assumption is that each packet has
- * a header followed by raw packet data, and that we've already read the
- * header, so if we get an EOF trying to read the packet data, the file
- * has been cut short, even if the read didn't read any data at all.)
+ * this as a short read error.
  *
  * If we get a read error, return false with *err and *err_info set
  * appropriately.
@@ -2170,23 +1842,16 @@ wtap_read_bytes(FILE_T fh, void *buf, unsigned int count, int *err,
 }
 
 /*
- * Read a given number of bytes from a file into a Buffer, growing the
- * buffer as necessary.
+ * Read packet data into a Buffer, growing the buffer as necessary.
  *
- * If we succeed, return true.
- *
- * If we get fewer bytes than the specified number, including getting
- * an EOF, return false with *err set to WTAP_ERR_SHORT_READ, reporting
- * this as a short read error.  (The assumption is that each packet has
- * a header followed by raw packet data, and that we've already read the
+ * This returns an error on a short read, even if the short read hit
+ * the EOF immediately.  (The assumption is that each packet has a
+ * header followed by raw packet data, and that we've already read the
  * header, so if we get an EOF trying to read the packet data, the file
  * has been cut short, even if the read didn't read any data at all.)
- *
- * If we get a read error, return false with *err and *err_info set
- * appropriately.
  */
 bool
-wtap_read_bytes_buffer(FILE_T fh, Buffer *buf, unsigned length, int *err,
+wtap_read_packet_bytes(FILE_T fh, Buffer *buf, unsigned length, int *err,
     char **err_info)
 {
 	bool rv;
@@ -2211,41 +1876,14 @@ wtap_read_so_far(wtap *wth)
 
 /* Perform global/initial initialization */
 void
-wtap_rec_init(wtap_rec *rec, size_t space)
+wtap_rec_init(wtap_rec *rec)
 {
 	memset(rec, 0, sizeof *rec);
 	ws_buffer_init(&rec->options_buf, 0);
-	ws_buffer_init(&rec->data, space);
 	/* In the future, see if we can create rec->block here once
 	 * and have it be reused like the rest of rec.
 	 * Currently it's recreated for each packet.
 	 */
-}
-
-/* Apply a snapshot value */
-void
-wtap_rec_apply_snapshot(wtap_rec *rec, uint32_t snaplen)
-{
-	switch (rec->rec_type) {
-
-	case REC_TYPE_PACKET:
-		if (rec->presence_flags & WTAP_HAS_CAP_LEN) {
-                	/* Limit capture length to snaplen */
-			if (rec->rec_header.packet_header.caplen > snaplen) {
-				/*
-				 * A dumper will only write up to caplen
-				 * bytes out, so we only need to change
-				 * that value, instead of cloning the
-				 * whole packet with fewer bytes.
-				 *
-				 * XXX: but do we need to change the IDBs'
-				 * snap_len?
-				 */
-				rec->rec_header.packet_header.caplen = snaplen;
-			}
-		}
-		break;
-	}
 }
 
 /* re-initialize record */
@@ -2255,28 +1893,6 @@ wtap_rec_reset(wtap_rec *rec)
 	wtap_block_unref(rec->block);
 	rec->block = NULL;
 	rec->block_was_modified = false;
-
-	/*
-	 * Assume the file has only one section; the module for the
-	 * file type needs to indicate the section number if there's
-	 * more than one section.
-	 */
-	rec->section_number = 0;
-
-	/*
-	 * Reset the data buffer to an initialized state.
-	 */
-	ws_buffer_clean(&rec->data);
-
-	/*
-	 * Reset the options buffer to an initialized state.
-	 * (Nothing in the repo uses this currently, but perhaps third
-	 * party code does.)
-	 */
-	ws_buffer_clean(&rec->options_buf);
-
-	/* XXX - Reset rec_type, presence_flags, etc? All the modules
-	 * explicitly set the values. */
 }
 
 /* clean up record metadata */
@@ -2285,7 +1901,6 @@ wtap_rec_cleanup(wtap_rec *rec)
 {
 	wtap_rec_reset(rec);
 	ws_buffer_free(&rec->options_buf);
-	ws_buffer_free(&rec->data);
 }
 
 wtap_block_t
@@ -2303,17 +1918,18 @@ wtap_rec_generate_idb(const wtap_rec *rec)
 }
 
 bool
-wtap_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
+wtap_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec, Buffer *buf,
     int *err, char **err_info)
 {
 	/*
-	 * Reset the record to default values.
+	 * Initialize the record to default values.
 	 */
-	wtap_reset_rec(wth, rec);
+	wtap_init_rec(wth, rec);
+	ws_buffer_clean(buf);
 
 	*err = 0;
 	*err_info = NULL;
-	if (!wth->subtype_seek_read(wth, seek_off, rec, err, err_info)) {
+	if (!wth->subtype_seek_read(wth, seek_off, rec, buf, err, err_info)) {
 		if (rec->block != NULL) {
 			/*
 			 * Unreference any block created for this record.
@@ -2342,8 +1958,7 @@ wtap_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
 }
 
 static bool
-wtap_full_file_read_file(wtap *wth, FILE_T fh, wtap_rec *rec,
-    int *err, char **err_info)
+wtap_full_file_read_file(wtap *wth, FILE_T fh, wtap_rec *rec, Buffer *buf, int *err, char **err_info)
 {
 	int64_t file_size;
 	int packet_size = 0;
@@ -2375,8 +1990,8 @@ wtap_full_file_read_file(wtap *wth, FILE_T fh, wtap_rec *rec,
 					wtap_encap_name(wth->file_encap), INT_MAX);
 			return false;
 		}
-		ws_buffer_assure_space(&rec->data, buffer_size);
-		int nread = file_read(ws_buffer_start_ptr(&rec->data) + packet_size, buffer_size - packet_size, fh);
+		ws_buffer_assure_space(buf, buffer_size);
+		int nread = file_read(ws_buffer_start_ptr(buf) + packet_size, buffer_size - packet_size, fh);
 		if (nread < 0) {
 			*err = file_error(fh, err_info);
 			if (*err == 0)
@@ -2384,7 +1999,6 @@ wtap_full_file_read_file(wtap *wth, FILE_T fh, wtap_rec *rec,
 			return false;
 		}
 		packet_size += nread;
-		ws_buffer_increase_length(&rec->data, nread);
 		if (packet_size != buffer_size) {
 			/* EOF */
 			break;
@@ -2392,7 +2006,7 @@ wtap_full_file_read_file(wtap *wth, FILE_T fh, wtap_rec *rec,
 		buffer_size += block_size;
 	}
 
-	wtap_setup_packet_rec(rec, wth->file_encap);
+	rec->rec_type = REC_TYPE_PACKET;
 	rec->presence_flags = 0; /* yes, we have no bananas^Wtime stamp */
 	rec->ts.secs = 0;
 	rec->ts.nsecs = 0;
@@ -2403,8 +2017,8 @@ wtap_full_file_read_file(wtap *wth, FILE_T fh, wtap_rec *rec,
 }
 
 bool
-wtap_full_file_read(wtap *wth, wtap_rec *rec, int *err, char **err_info,
-    int64_t *data_offset)
+wtap_full_file_read(wtap *wth, wtap_rec *rec, Buffer *buf,
+                    int *err, char **err_info, int64_t *data_offset)
 {
 	int64_t offset = file_tell(wth->fh);
 
@@ -2415,12 +2029,11 @@ wtap_full_file_read(wtap *wth, wtap_rec *rec, int *err, char **err_info,
 	}
 
 	*data_offset = offset;
-	return wtap_full_file_read_file(wth, wth->fh, rec, err, err_info);
+	return wtap_full_file_read_file(wth, wth->fh, rec, buf, err, err_info);
 }
 
 bool
-wtap_full_file_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
-    int *err, char **err_info)
+wtap_full_file_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec, Buffer *buf, int *err, char **err_info)
 {
 	/* There is only one packet with the full file contents. */
 	if (seek_off > 0) {
@@ -2431,7 +2044,7 @@ wtap_full_file_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
 	if (file_seek(wth->random_fh, seek_off, SEEK_SET, err) == -1)
 		return false;
 
-	return wtap_full_file_read_file(wth, wth->random_fh, rec, err, err_info);
+	return wtap_full_file_read_file(wth, wth->random_fh, rec, buf, err, err_info);
 }
 
 void
@@ -2452,12 +2065,12 @@ wtap_buffer_append_epdu_tag(Buffer *buf, uint16_t epdu_tag, const uint8_t *data,
 	ws_buffer_assure_space(buf, space_needed);
 	buf_data = ws_buffer_end_ptr(buf);
 	memset(buf_data, 0, space_needed);
-	phtonu16(buf_data + 0, epdu_tag);
+	phton16(buf_data + 0, epdu_tag);
 	/* It seems as though the convention for exported_pdu is to specify
 	 * the fully-padded length of the tag value, not just its useful length.
 	 * e.g. the string value 'a' would be given a length of 4.
 	 */
-	phtonu16(buf_data + 2, data_len + pad_len);
+	phton16(buf_data + 2, data_len + pad_len);
 	if (data_len > 0) {
 		/* Still only copy as many bytes as we actually have */
 		memcpy(buf_data + 4, data, data_len);
@@ -2475,9 +2088,9 @@ wtap_buffer_append_epdu_uint(Buffer *buf, uint16_t epdu_tag, uint32_t val)
 	ws_buffer_assure_space(buf, space_needed);
 	buf_data = ws_buffer_end_ptr(buf);
 	memset(buf_data, 0, space_needed);
-	phtonu16(buf_data + 0, epdu_tag);
-	phtonu16(buf_data + 2, 4);
-	phtonu32(buf_data + 4, val);
+	phton16(buf_data + 0, epdu_tag);
+	phton16(buf_data + 2, 4);
+	phton32(buf_data + 4, val);
 	ws_buffer_increase_length(buf, space_needed);
 }
 
@@ -2495,7 +2108,7 @@ wtap_buffer_append_epdu_string(Buffer *buf, uint16_t epdu_tag, const char *val)
 	 */
 	if (string_len > UINT16_MAX)
 		string_len = UINT16_MAX;
-	wtap_buffer_append_epdu_tag(buf, epdu_tag, (const uint8_t*)val, (uint16_t) string_len);
+	wtap_buffer_append_epdu_tag(buf, epdu_tag, val, (uint16_t) string_len);
 }
 
 int
@@ -2516,16 +2129,15 @@ wtap_buffer_append_epdu_end(Buffer *buf)
  * Initialize the library.
  */
 void
-wtap_init(bool load_wiretap_plugins, const char* app_env_var_prefix, const struct file_extension_info* file_extensions, unsigned num_extensions)
+wtap_init(bool load_wiretap_plugins)
 {
 	init_open_routines();
 	wtap_opttypes_initialize();
 	wtap_init_encap_types();
-	wtap_init_file_type_subtypes(app_env_var_prefix);
-	wtap_init_file_type_extensions(file_extensions, num_extensions);
+	wtap_init_file_type_subtypes();
 	if (load_wiretap_plugins) {
 #ifdef HAVE_PLUGINS
-		libwiretap_plugins = plugins_init(WS_PLUGIN_WIRETAP, app_env_var_prefix);
+		libwiretap_plugins = plugins_init(WS_PLUGIN_WIRETAP);
 #endif
 		g_slist_foreach(wtap_plugins, call_plugin_register_wtap_module, NULL);
 	}

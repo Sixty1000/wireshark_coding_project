@@ -53,7 +53,6 @@ typedef enum {
     RC_RANFUNCTIONS,
     NI_RANFUNCTIONS,
     CCC_RANFUNCTIONS,
-    LLC_RANFUNCTIONS,
     MAX_RANFUNCTIONS
 } ran_function_t;
 
@@ -67,7 +66,7 @@ typedef struct {
     ran_function_pointers_t functions;
 } ran_function_dissector_t;
 
-void register_e2ap_ran_function_dissector(ran_function_t ran_function, const ran_function_dissector_t *dissector);
+void register_e2ap_ran_function_dissector(ran_function_t ran_function, ran_function_dissector_t *dissector);
 
 void e2ap_store_ran_function_mapping(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, const char *name);
 void e2ap_update_ran_function_mapping(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, const char *oid);

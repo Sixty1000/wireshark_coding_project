@@ -8,7 +8,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-#pragma once
+
+#ifndef __TFS_H__
+#define __TFS_H__
+
 #include <stdbool.h>
 #include "ws_symbol_export.h"
 
@@ -58,7 +61,6 @@ WS_DLL_PUBLIC const true_false_string tfs_allow_block;
 WS_DLL_PUBLIC const true_false_string tfs_restricted_not_restricted;
 WS_DLL_PUBLIC const true_false_string tfs_not_restricted_restricted;
 WS_DLL_PUBLIC const true_false_string tfs_accept_reject;
-WS_DLL_PUBLIC const true_false_string tfs_accepted_rejected;
 WS_DLL_PUBLIC const true_false_string tfs_more_nomore;
 WS_DLL_PUBLIC const true_false_string tfs_present_absent;
 WS_DLL_PUBLIC const true_false_string tfs_present_not_present;
@@ -133,6 +135,8 @@ WS_DLL_PUBLIC const true_false_string tfs_data_pdu_control_pdu;
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
+
+#endif /* __TFS_H__ */
 
 /*
  * Editor modelines  -  https://www.wireshark.org/tools/modelines.html

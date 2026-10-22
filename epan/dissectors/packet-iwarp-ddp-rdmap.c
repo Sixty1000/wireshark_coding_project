@@ -394,7 +394,7 @@ dissect_rdmap_payload(tvbuff_t *tvb, packet_info *pinfo,
 	}
 
 	tvb = process_reassembled_data(tvb, 0, pinfo,
-				       "Reassembled iWarp RDMA Send",
+				       "Reassembled SMB Direct",
 				       fd_head,
 				       &iwarp_rdma_send_frag_items,
 				       NULL, /* update_col_info*/
@@ -434,7 +434,7 @@ ddp_rdma_packetlist(packet_info *pinfo, bool ddp_last_flag,
 	}
 
 	col_add_fstr(pinfo->cinfo, COL_INFO, "%d > %d %s %s", pinfo->srcport,
-				pinfo->destport, val_to_str(pinfo->pool, rdma_msg_opcode, rdmap_messages,
+				pinfo->destport, val_to_str(rdma_msg_opcode, rdmap_messages,
 						"Unknown %d"), ddp_fragment_state);
 }
 
@@ -622,7 +622,8 @@ dissect_iwarp_atomic(tvbuff_t *tvb, proto_tree *atomic_tree, uint32_t offset,
 		case RDMA_ATOMIC_REQUEST:{
 			uint32_t atomic_opcode;
 			proto_tree_add_item(atomic_tree, hf_iwarp_rdma_atomic_reserved, tvb, offset, 4, ENC_BIG_ENDIAN);
-			proto_tree_add_item_ret_uint(atomic_tree, hf_iwarp_rdma_atomic_opcode, tvb, offset, 4, ENC_BIG_ENDIAN, &atomic_opcode);
+			proto_tree_add_item(atomic_tree, hf_iwarp_rdma_atomic_opcode, tvb, offset, 4, ENC_BIG_ENDIAN);
+			atomic_opcode = tvb_get_ntohl(tvb, offset);
 			offset += 4;
 			proto_tree_add_item(atomic_tree, hf_iwarp_rdma_atomic_request_identifier, tvb, offset, 4, ENC_BIG_ENDIAN);
 			offset += 4;
@@ -1122,7 +1123,7 @@ proto_register_iwarp_ddp_rdmap(void)
 				NULL, HFILL} },
 
 		{ &hf_iwarp_rdma_send_fragments, {
-				"Reassembled iWarp RDMA Send Fragments", "iwarp_rdma.send.fragments",
+				"Reassembled SMB Direct Fragments", "iwarp_rdma.send.fragments",
 				FT_NONE, BASE_NONE, NULL, 0,
 				NULL, HFILL} },
 		{ &hf_iwarp_rdma_send_fragment, {

@@ -15,9 +15,7 @@ WiresharkApplication::WiresharkApplication(int &argc,  char **argv) :
     MainApplication(argc, argv)
 {
     wsApp = this;
-#ifndef Q_OS_MACOS
     Q_INIT_RESOURCE(wsicon);
-#endif
     setApplicationName("Wireshark");
     setDesktopFileName(QStringLiteral("org.wireshark.Wireshark"));
 }
@@ -31,13 +29,11 @@ void WiresharkApplication::initializeIcons()
 {
     // Do this as late as possible in order to allow time for
     // MimeDatabaseInitThread to do its work.
-#ifndef Q_OS_MACOS
-    QList<int> icon_sizes = QList<int>() << 256 << 64 << 48 << 32 << 24 << 16;
+    QList<int> icon_sizes = QList<int>() << 1024 << 512 << 256 << 128 << 64 << 48 << 32 << 24 << 16;
     foreach (int icon_size, icon_sizes) {
-        QString icon_path = QStringLiteral(":/wsicon/wsicon%1.png").arg(icon_size);
+        QString icon_path = QString(":/wsicon/wsicon%1.png").arg(icon_size);
         normal_icon_.addFile(icon_path);
-        icon_path = QStringLiteral(":/wsicon/wsiconcap%1.png").arg(icon_size);
+        icon_path = QString(":/wsicon/wsiconcap%1.png").arg(icon_size);
         capture_icon_.addFile(icon_path);
     }
-#endif
 }

@@ -51,14 +51,17 @@ bool ProtoNode::isChild() const
     return node_ && node_->parent;
 }
 
-ProtoNode* ProtoNode::parentNode() const
+ProtoNode* ProtoNode::parentNode()
 {
     return parent_;
 }
 
 QString ProtoNode::labelText() const
 {
-    field_info *fi = fieldInfo();
+    if (!node_) {
+        return QString();
+    }
+    field_info *fi = PNODE_FINFO(node_);
     if (!fi) {
         return QString();
     }
@@ -70,7 +73,7 @@ QString ProtoNode::labelText() const
     }
     else { /* no, make a generic label */
         char label_str[ITEM_LABEL_LENGTH];
-        proto_item_fill_label(fi, label_str, NULL);
+        proto_item_fill_label(fi, label_str);
         label = label_str;
     }
 
@@ -93,7 +96,7 @@ int ProtoNode::childrenCount() const
     return (int)m_children.count();
 }
 
-int ProtoNode::row() const
+int ProtoNode::row()
 {
     if (!isChild()) {
         return -1;
@@ -115,18 +118,7 @@ proto_node * ProtoNode::protoNode() const
     return node_;
 }
 
-field_info *ProtoNode::fieldInfo() const
-{
-    return node_ ? PNODE_FINFO(node_) : nullptr;
-}
-
-int ProtoNode::hfId() const
-{
-    const field_info *fi = fieldInfo();
-    return (fi && fi->hfinfo) ? fi->hfinfo->id : -1;
-}
-
-ProtoNode* ProtoNode::child(int row) const
+ProtoNode* ProtoNode::child(int row)
 {
     if (row < 0 || row >= m_children.size())
         return nullptr;

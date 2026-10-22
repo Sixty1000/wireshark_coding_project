@@ -38,9 +38,8 @@
 #include <epan/packet.h>
 #include <epan/etypes.h>
 #include <epan/expert.h>
+#include <epan/ppptypes.h>
 #include <epan/tfs.h>
-#include "packet-ppp.h"
-
 
 typedef enum {
     RT_CTL_INITIALIZATION,
@@ -636,6 +635,7 @@ do_routing_msg(
         my_offset, 2, ENC_LITTLE_ENDIAN);
     /* Skip the 1-byte reserved field */
     my_offset += 3;
+    remainder_count = tvb_reported_length_remaining(tvb, my_offset);
     do {
         /* if the remainder_count == 1, only the checksum remains */
         count = tvb_get_letohs(tvb, my_offset);
@@ -656,12 +656,9 @@ do_routing_msg(
         };
         my_checksum += (count + startid + rtginfo);
         my_offset += 6;
-    } while (tvb_reported_length_remaining(tvb, my_offset) > 6);
-    remainder_count = tvb_reported_length_remaining(tvb, my_offset);
-    if (remainder_count >= 2) {
-        /* Otherwise, no room for checksum, malformed, throw exception below. */
-        my_offset += remainder_count - 2;
-    }
+        remainder_count -= 6;
+    } while (remainder_count > 6);
+    my_offset += remainder_count - 2;
     /* fold 32 bit sum into 16 bits */
     while (my_checksum>>16)
         my_checksum = (my_checksum & 0xffff) + (my_checksum >> 16);

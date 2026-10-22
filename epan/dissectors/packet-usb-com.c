@@ -433,7 +433,7 @@ static int
 dissect_usb_com_descriptor(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
     urb_info_t *urb = (urb_info_t *)data;
-    unsigned offset = 0;
+    int offset = 0;
     uint8_t type, subtype;
     proto_tree *subtree;
     proto_tree *subtree_capabilities;
@@ -619,7 +619,7 @@ dissect_usb_com_control(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
     usb_trans_info_t *usb_trans_info;
     proto_tree *subtree;
     proto_item *ti;
-    unsigned offset = 0;
+    int offset = 0;
     bool is_request;
 
     if (tvb_reported_length(tvb) == 0) {
@@ -640,7 +640,7 @@ dissect_usb_com_control(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 
         is_request = (pinfo->srcport==NO_ENDPOINT);
         col_add_fstr(pinfo->cinfo, COL_INFO, "%s %s",
-        val_to_str_ext(pinfo->pool, usb_trans_info->setup.request, &usb_com_setup_request_vals_ext, "Unknown type %x"),
+        val_to_str_ext(usb_trans_info->setup.request, &usb_com_setup_request_vals_ext, "Unknown type %x"),
             is_request ? "Request" : "Response");
 
         if (is_request) {
@@ -847,7 +847,7 @@ dissect_usb_com_interrupt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
     proto_tree *subtree;
     proto_item *it;
     uint32_t notif_code;
-    unsigned offset = 0;
+    int offset = 0;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "USBCOM");
 
@@ -858,7 +858,7 @@ dissect_usb_com_interrupt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
     offset++;
     proto_tree_add_item_ret_uint(subtree, hf_usb_com_interrupt_notif_code, tvb, offset, 1, ENC_LITTLE_ENDIAN, &notif_code);
     offset++;
-    col_add_str(pinfo->cinfo, COL_INFO, val_to_str(pinfo->pool, notif_code, usb_com_interrupt_notif_code_vals, "Unknown type %x"));
+    col_add_str(pinfo->cinfo, COL_INFO, val_to_str(notif_code, usb_com_interrupt_notif_code_vals, "Unknown type %x"));
     switch (notif_code) {
         case NETWORK_CONNECTION:
             proto_tree_add_item(subtree, hf_usb_com_interrupt_value_nw_conn, tvb, offset, 2, ENC_LITTLE_ENDIAN);
@@ -1310,7 +1310,7 @@ proto_register_usb_com(void)
               NULL, 0, NULL, HFILL }},
     };
 
-    static int *usb_com_ett[] = {
+    static int *usb_com_subtrees[] = {
         &ett_usb_com,
         &ett_usb_com_capabilities,
         &ett_usb_com_bitmap,
@@ -1328,7 +1328,7 @@ proto_register_usb_com(void)
 
     proto_usb_com = proto_register_protocol("USB Communications and CDC Control", "USBCOM", "usbcom");
     proto_register_field_array(proto_usb_com, hf, array_length(hf));
-    proto_register_subtree_array(usb_com_ett, array_length(usb_com_ett));
+    proto_register_subtree_array(usb_com_subtrees, array_length(usb_com_subtrees));
 
     usb_com_descriptor_handle = register_dissector("usbcom.descriptor", dissect_usb_com_descriptor, proto_usb_com);
     usb_com_control_handle = register_dissector("usbcom.control", dissect_usb_com_control, proto_usb_com);

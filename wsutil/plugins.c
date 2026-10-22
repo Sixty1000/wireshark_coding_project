@@ -26,10 +26,6 @@
 #include <wsutil/report_message.h>
 #include <wsutil/wslog.h>
 
-#ifdef HAVE_VALGRIND_H
-#include <valgrind/valgrind.h>
-#endif
-
 typedef struct _plugin {
     GModule        *handle;       /* handle returned by g_module_open */
     char           *name;         /* plugin name */
@@ -40,7 +36,6 @@ typedef struct _plugin {
 #define TYPE_DIR_EPAN       "epan"
 #define TYPE_DIR_WIRETAP    "wiretap"
 #define TYPE_DIR_CODECS     "codecs"
-#define TYPE_DIR_UI         "ui"
 
 static GSList *plugins_module_list;
 
@@ -55,8 +50,6 @@ type_to_dir(plugin_type_e type)
         return TYPE_DIR_WIRETAP;
     case WS_PLUGIN_CODEC:
         return TYPE_DIR_CODECS;
-    case WS_PLUGIN_UI:
-        return TYPE_DIR_UI;
     default:
         ws_error("Unknown plugin type: %u. Aborting.", (unsigned) type);
         break;
@@ -81,8 +74,6 @@ flags_to_str(uint32_t flags)
         return "tap listener";
     else if (flags & WS_PLUGIN_DESC_DFILTER)
         return "dfilter";
-    else if (flags & WS_PLUGIN_DESC_UI)
-        return "ui";
     else
         return "unknown";
 }
@@ -136,12 +127,6 @@ pass_plugin_version_compatibility(GModule *handle, const char *name)
 #define MODULE_SUFFIX ".so"
 #endif
 
-bool
-is_plugin_filename(const char *filename) {
-    // Should this be case-insensitive, at least on Windows?
-    return g_str_has_suffix(filename, MODULE_SUFFIX);
-}
-
 static void
 scan_plugins_dir(GHashTable *plugins_module, const char *dirpath, plugin_type_e type, bool append_type)
 {
@@ -170,7 +155,7 @@ scan_plugins_dir(GHashTable *plugins_module, const char *dirpath, plugin_type_e 
 
     while ((name = g_dir_read_name(dir)) != NULL) {
         /* Skip anything but files with .dll or .so. */
-        if (!is_plugin_filename(name))
+        if (!g_str_has_suffix(name, MODULE_SUFFIX))
             continue;
 
         /*
@@ -237,13 +222,6 @@ DIAG_ON_PEDANTIC
         g_hash_table_replace(plugins_module, new_plug->name, new_plug);
         ws_info("Registered plugin: %s (%s)", new_plug->name, plugin_file);
         g_free(plugin_file);
-#if defined (ENABLE_ASAN) || defined (ENABLE_LSAN)
-        g_module_make_resident(handle);
-#elif defined(HAVE_VALGRIND_H)
-        // https://valgrind.org/docs/manual/manual-core-adv.html
-        if (RUNNING_ON_VALGRIND)
-            g_module_make_resident(handle);
-#endif
     }
     ws_dir_close(dir);
     g_free(plugin_folder);
@@ -253,7 +231,7 @@ DIAG_ON_PEDANTIC
  * Scan for plugins.
  */
 plugins_t *
-plugins_init(plugin_type_e type, const char* app_env_var_prefix)
+plugins_init(plugin_type_e type)
 {
     if (!g_module_supported())
         return NULL; /* nothing to do */
@@ -263,7 +241,7 @@ plugins_init(plugin_type_e type, const char* app_env_var_prefix)
     /*
      * Scan the global plugin directory.
      */
-    scan_plugins_dir(plugins_module, get_plugins_dir_with_version(app_env_var_prefix), type, true);
+    scan_plugins_dir(plugins_module, get_plugins_dir_with_version(), type, true);
 
     /*
      * If the program wasn't started with special privileges,
@@ -273,8 +251,8 @@ plugins_init(plugin_type_e type, const char* app_env_var_prefix)
      * if we need privileges to start capturing, we'd need to
      * reclaim them before each time we start capturing.)
      */
-    if (!started_with_special_privs() && !files_identical(get_plugins_dir_with_version(app_env_var_prefix), get_plugins_pers_dir_with_version(app_env_var_prefix))) {
-        scan_plugins_dir(plugins_module, get_plugins_pers_dir_with_version(app_env_var_prefix), type, true);
+    if (!started_with_special_privs()) {
+        scan_plugins_dir(plugins_module, get_plugins_pers_dir_with_version(), type, true);
     }
 
     plugins_module_list = g_slist_prepend(plugins_module_list, plugins_module);

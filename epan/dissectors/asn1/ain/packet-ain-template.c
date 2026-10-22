@@ -18,7 +18,6 @@
 #include <epan/oids.h>
 #include <epan/asn1.h>
 #include <epan/expert.h>
-#include <epan/tfs.h>
 #include <wsutil/array.h>
 
 #include "packet-ber.h"
@@ -33,6 +32,10 @@
  */
 #pragma GCC diagnostic ignored "-Wunused-function"
 #endif
+
+#define PNAME  "Advanced Intelligent Network"
+#define PSNAME "AIN"
+#define PFNAME "ain"
 
 void proto_register_ain(void);
 void proto_reg_handoff_ain(void);
@@ -83,9 +86,9 @@ static int ain_opcode_type;
 #define AIN_OPCODE_REJECT        4
 
 /* Forward declarations */
-static unsigned dissect_invokeData(proto_tree *tree, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx _U_);
-static unsigned dissect_returnResultData(proto_tree *tree, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx _U_);
-static unsigned dissect_returnErrorData(proto_tree *tree, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx);
+static int dissect_invokeData(proto_tree *tree, tvbuff_t *tvb, int offset, asn1_ctx_t *actx _U_);
+static int dissect_returnResultData(proto_tree *tree, tvbuff_t *tvb, int offset, asn1_ctx_t *actx _U_);
+static int dissect_returnErrorData(proto_tree *tree, tvbuff_t *tvb, int offset, asn1_ctx_t *actx);
 
 static const value_string ain_np_vals[] = {
     {   0, "Unknown or not applicable"},
@@ -159,22 +162,22 @@ dissect_ain(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void *da
     case 1:
         opcode = p_private_tcap->d.OperationCode_private;
         /*ansi_map_is_invoke = true;*/
-        col_add_fstr(pinfo->cinfo, COL_INFO, "%s Invoke ", val_to_str(pinfo->pool, opcode, ain_opr_code_strings, "Unknown AIN PDU (%u)"));
-        proto_item_append_text(p_private_tcap->d.OperationCode_item, " %s", val_to_str(pinfo->pool, opcode, ain_opr_code_strings, "Unknown AIN PDU (%u)"));
+        col_add_fstr(pinfo->cinfo, COL_INFO, "%s Invoke ", val_to_str(opcode, ain_opr_code_strings, "Unknown AIN PDU (%u)"));
+        proto_item_append_text(p_private_tcap->d.OperationCode_item, " %s", val_to_str(opcode, ain_opr_code_strings, "Unknown AIN PDU (%u)"));
         dissect_invokeData(ain_tree, tvb, 0, &asn1_ctx);
         /*update_saved_invokedata(pinfo, p_private_tcap);*/
         break;
     //case 2:
     //    opcode = find_saved_invokedata(&asn1_ctx, p_private_tcap);
-    //    col_add_fstr(pinfo->cinfo, COL_INFO, "%s ReturnResult ", val_to_str_ext(pinfo->pool, opcode, &ansi_map_opr_code_strings_ext, "Unknown ANSI-MAP PDU (%u)"));
-    //    proto_item_append_text(p_private_tcap->d.OperationCode_item, " %s", val_to_str_ext(pinfo->pool, opcode, &ansi_map_opr_code_strings_ext, "Unknown ANSI-MAP PDU (%u)"));
+    //    col_add_fstr(pinfo->cinfo, COL_INFO, "%s ReturnResult ", val_to_str_ext(opcode, &ansi_map_opr_code_strings_ext, "Unknown ANSI-MAP PDU (%u)"));
+    //    proto_item_append_text(p_private_tcap->d.OperationCode_item, " %s", val_to_str_ext(opcode, &ansi_map_opr_code_strings_ext, "Unknown ANSI-MAP PDU (%u)"));
     //    dissect_returnData(ain_tree, tvb, 0, &asn1_ctx);
     //    break;
     case 3:
-        col_add_fstr(pinfo->cinfo, COL_INFO, "%s ReturnError ", val_to_str(pinfo->pool, opcode, ain_opr_code_strings, "Unknown AIN PDU (%u)"));
+        col_add_fstr(pinfo->cinfo, COL_INFO, "%s ReturnError ", val_to_str(opcode, ain_opr_code_strings, "Unknown AIN PDU (%u)"));
         break;
     case 4:
-        col_add_fstr(pinfo->cinfo, COL_INFO, "%s Reject ", val_to_str(pinfo->pool, opcode, ain_opr_code_strings, "Unknown AIN PDU (%u)"));
+        col_add_fstr(pinfo->cinfo, COL_INFO, "%s Reject ", val_to_str(opcode, ain_opr_code_strings, "Unknown AIN PDU (%u)"));
         break;
     default:
         /* Must be Invoke ReturnResult ReturnError or Reject */
@@ -255,13 +258,13 @@ void proto_register_ain(void) {
     static ei_register_info ei[] = {
         { &ei_ain_unknown_invokeData,{ "ain.unknown.invokeData", PI_MALFORMED, PI_WARN, "Unknown invokeData", EXPFILL } },
         { &ei_ain_unknown_returnResultData,{ "ain.unknown.returnResultData", PI_MALFORMED, PI_WARN, "Unknown returnResultData", EXPFILL } },
-        { &ei_ain_unknown_returnErrorData,{ "ain.unknown.returnErrorData", PI_MALFORMED, PI_WARN, "Unknown returnErrorData", EXPFILL } },
+        { &ei_ain_unknown_returnErrorData,{ "ain.unknown.returnErrorData", PI_MALFORMED, PI_WARN, "Unknown returnResultData", EXPFILL } },
     };
 
     expert_module_t* expert_ain;
 
     /* Register protocol */
-    proto_ain = proto_register_protocol("Advanced Intelligent Network", "AIN", "ain");
+    proto_ain = proto_register_protocol(PNAME, PSNAME, PFNAME);
     ain_handle = register_dissector("ain", dissect_ain, proto_ain);
     /* Register fields and subtrees */
     proto_register_field_array(proto_ain, hf, array_length(hf));

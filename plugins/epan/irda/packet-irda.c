@@ -22,12 +22,10 @@
 #include <epan/to_str.h>
 #include <epan/strutil.h>
 #include <epan/conversation.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
+#include <epan/xdlc.h>
 #include <wiretap/wtap.h>
 
 #include <epan/dissectors/packet-sll.h>
-#include <epan/dissectors/packet-xdlc.h>
 #include "irda-appl.h"
 
 /*
@@ -65,7 +63,7 @@
 
 /*
  * XXX - the IrDA spec gives XID as 0x2c; HDLC (and other HDLC-derived
- * protocols) use 0xAC.
+ * protocolc) use 0xAC.
  */
 #define IRDA_XID_CMD   0x2c /* Exchange Station Identification */
 
@@ -571,7 +569,7 @@ static void dissect_iap_request(tvbuff_t* tvb, packet_info* pinfo, proto_tree* r
             if (conv)
             {
                 iap_conv = (iap_conversation_t*)conversation_get_proto_data(conv, proto_iap);
-                while (iap_conv)
+                while (1)
                 {
                     if (iap_conv->iap_query_frame == pinfo->num)
                     {
@@ -580,7 +578,7 @@ static void dissect_iap_request(tvbuff_t* tvb, packet_info* pinfo, proto_tree* r
                     }
                     if (iap_conv->pnext == NULL)
                     {
-                        iap_conv->pnext = wmem_new0(wmem_file_scope(), iap_conversation_t);
+                        iap_conv->pnext = wmem_new(wmem_file_scope(), iap_conversation_t);
                         iap_conv = iap_conv->pnext;
                         break;
                     }
@@ -590,20 +588,22 @@ static void dissect_iap_request(tvbuff_t* tvb, packet_info* pinfo, proto_tree* r
             else
             {
                 conv = conversation_new(pinfo->num, &srcaddr, &destaddr, CONVERSATION_NONE, pinfo->srcport, pinfo->destport, 0);
-                iap_conv = wmem_new0(wmem_file_scope(), iap_conversation_t);
+                iap_conv = wmem_new(wmem_file_scope(), iap_conversation_t);
                 conversation_add_proto_data(conv, proto_iap, (void*)iap_conv);
             }
             if (iap_conv)
             {
+                iap_conv->pnext           = NULL;
                 iap_conv->iap_query_frame = pinfo->num;
+                iap_conv->pattr_dissector = NULL;
             }
 
             char   *class_name = (char *) tvb_get_string_enc(pinfo->pool, tvb, offset + 1 + 1, clen, ENC_ASCII|ENC_NA);
             char   *attr_name = (char *) tvb_get_string_enc(pinfo->pool, tvb, offset + 1 + 1 + clen + 1, alen, ENC_ASCII|ENC_NA);
 
             col_add_fstr(pinfo->cinfo, COL_INFO, "GetValueByClass: \"%s\" \"%s\"",
-                format_text(pinfo->pool, class_name, strlen(class_name)),
-                format_text(pinfo->pool, attr_name, strlen(attr_name)));
+                format_text(pinfo->pool, (unsigned char *) class_name, strlen(class_name)),
+                format_text(pinfo->pool, (unsigned char *) attr_name, strlen(attr_name)));
 
             /* Dissect IAP query if it is new */
             if (iap_conv)
@@ -733,7 +733,7 @@ static void dissect_iap_result(tvbuff_t* tvb, packet_info* pinfo, proto_tree* ro
     }
 
     col_set_str(pinfo->cinfo, COL_INFO, "Result: ");
-    col_append_str(pinfo->cinfo, COL_INFO, val_to_str(pinfo->pool, retcode, iap_return_vals, "0x%02X"));
+    col_append_str(pinfo->cinfo, COL_INFO, val_to_str(retcode, iap_return_vals, "0x%02X"));
 
     switch (op)
     {
@@ -792,7 +792,9 @@ static void dissect_iap_result(tvbuff_t* tvb, packet_info* pinfo, proto_tree* ro
             case GET_VALUE_BY_CLASS:
                 if (retcode == 0)
                 {
-                    proto_tree_add_item_ret_uint(tree, hf_iap_list_len, tvb, offset, 2, ENC_BIG_ENDIAN, &list_len);
+                    list_len = tvb_get_ntohs(tvb, offset);
+
+                    proto_tree_add_item(tree, hf_iap_list_len, tvb, offset, 2, ENC_BIG_ENDIAN);
                     offset += 2;
 
                     while ((offset < len) && (n < list_len))
@@ -818,7 +820,7 @@ static void dissect_iap_result(tvbuff_t* tvb, packet_info* pinfo, proto_tree* ro
 
                         ti = proto_tree_add_item(tree, hf_iap_list_entry, tvb, offset, 2 + 1 + attr_len, ENC_NA);
                         proto_item_append_text(ti, "%d", n + 1);
-                        entry_tree = proto_item_add_subtree(ti, ett_iap_entry[MIN(n, MAX_IAP_ENTRIES - 1)]);
+                        entry_tree = proto_item_add_subtree(ti, ett_iap_entry[n]);
 
                         proto_tree_add_item(entry_tree, hf_iap_obj_id, tvb, offset, 2, ENC_BIG_ENDIAN);
                         offset += 2;
@@ -1059,12 +1061,12 @@ static void dissect_irlmp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* root, u
         opcode = tvb_get_uint8(tvb, offset+2);
 
         col_add_fstr(pinfo->cinfo, COL_INFO, "%d > %d, ", slsap, dlsap);
-        col_append_str(pinfo->cinfo, COL_INFO, val_to_str(pinfo->pool, opcode, lmp_opcode_vals, "0x%02X"));
+        col_append_str(pinfo->cinfo, COL_INFO, val_to_str(opcode, lmp_opcode_vals, "0x%02X"));
         if ((opcode == ACCESSMODE_CMD) || (opcode == ACCESSMODE_CNF))
         {
             col_append_str(pinfo->cinfo, COL_INFO, " (");
             col_append_str(pinfo->cinfo, COL_INFO,
-                           val_to_str(pinfo->pool, tvb_get_uint8(tvb, offset+4), lmp_mode_vals, "0x%02X"));
+                           val_to_str(tvb_get_uint8(tvb, offset+4), lmp_mode_vals, "0x%02X"));
             col_append_str(pinfo->cinfo, COL_INFO, ")");
         }
     }
@@ -1218,7 +1220,7 @@ void add_lmp_conversation(packet_info* pinfo, uint8_t dlsap, bool ttp, dissector
     if (conv)
     {
         lmp_conv = (lmp_conversation_t*)conversation_get_proto_data(conv, proto_irlmp);
-        while (lmp_conv)
+        while (1)
         {
             /* Does entry already exist? */
             if (lmp_conv->iap_result_frame == pinfo->num)
@@ -1226,7 +1228,7 @@ void add_lmp_conversation(packet_info* pinfo, uint8_t dlsap, bool ttp, dissector
 
             if (lmp_conv->pnext == NULL)
             {
-                lmp_conv->pnext = wmem_new0(wmem_file_scope(), lmp_conversation_t);
+                lmp_conv->pnext = wmem_new(wmem_file_scope(), lmp_conversation_t);
                 lmp_conv = lmp_conv->pnext;
                 break;
             }
@@ -1236,10 +1238,11 @@ void add_lmp_conversation(packet_info* pinfo, uint8_t dlsap, bool ttp, dissector
     else
     {
         conv = conversation_new(pinfo->num, &destaddr, &srcaddr, CONVERSATION_NONE, dlsap, 0, NO_PORT2);
-        lmp_conv = wmem_new0(wmem_file_scope(), lmp_conversation_t);
+        lmp_conv = wmem_new(wmem_file_scope(), lmp_conversation_t);
         conversation_add_proto_data(conv, proto_irlmp, (void*)lmp_conv);
     }
 
+    lmp_conv->pnext            = NULL;
     lmp_conv->iap_result_frame = pinfo->num;
     lmp_conv->ttp              = ttp;
     lmp_conv->dissector        = dissector;
@@ -1266,7 +1269,7 @@ static unsigned dissect_negotiation(tvbuff_t* tvb, proto_tree* tree, unsigned of
         if (tree)
         {
             ti = proto_tree_add_item(tree, hf_negotiation_param, tvb, offset, p_len + 2, ENC_NA);
-            p_tree = proto_item_add_subtree(ti, ett_param[MIN(n, MAX_PARAMETERS - 1)]);
+            p_tree = proto_item_add_subtree(ti, ett_param[n]);
 
             pv = tvb_get_uint8(tvb, offset+2);
             buf[0] = 0;
@@ -1676,7 +1679,7 @@ static void dissect_xid(tvbuff_t* tvb, packet_info* pinfo, proto_tree* root, pro
                 if (have_encoding)
                 {
                     name = (char *) tvb_get_string_enc(pinfo->pool, tvb, offset, name_len, encoding);
-                    col_append_fstr(pinfo->cinfo, COL_INFO, ", \"%s\"", format_text(pinfo->pool, name, strlen(name)));
+                    col_append_fstr(pinfo->cinfo, COL_INFO, ", \"%s\"", format_text(pinfo->pool, (unsigned char *) name, strlen(name)));
                     if (root)
                         proto_tree_add_item(lmp_tree, hf_lmp_xid_name, tvb, offset,
                                             -1, encoding);
@@ -1718,7 +1721,7 @@ static void dissect_log(tvbuff_t* tvb, packet_info* pinfo, proto_tree* root)
         else if (length > 1 && buf[length-2] == '\n')
             buf[length-2] = 0;
 
-        col_add_str(pinfo->cinfo, COL_INFO, format_text(pinfo->pool, buf, strlen(buf)));
+        col_add_str(pinfo->cinfo, COL_INFO, format_text(pinfo->pool, (unsigned char *) buf, strlen(buf)));
     }
 
     if (root)
@@ -1729,7 +1732,7 @@ static void dissect_log(tvbuff_t* tvb, packet_info* pinfo, proto_tree* root)
         if (pinfo->pseudo_header->irda.pkttype == IRDA_MISSED_MSG)
             proto_tree_add_item(tree, hf_log_missed, tvb, 0, 0, ENC_NA);
         else
-            proto_tree_add_item(tree, hf_log_msg, tvb, 0, -1, ENC_ASCII);
+            proto_tree_add_item(tree, hf_log_msg, tvb, 0, -1, ENC_ASCII|ENC_NA);
     }
 }
 

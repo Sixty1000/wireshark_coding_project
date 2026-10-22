@@ -34,9 +34,6 @@
 /* From IEEE 802.11 2016 Chapter 12.5.3.3.3 and 12.5.5.3.3 Construct AAD */
 void dot11decrypt_construct_aad(
     PDOT11DECRYPT_MAC_FRAME wh,
-    const uint8_t *A1,
-    const uint8_t *A2,
-    const uint8_t *A3,
     uint8_t *aad,
     size_t *aad_len)
 {
@@ -62,9 +59,9 @@ void dot11decrypt_construct_aad(
     } else {
         aad[1] = (uint8_t)((wh->fc[1] & FC1_AAD_MASK) | 0x40);
     }
-    memcpy(aad + 2, A1, DOT11DECRYPT_MAC_LEN);
-    memcpy(aad + 8, A2, DOT11DECRYPT_MAC_LEN);
-    memcpy(aad + 14, A3, DOT11DECRYPT_MAC_LEN);
+    memcpy(aad + 2, (uint8_t *)wh->addr1, DOT11DECRYPT_MAC_LEN);
+    memcpy(aad + 8, (uint8_t *)wh->addr2, DOT11DECRYPT_MAC_LEN);
+    memcpy(aad + 14, (uint8_t *)wh->addr3, DOT11DECRYPT_MAC_LEN);
     aad[20] = (uint8_t)(wh->seq[0] & DOT11DECRYPT_SEQ_FRAG_MASK);
     aad[21] = 0; /* all bits masked */
 
@@ -122,7 +119,7 @@ dot11decrypt_prf(const uint8_t *key, size_t key_len,
                  uint8_t *output, size_t output_len)
 {
     uint8_t R[MAX_R_LEN]; /* Will hold "label || 0 || context || i" */
-    size_t label_len;
+    size_t label_len = strlen(label);
     uint8_t tmp[MAX_TMP_LEN];
     uint16_t hash_len = gcry_md_get_algo_dlen(hash_algo);
     size_t offset = 0;
@@ -130,8 +127,6 @@ dot11decrypt_prf(const uint8_t *key, size_t key_len,
     if (!key || !label || !context || !output) {
         return false;
     }
-
-    label_len = strlen(label);
     if (label_len + 1 + context_len + 1 > MAX_R_LEN ||
         output_len > 64) {
         ws_warning("Invalid input or output sizes");
@@ -180,7 +175,7 @@ dot11decrypt_kdf(const uint8_t *key, size_t key_len,
 {
     uint8_t R[MAX_R_LEN]; /* Will hold "i || Label || Context || Length" */
     uint8_t tmp[MAX_TMP_LEN];
-    size_t label_len;
+    size_t label_len = strlen(label);
     size_t hash_len = gcry_md_get_algo_dlen(hash_algo);
     size_t iterations = output_len * 8 / hash_len;
     uint16_t len_le = GUINT16_TO_LE(output_len * 8);
@@ -190,8 +185,6 @@ dot11decrypt_kdf(const uint8_t *key, size_t key_len,
     if (!key || !label || !context || !output) {
         return false;
     }
-
-    label_len = strlen(label);
     if (2 + label_len + context_len + 2 > MAX_R_LEN ||
         iterations * hash_len > MAX_TMP_LEN) {
         ws_warning("Invalid input sizes");

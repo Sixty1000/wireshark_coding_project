@@ -11,10 +11,6 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-/*
- * Up-to-date to draft-ietf-opsawg-pcapng-03
- */
-
 #include "config.h"
 
 #include <epan/packet.h>
@@ -24,13 +20,8 @@
 #include <epan/show_exception.h>
 #include <epan/addr_resolv.h>
 #include <epan/tfs.h>
-
 #include <wiretap/pcapng_module.h>
 #include <wiretap/secrets-types.h>
-
-#include <wsutil/array.h>
-#include <wsutil/str_util.h>
-#include <wsutil/ws_padding_to.h>
 
 #include "file-pcapng.h"
 #include "packet-pcap_pktdata.h"
@@ -41,15 +32,12 @@ static dissector_handle_t  pcap_pktdata_handle;
 
 static int hf_pcapng_block;
 
-static int hf_pcapng_block_offset;
 static int hf_pcapng_block_type;
 static int hf_pcapng_block_type_vendor;
 static int hf_pcapng_block_type_value;
 static int hf_pcapng_block_length;
 static int hf_pcapng_block_length_trailer;
 static int hf_pcapng_block_data;
-static int hf_pcapng_block_extraneous_data;
-static int hf_pcapng_block_extraneous_data_length;
 
 static int hf_pcapng_section_header_byte_order_magic;
 static int hf_pcapng_section_header_major_version;
@@ -79,8 +67,6 @@ static int hf_pcapng_option_data_ipv6_mask;
 static int hf_pcapng_option_data_mac_address;
 static int hf_pcapng_option_data_eui_address;
 static int hf_pcapng_option_data_interface_speed;
-static int hf_pcapng_option_data_interface_txspeed;
-static int hf_pcapng_option_data_interface_rxspeed;
 static int hf_pcapng_option_data_interface_timestamp_resolution;
 static int hf_pcapng_option_data_interface_timestamp_resolution_base;
 static int hf_pcapng_option_data_interface_timestamp_resolution_value;
@@ -91,11 +77,8 @@ static int hf_pcapng_option_data_interface_filter_bpf_program;
 static int hf_pcapng_option_data_interface_filter_unknown;
 static int hf_pcapng_option_data_interface_os;
 static int hf_pcapng_option_data_interface_hardware;
-static int hf_pcapng_option_data_interface_iana_tzname;
 static int hf_pcapng_option_data_interface_fcs_length;
 static int hf_pcapng_option_data_interface_timestamp_offset;
-static int hf_pcapng_option_data_proc_id;
-static int hf_pcapng_option_data_thread_id;
 static int hf_pcapng_option_data_packet_verdict_type;
 static int hf_pcapng_option_data_packet_verdict_data;
 static int hf_pcapng_option_data_packet_queue;
@@ -159,9 +142,9 @@ static int hf_pcapng_cb_data;
 static int hf_pcapng_cb_option_string;
 static int hf_pcapng_cb_option_data;
 
-static int hf_pcapng_option_data_packet_darwin_dpib_id;
+static int hf_pcapng_option_data_packet_darwin_dpeb_id;
 static int hf_pcapng_option_data_packet_darwin_svc_class;
-static int hf_pcapng_option_data_packet_darwin_edpib_id;
+static int hf_pcapng_option_data_packet_darwin_edpeb_id;
 static int hf_pcapng_option_data_packet_darwin_flags;
 static int hf_pcapng_option_data_packet_darwin_flags_reserved;
 static int hf_pcapng_option_data_packet_darwin_flags_wk;
@@ -177,9 +160,7 @@ static expert_field ei_block_length_below_block_minimum;
 static expert_field ei_block_length_below_block_content_length;
 static expert_field ei_block_length_not_multiple_of_4;
 static expert_field ei_block_lengths_dont_match;
-static expert_field ei_block_extraneous_data;
 static expert_field ei_invalid_option_length;
-static expert_field ei_option_length_too_large;
 static expert_field ei_invalid_record_length;
 static expert_field ei_missing_idb;
 
@@ -187,7 +168,6 @@ static int ett_pcapng;
 static int ett_pcapng_section_header_block;
 static int ett_pcapng_block_data;
 static int ett_pcapng_block_type;
-static int ett_pcapng_block_extraneous;
 static int ett_pcapng_options;
 static int ett_pcapng_option;
 static int ett_pcapng_records;
@@ -233,7 +213,6 @@ static int * const hfx_pcapng_option_data_packet_darwin_flags[] = {
 };
 
 static bool pref_dissect_next_layer;
-static bool pref_additional_block_info;
 
 static const value_string block_type_vals[] = {
     { BLOCK_TYPE_IDB,                       "Interface Description Block" },
@@ -246,8 +225,6 @@ static const value_string block_type_vals[] = {
     { BLOCK_TYPE_ARINC_429,                 "Arinc 429 in AFDX Encapsulation Information Block" },
     { BLOCK_TYPE_SYSTEMD_JOURNAL_EXPORT,    "systemd Journal Export Block" },
     { BLOCK_TYPE_DSB,                       "Decryption Secrets Block" },
-    { BLOCK_TYPE_HP_MIB,                    "Hone Project Machine Info Block" },
-    { BLOCK_TYPE_HP_CEB,                    "Hone Project Connection Event Block" },
     { BLOCK_TYPE_SYSDIG_MI,                 "Sysdig Machine Info Block" },
     { BLOCK_TYPE_SYSDIG_PL_V1,              "Sysdig Process List Block" },
     { BLOCK_TYPE_SYSDIG_FDL_V1,             "Sysdig File Descriptor List Block" },
@@ -280,44 +257,41 @@ static const value_string block_type_vals[] = {
 /* blockId-> local_block_callback_info_t* */
 static GHashTable *s_local_block_callback_table;
 
-#define OPTION_CODE_STD_OPTIONS \
-    { OPT_EOFOPT,       "End of Options" }, \
-    { OPT_COMMENT,      "Comment" }
-
 #define OPTION_CODE_CUSTOM_OPTIONS \
-    { OPT_CUSTOM_STR_COPY,      "Custom Option UTF-8 string which can be copied" }, \
-    { OPT_CUSTOM_BIN_COPY,      "Custom Option which can be copied" }, \
-    { OPT_CUSTOM_STR_NO_COPY,   "Custom Option UTF-8 string which should not be copied" }, \
-    { OPT_CUSTOM_BIN_NO_COPY,   "Custom Option which should not be copied" }
+    { 2988,  "Custom Option UTF-8 string which can be copied" }, \
+    { 2989,  "Custom Option which can be copied" }, \
+    { 19372, "Custom Option UTF-8 string which should not be copied" }, \
+    { 19373, "Custom Option which should not be copied" }
 
 static const value_string option_code_section_header_vals[] = {
-    OPTION_CODE_STD_OPTIONS,
-    { OPT_SHB_HARDWARE,  "Hardware Description" },
-    { OPT_SHB_OS,        "OS Description" },
-    { OPT_SHB_USERAPPL,  "User Application" },
+    { 0,  "End of Options" },
+    { 1,  "Comment" },
+
+    { 2,  "Hardware Description" },
+    { 3,  "OS Description" },
+    { 4,  "User Application" },
     OPTION_CODE_CUSTOM_OPTIONS,
     { 0, NULL }
 };
 
 static const value_string option_code_interface_description_vals[] = {
-    OPTION_CODE_STD_OPTIONS,
-    { OPT_IDB_NAME,         "Interface Name" },
-    { OPT_IDB_DESCRIPTION,  "Interface Description" },
-    { OPT_IDB_IP4ADDR,      "IPv4 Address" },
-    { OPT_IDB_IP6ADDR,      "IPv6 Address" },
-    { OPT_IDB_MACADDR,      "MAC Address" },
-    { OPT_IDB_EUIADDR,      "EUI Address" },
-    { OPT_IDB_SPEED,        "Speed" },
-    { OPT_IDB_TSRESOL,      "Timestamp Resolution" },
-    { OPT_IDB_TZONE,        "Timezone" },
-    { OPT_IDB_FILTER,       "Filter" },
-    { OPT_IDB_OS,           "OS" },
-    { OPT_IDB_FCSLEN,       "FCS Length" },
-    { OPT_IDB_TSOFFSET,     "Timestamp Offset" },
-    { OPT_IDB_HARDWARE,     "Hardware" },
-    { OPT_IDB_TXSPEED,      "Tx Speed" },
-    { OPT_IDB_RXSPEED,      "Rx Speed" },
-    { OPT_IDB_IANA_TZNAME,  "IANA TZ Name" },
+    { 0,  "End of Options" },
+    { 1,  "Comment" },
+
+    { 2,  "Interface Name" },
+    { 3,  "Interface Description" },
+    { 4,  "IPv4 Address" },
+    { 5,  "IPv6 Address" },
+    { 6,  "MAC Address" },
+    { 7,  "EUI Address" },
+    { 8,  "Speed" },
+    { 9,  "Timestamp Resolution" },
+    { 10, "Timezone" },
+    { 11, "Filter" },
+    { 12, "OS" },
+    { 13, "FCS Length" },
+    { 14, "Timestamp Offset" },
+    { 15, "Hardware" },
     OPTION_CODE_CUSTOM_OPTIONS,
     { 0, NULL }
 };
@@ -327,186 +301,158 @@ static const value_string option_code_interface_description_vals[] = {
  * Enhanced Packet Block (EPB) options for supporting Darwin process information
  *
  *    Enhanced Packet Blocks may be augmented with an Apple defined Darwin
- *    Process Info Block Id option (dpib_id) and / or an Effective Darwin
- *    Process Info Block Id option (edpib_id) that refer to particular
- *    Darwin processes via the supplied DPIB ID option payload value.
- *    There must be a Darwin Process Info Block (DPIB) for each Darwin process
- *    to which an augmented EPB references.  If the file does not contain any EPBs
- *    that contain any Darwin dpib_id or edpib_id options, then the file
- *    does not need to have any DPIBs.
+ *    process event block id option (dpeb_id) and / or an effective Darwin
+ *    process event block id option (edpeb_id) that refer to particular
+ *    Darwin processes via the supplied DPEB ID option payload value.  There
+ *    must be a Darwin Process Event Block for each Darwin process to which an
+ *    augmented EPB references.  If the file does not contain any EPBs that
+ *    contain any Darwin dpeb_id or edpeb_id options then the file does not need
+ *    to have any DPEBs.
  *
- *    A Darwin Process Info Block is valid only inside the section to which
- *    it belongs.  The structure of a Darwin Process Info Block is shown in
+ *    A Darwin Process Event Block is valid only inside the section to which
+ *    it belongs.  The structure of a Darwin Process Event Block is shown in
  *    Figure XXX.1 below.
  *
  *    An Enhanced Packet Block (EPB) may be augmented with any or all of the
  *    following block options for Darwin process information:
  *
- *          +--------------------+-------+--------+-------------------+
- *          | Name               | Code  | Length | Multiple allowed? |
- *          +--------------------+-------+--------+-------------------+
- *          | darwin_dpib_id     | 32769 | 4      | no                |
- *          | darwin_svc_class   | 32770 | 4      | no                |
- *          | darwin_edpib_id    | 32771 | 4      | no                |
- *          | darwin_flags       | 32772 | 4      | no                |
- *          | darwin_flow_id     | 32773 | 4      | no                |
- *          | darwin_trace_tag   | 32774 | 4      | no                |
- *          | darwin_drop_reason | 32775 | 4      | no                |
- *          | darwin_drop_line   | 32776 | 4      | no                |
- *          | darwin_drop_func   | 32773 | var    | no                |
- *          | darwin_comp_gencnt | 32773 | 4      | no                |
- *          +--------------------+------+---------+-------------------+
+ *          +------------------+-------+--------+-------------------+
+ *          | Name             | Code  | Length | Multiple allowed? |
+ *          +------------------+-------+--------+-------------------+
+ *          | darwin_dpeb_id   | 32769 | 4      | no?               |
+ *          | darwin_svc_class | 32770 | 4      | no?               |
+ *          | darwin_edpeb_id  | 32771 | 4      | no?               |
+ *          | darwin_flags     | 32772 | 4      | no?               |
+ *          | darwin_flow_id   | 32773 | 4      | no?               |
+ *          +------------------+------+---------+-------------------+
  *
  *           Table XXX.2: Darwin options for Enhanced Packet Blocks
  *
- *    darwin_dpib_id:
- *            The darwin_dpib_id option specifies the Darwin Process Info
+ *    darwin_dpeb_id:
+ *            The darwin_dpeb_id option specifies the Darwin Process Event
  *            Block ID for the process (proc) this packet is associated with;
- *            the correct DPIB will be the one whose DPIB ID (within the
+ *            the correct DPEB will be the one whose DPEB ID (within the
  *            current Section of the file) is identified by the same number
- *            (see Section XXX.X) of this field.  The DPIB ID MUST be valid,
- *            which means that a matching Darwin Process Info Block MUST
+ *            (see Section XXX.X) of this field.  The DPEB ID MUST be valid,
+ *            which means that a matching Darwin Process Event Block MUST
  *            exist.
  *
- *    darwin_edpib_id:
- *            The darwin_edpib_id option specifies the Darwin Process Info
- *            Block ID for the effective process (eproc) this packet is
- *            associated with; the correct DPIB will be the one whose DPIB
- *            ID (within the current Section of the file) is identified by
- *            the same number (see Section XXX.X) of this field.  The DPIB
- *            ID MUST be valid, which means that a matching Darwin Process
- *            Info Block MUST exist.
- *
- *    darwin_svc_class:
+ *    darwin_srv_class:
  *            The darwin_svc_class option is a number that maps to a
  *            specific Darwin Service Class mnemonic that the packet is
- *            associated with. The Darwin Service Class is an internal
- *            enumeration that generally follows the guidelines in
- *            https://www.rfc-editor.org/rfc/rfc4594
+ *            associated with.
  *
- *            The following Darwin Service Class values are defined:
+ *    The following Darwin Service Class values are defined:
  *
- *              +-------+-----------+--------------------------------------------+
- *              | Value |  Mnemonic | Notes                                      |
- *              +-------+-----------+--------------------------------------------+
- *              | 0     | BE        | rfc 4594 section 4.9: Best Effort, User    |
- *              | 100   | BE_SYS    | rfc 4594 section 4.10: Best Effort, System |
- *              | 200   | BK        | rfc 4594 section 4.8: Bulk                 |
- *              | 300   | RD        | rfc 4594 section 4.7: Low Latency          |
- *              | 400   | OAM       | rfc 4594 section 3.3: Ops, Admin, Mgmt     |
- *              | 500   | AV        | rfc 4594 section 4.5: Streaming            |
- *              | 600   | RV        | rfc 4594 section 4.4: Interactive          |
- *              | 700   | VI        | rfc 4594 section 4.3: Conferencing         |
- *              | 800   | VO        | rfc 4594 section 4.1: Telephony            |
- *              | 900   | CTL       | rfc 4594 section 3.2: Network Control      |
- *              +-------+-----------+--------------------------------------------+
+ *              +---------------------+------------------------+
+ *              | Service Class Value | Service Class Mnemonic |
+ *              +---------------------+------------------------+
+ *              | 0                   | BE                     |
+ *              | 100                 | BK_SYS                 |
+ *              | 200                 | BK                     |
+ *              | 300                 | RD                     |
+ *              | 400                 | OAM                    |
+ *              | 500                 | AV                     |
+ *              | 600                 | RV                     |
+ *              | 700                 | VI                     |
+ *              | 800                 | VO                     |
+ *              | 900                 | CTL                    |
+ *              +---------------------+------------------------+
  *
  *              Table XXX.3: Darwin Service Class Option Values
+ *
+ *    darwin_edpeb_id:
+ *            The darwin_edpeb_id option specifies the Darwin Process Event
+ *            Block ID for the effective process (eproc) this packet is
+ *            associated with; the correct DPEB will be the one whose DPEB
+ *            ID (within the current Section of the file) is identified by
+ *            the same number (see Section XXX.X) of this field.  The DPEB
+ *            ID MUST be valid, which means that a matching Darwin Process
+ *            Event Block MUST exist.
  *
  *    darwin_flags:
  *            The darwin_flags option is a 32 bit field for indicating
  *            various Darwin specific flags.
  *
- *            The following Darwin Flags are defined:
+ *    The following Darwin Flags are defined:
  *
- *              +------------+------+------------------------------------------------+
- *              | Mask       | Flag | Notes (direction)                              |
- *              +------------+------+------------------------------------------------+
- *              | 0x00000020 |  wk  | Wake Packet: Will wake the OS from sleep (In)  |
- *              | 0x00000010 |  ch  | Channel: User-space networking (In, Out)       |
- *              | 0x00000008 |  so  | Socket: Kernel-space networking (In, Out)      |
- *              | 0x00000004 |  re  | RExmit: Detected retransmit (In)               |
- *              | 0x00000002 |  ka  | Keep Alive: Keep Alive (Out)                   |
- *              | 0x00000001 |  nf  | New Flow: first packet on a new flow (In, Out) |
- *              +------------+------+------------------------------------------------+
+ *                          +-------------------------+
+ *                          |     FLAG_MASK    | Flag |
+ *                          +-------------------------+
+ *                          |    0x00000020    |  wk  |
+ *                          |    0x00000010    |  ch  |
+ *                          |    0x00000008    |  so  |
+ *                          |    0x00000004    |  re  |
+ *                          |    0x00000002    |  ka  |
+ *                          |    0x00000001    |  nf  |
+ *                          +-------------------------+
  *
- *              Table XXX.4: Darwin Flags
+ *                           Table XXX.4: Darwin Flags
  *
+ *      wk = Wake Packet
+ *      ch = Nexus Channel
+ *      so = Socket
+ *      re = ReXmit
+ *      ka = Keep Alive
+ *      nf = New Flow
  *
  *    darwin_flow_id:
  *            The darwin_flow_id option is a 32 bit value that
- *            identifies a specific flow (5-tuple) this packet belongs to.
- *
- *    darwin_trace_tag:
- *            The darwin_trace_tag option is a 32 bit value that
- *            identifies a random tracing tag. NOTE: same tracing tag
- *            value can be shared by multiple flows (see `darwin_flow_id` above)
- *
- *    darwin_drop_reason:
- *            The darwin_drop_reason option is a 32 bit value that
- *            is specific to the `droptap` pseudo interface.
- *            This option identifies the reason for dropping the packet.
- *
- *    darwin_drop_line:
- *            The darwin_drop_line option is a 32 bit value that
- *            is specific to the `droptap` pseudo interface.
- *            This option identifies the approximate source code
- *            location of the packet processing logic that is responsible
- *            for dropping the packet.
- *
- *    darwin_drop_func:
- *            The darwin_drop_func option is a NUL-terminated value that
- *            is specific to the `droptap` pseudo interface.
- *            This option identifies the function name that is responsible
- *            for dropping the packet.
- *
- *    darwin_comp_gencnt:
- *            The darwin_comp_gencnt option is a 32 bit value that
- *            specifies the generation count, which is used for
- *            traffic compression.
+ *            identifies a specific flow this packet is a part of.
  */
 
 
 static const value_string option_code_enhanced_packet_vals[] = {
-    OPTION_CODE_STD_OPTIONS,
-    { OPT_PKT_FLAGS,        "Flags" },
-    { OPT_PKT_HASH,         "Hash" },
-    { OPT_PKT_DROPCOUNT,    "Drop Count" },
-    { OPT_PKT_PACKETID,     "Packet ID" },
-    { OPT_PKT_QUEUE,        "Queue" },
-    { OPT_PKT_VERDICT,      "Verdict" },
-    { OPT_PKT_PROCIDTHRDID, "Process ID thread ID" },
-    OPTION_CODE_CUSTOM_OPTIONS,
-    { OPT_PKT_DARWIN_PIB_ID,            "Darwin DPIB ID" },
-    { OPT_PKT_DARWIN_SVC_CODE,          "Darwin Service Class" },
-    { OPT_PKT_DARWIN_EFFECTIVE_PIB_ID,  "Darwin Effective DPIB ID" },
-    { OPT_PKT_DARWIN_MD_FLAGS,          "Darwin Flags" },
-    { OPT_PKT_DARWIN_FLOW_ID,           "Darwin Flow ID" },
-    { OPT_PKT_DARWIN_TRACE_TAG,         "Darwin Trace tag" },
-    { OPT_PKT_DARWIN_DROP_REASON,       "Darwin Drop Reason" },
-    { OPT_PKT_DARWIN_DROP_LINE,         "Darwin Drop Line" },
-    { OPT_PKT_DARWIN_DROP_FUNC,         "Darwin Drop Function" },
-    { OPT_PKT_DARWIN_COMP_GENCNT,       "Darwin Comp Gen Count" },
+    { 0,  "End of Options" },
+    { 1,  "Comment" },
 
+    { 2,  "Flags" },
+    { 3,  "Hash" },
+    { 4,  "Drop Count" },
+    { 5,  "Packet ID" },
+    { 6,  "Queue" },
+    { 7,  "Verdict" },
+    OPTION_CODE_CUSTOM_OPTIONS,
+    { 32769,   "Darwin DPEB ID" },
+    { 32770,   "Darwin Service Class" },
+    { 32771,   "Darwin Effective DPEB ID" },
+    { 32772,   "Darwin Flags" },
+    { 32773,   "Darwin Flow ID" },
     { 0, NULL }
 };
 
 static const value_string option_code_packet_vals[] = {
-    OPTION_CODE_STD_OPTIONS,
-    { OPT_PKT_FLAGS,    "Flags" },
-    { OPT_PKT_HASH,     "Hash" },
+    { 0,  "End of Options" },
+    { 1,  "Comment" },
+
+    { 2,  "Flags" },
+    { 3,  "Hash" },
     OPTION_CODE_CUSTOM_OPTIONS,
     { 0, NULL }
 };
 
 static const value_string option_code_name_resolution_vals[] = {
-    OPTION_CODE_STD_OPTIONS,
-    { OPT_NS_DNSNAME,       "DNS Name" },
-    { OPT_NS_DNSIP4ADDR,    "DNS IPv4 Address" },
-    { OPT_NS_DNSIP6ADDR,    "DNS IPv6 Address" },
+    { 0,  "End of Options" },
+    { 1,  "Comment" },
+
+    { 2,  "DNS Name" },
+    { 3,  "DNS IPv4 Address" },
+    { 4,  "DNS IPv6 Address" },
     OPTION_CODE_CUSTOM_OPTIONS,
     { 0, NULL }
 };
 
 static const value_string option_code_interface_statistics_vals[] = {
-    OPTION_CODE_STD_OPTIONS,
-    { OPT_ISB_STARTTIME,    "Start Time" },
-    { OPT_ISB_ENDTIME,      "End Time" },
-    { OPT_ISB_IFRECV,       "Number of Received Packets" },
-    { OPT_ISB_IFDROP,       "Number of Dropped Packets" },
-    { OPT_ISB_FILTERACCEPT, "Number of Accepted Packets" },
-    { OPT_ISB_OSDROP,       "Number of Packets Dropped by OS" },
-    { OPT_ISB_USRDELIV,     "Number of Packets Delivered to the User" },
+    { 0,  "End of Options" },
+    { 1,  "Comment" },
+
+    { 2,  "Start Time" },
+    { 3,  "End Time" },
+    { 4,  "Number of Received Packets" },
+    { 5,  "Number of Dropped Packets" },
+    { 6,  "Number of Accepted Packets" },
+    { 7,  "Number of Packets Dropped by OS" },
+    { 8,  "Number of Packets Delivered to the User" },
     OPTION_CODE_CUSTOM_OPTIONS,
     { 0, NULL }
 };
@@ -529,8 +475,6 @@ static const value_string record_code_vals[] = {
     { 0x0000,  "End of Records" },
     { 0x0001,  "IPv4 Record" },
     { 0x0002,  "IPv6 Record" },
-    { 0x0003,  "EUI48 Record" },
-    { 0x0004,  "EUI64 Record" },
     { 0, NULL }
 };
 
@@ -559,7 +503,6 @@ static const value_string packet_hash_algorithm_vals[] = {
     { 2,  "CRC32" },
     { 3,  "MD5" },
     { 4,  "SHA1" },
-    { 5,  "Toeplitz" },
     { 0, NULL }
 };
 
@@ -586,14 +529,11 @@ static const value_string dsb_secrets_types_vals[] = {
     { SECRETS_TYPE_ZIGBEE_NWK_KEY,  "Zigbee NWK Key" },
     { SECRETS_TYPE_ZIGBEE_APS_KEY,  "Zigbee APS Key" },
     { SECRETS_TYPE_OPCUA,           "OPC UA Key Log" },
-    { SECRETS_TYPE_ESP,             "ESP SA Key" },
     { 0, NULL }
 };
 
 void proto_register_pcapng(void);
-void event_register_pcapng(void);
 void proto_reg_handoff_pcapng(void);
-void event_reg_handoff_pcapng(void);
 
 #define BYTE_ORDER_MAGIC_SIZE  4
 
@@ -613,12 +553,12 @@ void dissect_custom_options(proto_tree *tree, packet_info *pinfo _U_, tvbuff_t *
 
     /* Todo: Add known PEN custom options dissection. */
     switch (option_code) {
-    case OPT_CUSTOM_STR_COPY:
-    case OPT_CUSTOM_STR_NO_COPY:
+    case 2988:
+    case 19372:
         proto_tree_add_item(tree, hf_pcapng_cb_option_string, tvb, offset, option_length - 4, ENC_UTF_8);
         break;
-    case OPT_CUSTOM_BIN_COPY:
-    case OPT_CUSTOM_BIN_NO_COPY:
+    case 2989:
+    case 19373:
         proto_tree_add_item(tree, hf_pcapng_cb_option_data, tvb, offset, option_length - 4, encoding);
         break;
     }
@@ -714,709 +654,659 @@ int dissect_options(proto_tree *tree, packet_info *pinfo,
         option_length_item = proto_tree_add_item_ret_uint(option_tree, hf_pcapng_option_length, tvb, offset, 2, encoding, &option_length);
         offset += 2;
 
-        if (option_code == OPT_EOFOPT) {
+        if (option_code == 0) {
             if (option_length != 0)
                 expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
             proto_item_set_len(option_item, option_length + 2 * 2);
             break;
-        } else {
-            if (option_length > tvb_reported_length_remaining(tvb, offset))
-                expert_add_info(pinfo, option_length_item, &ei_option_length_too_large);
-            if (option_code == OPT_COMMENT) {
-                proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_comment, tvb, offset, option_length, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
+        } else if (option_code == 1) {
+            proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_comment, tvb, offset, option_length, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
+            proto_item_append_text(option_item, " = %s", str);
+            offset += option_length;
+        } else if (option_code == 2988 || option_code == 2989 || option_code == 19372 || option_code == 19373) {
+            dissect_custom_options(option_tree, pinfo, tvb, offset, option_code, option_length, encoding);
+            offset += option_length;
+        } else switch (block_type) {
+        case BLOCK_TYPE_SHB:
+            switch (option_code) {
+            case 2:
+                proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_section_header_hardware, tvb, offset, option_length, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
                 proto_item_append_text(option_item, " = %s", str);
                 offset += option_length;
-            } else if (option_code == OPT_CUSTOM_STR_COPY || option_code == OPT_CUSTOM_BIN_COPY || option_code == OPT_CUSTOM_STR_NO_COPY || option_code == OPT_CUSTOM_BIN_NO_COPY) {
-                dissect_custom_options(option_tree, pinfo, tvb, offset, option_code, option_length, encoding);
+                break;
+            case 3:
+                proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_section_header_os, tvb, offset, option_length, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
+                proto_item_append_text(option_item, " = %s", str);
                 offset += option_length;
-            } else switch (block_type) {
-            case BLOCK_TYPE_SHB:
-                switch (option_code) {
-                case OPT_SHB_HARDWARE:
-                    proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_section_header_hardware, tvb, offset, option_length, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
-                    proto_item_append_text(option_item, " = %s", str);
-                    offset += option_length;
-                    break;
-                case OPT_SHB_OS:
-                    proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_section_header_os, tvb, offset, option_length, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
-                    proto_item_append_text(option_item, " = %s", str);
-                    offset += option_length;
-                    break;
-                case OPT_SHB_USERAPPL:
-                    proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_section_header_user_application, tvb, offset, option_length, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
-                    proto_item_append_text(option_item, " = %s", str);
-                    offset += option_length;
-                    break;
-                default:
-                    proto_tree_add_item(option_tree, hf_pcapng_option_data, tvb, offset, option_length, ENC_NA);
-                    offset += option_length;
-                }
                 break;
-            case BLOCK_TYPE_IDB: {
-                struct interface_description  *interface_description = (struct interface_description *) user_data;
-
-                switch (option_code) {
-                case OPT_IDB_NAME:
-                    proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_interface_description_name, tvb, offset, option_length, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
-                    proto_item_append_text(option_item, " = %s", str);
-                    offset += option_length;
-                    break;
-                case OPT_IDB_DESCRIPTION:
-                    proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_interface_description_description, tvb, offset, option_length, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
-                    proto_item_append_text(option_item, " = %s", str);
-                    offset += option_length;
-                    break;
-                case OPT_IDB_IP4ADDR:
-                    if (option_length != 8) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-                    proto_tree_add_item(option_tree, hf_pcapng_option_data_ipv4, tvb, offset, 4, ENC_BIG_ENDIAN);
-                    set_address_tvb(&addr, AT_IPv4, 4, tvb, offset);
-                    offset += 4;
-
-                    proto_tree_add_item(option_tree, hf_pcapng_option_data_ipv4_mask, tvb, offset, 4, ENC_BIG_ENDIAN);
-                    set_address_tvb(&addr_mask, AT_IPv4, 4, tvb, offset);
-                    offset += 4;
-
-                    proto_item_append_text(option_item, " = %s/%s",
-                            address_to_display(pinfo->pool,  &addr),
-                            address_to_display(pinfo->pool,  &addr_mask));
-                    break;
-                case OPT_IDB_IP6ADDR:
-                    if (option_length != 17) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-                    proto_tree_add_item(option_tree, hf_pcapng_option_data_ipv6, tvb, offset, 16, ENC_NA);
-                    set_address_tvb(&addr, AT_IPv6, 16, tvb, offset);
-                    offset += 16;
-
-                    proto_tree_add_item_ret_uint(option_tree, hf_pcapng_option_data_ipv6_mask, tvb, offset, 1, ENC_NA, &value_u32);
-                    offset += 1;
-
-                    proto_item_append_text(option_item, " = %s/%u",
-                        address_to_display(pinfo->pool,  &addr), value_u32);
-
-                    break;
-                case OPT_IDB_MACADDR:
-                    if (option_length != 6) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-                    proto_tree_add_item(option_tree, hf_pcapng_option_data_mac_address, tvb, offset, 6, encoding);
-                    proto_item_append_text(option_item, " = %s",
-                        tvb_get_ether_name(tvb, offset));
-                    offset += 6;
-
-                    break;
-                case OPT_IDB_EUIADDR:
-                    if (option_length != 8) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-                    proto_tree_add_item(option_tree, hf_pcapng_option_data_eui_address, tvb, offset, 8, encoding);
-                    set_address_tvb(&addr, AT_EUI64, 8, tvb, offset);
-                    offset += 8;
-
-                    proto_item_append_text(option_item, " = %s",
-                        address_to_display(pinfo->pool,  &addr));
-
-                    break;
-                case OPT_IDB_SPEED:
-                case OPT_IDB_TXSPEED: // if_txspeed
-                case OPT_IDB_RXSPEED: // if_rxspeed
-                    if (option_length != 8) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-                    if (option_code == OPT_IDB_SPEED)
-                        p_item = proto_tree_add_item_ret_uint64(option_tree, hf_pcapng_option_data_interface_speed, tvb, offset, 8, encoding, &value_u64);
-                    else if (option_code == OPT_IDB_TXSPEED)
-                        p_item = proto_tree_add_item_ret_uint64(option_tree, hf_pcapng_option_data_interface_txspeed, tvb, offset, 8, encoding, &value_u64);
-                    else
-                        p_item = proto_tree_add_item_ret_uint64(option_tree, hf_pcapng_option_data_interface_rxspeed, tvb, offset, 8, encoding, &value_u64);
-
-                    const_str = format_size_wmem(pinfo->pool, value_u64, FORMAT_SIZE_UNIT_BITS_S, FORMAT_SIZE_PREFIX_SI);
-
-                    proto_item_append_text(p_item, " bps (%s)", const_str);
-                    proto_item_append_text(option_item, " = %s", const_str);
-                    offset += 8;
-
-                    break;
-                case OPT_IDB_TSRESOL:
-                {
-                    uint32_t    base;
-                    uint32_t    exponent;
-                    uint32_t    i;
-                    uint64_t    resolution;
-
-                    if (option_length != 1) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-                    proto_tree_add_bitmask(option_tree, tvb, offset, hf_pcapng_option_data_interface_timestamp_resolution, ett_pcapng_option, hfx_pcapng_option_data_interface_timestamp_resolution, ENC_NA);
-                    value_u8 = tvb_get_uint8(tvb, offset);
-                    offset += 1;
-
-                    if (value_u8 & 0x80) {
-                        base = 2;
-                    } else {
-                        base = 10;
-                    }
-                    exponent = value_u8 & 0x7F;
-
-                    strbuf = wmem_strbuf_new(pinfo->pool, "");
-                    wmem_strbuf_append_printf(strbuf, "%u^-%u", base, exponent);
-                    resolution = 1;
-                    for (i = 0; i < exponent; i += 1)
-                        resolution *= base;
-                    if (interface_description) {
-                        interface_description->timestamp_resolution = resolution;
-                    }
-                    switch (resolution) {
-
-                    case 0:
-                        /* Overflow */
-                        wmem_strbuf_append(strbuf, " (overflow)");
-                        break;
-
-                    case 1:
-                        wmem_strbuf_append(strbuf, " (seconds)");
-                        break;
-
-                    case 10:
-                        wmem_strbuf_append(strbuf, " (.1 seconds)");
-                        break;
-
-                    case 100:
-                        wmem_strbuf_append(strbuf, " (.01 seconds)");
-                        break;
-
-                    case 1000:
-                        wmem_strbuf_append(strbuf, " (milliseconds)");
-                        break;
-
-                    case 10000:
-                        wmem_strbuf_append(strbuf, " (.1 milliseconds)");
-                        break;
-
-                    case 100000:
-                        wmem_strbuf_append(strbuf, " (.01 milliseconds)");
-                        break;
-
-                    case 1000000:
-                        wmem_strbuf_append(strbuf, " (microseconds)");
-                        break;
-
-                    case 10000000:
-                        wmem_strbuf_append(strbuf, " (.1 microseconds)");
-                        break;
-
-                    case 100000000:
-                        wmem_strbuf_append(strbuf, " (.01 microseconds)");
-                        break;
-
-                    case 1000000000:
-                        wmem_strbuf_append(strbuf, " (nanoseconds)");
-                        break;
-
-                    case 10000000000:
-                        wmem_strbuf_append(strbuf, " (.1 nanoseconds)");
-                        break;
-
-                    case 100000000000:
-                        wmem_strbuf_append(strbuf, " (.01 nanoseconds)");
-                        break;
-
-                    case 1000000000000:
-                        wmem_strbuf_append(strbuf, " (picoseconds)");
-                        break;
-
-                    case 10000000000000:
-                        wmem_strbuf_append(strbuf, " (.1 picoseconds)");
-                        break;
-
-                    case 100000000000000:
-                        wmem_strbuf_append(strbuf, " (.01 picoseconds)");
-                        break;
-                    }
-                    proto_item_append_text(option_item, " = %s",
-                        wmem_strbuf_finalize(strbuf));
-                    break;
-                }
-                case OPT_IDB_TZONE:
-                    if (option_length != 4) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-/* TODO: Better timezone decoding */
-                    proto_tree_add_item_ret_uint(option_tree, hf_pcapng_option_data_interface_timezone, tvb, offset, 4, encoding, &value_u32);
-                    offset += 4;
-
-                    proto_item_append_text(option_item, " = %u", value_u32);
-
-                    break;
-                case OPT_IDB_FILTER:
-                    if (option_length == 0) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        break;
-                    }
-
-                    /* Get filter type (0 is libpcap, 1 is BPF program, others are unspecified.) */
-                    proto_tree_add_item_ret_uint(option_tree, hf_pcapng_option_data_interface_filter_type, tvb, offset, 1, ENC_NA, &if_filter_type);
-                    offset++;
-                    switch (if_filter_type) {
-
-                    case 0:
-                        proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_interface_filter_string, tvb, offset, option_length - 1, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
-                        proto_item_append_text(option_item, " = %s", str);
-                        break;
-
-                    case 1:
-                        proto_tree_add_item(option_tree, hf_pcapng_option_data_interface_filter_bpf_program, tvb, offset, option_length - 1, ENC_NA);
-                        proto_item_append_text(option_item, " = {BPF program}");
-                        break;
-
-                    default:
-                        proto_tree_add_item(option_tree, hf_pcapng_option_data_interface_filter_unknown, tvb, offset, option_length - 1, ENC_NA);
-                        proto_item_append_text(option_item, " = unknown (type %u)", if_filter_type);
-                        break;
-                    }
-                    offset += option_length - 1;
-
-                    break;
-                case OPT_IDB_OS:
-                    proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_interface_os, tvb, offset, option_length, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
-                    proto_item_append_text(option_item, " = %s", str);
-                    offset += option_length;
-
-                    break;
-                case OPT_IDB_FCSLEN:
-                    if (option_length != 1) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-                    proto_tree_add_item_ret_uint(option_tree, hf_pcapng_option_data_interface_fcs_length, tvb, offset, 1, ENC_NA, &value_u32);
-                    offset += 1;
-                    proto_item_append_text(option_item, " = %u", value_u32);
-
-                    break;
-                case OPT_IDB_TSOFFSET:
-                    if (option_length != 8) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-                    proto_tree_add_item_ret_uint64(option_tree, hf_pcapng_option_data_interface_timestamp_offset, tvb, offset, 8, encoding, &value_u64);
-                    offset += 8;
-                    proto_item_append_text(option_item, " = %"PRIu64, value_u64);
-
-                    if (interface_description) {
-                        interface_description->timestamp_offset = value_u64;
-                    }
-
-                    break;
-                case OPT_IDB_HARDWARE:
-                    proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_interface_hardware, tvb, offset, option_length, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
-                    proto_item_append_text(option_item, " = %s", str);
-                    offset += option_length;
-
-                    break;
-                //case OPT_IDB_TXSPEED: done together with OPT_IDB_SPEED
-                //case OPT_IDB_RXSPEED: done together with OPT_IDB_SPEED
-                case OPT_IDB_IANA_TZNAME: // if_iana_tzname
-                    proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_interface_iana_tzname, tvb, offset, option_length, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
-                    proto_item_append_text(option_item, " = %s", str);
-                    offset += option_length;
-
-                    break;
-                default:
-                    proto_tree_add_item(option_tree, hf_pcapng_option_data, tvb, offset, option_length, ENC_NA);
-                    offset += option_length;
-                }
-                }
+            case 4:
+                proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_section_header_user_application, tvb, offset, option_length, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
+                proto_item_append_text(option_item, " = %s", str);
+                offset += option_length;
                 break;
-            case BLOCK_TYPE_PB:
-                switch (option_code) {
-                case OPT_PKT_FLAGS:
-                    if (option_length != 4) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-                    if (encoding == ENC_LITTLE_ENDIAN) {
-                        proto_tree_add_bitmask(option_tree, tvb, offset, hf_pcapng_option_data_packet_flags, ett_pcapng_option, hfx_pcapng_option_data_packet_flags, encoding);
-                        offset += 2;
-
-                        proto_tree_add_bitmask(option_tree, tvb, offset, hf_pcapng_option_data_packet_flags_link_layer_errors, ett_pcapng_option, hfx_pcapng_option_data_packet_flags_link_layer_errors, encoding);
-                        offset += 2;
-                    } else {
-                        proto_tree_add_bitmask(option_tree, tvb, offset, hf_pcapng_option_data_packet_flags_link_layer_errors, ett_pcapng_option, hfx_pcapng_option_data_packet_flags_link_layer_errors, encoding);
-                        offset += 2;
-
-                        proto_tree_add_bitmask(option_tree, tvb, offset, hf_pcapng_option_data_packet_flags, ett_pcapng_option, hfx_pcapng_option_data_packet_flags, encoding);
-                        offset += 2;
-                    }
-
-                    break;
-                case OPT_PKT_HASH:
-                    proto_tree_add_item(option_tree, hf_pcapng_option_data_packet_hash_algorithm, tvb, offset, 1, ENC_NA);
-                    offset += 1;
-
-                    proto_tree_add_item(option_tree, hf_pcapng_option_data_packet_hash_data, tvb, offset, option_length - 1, ENC_NA);
-                    offset += option_length - 1;
-
-                    break;
-                default:
-                    proto_tree_add_item(option_tree, hf_pcapng_option_data, tvb, offset, option_length, ENC_NA);
-                    offset += option_length;
-                }
-
-                break;
-            case BLOCK_TYPE_NRB:
-                switch (option_code) {
-                case OPT_NS_DNSNAME:
-                    proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_dns_name, tvb, offset, option_length, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
-                    proto_item_append_text(option_item, " = %s", str);
-                    offset += option_length;
-
-                    break;
-                case OPT_NS_DNSIP4ADDR:
-                    if (option_length != 4) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-                    proto_tree_add_item(option_tree, hf_pcapng_option_data_ipv4, tvb, offset, 4, ENC_BIG_ENDIAN);
-                    set_address_tvb(&addr, AT_IPv4, 4, tvb, offset);
-                    offset += 4;
-
-                    proto_item_append_text(option_item, " = %s",
-                        address_to_display(pinfo->pool, &addr));
-
-                    break;
-                case OPT_NS_DNSIP6ADDR:
-                    if (option_length != 16) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-                    proto_tree_add_item(option_tree, hf_pcapng_option_data_ipv6, tvb, offset, 16, ENC_NA);
-                    set_address_tvb(&addr, AT_IPv6, 16, tvb, offset);
-                    offset += 16;
-
-                    proto_item_append_text(option_item, " = %s",
-                        address_to_display(pinfo->pool,  &addr));
-
-                    break;
-                default:
-                    proto_tree_add_item(option_tree, hf_pcapng_option_data, tvb, offset, option_length, ENC_NA);
-                    offset += option_length;
-                }
-
-                break;
-            case BLOCK_TYPE_ISB:
-                switch (option_code) {
-                case OPT_ISB_STARTTIME:
-                    if (option_length != 8) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-                    proto_tree_add_item(option_tree, hf_pcapng_option_data_start_time, tvb, offset, 8, encoding);
-                    offset += 8;
-
-                    break;
-                case OPT_ISB_ENDTIME:
-                    if (option_length != 8) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-                    proto_tree_add_item(option_tree, hf_pcapng_option_data_end_time, tvb, offset, 8, encoding);
-                    offset += 8;
-
-                    break;
-                case OPT_ISB_IFRECV:
-                    if (option_length != 8) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-                    proto_tree_add_item_ret_uint64(option_tree, hf_pcapng_option_data_interface_received, tvb, offset, 8, encoding, &value_u64);
-                    proto_item_append_text(option_item, " = %"PRIu64, value_u64);
-                    offset += 8;
-
-                    break;
-                case OPT_ISB_IFDROP:
-                    if (option_length != 8) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-                    proto_tree_add_item_ret_uint64(option_tree, hf_pcapng_option_data_interface_dropped, tvb, offset, 8, encoding, &value_u64);
-                    proto_item_append_text(option_item, " = %"PRIu64, value_u64);
-                    offset += 8;
-
-                    break;
-                case OPT_ISB_FILTERACCEPT:
-                    if (option_length != 8) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-                    proto_tree_add_item_ret_uint64(option_tree, hf_pcapng_option_data_interface_accepted_by_filter, tvb, offset, 8, encoding, &value_u64);
-                    proto_item_append_text(option_item, " = %"PRIu64, value_u64);
-                    offset += 8;
-
-                    break;
-                case OPT_ISB_OSDROP:
-                    if (option_length != 8) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-                    proto_tree_add_item_ret_uint64(option_tree, hf_pcapng_option_data_interface_dropped_by_os, tvb, offset, 8, encoding, &value_u64);
-                    proto_item_append_text(option_item, " = %"PRIu64, value_u64);
-                    offset += 8;
-
-                    break;
-                case OPT_ISB_USRDELIV:
-                    if (option_length != 8) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-                    proto_tree_add_item_ret_uint64(option_tree, hf_pcapng_option_data_interface_delivered_to_user, tvb, offset, 8, encoding, &value_u64);
-                    proto_item_append_text(option_item, " = %"PRIu64, value_u64);
-                    offset += 8;
-
-                    break;
-                default:
-                    proto_tree_add_item(option_tree, hf_pcapng_option_data, tvb, offset, option_length, ENC_NA);
-                    offset += option_length;
-                }
-
-                break;
-            case BLOCK_TYPE_EPB:
-                switch (option_code) {
-                case OPT_PKT_FLAGS:
-                    if (option_length != 4) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-                    if (encoding == ENC_LITTLE_ENDIAN) {
-                        proto_tree_add_bitmask(option_tree, tvb, offset, hf_pcapng_option_data_packet_flags, ett_pcapng_option, hfx_pcapng_option_data_packet_flags, encoding);
-                        offset += 2;
-
-                        proto_tree_add_bitmask(option_tree, tvb, offset, hf_pcapng_option_data_packet_flags_link_layer_errors, ett_pcapng_option, hfx_pcapng_option_data_packet_flags_link_layer_errors, encoding);
-                        offset += 2;
-                    } else {
-                        proto_tree_add_bitmask(option_tree, tvb, offset, hf_pcapng_option_data_packet_flags_link_layer_errors, ett_pcapng_option, hfx_pcapng_option_data_packet_flags_link_layer_errors, encoding);
-                        offset += 2;
-
-                        proto_tree_add_bitmask(option_tree, tvb, offset, hf_pcapng_option_data_packet_flags, ett_pcapng_option, hfx_pcapng_option_data_packet_flags, encoding);
-                        offset += 2;
-                    }
-
-                    break;
-                case OPT_PKT_HASH:
-                    proto_tree_add_item(option_tree, hf_pcapng_option_data_packet_hash_algorithm, tvb, offset, 1, ENC_NA);
-                    offset += 1;
-
-                    proto_tree_add_item(option_tree, hf_pcapng_option_data_packet_hash_data, tvb, offset, option_length - 1, ENC_NA);
-                    offset += option_length - 1;
-
-                    break;
-                case OPT_PKT_DROPCOUNT:
-                    if (option_length != 8) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-                    proto_tree_add_item_ret_uint64(option_tree, hf_pcapng_option_data_packet_drop_count, tvb, offset, 8, encoding, &value_u64);
-                    proto_item_append_text(option_item, " = %"PRIu64, value_u64);
-                    offset += 8;
-
-                    break;
-                case OPT_PKT_PACKETID:
-                    if (option_length != 8) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-                    proto_tree_add_item_ret_uint64(option_tree, hf_pcapng_option_data_packet_id, tvb, offset, 8, encoding, &value_u64);
-                    proto_item_append_text(option_item, " = 0x%016"PRIx64, value_u64);
-                    offset += 8;
-
-                    break;
-                case OPT_PKT_QUEUE:
-                    if (option_length != 4) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-                    proto_tree_add_item_ret_uint(option_tree, hf_pcapng_option_data_packet_queue, tvb, offset, 4, encoding, &value_u32);
-                    proto_item_append_text(option_item, " = %u", value_u32);
-                    offset += 4;
-
-                    break;
-                case OPT_PKT_VERDICT:
-                    if (option_length < 1) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        break;
-                    }
-
-                    switch (tvb_get_uint8(tvb, offset)) {
-                    case 1:
-                    case 2:
-                        if (option_length != 9) {
-                            expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        }
-                        break;
-                    default:
-                        break;
-                    }
-
-                    proto_tree_add_item(option_tree, hf_pcapng_option_data_packet_verdict_type, tvb, offset, 1, ENC_NA);
-                    if (option_length > 1)
-                        proto_tree_add_item(option_tree, hf_pcapng_option_data_packet_verdict_data, tvb, offset + 1, option_length - 1, ENC_NA);
-                    offset += option_length;
-
-                    break;
-                case OPT_PKT_PROCIDTHRDID:
-                    if (option_length != 8) {
-                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
-                        offset += option_length;
-                        break;
-                    }
-
-                    // XXX - assuming this is the right order
-                    proto_tree_add_item_ret_uint(option_tree, hf_pcapng_option_data_proc_id, tvb, offset, 4, encoding, &value_u32);
-                    proto_item_append_text(option_item, " = 0x%08x", value_u32);
-                    offset += 4;
-                    proto_tree_add_item_ret_uint(option_tree, hf_pcapng_option_data_thread_id, tvb, offset, 4, encoding, &value_u32);
-                    proto_item_append_text(option_item, ", 0x%08x", value_u32);
-                    offset += 4;
-
-                    break;
-                /*
-                 * The values of the Darwin options are little-endian whatever
-                 * the byte order of the section (see wiretap/pcapng-darwin-custom.c).
-                 */
-                case 32769: /* Darwin DPIB ID */
-                    proto_tree_add_item_ret_uint(option_tree, hf_pcapng_option_data_packet_darwin_dpib_id, tvb, offset, option_length, ENC_LITTLE_ENDIAN, &value_u32);
-                    offset += option_length;
-
-                    proto_item_append_text(option_item, " = %u", value_u32);
-
-                    break;
-                case 32770: /* Darwin Service Type */
-                    proto_tree_add_item_ret_uint(option_tree, hf_pcapng_option_data_packet_darwin_svc_class, tvb, offset, option_length, ENC_LITTLE_ENDIAN, &value_u32);
-                    offset += option_length;
-
-                    proto_item_append_text(option_item, " = %s", val_to_str_const(value_u32, option_code_darwin_svc_class_vals, "Unknown"));
-
-                    break;
-                case 32771: /* Darwin Effective DPIB ID */
-                    proto_tree_add_item_ret_uint(option_tree, hf_pcapng_option_data_packet_darwin_edpib_id, tvb, offset, option_length, ENC_LITTLE_ENDIAN, &value_u32);
-                    offset += option_length;
-
-                    proto_item_append_text(option_item, " = %u", value_u32);
-
-                    break;
-                case 32772: /* Darwin Flags */
-                    proto_tree_add_bitmask(option_tree, tvb, offset, hf_pcapng_option_data_packet_darwin_flags, ett_pcapng_option, hfx_pcapng_option_data_packet_darwin_flags, ENC_LITTLE_ENDIAN);
-                    offset += option_length;
-
-                    break;
-                case 32773: /* Darwin Flow ID */
-                    proto_tree_add_item_ret_uint(option_tree, hf_pcapng_option_data_packet_darwin_flow_id, tvb, offset, option_length, ENC_LITTLE_ENDIAN, &value_u32);
-                    offset += option_length;
-
-                    proto_item_append_text(option_item, " = %u", value_u32);
-
-                    break;
-                default:
-                    proto_tree_add_item(option_tree, hf_pcapng_option_data, tvb, offset, option_length, ENC_NA);
-                    offset += option_length;
-                }
-
-                break;
-
             default:
-                /* Use local block handling if available */
-                if (p_local_block_callback) {
-                     p_local_block_callback->option_dissector(option_tree, option_item, pinfo, tvb, offset,
-                                                              hf_pcapng_option_data, option_code, option_length, encoding);
-                }
-                else {
-                    proto_tree_add_item(option_tree, hf_pcapng_option_data, tvb, offset, option_length, ENC_NA);
-                }
+                proto_tree_add_item(option_tree, hf_pcapng_option_data, tvb, offset, option_length, ENC_NA);
                 offset += option_length;
             }
+            break;
+        case BLOCK_TYPE_IDB: {
+            struct interface_description  *interface_description = (struct interface_description *) user_data;
+
+            switch (option_code) {
+            case 2:
+                proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_interface_description_name, tvb, offset, option_length, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
+                proto_item_append_text(option_item, " = %s", str);
+                offset += option_length;
+                break;
+            case 3:
+                proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_interface_description_description, tvb, offset, option_length, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
+                proto_item_append_text(option_item, " = %s", str);
+                offset += option_length;
+                break;
+            case 4:
+                if (option_length != 8) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+                proto_tree_add_item(option_tree, hf_pcapng_option_data_ipv4, tvb, offset, 4, ENC_BIG_ENDIAN);
+                set_address_tvb(&addr, AT_IPv4, 4, tvb, offset);
+                offset += 4;
+
+                proto_tree_add_item(option_tree, hf_pcapng_option_data_ipv4_mask, tvb, offset, 4, ENC_BIG_ENDIAN);
+                set_address_tvb(&addr_mask, AT_IPv4, 4, tvb, offset);
+                offset += 4;
+
+                proto_item_append_text(option_item, " = %s/%s",
+                        address_to_display(pinfo->pool,  &addr),
+                        address_to_display(pinfo->pool,  &addr_mask));
+                break;
+            case 5:
+                if (option_length != 17) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+
+                proto_tree_add_item(option_tree, hf_pcapng_option_data_ipv6, tvb, offset, 16, ENC_NA);
+                set_address_tvb(&addr, AT_IPv6, 16, tvb, offset);
+                offset += 16;
+
+                proto_tree_add_item_ret_uint(option_tree, hf_pcapng_option_data_ipv6_mask, tvb, offset, 1, ENC_NA, &value_u32);
+                offset += 1;
+
+                proto_item_append_text(option_item, " = %s/%u",
+                    address_to_display(pinfo->pool,  &addr), value_u32);
+
+                break;
+            case 6:
+                if (option_length != 6) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+
+                proto_tree_add_item(option_tree, hf_pcapng_option_data_mac_address, tvb, offset, 6, encoding);
+                proto_item_append_text(option_item, " = %s",
+                    tvb_get_ether_name(tvb, offset));
+                offset += 6;
+
+                break;
+            case 7:
+                if (option_length != 8) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+
+                proto_tree_add_item(option_tree, hf_pcapng_option_data_eui_address, tvb, offset, 8, encoding);
+                set_address_tvb(&addr, AT_EUI64, 8, tvb, offset);
+                offset += 8;
+
+                proto_item_append_text(option_item, " = %s",
+                    address_to_display(pinfo->pool,  &addr));
+
+                break;
+            case 8:
+                if (option_length != 8) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+
+                p_item = proto_tree_add_item_ret_uint64(option_tree, hf_pcapng_option_data_interface_speed, tvb, offset, 8, encoding, &value_u64);
+                /* XXX - is there a general routine to do this mapping? */
+                if (value_u64 == 10000000) {
+                    const_str = "10 Mbps";
+                } else if (value_u64 == 100000000) {
+                    const_str = "100 Mbps";
+                } else if (value_u64 == 1000000000) {
+                    const_str = "1 Gbps";
+                } else {
+                    const_str = wmem_strdup_printf(pinfo->pool, "%"PRIu64, value_u64);
+                }
+                proto_item_append_text(p_item, "%s", const_str);
+                proto_item_append_text(option_item, " = %s", const_str);
+                offset += 8;
+
+                break;
+            case 9:
+            {
+                uint32_t    base;
+                uint32_t    exponent;
+                uint32_t    i;
+                uint64_t    resolution;
+
+                if (option_length != 1) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+
+                proto_tree_add_bitmask(option_tree, tvb, offset, hf_pcapng_option_data_interface_timestamp_resolution, ett_pcapng_option, hfx_pcapng_option_data_interface_timestamp_resolution, ENC_NA);
+                value_u8 = tvb_get_uint8(tvb, offset);
+                offset += 1;
+
+                if (value_u8 & 0x80) {
+                    base = 2;
+                } else {
+                    base = 10;
+                }
+                exponent = value_u8 & 0x7F;
+
+                strbuf = wmem_strbuf_new(pinfo->pool, "");
+                wmem_strbuf_append_printf(strbuf, "%u^-%u", base, exponent);
+                resolution = 1;
+                for (i = 0; i < exponent; i += 1)
+                    resolution *= base;
+                if (interface_description) {
+                    interface_description->timestamp_resolution = resolution;
+                }
+                switch (resolution) {
+
+                case 0:
+                    /* Overflow */
+                    wmem_strbuf_append(strbuf, " (overflow)");
+                    break;
+
+                case 1:
+                    wmem_strbuf_append(strbuf, " (seconds)");
+                    break;
+
+                case 10:
+                    wmem_strbuf_append(strbuf, " (.1 seconds)");
+                    break;
+
+                case 100:
+                    wmem_strbuf_append(strbuf, " (.01 seconds)");
+                    break;
+
+                case 1000:
+                    wmem_strbuf_append(strbuf, " (milliseconds)");
+                    break;
+
+                case 10000:
+                    wmem_strbuf_append(strbuf, " (.1 milliseconds)");
+                    break;
+
+                case 100000:
+                    wmem_strbuf_append(strbuf, " (.01 milliseconds)");
+                    break;
+
+                case 1000000:
+                    wmem_strbuf_append(strbuf, " (microseconds)");
+                    break;
+
+                case 10000000:
+                    wmem_strbuf_append(strbuf, " (.1 microseconds)");
+                    break;
+
+                case 100000000:
+                    wmem_strbuf_append(strbuf, " (.01 microseconds)");
+                    break;
+
+                case 1000000000:
+                    wmem_strbuf_append(strbuf, " (nanoseconds)");
+                    break;
+
+                case 10000000000:
+                    wmem_strbuf_append(strbuf, " (.1 nanoseconds)");
+                    break;
+
+                case 100000000000:
+                    wmem_strbuf_append(strbuf, " (.01 nanoseconds)");
+                    break;
+
+                case 1000000000000:
+                    wmem_strbuf_append(strbuf, " (picoseconds)");
+                    break;
+
+                case 10000000000000:
+                    wmem_strbuf_append(strbuf, " (.1 picoseconds)");
+                    break;
+
+                case 100000000000000:
+                    wmem_strbuf_append(strbuf, " (.01 picoseconds)");
+                    break;
+                }
+                proto_item_append_text(option_item, " = %s",
+                    wmem_strbuf_finalize(strbuf));
+                break;
+            }
+            case 10:
+                if (option_length != 4) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+
+/* TODO: Better timezone decoding */
+                proto_tree_add_item_ret_uint(option_tree, hf_pcapng_option_data_interface_timezone, tvb, offset, 4, encoding, &value_u32);
+                offset += 4;
+
+                proto_item_append_text(option_item, " = %u", value_u32);
+
+                break;
+            case 11:
+                if (option_length == 0) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    break;
+                }
+
+
+                /* Get filter type (0 is libpcap, 1 is BPF program, others are unspecified.) */
+                proto_tree_add_item_ret_uint(option_tree, hf_pcapng_option_data_interface_filter_type, tvb, offset, 1, ENC_NA, &if_filter_type);
+                offset++;
+                switch (if_filter_type) {
+
+                case 0:
+                    proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_interface_filter_string, tvb, offset, option_length - 1, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
+                    proto_item_append_text(option_item, " = %s", str);
+                    break;
+
+                case 1:
+                    proto_tree_add_item(option_tree, hf_pcapng_option_data_interface_filter_bpf_program, tvb, offset, option_length - 1, ENC_NA);
+                    proto_item_append_text(option_item, " = {BPF program}");
+                    break;
+
+                default:
+                    proto_tree_add_item(option_tree, hf_pcapng_option_data_interface_filter_unknown, tvb, offset, option_length - 1, ENC_NA);
+                    proto_item_append_text(option_item, " = unknown (type %u)", if_filter_type);
+                    break;
+		}
+                offset += option_length - 1;
+
+                break;
+            case 12:
+                proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_interface_os, tvb, offset, option_length, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
+                proto_item_append_text(option_item, " = %s", str);
+                offset += option_length;
+
+                break;
+            case 13:
+                if (option_length != 1) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+
+                proto_tree_add_item_ret_uint(option_tree, hf_pcapng_option_data_interface_fcs_length, tvb, offset, 1, ENC_NA, &value_u32);
+                offset += 1;
+                proto_item_append_text(option_item, " = %u", value_u32);
+
+                break;
+            case 14:
+                if (option_length != 8) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+
+                proto_tree_add_item_ret_uint64(option_tree, hf_pcapng_option_data_interface_timestamp_offset, tvb, offset, 8, encoding, &value_u64);
+                offset += 8;
+                proto_item_append_text(option_item, " = %"PRIu64, value_u64);
+
+                if (interface_description) {
+                    interface_description->timestamp_offset = value_u64;
+                }
+
+                break;
+            case 15:
+                proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_interface_hardware, tvb, offset, option_length, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
+                proto_item_append_text(option_item, " = %s", str);
+                offset += option_length;
+
+                break;
+            default:
+                proto_tree_add_item(option_tree, hf_pcapng_option_data, tvb, offset, option_length, ENC_NA);
+                offset += option_length;
+            }
+            }
+            break;
+        case BLOCK_TYPE_PB:
+            switch (option_code) {
+            case 2:
+                if (option_length != 4) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+
+                if (encoding == ENC_LITTLE_ENDIAN) {
+                    proto_tree_add_bitmask(option_tree, tvb, offset, hf_pcapng_option_data_packet_flags, ett_pcapng_option, hfx_pcapng_option_data_packet_flags, encoding);
+                    offset += 2;
+
+                    proto_tree_add_bitmask(option_tree, tvb, offset, hf_pcapng_option_data_packet_flags_link_layer_errors, ett_pcapng_option, hfx_pcapng_option_data_packet_flags_link_layer_errors, encoding);
+                    offset += 2;
+                } else {
+                    proto_tree_add_bitmask(option_tree, tvb, offset, hf_pcapng_option_data_packet_flags_link_layer_errors, ett_pcapng_option, hfx_pcapng_option_data_packet_flags_link_layer_errors, encoding);
+                    offset += 2;
+
+                    proto_tree_add_bitmask(option_tree, tvb, offset, hf_pcapng_option_data_packet_flags, ett_pcapng_option, hfx_pcapng_option_data_packet_flags, encoding);
+                    offset += 2;
+                }
+
+                break;
+            case 3:
+                proto_tree_add_item(option_tree, hf_pcapng_option_data_packet_hash_algorithm, tvb, offset, 1, ENC_NA);
+                offset += 1;
+
+                proto_tree_add_item(option_tree, hf_pcapng_option_data_packet_hash_data, tvb, offset, option_length - 1, ENC_NA);
+                offset += option_length - 1;
+
+                break;
+            default:
+                proto_tree_add_item(option_tree, hf_pcapng_option_data, tvb, offset, option_length, ENC_NA);
+                offset += option_length;
+            }
+
+            break;
+        case BLOCK_TYPE_NRB:
+            switch (option_code) {
+            case 2:
+                proto_tree_add_item_ret_display_string(option_tree, hf_pcapng_option_data_dns_name, tvb, offset, option_length, ENC_NA | ENC_UTF_8, pinfo->pool, &str);
+                proto_item_append_text(option_item, " = %s", str);
+                offset += option_length;
+
+                break;
+            case 3:
+                if (option_length != 4) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+
+                proto_tree_add_item(option_tree, hf_pcapng_option_data_ipv4, tvb, offset, 4, ENC_BIG_ENDIAN);
+                set_address_tvb(&addr, AT_IPv4, 4, tvb, offset);
+                offset += 4;
+
+                proto_item_append_text(option_item, " = %s",
+                    address_to_display(pinfo->pool, &addr));
+
+                break;
+            case 4:
+                if (option_length != 16) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+
+                proto_tree_add_item(option_tree, hf_pcapng_option_data_ipv6, tvb, offset, 16, ENC_NA);
+                set_address_tvb(&addr, AT_IPv6, 16, tvb, offset);
+                offset += 16;
+
+                proto_item_append_text(option_item, " = %s",
+                    address_to_display(pinfo->pool,  &addr));
+
+                break;
+            default:
+                proto_tree_add_item(option_tree, hf_pcapng_option_data, tvb, offset, option_length, ENC_NA);
+                offset += option_length;
+            }
+
+            break;
+        case BLOCK_TYPE_ISB:
+            switch (option_code) {
+            case 2:
+                if (option_length != 8) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+
+                proto_tree_add_item(option_tree, hf_pcapng_option_data_start_time, tvb, offset, 8, encoding);
+                offset += 8;
+
+                break;
+            case 3:
+                if (option_length != 8) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+
+                proto_tree_add_item(option_tree, hf_pcapng_option_data_end_time, tvb, offset, 8, encoding);
+                offset += 8;
+
+                break;
+            case 4:
+                if (option_length != 8) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+
+                proto_tree_add_item_ret_uint64(option_tree, hf_pcapng_option_data_interface_received, tvb, offset, 8, encoding, &value_u64);
+                proto_item_append_text(option_item, " = %"PRIu64, value_u64);
+                offset += 8;
+
+                break;
+            case 5:
+                if (option_length != 8) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+
+                proto_tree_add_item_ret_uint64(option_tree, hf_pcapng_option_data_interface_dropped, tvb, offset, 8, encoding, &value_u64);
+                proto_item_append_text(option_item, " = %"PRIu64, value_u64);
+                offset += 8;
+
+                break;
+            case 6:
+                if (option_length != 8) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+
+                proto_tree_add_item_ret_uint64(option_tree, hf_pcapng_option_data_interface_accepted_by_filter, tvb, offset, 8, encoding, &value_u64);
+                proto_item_append_text(option_item, " = %"PRIu64, value_u64);
+                offset += 8;
+
+                break;
+            case 7:
+                if (option_length != 8) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+
+                proto_tree_add_item_ret_uint64(option_tree, hf_pcapng_option_data_interface_dropped_by_os, tvb, offset, 8, encoding, &value_u64);
+                proto_item_append_text(option_item, " = %"PRIu64, value_u64);
+                offset += 8;
+
+                break;
+            case 8:
+                if (option_length != 8) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+
+                proto_tree_add_item_ret_uint64(option_tree, hf_pcapng_option_data_interface_delivered_to_user, tvb, offset, 8, encoding, &value_u64);
+                proto_item_append_text(option_item, " = %"PRIu64, value_u64);
+                offset += 8;
+
+                break;
+            default:
+                proto_tree_add_item(option_tree, hf_pcapng_option_data, tvb, offset, option_length, ENC_NA);
+                offset += option_length;
+            }
+
+            break;
+        case BLOCK_TYPE_EPB:
+            switch (option_code) {
+            case 2:
+                if (option_length != 4) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+
+                if (encoding == ENC_LITTLE_ENDIAN) {
+                    proto_tree_add_bitmask(option_tree, tvb, offset, hf_pcapng_option_data_packet_flags, ett_pcapng_option, hfx_pcapng_option_data_packet_flags, encoding);
+                    offset += 2;
+
+                    proto_tree_add_bitmask(option_tree, tvb, offset, hf_pcapng_option_data_packet_flags_link_layer_errors, ett_pcapng_option, hfx_pcapng_option_data_packet_flags_link_layer_errors, encoding);
+                    offset += 2;
+                } else {
+                    proto_tree_add_bitmask(option_tree, tvb, offset, hf_pcapng_option_data_packet_flags_link_layer_errors, ett_pcapng_option, hfx_pcapng_option_data_packet_flags_link_layer_errors, encoding);
+                    offset += 2;
+
+                    proto_tree_add_bitmask(option_tree, tvb, offset, hf_pcapng_option_data_packet_flags, ett_pcapng_option, hfx_pcapng_option_data_packet_flags, encoding);
+                    offset += 2;
+                }
+
+                break;
+            case 3:
+                proto_tree_add_item(option_tree, hf_pcapng_option_data_packet_hash_algorithm, tvb, offset, 1, ENC_NA);
+                offset += 1;
+
+                proto_tree_add_item(option_tree, hf_pcapng_option_data_packet_hash_data, tvb, offset, option_length - 1, ENC_NA);
+                offset += option_length - 1;
+
+                break;
+            case 4:
+                if (option_length != 8) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+
+                proto_tree_add_item_ret_uint64(option_tree, hf_pcapng_option_data_packet_drop_count, tvb, offset, 8, encoding, &value_u64);
+                proto_item_append_text(option_item, " = %"PRIu64, value_u64);
+                offset += 8;
+
+                break;
+            case 5:
+                if (option_length != 8) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+
+                proto_tree_add_item_ret_uint64(option_tree, hf_pcapng_option_data_packet_id, tvb, offset, 8, encoding, &value_u64);
+                proto_item_append_text(option_item, " = 0x%016"PRIx64, value_u64);
+                offset += 8;
+
+                break;
+            case 6:
+                if (option_length != 4) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    offset += option_length;
+                    break;
+                }
+
+                proto_tree_add_item_ret_uint(option_tree, hf_pcapng_option_data_packet_queue, tvb, offset, 4, encoding, &value_u32);
+                proto_item_append_text(option_item, " = %u", value_u32);
+                offset += 4;
+
+                break;
+            case 7:
+                if (option_length < 1) {
+                    expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    break;
+                }
+
+                switch (tvb_get_uint8(tvb, offset)) {
+                case 1:
+                case 2:
+                    if (option_length != 9) {
+                        expert_add_info(pinfo, option_length_item, &ei_invalid_option_length);
+                    }
+                    break;
+                default:
+                    break;
+                }
+
+                proto_tree_add_item(option_tree, hf_pcapng_option_data_packet_verdict_type, tvb, offset, 1, ENC_NA);
+                if (option_length > 1)
+                    proto_tree_add_item(option_tree, hf_pcapng_option_data_packet_verdict_data, tvb, offset + 1, option_length - 1, ENC_NA);
+                offset += option_length;
+
+                break;
+            case 32769: /* Darwin DPEB ID */
+                proto_tree_add_item_ret_uint(option_tree, hf_pcapng_option_data_packet_darwin_dpeb_id, tvb, offset, option_length, encoding, &value_u32);
+                offset += option_length;
+
+                proto_item_append_text(option_item, " = %u", value_u32);
+
+                break;
+            case 32770: /* Darwin Service Type */
+                proto_tree_add_item_ret_uint(option_tree, hf_pcapng_option_data_packet_darwin_svc_class, tvb, offset, option_length, encoding, &value_u32);
+                offset += option_length;
+
+                proto_item_append_text(option_item, " = %s", val_to_str_const(value_u32, option_code_darwin_svc_class_vals, "Unknown"));
+
+                break;
+            case 32771: /* Darwin Effective DPEB ID */
+                proto_tree_add_item_ret_uint(option_tree, hf_pcapng_option_data_packet_darwin_edpeb_id, tvb, offset, option_length, encoding, &value_u32);
+                offset += option_length;
+
+                proto_item_append_text(option_item, " = %u", value_u32);
+
+                break;
+            case 32772: /* Darwin Flags */
+                proto_tree_add_bitmask(option_tree, tvb, offset, hf_pcapng_option_data_packet_darwin_flags, ett_pcapng_option, hfx_pcapng_option_data_packet_darwin_flags, encoding);
+                offset += option_length;
+
+                break;
+            case 32773: /* Darwin Flow ID */
+                proto_tree_add_item_ret_uint(option_tree, hf_pcapng_option_data_packet_darwin_flow_id, tvb, offset, option_length, encoding, &value_u32);
+                offset += option_length;
+
+                proto_item_append_text(option_item, " = %u", value_u32);
+
+                break;
+            default:
+                proto_tree_add_item(option_tree, hf_pcapng_option_data, tvb, offset, option_length, ENC_NA);
+                offset += option_length;
+            }
+
+            break;
+
+        default:
+            /* Use local block handling if available */
+            if (p_local_block_callback) {
+                 p_local_block_callback->option_dissector(option_tree, option_item, pinfo, tvb, offset,
+                                                          hf_pcapng_option_data, option_code, option_length, encoding);
+            }
+            else {
+                proto_tree_add_item(option_tree, hf_pcapng_option_data, tvb, offset, option_length, ENC_NA);
+            }
+            offset += option_length;
         }
 
         /* Pad this option out to next 4 bytes */
-        unsigned option_padding = WS_PADDING_TO_4(option_length);
-        if (option_padding != 0) {
-            proto_item_set_len(option_item, option_length + 2 * 2 + option_padding);
-            proto_tree_add_item(option_tree, hf_pcapng_option_padding, tvb, offset, option_padding, ENC_NA);
-            offset += option_padding;
+        if ((option_length % 4) != 0) {
+            proto_item_set_len(option_item, option_length + 2 * 2 + (4 - option_length % 4));
+            option_length = 4 - option_length % 4;
+            proto_tree_add_item(option_tree, hf_pcapng_option_padding, tvb, offset, option_length, ENC_NA);
+            offset += option_length;
         } else
             proto_item_set_len(option_item, option_length + 2 * 2);
     }
-
-    /* Do we have any extraneous data? */
-    int extraneous_data_length = tvb_reported_length_remaining(tvb, offset);
-    if(extraneous_data_length > 0) {
-        proto_tree *ext_tree;
-        proto_item *it;
-
-        ext_tree = proto_tree_add_subtree_format(tree, tvb, offset, extraneous_data_length,
-                                                 ett_pcapng_block_extraneous, &it, "Extraneous Data (%d octets)", extraneous_data_length);
-
-        proto_tree_add_item(ext_tree, hf_pcapng_block_extraneous_data, tvb, offset, extraneous_data_length, ENC_NA);
-
-        it = proto_tree_add_uint(ext_tree, hf_pcapng_block_extraneous_data_length, tvb, 0, 0, extraneous_data_length);
-        proto_item_set_generated(it);
-
-        it = proto_tree_add_expert(ext_tree, pinfo, &ei_block_extraneous_data, tvb, offset, extraneous_data_length);
-        proto_item_set_hidden(it);
-    }
-
     proto_item_set_end(options_item, tvb, offset);
 
     return offset;
@@ -1528,20 +1418,13 @@ dissect_shb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
 
     byte_order_magic_item = proto_tree_add_item(tree, hf_pcapng_section_header_byte_order_magic, tvb, offset, 4, ENC_NA);
     if (byte_order_magic_bad) {
-        if (pref_additional_block_info)
-            proto_item_append_text(argp->block_item, " (Invalid endian)");
         expert_add_info(pinfo, byte_order_magic_item, &ei_invalid_byte_order_magic);
         return false;
     }
-    if (argp->info->encoding == ENC_BIG_ENDIAN) {
-        if (pref_additional_block_info)
-            proto_item_append_text(argp->block_item, " (Big-endian)");
+    if (argp->info->encoding == ENC_BIG_ENDIAN)
         proto_item_append_text(byte_order_magic_item, " (Big-endian)");
-    } else {
-        if (pref_additional_block_info)
-            proto_item_append_text(argp->block_item, " (Little-endian)");
+    else
         proto_item_append_text(byte_order_magic_item, " (Little-endian)");
-    }
     offset += 4;
 
     proto_tree_add_item(tree, hf_pcapng_section_header_major_version, tvb, offset, 2, argp->info->encoding);
@@ -1600,7 +1483,8 @@ dissect_pb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
 
     proto_item_append_text(argp->block_item, " %u", argp->info->frame_number);
 
-    proto_tree_add_item_ret_uint(tree, hf_pcapng_packet_block_interface_id, tvb, offset, 2, argp->info->encoding, &interface_id);
+    proto_tree_add_item(tree, hf_pcapng_packet_block_interface_id, tvb, offset, 2, argp->info->encoding);
+    interface_id = tvb_get_uint16(tvb, offset, argp->info->encoding);
     offset += 2;
     interface_description = get_interface_description(argp->info, interface_id,
                                                       pinfo, argp->block_tree);
@@ -1636,10 +1520,9 @@ dissect_pb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
     argp->info->frame_number += 1;
     offset += captured_length;
 
-    unsigned padding = WS_PADDING_TO_4(captured_length);
-    if (padding != 0) {
-        proto_tree_add_item(tree, hf_pcapng_packet_padding, tvb, offset, padding, ENC_NA);
-        offset += padding;
+    if (captured_length % 4) {
+        proto_tree_add_item(tree, hf_pcapng_packet_padding, tvb, offset, ((captured_length % 4) ? (4 - (captured_length % 4)) : 0), ENC_NA);
+        offset += ((captured_length % 4) ?(4 - (captured_length % 4)):0);
     }
 
     dissect_options(tree, pinfo, BLOCK_TYPE_PB, tvb, offset, argp->info->encoding, NULL);
@@ -1690,10 +1573,9 @@ dissect_spb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
     argp->info->frame_number += 1;
     offset += captured_length;
 
-    unsigned padding = WS_PADDING_TO_4(captured_length);
-    if (padding != 0) {
-        proto_tree_add_item(tree, hf_pcapng_packet_padding, tvb, offset, padding, ENC_NA);
-        offset += padding;
+    if (captured_length % 4) {
+        proto_tree_add_item(tree, hf_pcapng_packet_padding, tvb, offset, ((captured_length % 4)?(4 - (captured_length % 4)):0), ENC_NA);
+        offset += ((captured_length % 4) ? (4 - (captured_length % 4)):0);
     }
 }
 
@@ -1797,19 +1679,18 @@ dissect_nrb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
             str = address_to_display(pinfo->pool, &addr);
 
             break;
-        case 0x003: /* EUI48 Record */ // TODO
-        case 0x004: /* EUI64 Record */ // TODO
         default:
             proto_tree_add_item(record_tree, hf_pcapng_record_data, tvb, offset, record_length, ENC_NA);
             offset += record_length;
         }
 
-        unsigned padding = (record_code != 0) ? WS_PADDING_TO_4(record_length) : 0;
-        proto_item_set_len(record_item, record_length + 2 * 2 + padding);
-        if (padding != 0) {
-            proto_tree_add_item(record_tree, hf_pcapng_record_padding, tvb, offset, padding, ENC_NA);
-            offset += padding;
-        }
+        if (record_code != 0 && record_length % 4) {
+            proto_item_set_len(record_item, record_length + 2 * 2 + (4 - record_length % 4));
+            record_length = 4 - record_length % 4;
+            proto_tree_add_item(record_tree, hf_pcapng_record_padding, tvb, offset, record_length, ENC_NA);
+            offset += record_length;
+        } else
+            proto_item_set_len(record_item, record_length + 2 * 2);
 
         if (str)
             proto_item_append_text(record_item, " = %s", str);
@@ -1827,7 +1708,8 @@ dissect_isb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
     uint32_t interface_id;
     struct interface_description *interface_description;
 
-    proto_tree_add_item_ret_uint(tree, hf_pcapng_interface_id, tvb, offset, 4, argp->info->encoding, &interface_id);
+    proto_tree_add_item(tree, hf_pcapng_interface_id, tvb, offset, 4, argp->info->encoding);
+    interface_id = tvb_get_uint32(tvb, offset, argp->info->encoding);
     offset += 4;
     interface_description = get_interface_description(argp->info, interface_id,
                                                       pinfo, argp->block_tree);
@@ -1851,7 +1733,8 @@ dissect_epb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
 
     proto_item_append_text(argp->block_item, " %u", argp->info->frame_number);
 
-    proto_tree_add_item_ret_uint(tree, hf_pcapng_interface_id, tvb, offset, 4, argp->info->encoding, &interface_id);
+    proto_tree_add_item(tree, hf_pcapng_interface_id, tvb, offset, 4, argp->info->encoding);
+    interface_id = tvb_get_uint32(tvb, offset, argp->info->encoding);
     offset += 4;
     interface_description = get_interface_description(argp->info, interface_id,
                                                       pinfo, argp->block_tree);
@@ -1884,10 +1767,9 @@ dissect_epb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
     argp->info->frame_number += 1;
     offset += captured_length;
 
-    unsigned padding = WS_PADDING_TO_4(captured_length);
-    if (padding != 0) {
-        proto_tree_add_item(tree, hf_pcapng_packet_padding, tvb, offset, padding, ENC_NA);
-        offset += padding;
+    if (captured_length % 4) {
+        proto_tree_add_item(tree, hf_pcapng_packet_padding, tvb, offset, ((captured_length % 4)? (4 - (captured_length % 4)):0), ENC_NA);
+        offset += ((captured_length % 4) ?(4 - (captured_length % 4)):0);
     }
 
     dissect_options(tree, pinfo, BLOCK_TYPE_EPB, tvb, offset, argp->info->encoding, NULL);
@@ -1921,12 +1803,9 @@ dissect_cb_data(proto_tree *tree, packet_info *pinfo _U_, tvbuff_t *tvb,
                 block_data_arg *argp)
 {
     int offset = 0;
-    uint32_t pen;
 
-    proto_tree_add_item_ret_uint(tree, hf_pcapng_cb_pen, tvb, offset, 4, argp->info->encoding, &pen);
+    proto_tree_add_item(tree, hf_pcapng_cb_pen, tvb, offset, 4, argp->info->encoding);
     offset += 4;
-    if (pref_additional_block_info)
-        proto_item_append_text(argp->block_item, " (PEN: %u (%s))", pen, enterprises_lookup(pen, NULL));
 
     /* Todo: Add known PEN custom data dissection. */
     proto_tree_add_item(tree, hf_pcapng_cb_data, tvb, offset, tvb_reported_length(tvb) - offset, argp->info->encoding);
@@ -1950,9 +1829,8 @@ int dissect_block(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, struct in
     proto_item      *block_length_trailer_item;
     int              offset = 0;
     uint32_t         block_type;
-    uint32_t         block_length = 0, block_length_trailer;
+    uint32_t         block_length, block_length_trailer;
     uint32_t         length;
-    const char      *block_type_name;
     tvbuff_t        *volatile next_tvb = NULL;
     block_data_arg   arg;
     volatile bool stop_dissecting = false;
@@ -1971,9 +1849,6 @@ int dissect_block(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, struct in
     block_item = proto_tree_add_item(tree, hf_pcapng_block, tvb, offset, length, ENC_NA);
     block_tree = proto_item_add_subtree(block_item, ett_pcapng_section_header_block);
 
-    proto_tree_add_uint64_format_value(block_tree, hf_pcapng_block_offset, tvb, offset, length, info->block_offset,
-                                       "0x%08" PRIx64 " (%" PRIu64 ")", info->block_offset, info->block_offset);
-
     /* Block type */
     block_type_item = proto_tree_add_item(block_tree, hf_pcapng_block_type, tvb, offset, 4, info->encoding);
     block_type_tree = proto_item_add_subtree(block_type_item, ett_pcapng_block_type);
@@ -1984,16 +1859,15 @@ int dissect_block(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, struct in
 
     /* Name is either from local 'name', or from fixed block_type_vals */
     if (p_local_block_callback) {
-        block_type_name = p_local_block_callback->name;
+        proto_item_append_text(block_item, " %u: %s", info->block_number, p_local_block_callback->name);
+        proto_item_append_text(block_type_item, ": (%s)", p_local_block_callback->name);
+        proto_item_append_text(block_type_value_item, ": (%s)", p_local_block_callback->name);
     }
     else {
-        block_type_name = val_to_str_const(block_type, block_type_vals, "Unknown");
+        proto_item_append_text(block_item, " %u: %s", info->block_number, val_to_str_const(block_type, block_type_vals, "Unknown"));
+        proto_item_append_text(block_type_item, ": (%s)", val_to_str_const(block_type, block_type_vals, "Unknown"));
+        proto_item_append_text(block_type_value_item, ": (%s)", val_to_str_const(block_type, block_type_vals, "Unknown"));
     }
-    if (pref_additional_block_info)
-        proto_item_append_text(block_item, " %u: Offset: 0x%08" PRIx64 " (%" PRIu64 "), Length: %u, %s",
-            info->block_number, info->block_offset, info->block_offset, length, block_type_name);
-    proto_item_append_text(block_type_item, ": (%s)", block_type_name);
-    proto_item_append_text(block_type_value_item, ": (%s)", block_type_name);
     info->block_number += 1;
 
     arg.block_item = block_item;
@@ -2060,8 +1934,6 @@ int dissect_block(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, struct in
             break;
         case BLOCK_TYPE_IRIG_TS:
         case BLOCK_TYPE_ARINC_429:
-        case BLOCK_TYPE_HP_MIB:
-        case BLOCK_TYPE_HP_CEB:
             break;
 
         default:
@@ -2074,15 +1946,15 @@ int dissect_block(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, struct in
     }
     CATCH(ReportedBoundsError) {
         /*
-         * The body didn't fit in the block.
-         * Mark the length as being too small.
-         */
+            * The body didn't fit in the block.
+            * Mark the length as being too small.
+            */
         expert_add_info(pinfo, block_length_item, &ei_block_length_below_block_content_length);
     }
     CATCH_ALL {
         /*
-         * Just rethrow other exceptions to the ultimate handler.
-         */
+            * Just rethrow other exceptions to the ultimate handler.
+            */
         RETHROW;
     }
     ENDTRY;
@@ -2125,8 +1997,6 @@ dissect_pcapng(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
         return 0;
 
     info.encoding = ENC_BIG_ENDIAN;
-    info.block_offset = 0;
-    info.prev_block_length = 0;
     info.block_number = 1;
     info.section_number = 0;
     info.interface_number = 0;
@@ -2174,8 +2044,6 @@ dissect_pcapng(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
         }
         else {
             length = tvb_get_uint32(tvb, offset + 4, info.encoding);
-            info.block_offset += info.prev_block_length;
-            info.prev_block_length = length;
         }
         next_tvb = tvb_new_subset_length(tvb, offset, length);
 
@@ -2210,8 +2078,8 @@ void register_pcapng_local_block_dissector(uint32_t block_number, local_block_ca
     g_hash_table_insert(s_local_block_callback_table, GUINT_TO_POINTER(block_number), block_callback_info);
 }
 
-static void
-common_register_pcapng(void)
+void
+proto_register_pcapng(void)
 {
     module_t         *module;
     expert_module_t  *expert_module;
@@ -2220,11 +2088,6 @@ common_register_pcapng(void)
         { &hf_pcapng_block,
             { "Block",                                     "pcapng.block",
             FT_NONE, BASE_NONE, NULL, 0x00,
-            NULL, HFILL }
-        },
-        { &hf_pcapng_block_offset,
-            { "Block Offset",                              "pcapng.block.offset",
-            FT_UINT64, BASE_HEX_DEC, NULL, 0x00,
             NULL, HFILL }
         },
         { &hf_pcapng_block_type,
@@ -2255,16 +2118,6 @@ common_register_pcapng(void)
         { &hf_pcapng_block_data,
             { "Block Data",                                "pcapng.block.data",
             FT_NONE, BASE_NONE, NULL, 0x00,
-            NULL, HFILL }
-        },
-        { &hf_pcapng_block_extraneous_data,
-            { "Extraneous Data",                           "pcapng.block.extraneous.data",
-            FT_BYTES, BASE_NONE, NULL, 0x00,
-            NULL, HFILL }
-        },
-        { &hf_pcapng_block_extraneous_data_length,
-            { "Extraneous Data Length",                           "pcapng.block.extraneous.data.length",
-            FT_UINT32, BASE_DEC, NULL, 0x00,
             NULL, HFILL }
         },
         { &hf_pcapng_options,
@@ -2412,16 +2265,6 @@ common_register_pcapng(void)
             FT_UINT64, BASE_DEC, NULL, 0x00,
             NULL, HFILL }
         },
-        { &hf_pcapng_option_data_interface_txspeed,
-            { "Tx speed",                                  "pcapng.options.option.data.interface.txspeed",
-            FT_UINT64, BASE_DEC, NULL, 0x00,
-            NULL, HFILL }
-        },
-        { &hf_pcapng_option_data_interface_rxspeed,
-            { "Rx speed",                                  "pcapng.options.option.data.interface.rxspeed",
-            FT_UINT64, BASE_DEC, NULL, 0x00,
-            NULL, HFILL }
-        },
         { &hf_pcapng_option_data_interface_timestamp_resolution,
             { "Timestamp Resolution",                      "pcapng.options.option.data.interface.timestamp_resolution",
             FT_UINT8, BASE_HEX, NULL, 0x00,
@@ -2472,11 +2315,6 @@ common_register_pcapng(void)
             FT_STRING, BASE_NONE, NULL, 0x00,
             NULL, HFILL }
         },
-        { &hf_pcapng_option_data_interface_iana_tzname,
-            { "IANA timezone name",                        "pcapng.options.option.data.interface.iana_tzname",
-            FT_STRING, BASE_NONE, NULL, 0x00,
-            NULL, HFILL }
-        },
         { &hf_pcapng_option_data_interface_fcs_length,
             { "FCS Length",                                "pcapng.options.option.data.interface.fcs_length",
             FT_UINT8, BASE_DEC, NULL, 0x00,
@@ -2485,16 +2323,6 @@ common_register_pcapng(void)
         { &hf_pcapng_option_data_interface_timestamp_offset,
             { "Timestamp Offset",                          "pcapng.options.option.data.interface.timestamp_offset",
             FT_UINT64, BASE_DEC, NULL, 0x00,
-            NULL, HFILL }
-        },
-        { &hf_pcapng_option_data_proc_id,
-            { "Process ID",                                "pcapng.options.option.data.process_id",
-            FT_UINT32, BASE_HEX, NULL, 0x00,
-            NULL, HFILL }
-        },
-        { &hf_pcapng_option_data_thread_id,
-            { "Thread ID",                                 "pcapng.options.option.data.thread_id",
-            FT_UINT32, BASE_HEX, NULL, 0x00,
             NULL, HFILL }
         },
         { &hf_pcapng_option_data_packet_verdict_type,
@@ -2607,8 +2435,8 @@ common_register_pcapng(void)
             FT_UINT16, BASE_HEX, VALS(packet_flags_direction_vals), 0x0003,
             NULL, HFILL }
         },
-        { &hf_pcapng_option_data_packet_darwin_dpib_id,
-            { "DPIB ID",                                   "pcapng.options.option.data.packet.darwin.dpib_id",
+        { &hf_pcapng_option_data_packet_darwin_dpeb_id,
+            { "DPEB ID",                                   "pcapng.options.option.data.packet.darwin.dpeb_id",
             FT_UINT32, BASE_DEC, NULL, 0x00,
             NULL, HFILL }
         },
@@ -2617,8 +2445,8 @@ common_register_pcapng(void)
             FT_UINT32, BASE_DEC, VALS(option_code_darwin_svc_class_vals), 0x00,
             NULL, HFILL }
         },
-        { &hf_pcapng_option_data_packet_darwin_edpib_id,
-            { "Effective DPIB ID",                         "pcapng.options.option.data.packet.darwin.edpib_id",
+        { &hf_pcapng_option_data_packet_darwin_edpeb_id,
+            { "Effective DPED ID",                         "pcapng.options.option.data.packet.darwin.edpeb_id",
             FT_UINT32, BASE_DEC, NULL, 0x00,
             NULL, HFILL }
         },
@@ -2860,9 +2688,7 @@ common_register_pcapng(void)
         { &ei_block_length_below_block_content_length, { "pcapng.block_length_below_block_content_length", PI_PROTOCOL, PI_ERROR, "Block length is < the length of the contents of the block", EXPFILL }},
         { &ei_block_length_not_multiple_of_4, { "pcapng.block_length_not_multiple_of4", PI_PROTOCOL, PI_ERROR, "Block length is not a multiple of 4", EXPFILL }},
         { &ei_block_lengths_dont_match, { "pcapng.block_lengths_dont_match", PI_PROTOCOL, PI_ERROR, "Block length in trailer differs from block length in header", EXPFILL }},
-        { &ei_block_extraneous_data, { "pcapng.block.extraneous_data", PI_PROTOCOL, PI_NOTE, "Extraneous data in block after END-OF-OPTION option", EXPFILL }},
         { &ei_invalid_option_length, { "pcapng.invalid_option_length", PI_PROTOCOL, PI_ERROR, "Invalid Option Length", EXPFILL }},
-        { &ei_option_length_too_large, { "pcapng.option_length_too_large", PI_PROTOCOL, PI_ERROR, "Option Length goes past the end of the block", EXPFILL }},
         { &ei_invalid_record_length, { "pcapng.invalid_record_length", PI_PROTOCOL, PI_ERROR, "Invalid Record Length", EXPFILL }},
         { &ei_missing_idb, { "pcapng.no_interfaces", PI_PROTOCOL, PI_ERROR, "No Interface Description before block that requires it", EXPFILL }},
     };
@@ -2872,7 +2698,6 @@ common_register_pcapng(void)
         &ett_pcapng_section_header_block,
         &ett_pcapng_block_data,
         &ett_pcapng_block_type,
-        &ett_pcapng_block_extraneous,
         &ett_pcapng_options,
         &ett_pcapng_option,
         &ett_pcapng_records,
@@ -2896,11 +2721,6 @@ common_register_pcapng(void)
             "Dissect next layer",
             &pref_dissect_next_layer);
 
-    prefs_register_bool_preference(module, "additional_block_info",
-            "Additional Block Info",
-            "Display additional information for each block",
-            &pref_additional_block_info);
-
     expert_module = expert_register_protocol(proto_pcapng);
     expert_register_field_array(expert_module, ei, array_length(ei));
 
@@ -2912,28 +2732,10 @@ common_register_pcapng(void)
 }
 
 void
-proto_register_pcapng(void)
-{
-    common_register_pcapng();
-}
-
-void
-event_register_pcapng(void)
-{
-    common_register_pcapng();
-}
-
-void
 proto_reg_handoff_pcapng(void)
 {
     heur_dissector_add("wtap_file", dissect_pcapng_heur, "PCAPNG File", "pcapng_wtap", proto_pcapng, HEURISTIC_ENABLE);
     pcap_pktdata_handle = find_dissector_add_dependency("pcap_pktdata", proto_pcapng);
-}
-
-void
-event_reg_handoff_pcapng(void)
-{
-    heur_dissector_add("wtap_file", dissect_pcapng_heur, "SCAP File", "pcapng_wtap", proto_pcapng, HEURISTIC_ENABLE);
 }
 
 /*

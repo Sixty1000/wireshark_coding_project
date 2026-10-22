@@ -1,4 +1,4 @@
-/* packet-cisco-erspan.c
+/* packet-erspan.c
  * Routines for the disassembly of Cisco's ERSPAN protocol
  *
  * Copyright 2005 Joerg Mayer (see AUTHORS file)
@@ -87,6 +87,9 @@ static int hf_erspan_pid_rsvd;
 
 static expert_field ei_erspan_version_unknown;
 
+#define PROTO_SHORT_NAME "ERSPAN"
+#define PROTO_LONG_NAME "Encapsulated Remote Switch Packet ANalysis"
+
 static const true_false_string tfs_direction = { "Egress", "Ingress" };
 
 #define ERSPAN_ENCAP_00 0
@@ -160,8 +163,8 @@ dissect_erspan(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 	    ENC_NA);
 	erspan_tree = proto_item_add_subtree(ti, ett_erspan);
 
-	col_set_str(pinfo->cinfo, COL_PROTOCOL, "ERSPAN");
-	col_set_str(pinfo->cinfo, COL_INFO, "ERSPAN:");
+	col_set_str(pinfo->cinfo, COL_PROTOCOL, PROTO_SHORT_NAME);
+	col_set_str(pinfo->cinfo, COL_INFO, PROTO_SHORT_NAME ":");
 
 	/*
 	 * Dissect the version field, which is present in all versions
@@ -409,8 +412,8 @@ dissect_erspan_88BE(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *d
 		    ENC_NA);
 		proto_item_append_text(ti, " Type I");
 
-		col_set_str(pinfo->cinfo, COL_PROTOCOL, "ERSPAN");
-		col_set_str(pinfo->cinfo, COL_INFO, "ERSPAN:");
+		col_set_str(pinfo->cinfo, COL_PROTOCOL, PROTO_SHORT_NAME);
+		col_set_str(pinfo->cinfo, COL_INFO, PROTO_SHORT_NAME ":");
 
 		call_dissector(ethnofcs_handle, tvb, pinfo, tree);
 		return tvb_captured_length(tvb);
@@ -473,12 +476,12 @@ proto_register_erspan(void)
 
 		{ &hf_erspan_timestamp,
 		{ "Timestamp",	"erspan.timestamp", FT_UINT32, BASE_DEC, NULL,
-			0x0, NULL, HFILL }},
+			0xffffffff, NULL, HFILL }},
 
 
 		{ &hf_erspan_sgt,
 		{ "Security Group Tag",	"erspan.sgt", FT_UINT16, BASE_DEC, NULL,
-			0x0, NULL, HFILL }},
+			0xffff, NULL, HFILL }},
 
 		{ &hf_erspan_p,
 		{ "Has Ethernet PDU",	"erspan.p", FT_UINT16, BASE_DEC, NULL,
@@ -521,7 +524,7 @@ proto_register_erspan(void)
 
 		{ &hf_erspan_pid1_port_index,
 		{ "Port ID/Index", "erspan.pid1.port_index", FT_UINT32, BASE_DEC, NULL,
-			0x0, NULL, HFILL }},
+			0xffffffff, NULL, HFILL }},
 
 		/* ID = 3 */
 		{ &hf_erspan_pid3_rsvd1,
@@ -534,7 +537,7 @@ proto_register_erspan(void)
 
 		{ &hf_erspan_pid3_timestamp,
 		{ "Upper 32-bit Timestamp", "erspan.pid3.timestamp", FT_UINT32, BASE_DEC, NULL,
-			0x0, NULL, HFILL }},
+			0xffffffff, NULL, HFILL }},
 
 		/* ID = 4 */
 		{ &hf_erspan_pid4_rsvd1,
@@ -560,7 +563,7 @@ proto_register_erspan(void)
 
 		{ &hf_erspan_pid5_timestamp,
 		{ "Timestamp (seconds)", "erspan.pid5.timestamp", FT_UINT32, BASE_DEC, NULL,
-			0x0, NULL, HFILL }},
+			0xffffffff, NULL, HFILL }},
 
 		/* ID = 7 (or 0) */
 		{ &hf_erspan_pid7_rsvd1,
@@ -573,7 +576,7 @@ proto_register_erspan(void)
 
 		{ &hf_erspan_pid7_timestamp,
 		{ "Upper 32-bit Timestamp", "erspan.pid7.timestamp", FT_UINT32, BASE_DEC, NULL,
-			0x0, NULL, HFILL }},
+			0xffffffff, NULL, HFILL }},
 
 		/* Reserved */
 		{ &hf_erspan_pid_rsvd,
@@ -590,7 +593,7 @@ proto_register_erspan(void)
 		{ &ei_erspan_version_unknown, { "erspan.version.unknown", PI_UNDECODED, PI_WARN, "Unknown version, please report or test to use fake ERSPAN preference", EXPFILL }},
 	};
 
-	proto_erspan = proto_register_protocol("Encapsulated Remote Switch Packet ANalysis", "ERSPAN", "erspan");
+	proto_erspan = proto_register_protocol(PROTO_LONG_NAME, PROTO_SHORT_NAME, "erspan");
 	proto_register_field_array(proto_erspan, hf, array_length(hf));
 	proto_register_subtree_array(ett, array_length(ett));
 	expert_erspan = expert_register_protocol(proto_erspan);

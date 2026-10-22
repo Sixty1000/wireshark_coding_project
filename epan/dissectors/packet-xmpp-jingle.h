@@ -1,4 +1,4 @@
-/* packet-xmpp-jingle.h
+/* xmpp-jingle.h
  *
  * Copyright 2011, Mariusz Okroj <okrojmariusz[]gmail.com>
  *

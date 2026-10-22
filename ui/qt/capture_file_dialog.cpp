@@ -19,7 +19,6 @@
 
 #include <errno.h>
 #include "wsutil/filesystem.h"
-#include "app/application_flavor.h"
 #include "wsutil/nstime.h"
 #include "wsutil/str_util.h"
 #include "wsutil/utf8_entities.h"
@@ -137,7 +136,7 @@ check_savability_t CaptureFileDialog::checkSaveAsWithComments(QWidget *parent, c
         msg_dialog.setDefaultButton(QMessageBox::Cancel);
     }
 
-#if defined(Q_OS_MACOS)
+#if defined(Q_OS_MAC)
     /*
      * In macOS, the "default button" is not necessarily the button that
      * has the input focus; Enter/Return activates the default button, and
@@ -244,12 +243,12 @@ QString CaptureFileDialog::fileExtensionType(int et, bool extension_globs)
     extensions_list = wtap_get_file_extension_type_extensions(et);
 
     // Get the list of compression-type extensions.
-    GSList *compression_type_extensions = ws_get_all_compression_type_extensions_list();
+    GSList *compression_type_extensions = wtap_get_all_compression_type_extensions_list();
 
     /* Construct the list of patterns. */
     for (extension = extensions_list; extension != NULL;
          extension = g_slist_next(extension)) {
-        QString bare_wc = QStringLiteral("*.%1").arg((char *)extension->data);
+        QString bare_wc = QString("*.%1").arg((char *)extension->data);
         all_wildcards << bare_wc;
 
         // Does this end with a compression suffix?
@@ -257,7 +256,7 @@ QString CaptureFileDialog::fileExtensionType(int et, bool extension_globs)
         for (GSList *compression_type_extension = compression_type_extensions;
             compression_type_extension != NULL;
             compression_type_extension = g_slist_next(compression_type_extension)) {
-            QString suffix = QStringLiteral(".") + (char *)compression_type_extension->data;
+            QString suffix = QString(".") + (char *)compression_type_extension->data;
             if (bare_wc.endsWith(suffix)) {
                 ends_with_compression_suffix = true;
                 break;
@@ -275,7 +274,7 @@ QString CaptureFileDialog::fileExtensionType(int et, bool extension_globs)
     // We set HideNameFilterDetails so that "All Files" and "All Capture
     // Files" don't show a wildcard list. We want to show the associated
     // wildcards for individual file types so we add them twice.
-    return QStringLiteral("%1 (%2) (%3)")
+    return QString("%1 (%2) (%3)")
             .arg(extension_type_name)
             .arg(no_compression_suffix_wildcards.join(" "))
             .arg(all_wildcards.join(" "));
@@ -339,7 +338,7 @@ QStringList CaptureFileDialog::buildFileOpenTypeList() {
      * the filter will be a bit long, so it *really* shouldn't be shown.
      * What about other platforms?
      */
-    filters << tr("All Files (" ALL_FILES_WILDCARD ")");
+    filters << QString(tr("All Files (" ALL_FILES_WILDCARD ")"));
 
     /*
      * Add an "All Capture Files" entry, with all the capture file
@@ -420,11 +419,11 @@ void CaptureFileDialog::fixFilenameExtension()
 
     // Fixup the new suffix based on whether we're compressing or not.
     // Strip off any compression suffix
-    GSList *compression_type_extensions = ws_get_all_compression_type_extensions_list();
+    GSList *compression_type_extensions = wtap_get_all_compression_type_extensions_list();
     for (GSList *compression_type_extension = compression_type_extensions;
         compression_type_extension != NULL;
         compression_type_extension = g_slist_next(compression_type_extension)) {
-        QString suffix = QStringLiteral(".") + (char *)compression_type_extension->data;
+        QString suffix = QString(".") + (char *)compression_type_extension->data;
         if (new_suffix.endsWith(suffix)) {
             //
             // It ends with this compression suffix; chop it off.
@@ -434,9 +433,9 @@ void CaptureFileDialog::fixFilenameExtension()
         }
     }
     g_slist_free(compression_type_extensions);
-    if (compressionType() != WS_FILE_UNCOMPRESSED) {
+    if (compressionType() != WTAP_UNCOMPRESSED) {
         // Compressing; append the appropriate compression suffix.
-        QString compressed_file_extension = QStringLiteral(".") + ws_compression_type_extension(compressionType());
+        QString compressed_file_extension = QString(".") + wtap_compression_type_extension(compressionType());
         if (valid_extensions.contains(new_suffix + compressed_file_extension)) {
             new_suffix += compressed_file_extension;
         }
@@ -502,7 +501,7 @@ int CaptureFileDialog::selectedFileType() {
     return type_hash_.value(selectedNameFilter(), WTAP_FILE_TYPE_SUBTYPE_UNKNOWN);
 }
 
-ws_compression_type CaptureFileDialog::compressionType() {
+wtap_compression_type CaptureFileDialog::compressionType() {
     return compress_group_box_.compressionType();
 }
 
@@ -808,7 +807,7 @@ void CaptureFileDialog::preview(const QString & path)
         return;
     }
 
-    wth = wtap_open_offline(path.toUtf8().data(), WTAP_TYPE_AUTO, &err, &err_info, true, application_configuration_environment_prefix());
+    wth = wtap_open_offline(path.toUtf8().data(), WTAP_TYPE_AUTO, &err, &err_info, true);
     if (wth == NULL) {
         if (err == WTAP_ERR_FILE_UNKNOWN_FORMAT) {
             preview_format_.setText(tr("unknown file format"));
@@ -864,7 +863,7 @@ void CaptureFileDialog::preview(const QString & path)
         ti_tm = localtime(&ti_time);
         first_elapsed = "?";
         if (ti_tm) {
-            first_elapsed = QStringLiteral("%1-%2-%3 %4:%5:%6")
+            first_elapsed = QString("%1-%2-%3 %4:%5:%6")
                     .arg(ti_tm->tm_year + 1900, 4, 10, QChar('0'))
                     .arg(ti_tm->tm_mon + 1, 2, 10, QChar('0'))
                     .arg(ti_tm->tm_mday, 2, 10, QChar('0'))
@@ -893,7 +892,7 @@ void CaptureFileDialog::preview(const QString & path)
             first_elapsed += tr("%Ln day(s)", "", days) + " ";
             elapsed_time = elapsed_time % 86400;
         }
-        first_elapsed += QStringLiteral("%2:%3:%4")
+        first_elapsed += QString("%2:%3:%4")
                 .arg(elapsed_time%86400/3600, 2, 10, QChar('0'))
                 .arg(elapsed_time%3600/60, 2, 10, QChar('0'))
                 .arg(elapsed_time%60, 2, 10, QChar('0'));

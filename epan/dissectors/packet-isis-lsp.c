@@ -23,8 +23,6 @@
 
 #include <epan/expert.h>
 #include <epan/packet.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 
 #include "packet-osi.h"
 #include "packet-isis.h"
@@ -100,7 +98,7 @@
 #define SEGMENT_ROUTING_LB       22
 #define NODE_MSD                 23            /* rfc8491 */
 #define SRV6_CAP                 25            /* rfc9352 */
-#define FLEX_ALGO_DEF            26            /* rfc9350 */
+#define FLEX_ALGO_DEF            26            /* draft-ietf-lsr-flex-algo-16 */
 
 
 /*Sub-TLVs under Group Address TLV*/
@@ -132,22 +130,19 @@
 #define IGP_MSD_TYPE_H_ENCAP        44
 #define IGP_MSD_TYPE_END_D          45
 
-/* Flex Algo Definition Sub-TLV (rfc9350) */
+/* Flex Algo Definition Sub-TLV (draft-ietf-lsr-flex-algo-16) */
 #define FAD_EXCLUDE_AG              1
 #define FAD_INCLUDE_ANY_AG          2
 #define FAD_INCLUDE_ALL_AG          3
 #define FAD_DEF_FLAGS               4
 #define FAD_EXCLUDE_SRLG            5
 
-/* Flex Algo Definition Flags (rfc9350) */
-#define FAD_DEF_FLAGS_M             0x80
-
 /* Prefix Attribute Flags Sub-TLV (rfc7794)*/
 #define ISIS_LSP_PFX_ATTR_FLAG_X    0x80
 #define ISIS_LSP_PFX_ATTR_FLAG_R    0x40
 #define ISIS_LSP_PFX_ATTR_FLAG_N    0x20
 
-const range_string isis_mtid_strings[] = {
+const range_string mtid_strings[] = {
   {    0,    0, "Standard topology" },
   {    1,    1, "IPv4 In-Band Management" },
   {    2,    2, "IPv6 routing topology" },
@@ -176,12 +171,6 @@ static int hf_isis_lsp_srlg_flags_numbered;
 static int hf_isis_lsp_srlg_ipv4_local;
 static int hf_isis_lsp_srlg_ipv4_remote;
 static int hf_isis_lsp_srlg_value;
-static int hf_isis_lsp_appspec_srlg_system_id;
-static int hf_isis_lsp_appspec_srlg_pseudo_num;
-static int hf_isis_lsp_appspec_srlg_sub_tlv_length;
-static int hf_isis_lsp_appspec_srlg_value;
-static int hf_isis_lsp_appspec_srlg_link_local_id;
-static int hf_isis_lsp_appspec_srlg_link_remote_id;
 static int hf_isis_lsp_checksum;
 static int hf_isis_lsp_checksum_status;
 static int hf_isis_lsp_clv_ipv4_int_addr;
@@ -446,10 +435,6 @@ static int hf_isis_lsp_clv_flex_algo_algorithm;
 static int hf_isis_lsp_clv_flex_algo_metric_type;
 static int hf_isis_lsp_clv_flex_algo_calc_type;
 static int hf_isis_lsp_clv_flex_algo_priority;
-static int hf_isis_lsp_clv_flex_algo_def_flags;
-static int hf_isis_lsp_clv_flex_algo_def_flags_m;
-static int hf_isis_lsp_clv_flex_algo_srlg_value;
-static int hf_isis_lsp_clv_flex_algo_prefix_metric;
 static int hf_isis_lsp_clv_srv6_endx_sid_system_id;
 static int hf_isis_lsp_clv_srv6_endx_sid_flags;
 static int hf_isis_lsp_clv_srv6_endx_sid_flags_b;
@@ -557,8 +542,6 @@ static int ett_isis_lsp_clv_prefix_neighbors;
 static int ett_isis_lsp_clv_nlpid_nlpid;
 static int ett_isis_lsp_clv_hostname;
 static int ett_isis_lsp_clv_srlg;
-static int ett_isis_lsp_clv_appspec_srlg;
-static int ett_isis_lsp_clv_appspec_srlg_subtlv;
 static int ett_isis_lsp_clv_te_router_id;
 static int ett_isis_lsp_clv_authentication;
 static int ett_isis_lsp_clv_ip_authentication;
@@ -632,7 +615,7 @@ static int ett_isis_lsp_clv_avaya_ip_grt_mc;
 static expert_field ei_isis_lsp_short_pdu;
 static expert_field ei_isis_lsp_long_pdu;
 static expert_field ei_isis_lsp_bad_checksum;
-static expert_field ei_isis_lsp_unknown_subtlv;
+static expert_field ei_isis_lsp_subtlv;
 static expert_field ei_isis_lsp_authentication;
 static expert_field ei_isis_lsp_short_clv;
 static expert_field ei_isis_lsp_long_clv;
@@ -640,6 +623,7 @@ static expert_field ei_isis_lsp_length_clv;
 static expert_field ei_isis_lsp_clv_mt;
 static expert_field ei_isis_lsp_clv_unknown;
 static expert_field ei_isis_lsp_malformed_subtlv;
+static expert_field ei_isis_lsp_unknown_subtlv;
 static expert_field ei_isis_lsp_reserved_not_zero;
 static expert_field ei_isis_lsp_length_invalid;
 
@@ -825,14 +809,6 @@ static int * const isis_lsp_app_sabm_bits[] = {
     NULL,
 };
 
-static const value_string isis_lsp_appspec_srlg_sub_tlv_vals[] = {
-    { 4, "Link Local/Remote Identifiers" },
-    { 6, "IPv4 Interface Address" },
-    { 8, "IPv4 Neighbor Address" },
-    { 12, "IPv6 Interface Address" },
-    { 13, "IPv6 Neighbor Address" },
-    { 0, NULL } };
-
 static const value_string isis_lsp_grp_types[] = {
     { GRP_MAC_ADDRESS,  "MAC address" },
     { GRP_IPV4_ADDRESS, "IPv4 address" },
@@ -902,7 +878,6 @@ static const value_string isis_lsp_ext_is_reachability_code_vals[] = {
 #define IP_REACH_SUBTLV_64BIT_ADMIN_TAG 2
 #define IP_REACH_SUBTLV_PFX_SID         3
 #define IP_REACH_SUBTLV_PFX_ATTRIB_FLAG 4
-#define IP_REACH_SUBTLV_FAPM            6
 #define IP_REACH_SUBTLV_BIER_INFO       32
 
 static const value_string isis_lsp_ext_ip_reachability_code_vals[] = {
@@ -910,7 +885,6 @@ static const value_string isis_lsp_ext_ip_reachability_code_vals[] = {
     { IP_REACH_SUBTLV_64BIT_ADMIN_TAG, "64-bit Administrative Tag" },
     { IP_REACH_SUBTLV_PFX_SID,         "Prefix-SID" },
     { IP_REACH_SUBTLV_PFX_ATTRIB_FLAG, "Prefix Attribute Flags" },
-    { IP_REACH_SUBTLV_FAPM,            "Flexible Algorithm Prefix Metric" },
     { IP_REACH_SUBTLV_BIER_INFO,       "BIER Info" },
     { 0, NULL }
 };
@@ -1043,7 +1017,7 @@ dissect_lsp_ip_reachability_clv(tvbuff_t *tvb, packet_info* pinfo, proto_tree *t
 
     while ( length > 0 ) {
         if (length<12) {
-            proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset,
+            proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset, -1,
                 "short IP reachability (%d vs 12)", length );
             return;
         }
@@ -1252,36 +1226,6 @@ dissect_prefix_attr_flags_subclv(tvbuff_t *tvb, packet_info *pinfo,
     }
 }
 
-/*
- * Name: dissect_flex_algo_prefix_metric_subclv()
- *
- * Description:
- *    Decodes a Flexible Algorithm Prefix Metric (FAPM) sub-TLV (RFC 9350)
- *
- * Input:
- *   tvbuff_t * : tvbuffer for packet data
- *   packet_info * : expert error misuse reporting
- *   proto_tree * : proto tree to build on
- *   int : current offset into packet data
- *   int : type of this clv
- *   int : length of this clv
- *
- * Output:
- *    void, will modify proto_tree if not null.
- */
-static void
-dissect_flex_algo_prefix_metric_subclv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
-                                       int offset, int clv_code _U_, int clv_len)
-{
-    if (clv_len != 5) {
-        proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_malformed_subtlv,
-                                     tvb, offset-2, 2,
-                                     "Invalid Sub-TLV Length %d (should be 5)", clv_len);
-        return;
-    }
-    proto_tree_add_item(tree, hf_isis_lsp_clv_flex_algo_algorithm, tvb, offset, 1, ENC_NA);
-    proto_tree_add_item(tree, hf_isis_lsp_clv_flex_algo_prefix_metric, tvb, offset+1, 4, ENC_BIG_ENDIAN);
-}
 
 /*
  * Name: dissect_ipreach_subclv ()
@@ -1345,10 +1289,6 @@ dissect_ipreach_subclv(tvbuff_t *tvb, packet_info *pinfo,  proto_tree *tree, pro
         /* Prefix Attribute Flags */
         dissect_prefix_attr_flags_subclv(tvb, pinfo, tree, tree_item, offset, clv_code, clv_len);
         break;
-    case IP_REACH_SUBTLV_FAPM:
-        /* Flexible Algorithm Prefix Metric (FAPM) */
-        dissect_flex_algo_prefix_metric_subclv(tvb, pinfo, tree, offset, clv_code, clv_len);
-        break;
     case IP_REACH_SUBTLV_BIER_INFO:
         dissect_bierinfo_subtlv(tvb, pinfo, tree, offset, clv_len);
         break;
@@ -1365,7 +1305,7 @@ dissect_ipreach_subclv(tvbuff_t *tvb, packet_info *pinfo,  proto_tree *tree, pro
  *
  *   The extended IP reachability TLV is an extended version
  *   of the IP reachability TLVs (codes 128 and 130). It encodes
- *   the metric as a 32-bit unsigned integer and allows to add
+ *   the metric as a 32-bit unsigned interger and allows to add
  *   sub-CLV(s).
  *
  *   CALLED BY TLV 235 DISSECTOR
@@ -1405,7 +1345,7 @@ dissect_lsp_ext_ip_reachability_clv(tvbuff_t *tvb, packet_info* pinfo, proto_tre
         bit_length = ctrl_info & 0x3f;
         byte_length = tvb_get_ipv4_addr_with_prefix_len(tvb, offset+5, &prefix, bit_length);
         if (byte_length == -1) {
-            proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset,
+            proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset, -1,
                  "IPv4 prefix has an invalid length: %d bits", bit_length );
                 return;
             }
@@ -1430,7 +1370,8 @@ dissect_lsp_ext_ip_reachability_clv(tvbuff_t *tvb, packet_info* pinfo, proto_tre
 
         len = 5 + byte_length;
         if ((ctrl_info & 0x40) != 0) {
-            proto_tree_add_item_ret_uint(subtree, hf_isis_lsp_ext_ip_reachability_subclvs_len, tvb, offset+len, 1, ENC_BIG_ENDIAN, &subclvs_len);
+            subclvs_len = tvb_get_uint8(tvb, offset+len);
+            proto_tree_add_item(subtree, hf_isis_lsp_ext_ip_reachability_subclvs_len, tvb, offset+len, 1, ENC_BIG_ENDIAN);
             i =0;
             while (i < subclvs_len) {
                 clv_offset = offset + len + 1 + i; /* skip the total subtlv len indicator */
@@ -1746,7 +1687,7 @@ dissect_lsp_sr_sid_label_clv(tvbuff_t *tvb, packet_info* pinfo _U_,
             proto_tree_add_item(subtree, hf_isis_lsp_clv_sr_cap_label, tvb, offset, tlv_len, ENC_BIG_ENDIAN);
             break;
     default:
-            proto_tree_add_expert_format(subtree, pinfo, &ei_isis_lsp_unknown_subtlv, tvb, offset, tlv_len,
+            proto_tree_add_expert_format(subtree, pinfo, &ei_isis_lsp_subtlv, tvb, offset, tlv_len,
                                          "SID/Label SubTlv - Bad length: Type: %d, Length: %d", ISIS_SR_SID_LABEL, tlv_len);
             break;
     }
@@ -1761,12 +1702,10 @@ dissect_isis_trill_clv(tvbuff_t *tvb, packet_info* pinfo _U_,
 {
     uint16_t rt_block;
     proto_tree *rt_tree, *cap_tree, *subtree;
-    proto_item *tree_item = NULL;
     uint16_t root_id;
     uint8_t tlv_type, tlv_len;
     int i;
-    int local_offset, local_len;
-    uint8_t flags;
+    int local_offset;
 
     switch (subtype) {
 
@@ -1809,7 +1748,7 @@ dissect_isis_trill_clv(tvbuff_t *tvb, packet_info* pinfo _U_,
         if (tlv_type == ISIS_SR_SID_LABEL) {
             dissect_lsp_sr_sid_label_clv(tvb, pinfo, rt_tree, offset+6, tlv_len);
         } else
-            proto_tree_add_expert_format(rt_tree, pinfo, &ei_isis_lsp_unknown_subtlv, tvb, offset+4, tlv_len+2,
+            proto_tree_add_expert_format(rt_tree, pinfo, &ei_isis_lsp_subtlv, tvb, offset+4, tlv_len+2,
                                          "Unknown SubTlv: Type: %d, Length: %d", tlv_type, tlv_len);
 
         return 0;
@@ -1831,10 +1770,10 @@ dissect_isis_trill_clv(tvbuff_t *tvb, packet_info* pinfo _U_,
 
         if ( sublen == 5 ) {
             offset++;
-            proto_tree_add_item(rt_tree, hf_isis_lsp_rt_capable_trill_affinity_tlv, tvb, offset, 4, ENC_BIG_ENDIAN);
-            proto_tree_add_item(rt_tree, hf_isis_lsp_rt_capable_trill_fgl_safe, tvb, offset, 4, ENC_BIG_ENDIAN);
-            proto_tree_add_item(rt_tree, hf_isis_lsp_rt_capable_trill_caps, tvb, offset, 4, ENC_BIG_ENDIAN);
-            proto_tree_add_item(rt_tree, hf_isis_lsp_rt_capable_trill_flags, tvb, offset, 4, ENC_BIG_ENDIAN);
+            proto_tree_add_item(rt_tree, hf_isis_lsp_rt_capable_trill_affinity_tlv, tvb, offset, 4, ENC_NA);
+            proto_tree_add_item(rt_tree, hf_isis_lsp_rt_capable_trill_fgl_safe, tvb, offset, 4, ENC_NA);
+            proto_tree_add_item(rt_tree, hf_isis_lsp_rt_capable_trill_caps, tvb, offset, 4, ENC_NA);
+            proto_tree_add_item(rt_tree, hf_isis_lsp_rt_capable_trill_flags, tvb, offset, 4, ENC_NA);
         }
 
         return 0;
@@ -1974,13 +1913,13 @@ dissect_isis_trill_clv(tvbuff_t *tvb, packet_info* pinfo _U_,
         i = 0;
         while (i < sublen) {
             local_offset = offset + i;
-            proto_tree_add_item(rt_tree, hf_isis_lsp_clv_sr_cap_range, tvb, local_offset, 3, ENC_BIG_ENDIAN);
+            proto_tree_add_item(rt_tree, hf_isis_lsp_clv_sr_cap_range, tvb, local_offset, 3, ENC_NA);
             tlv_type = tvb_get_uint8(tvb, local_offset+3);
             tlv_len = tvb_get_uint8(tvb, local_offset+4);
             if (tlv_type == ISIS_SR_SID_LABEL) {
                 dissect_lsp_sr_sid_label_clv(tvb, pinfo, rt_tree, local_offset+5, tlv_len);
             } else {
-                proto_tree_add_expert_format(rt_tree, pinfo, &ei_isis_lsp_unknown_subtlv, tvb, local_offset+3, tlv_len+2,
+                proto_tree_add_expert_format(rt_tree, pinfo, &ei_isis_lsp_subtlv, tvb, local_offset+3, tlv_len+2,
                                              "Unknown Sub-TLV: Type: %d, Length: %d", tlv_type, tlv_len);
             }
             i += (5 + tlv_len);
@@ -1993,7 +1932,7 @@ dissect_isis_trill_clv(tvbuff_t *tvb, packet_info* pinfo _U_,
                                                 NULL, "SRv6 Capability (t=%u, l=%u)",
                                                 subtype, sublen);
         proto_tree_add_bitmask(rt_tree, tvb, offset, hf_isis_lsp_clv_srv6_cap_flags,
-                               ett_isis_lsp_clv_srv6_cap_flags, srv6_cap_flags, ENC_BIG_ENDIAN);
+                               ett_isis_lsp_clv_srv6_cap_flags, srv6_cap_flags, ENC_NA);
         return 0;
 
     case NODE_MSD:
@@ -2027,7 +1966,7 @@ dissect_isis_trill_clv(tvbuff_t *tvb, packet_info* pinfo _U_,
             offset += 2;
             subtree = proto_tree_add_subtree_format(rt_tree, tvb, offset-2, tlv_len+2,
                                                     ett_isis_lsp_clv_flex_algo_def_sub_tlv,
-                                                    &tree_item, "%s (t=%u, l=%u)",
+                                                    NULL, "%s (t=%u, l=%u)",
                                                     val_to_str_const(tlv_type, isis_lsp_flex_algo_sub_tlv_vals, "Unknown"),
                                                     tlv_type, tlv_len);
             switch (tlv_type) {
@@ -2035,23 +1974,6 @@ dissect_isis_trill_clv(tvbuff_t *tvb, packet_info* pinfo _U_,
             case FAD_INCLUDE_ANY_AG:
             case FAD_INCLUDE_ALL_AG:
                 dissect_subclv_ext_admin_group(tvb, subtree, offset, tlv_type, tlv_len);
-                break;
-            case FAD_DEF_FLAGS:
-                flags = tvb_get_uint8(tvb, offset);
-                proto_tree_add_item(subtree, hf_isis_lsp_clv_flex_algo_def_flags_m, tvb, offset, 1, ENC_NA);
-                if (tree_item) {
-                    proto_item_append_text(tree_item, ": Flags:%c",
-                                           ((flags & FAD_DEF_FLAGS_M) != 0) ? 'M' : '-');
-                }
-                break;
-            case FAD_EXCLUDE_SRLG:
-                local_offset = offset;
-                local_len = sublen;
-                while (local_len >= 4) {
-                    proto_tree_add_item(subtree, hf_isis_lsp_clv_flex_algo_srlg_value, tvb, local_offset, 4, ENC_BIG_ENDIAN);
-                    local_len -= 4;
-                    local_offset += 4;
-                }
                 break;
             default:
                 break;
@@ -2110,14 +2032,14 @@ dissect_isis_rt_capable_clv(tvbuff_t *tvb, packet_info* pinfo _U_,
         offset += 2;
 
         if (subtlvlen > length) {
-            proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset-2,
+            proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset-2, -1,
                                   "Short type %d TLV (%d vs %d)", subtype, subtlvlen, length);
             return;
         }
 
         if (dissect_isis_trill_clv(tvb, pinfo, tree, offset, subtype, subtlvlen)==-1) {
 
-            proto_tree_add_expert_format( tree, pinfo, &ei_isis_lsp_unknown_subtlv, tvb, offset-2, subtlvlen+2,
+            proto_tree_add_expert_format( tree, pinfo, &ei_isis_lsp_subtlv, tvb, offset-2, subtlvlen+2,
                                       "Unknown SubTlv: Type: %d, Length: %d", subtype, subtlvlen);
         }
         length -= subtlvlen;
@@ -2168,7 +2090,7 @@ dissect_lsp_ipv6_reachability_clv(tvbuff_t *tvb, packet_info* pinfo, proto_tree 
         bit_length = tvb_get_uint8(tvb, offset+5);
         byte_length = tvb_get_ipv6_addr_with_prefix_len(tvb, offset+6, &prefix, bit_length);
         if (byte_length == -1) {
-            proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset,
+            proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset, -1,
                 "IPv6 prefix has an invalid length: %d bits", bit_length );
                 return;
             }
@@ -2197,7 +2119,8 @@ dissect_lsp_ipv6_reachability_clv(tvbuff_t *tvb, packet_info* pinfo, proto_tree 
 
         len = 6 + byte_length;
         if ((ctrl_info & 0x20) != 0) {
-            proto_tree_add_item_ret_uint(subtree, hf_isis_lsp_ipv6_reachability_subclvs_len, tvb, offset+len, 1, ENC_BIG_ENDIAN, &subclvs_len);
+            subclvs_len = tvb_get_uint8(tvb, offset+len);
+            proto_tree_add_item(subtree, hf_isis_lsp_ipv6_reachability_subclvs_len, tvb, offset+len, 1, ENC_BIG_ENDIAN);
 
             i =0;
             while (i < subclvs_len) {
@@ -2322,7 +2245,7 @@ dissect_lsp_srlg_clv(tvbuff_t *tvb, packet_info* pinfo _U_, proto_tree *tree, in
     isis_data_t *isis _U_, int length)
 {
 
-    proto_tree_add_item(tree, hf_isis_lsp_srlg_system_id, tvb, offset, 6, ENC_NA);
+    proto_tree_add_item(tree, hf_isis_lsp_srlg_system_id, tvb, offset, 6, ENC_BIG_ENDIAN);
     offset += 6;
 
     proto_tree_add_item(tree, hf_isis_lsp_srlg_pseudo_num, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -2342,135 +2265,6 @@ dissect_lsp_srlg_clv(tvbuff_t *tvb, packet_info* pinfo _U_, proto_tree *tree, in
         proto_tree_add_item(tree, hf_isis_lsp_srlg_value, tvb, offset, 4, ENC_BIG_ENDIAN);
         offset += 4;
         length -= 4;
-    }
-}
-
-
-/*
- * Name: dissect_lsp_appspec_srlg_clv()
- *
- * Description:
- *      Decode for a lsp packets Application-Specific SRLG clv (238).  Calls into the
- *      clv common one.
- *
- * Input:
- *      tvbuff_t * : tvbuffer for packet data
- *      proto_tree * : proto tree to build on (may be null)
- *      int : current offset into packet data
- *      int : length of IDs in packet.
- *      int : length of this clv
- *
- * Output:
- *      void, will modify proto_tree if not null.
- */
-static void
-dissect_lsp_appspec_srlg_clv(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, int offset,
-    isis_data_t *isis _U_, int length)
-{
-    proto_tree *subtree;
-    proto_item *tree_item = NULL;
-    uint8_t sabm_length = 0, udabm_length = 0;
-    int sabm_length_offset, udabm_length_offset;
-    int local_offset, local_len;
-    uint8_t sub_tlv_len = 0;
-    uint8_t tlv_type, tlv_len;
-
-    if (length < 10) {
-        proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset, length,
-                                     "Too short Application-Specific SRLG TLV length (%d vs min 10)", length);
-        return;
-    }
-
-    proto_tree_add_item(tree, hf_isis_lsp_appspec_srlg_system_id, tvb, offset, 6, ENC_NA);
-    offset += 6;
-    length -= 6;
-
-    proto_tree_add_item(tree, hf_isis_lsp_appspec_srlg_pseudo_num, tvb, offset, 1, ENC_BIG_ENDIAN);
-    offset += 1;
-    length -= 1;
-
-    proto_tree_add_item(tree, hf_isis_lsp_clv_app_sabm_legacy, tvb, offset, 1, ENC_NA);
-    sabm_length = tvb_get_uint8(tvb, offset) & 0x7f;
-    sabm_length_offset = offset;
-    proto_tree_add_uint(tree, hf_isis_lsp_clv_app_sabm_length, tvb, offset, 1, sabm_length);
-    offset += 1;
-    length -= 1;
-
-    proto_tree_add_item(tree, hf_isis_lsp_clv_app_udabm_reserved, tvb, offset, 1, ENC_NA);
-    udabm_length = tvb_get_uint8(tvb, offset) & 0x7f;
-    udabm_length_offset = offset;
-    proto_tree_add_uint(tree, hf_isis_lsp_clv_app_udabm_length, tvb, offset, 1, udabm_length);
-    offset += 1;
-    length -= 1;
-
-    if (sabm_length > 0) {
-        if (sabm_length > 8 || sabm_length > length) {
-            proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_short_clv, tvb, sabm_length_offset, 1,
-                                         "Invalid SABM length (%u vs %d bytes left)",
-                                         sabm_length, length);
-            return;
-        }
-        proto_tree_add_bitmask(tree, tvb, offset, hf_isis_lsp_clv_app_sabm_bits,
-                               ett_isis_lsp_clv_app_sabm_bits, isis_lsp_app_sabm_bits, ENC_NA);
-        offset += sabm_length;
-        length -= sabm_length;
-    }
-    if (udabm_length > 0) {
-        if (udabm_length > 8 || udabm_length > length) {
-            proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_short_clv, tvb, udabm_length_offset, 1,
-                                         "Invalid UDABM length (%u vs %d bytes left)",
-                                         udabm_length, length);
-            return;
-        }
-        proto_tree_add_item(tree, hf_isis_lsp_clv_app_udabm_bits, tvb, offset, udabm_length, ENC_NA);
-        offset += udabm_length;
-        length -= udabm_length;
-    }
-
-    proto_tree_add_item(tree, hf_isis_lsp_appspec_srlg_sub_tlv_length, tvb, offset, 1, ENC_NA);
-    sub_tlv_len = tvb_get_uint8(tvb, offset);
-    if (sub_tlv_len > length) {
-        proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset, 1,
-                                     "Invalid Application-Specific SRLG sub-TLV length (%u vs %d bytes left)",
-                                     sub_tlv_len, length);
-        return;
-    }
-    offset += 1;
-    length -= 1;
-
-    local_offset = offset;
-    local_len = sub_tlv_len;
-    while (local_len >= 2) {
-        tlv_type = tvb_get_uint8(tvb, local_offset);
-        tlv_len = tvb_get_uint8(tvb, local_offset + 1);
-        subtree = proto_tree_add_subtree_format(tree, tvb, local_offset, tlv_len+2,
-                                                ett_isis_lsp_clv_appspec_srlg_subtlv,
-                                                &tree_item, "%s (t=%u, l=%u)",
-                                                val_to_str_const(tlv_type, isis_lsp_appspec_srlg_sub_tlv_vals, "Unknown"),
-                                                tlv_type, tlv_len);
-        local_offset += 2;
-        local_len -= 2;
-        switch (tlv_type) {
-        case 4:
-            /* Link Local/Remote Identifiers */
-            proto_tree_add_item(subtree, hf_isis_lsp_appspec_srlg_link_local_id, tvb, local_offset, 4, ENC_BIG_ENDIAN);
-            proto_tree_add_item(subtree, hf_isis_lsp_appspec_srlg_link_remote_id, tvb, local_offset+4, 4, ENC_BIG_ENDIAN);
-            break;
-        default:
-            proto_tree_add_expert_format(subtree, pinfo, &ei_isis_lsp_unknown_subtlv, tvb, local_offset-2, tlv_len+2,
-                                         "Unknown Application-Specific SRLG subTLV (%u)", tlv_type);
-            break;
-        }
-        local_offset += tlv_len;
-        local_len -= tlv_len;
-    }
-
-    local_offset = offset + sub_tlv_len;
-    local_len = length - sub_tlv_len;
-    while (local_len >= 4) {
-        proto_tree_add_item(tree, hf_isis_lsp_appspec_srlg_value, tvb, local_offset, 4, ENC_BIG_ENDIAN);
-        local_offset += 4;
-        local_len -= 4;
     }
 }
 
@@ -2578,7 +2372,7 @@ dissect_isis_lsp_clv_mt_cap_spb_instance(tvbuff_t *tvb, packet_info *pinfo,
     };
 
     if (sublen < FIXED_LEN) {
-        proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset,
+        proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset, -1,
                               "Short SPB Digest subTLV (%d vs %d)", sublen, FIXED_LEN);
         return;
     }
@@ -2613,7 +2407,7 @@ dissect_isis_lsp_clv_mt_cap_spb_instance(tvbuff_t *tvb, packet_info *pinfo,
         }
         while (sublen > 0 && num_trees > 0) {
             if (sublen < VLAN_ID_TUPLE_LEN) {
-                proto_tree_add_expert_format_remaining(subtree, pinfo, &ei_isis_lsp_short_clv, tvb, offset,
+                proto_tree_add_expert_format(subtree, pinfo, &ei_isis_lsp_short_clv, tvb, offset, -1,
                                       "Short VLAN_ID entry (%d vs %d)", sublen, VLAN_ID_TUPLE_LEN);
                 return;
             }
@@ -2632,7 +2426,7 @@ dissect_isis_lsp_clv_mt_cap_spb_instance(tvbuff_t *tvb, packet_info *pinfo,
             }
         }
         if (num_trees) {
-            proto_tree_add_expert_format_remaining(subtree, pinfo, &ei_isis_lsp_short_clv, tvb, offset,
+            proto_tree_add_expert_format(subtree, pinfo, &ei_isis_lsp_short_clv, tvb, offset, -1,
                                   "Short subTLV (%d vs %d)", sublen, num_trees * VLAN_ID_TUPLE_LEN);
             return;
         }
@@ -2669,7 +2463,7 @@ dissect_isis_lsp_clv_mt_cap_spbm_service_identifier(tvbuff_t *tvb, packet_info *
     };
 
     if (sublen < FIXED_LEN) {
-        proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset,
+        proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset, -1,
                               "Short SPBM Service Identifier and Unicast Address subTLV (%d vs %d)", sublen, FIXED_LEN);
         return;
     }
@@ -2691,7 +2485,7 @@ dissect_isis_lsp_clv_mt_cap_spbm_service_identifier(tvbuff_t *tvb, packet_info *
         /*************************/
         while (sublen > 0) {
             if (sublen < ISID_LEN) {
-                proto_tree_add_expert_format_remaining(subtree, pinfo, &ei_isis_lsp_short_clv, tvb, offset,
+                proto_tree_add_expert_format(subtree, pinfo, &ei_isis_lsp_short_clv, tvb, offset, -1,
                                       "Short ISID entry (%d vs %d)", sublen, 4);
                 return;
             }
@@ -2721,7 +2515,7 @@ dissect_isis_lsp_clv_mt_cap_spbv_mac_address(tvbuff_t *tvb, packet_info *pinfo,
 
 
     if (sublen < 2) {
-        proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset,
+        proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset, -1,
                               "Short SPBV Mac Address subTLV (%d vs %d)", sublen, 2);
         return;
     }
@@ -2744,7 +2538,7 @@ dissect_isis_lsp_clv_mt_cap_spbv_mac_address(tvbuff_t *tvb, packet_info *pinfo,
         /*************************/
         while (sublen > 0) {
             if (sublen < 7) {
-                proto_tree_add_expert_format_remaining(subtree, pinfo, &ei_isis_lsp_short_clv, tvb, offset,
+                proto_tree_add_expert_format(subtree, pinfo, &ei_isis_lsp_short_clv, tvb, offset, -1,
                                       "Short MAC Address entry (%d vs %d)", sublen, 7);
                 return;
             }
@@ -2796,7 +2590,7 @@ dissect_isis_lsp_clv_mt_cap(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree,
             length -= 2;
             offset += 2;
             if (subtlvlen > length) {
-                proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset-2,
+                proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset-2, -1,
                                       "Short type %d TLV (%d vs %d)", subtype, subtlvlen, length);
                 return;
             }
@@ -2813,7 +2607,7 @@ dissect_isis_lsp_clv_mt_cap(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree,
                 dissect_isis_lsp_clv_mt_cap_spbv_mac_address(tvb, pinfo, tree, offset, subtype, subtlvlen);
             }
             else if (dissect_isis_trill_clv(tvb, pinfo, tree, offset, subtype, subtlvlen)==-1) {
-                proto_tree_add_expert_format( tree, pinfo, &ei_isis_lsp_unknown_subtlv, tvb, offset-2, subtlvlen+2,
+                proto_tree_add_expert_format( tree, pinfo, &ei_isis_lsp_subtlv, tvb, offset-2, subtlvlen+2,
                                       "Unknown SubTlv: Type: %d, Length: %d", subtype, subtlvlen);
             }
             length -= subtlvlen;
@@ -2891,13 +2685,13 @@ dissect_isis_lsp_clv_sid_label_binding(tvbuff_t *tvb, packet_info* pinfo, proto_
     clv_pref_l = tvb_get_uint8(tvb, tlv_offset);
     tlv_offset++;
     if (clv_pref_l == 32) {
-        proto_tree_add_item(tree, hf_isis_lsp_sl_binding_fec_prefix_ipv4, tvb, tlv_offset, clv_pref_l/8, ENC_BIG_ENDIAN);
+        proto_tree_add_item(tree, hf_isis_lsp_sl_binding_fec_prefix_ipv4, tvb, tlv_offset, clv_pref_l/8, ENC_NA);
     }
     else if (clv_pref_l == 128) {
         proto_tree_add_item(tree, hf_isis_lsp_sl_binding_fec_prefix_ipv6, tvb, tlv_offset, clv_pref_l/8, ENC_NA);
     }
     else {
-      proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_malformed_subtlv, tvb, tlv_offset,
+      proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_malformed_subtlv, tvb, tlv_offset, -1,
                                       "Prefix address format unknown length : %d",clv_pref_l);
     }
     tlv_offset = tlv_offset+(clv_pref_l/8);
@@ -2923,7 +2717,7 @@ dissect_isis_lsp_clv_sid_label_binding(tvbuff_t *tvb, packet_info* pinfo, proto_
                                             tvb, i+2+tlv_offset, clv_len, ENC_BIG_ENDIAN);
                         break;
                     default :
-                        proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_malformed_subtlv, tvb, i+2+tlv_offset,
+                        proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_malformed_subtlv, tvb, i+2+tlv_offset, -1,
                                                 "Label badly formatted");
                     break;
                 }
@@ -2943,14 +2737,14 @@ dissect_isis_lsp_clv_sid_label_binding(tvbuff_t *tvb, packet_info* pinfo, proto_
                                             tvb, i+2+tlv_offset+2, clv_len-2, ENC_BIG_ENDIAN);
                         break;
                     default :
-                        proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_malformed_subtlv, tvb, i+2+tlv_offset+2,
+                        proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_malformed_subtlv, tvb, i+2+tlv_offset+2, -1,
                                                 "Label badly formatted");
                         break;
                     }
                 }
                 break;
             default:
-                proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_malformed_subtlv, tvb, i+2+tlv_offset,
+                proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_malformed_subtlv, tvb, i+2+tlv_offset, -1,
                                             "Sub TLV badly formatted, type unknown %d", clv_code);
                 break;
         }
@@ -3081,7 +2875,7 @@ dissect_lsp_eis_neighbors_clv_inner(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 
     while ( length > 0 ) {
         if (length<tlen) {
-            proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset,
+            proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset, -1,
                 "short E/IS reachability (%d vs %d)", length, tlen );
             return;
         }
@@ -3246,11 +3040,12 @@ dissect_subclv_admin_group (tvbuff_t *tvb, proto_tree *tree, int offset) {
                 ett_isis_lsp_subclv_admin_group, NULL, "Administrative group(s):");
 
     clv_value = tvb_get_ntohl(tvb, offset);
-
-    for (i = 0, mask = 1; i < 32; i++, mask <<= 1) {
+    mask = 1;
+    for (i = 0 ; i < 32 ; i++) {
         if ( (clv_value & mask) != 0 ) {
             proto_tree_add_uint_format(ntree, hf_isis_lsp_group, tvb, offset, 4, clv_value & mask, "group %d", i);
         }
+        mask <<= 1;
     }
 }
 
@@ -3454,7 +3249,7 @@ dissect_subclv_spb_link_metric(tvbuff_t *tvb, packet_info *pinfo,
     const int SUBLEN     = 6;
 
     if (sublen != SUBLEN) {
-        proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset,
+        proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset, -1,
                               "Short SPB Link Metric sub-TLV (%d vs %d)", sublen, SUBLEN);
         return;
     }
@@ -3820,7 +3615,7 @@ dissect_sub_clv_tlv_22_22_23_141_222_223(tvbuff_t *tvb, packet_info* pinfo, prot
                                        srv6_endx_sid_flags, ENC_BIG_ENDIAN);
                 proto_tree_add_item(subtree, hf_isis_lsp_clv_srv6_endx_sid_alg, tvb, sub_tlv_offset+1, 1, ENC_NA);
                 proto_tree_add_item(subtree, hf_isis_lsp_clv_srv6_endx_sid_weight, tvb, sub_tlv_offset+2, 1, ENC_BIG_ENDIAN);
-                proto_tree_add_item(subtree, hf_isis_lsp_clv_srv6_endx_sid_endpoint_behavior, tvb, sub_tlv_offset+3, 2, ENC_BIG_ENDIAN);
+                proto_tree_add_item(subtree, hf_isis_lsp_clv_srv6_endx_sid_endpoint_behavior, tvb, sub_tlv_offset+3, 2, ENC_NA);
                 proto_tree_add_item(subtree, hf_isis_lsp_clv_srv6_endx_sid_sid, tvb, sub_tlv_offset+5, 16, ENC_NA);
                 proto_tree_add_item(subtree, hf_isis_lsp_clv_srv6_endx_sid_subsubclvs_len, tvb, sub_tlv_offset+21, 1, ENC_NA);
                 subsubclvs_len = tvb_get_uint8(tvb, sub_tlv_offset+21);
@@ -3850,7 +3645,7 @@ dissect_sub_clv_tlv_22_22_23_141_222_223(tvbuff_t *tvb, packet_info* pinfo, prot
                                                           local_offset, ssclv_code, ssclv_len);
                         break;
                     default:
-                        proto_tree_add_expert_format(subsubtree, pinfo, &ei_isis_lsp_unknown_subtlv, tvb,
+                        proto_tree_add_expert_format(subsubtree, pinfo, &ei_isis_lsp_subtlv, tvb,
                                                      local_offset, ssclv_len,
                                                      "Unknown Sub-Sub-TLV: Type: %u, Length: %u",
                                                      ssclv_code, ssclv_len);
@@ -3869,7 +3664,7 @@ dissect_sub_clv_tlv_22_22_23_141_222_223(tvbuff_t *tvb, packet_info* pinfo, prot
                                        srv6_endx_sid_flags, ENC_BIG_ENDIAN);
                 proto_tree_add_item(subtree, hf_isis_lsp_clv_srv6_endx_sid_alg, tvb, sub_tlv_offset+7, 1, ENC_NA);
                 proto_tree_add_item(subtree, hf_isis_lsp_clv_srv6_endx_sid_weight, tvb, sub_tlv_offset+8, 1, ENC_BIG_ENDIAN);
-                proto_tree_add_item(subtree, hf_isis_lsp_clv_srv6_endx_sid_endpoint_behavior, tvb, sub_tlv_offset+9, 2, ENC_BIG_ENDIAN);
+                proto_tree_add_item(subtree, hf_isis_lsp_clv_srv6_endx_sid_endpoint_behavior, tvb, sub_tlv_offset+9, 2, ENC_NA);
                 proto_tree_add_item(subtree, hf_isis_lsp_clv_srv6_endx_sid_sid, tvb, sub_tlv_offset+11, 16, ENC_NA);
                 proto_tree_add_item(subtree, hf_isis_lsp_clv_srv6_endx_sid_subsubclvs_len, tvb, sub_tlv_offset+27, 1, ENC_NA);
                 subsubclvs_len = tvb_get_uint8(tvb, sub_tlv_offset+27);
@@ -3899,7 +3694,7 @@ dissect_sub_clv_tlv_22_22_23_141_222_223(tvbuff_t *tvb, packet_info* pinfo, prot
                                                           local_offset, ssclv_code, ssclv_len);
                         break;
                     default:
-                        proto_tree_add_expert_format(subsubtree, pinfo, &ei_isis_lsp_unknown_subtlv, tvb,
+                        proto_tree_add_expert_format(subsubtree, pinfo, &ei_isis_lsp_subtlv, tvb,
                                                      local_offset, ssclv_len,
                                                      "Unknown Sub-Sub-TLV: Type: %u, Length: %u",
                                                      ssclv_code, ssclv_len);
@@ -3999,7 +3794,7 @@ dissect_lsp_mt_reachable_IPv4_prefx_clv(tvbuff_t *tvb, packet_info* pinfo,
         proto_tree *tree, int offset, isis_data_t *isis _U_, int length)
 {
     if (length < 2) {
-        proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset,
+        proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset, -1,
                 "short lsp multi-topology reachable IPv4 prefixes(%d vs %d)", length, 2 );
         return;
     }
@@ -4028,7 +3823,7 @@ dissect_lsp_mt_reachable_IPv6_prefx_clv(tvbuff_t *tvb, packet_info* pinfo,
         proto_tree *tree, int offset, isis_data_t *isis _U_, int length)
 {
     if (length < 2) {
-        proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset,
+        proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset, -1,
                 "short lsp multi-topology reachable IPv6 prefixes(%d vs %d)", length, 2 );
         return;
     }
@@ -4059,7 +3854,7 @@ dissect_lsp_mt_is_reachability_clv(tvbuff_t *tvb, packet_info* pinfo, proto_tree
     isis_data_t *isis _U_, int length)
 {
     if (length < 2) {
-        proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset,
+        proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset, -1,
                 "short lsp reachability(%d vs %d)", length, 2 );
         return;
     }
@@ -4098,7 +3893,7 @@ dissect_lsp_ori_buffersize_clv(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tr
     isis_data_t *isis, int length)
 {
     if ( length != 2 ) {
-        proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset,
+        proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset, -1,
                 "short lsp partition DIS(%d vs %d)", length, isis->system_id_len );
         return;
     }
@@ -4132,7 +3927,7 @@ dissect_lsp_partition_dis_clv(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tre
     isis_data_t *isis, int length)
 {
     if ( length < isis->system_id_len ) {
-        proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset,
+        proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset, -1,
                 "short lsp partition DIS(%d vs %d)", length, isis->system_id_len );
         return;
     }
@@ -4144,7 +3939,7 @@ dissect_lsp_partition_dis_clv(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tre
     length -= isis->system_id_len;
     offset += isis->system_id_len;
     if ( length > 0 ) {
-        proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_long_clv, tvb, offset,
+        proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_long_clv, tvb, offset, -1,
                 "Long lsp partition DIS, %d left over", length );
         return;
     }
@@ -4176,7 +3971,7 @@ dissect_lsp_prefix_neighbors_clv(tvbuff_t *tvb, packet_info* pinfo, proto_tree *
     int mylen;
 
     if ( length < 4 ) {
-        proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset,
+        proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset, -1,
             "Short lsp prefix neighbors (%d vs 4)", length );
         return;
     }
@@ -4199,12 +3994,12 @@ dissect_lsp_prefix_neighbors_clv(tvbuff_t *tvb, packet_info* pinfo, proto_tree *
         mylen = tvb_get_uint8(tvb, offset);
         length--;
         if (length<=0) {
-            proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset,
+            proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_short_clv, tvb, offset, -1,
                 "Zero payload space after length in prefix neighbor" );
             return;
         }
         if ( mylen > length*2) {
-            proto_tree_add_expert_format_remaining(tree, pinfo, &ei_isis_lsp_long_clv, tvb, offset,
+            proto_tree_add_expert_format(tree, pinfo, &ei_isis_lsp_long_clv, tvb, offset, -1,
                 "Integral length of prefix neighbor too long (%d vs %d)", mylen, length*2 );
             return;
         }
@@ -4285,7 +4080,7 @@ dissect_lsp_srv6_locator_subclv(tvbuff_t *tvb, packet_info *pinfo,
             break;
         }
         proto_tree_add_item(subtree, hf_isis_lsp_clv_srv6_end_sid_flags, tvb, offset, 1, ENC_NA);
-        proto_tree_add_item(subtree, hf_isis_lsp_clv_srv6_end_sid_endpoint_behavior, tvb, offset+1, 2, ENC_BIG_ENDIAN);
+        proto_tree_add_item(subtree, hf_isis_lsp_clv_srv6_end_sid_endpoint_behavior, tvb, offset+1, 2, ENC_NA);
         proto_tree_add_item(subtree, hf_isis_lsp_clv_srv6_end_sid_sid, tvb, offset+3, 16, ENC_NA);
         proto_tree_add_item(subtree, hf_isis_lsp_clv_srv6_end_sid_subsubclvs_len, tvb, offset+19, 1, ENC_NA);
         subsubclvs_len = tvb_get_uint8(tvb, offset + 19);
@@ -4321,7 +4116,7 @@ dissect_lsp_srv6_locator_subclv(tvbuff_t *tvb, packet_info *pinfo,
                                                   offset, ssclv_code, ssclv_len);
                 break;
             default:
-                proto_tree_add_expert_format(subsubtree, pinfo, &ei_isis_lsp_unknown_subtlv, tvb,
+                proto_tree_add_expert_format(subsubtree, pinfo, &ei_isis_lsp_subtlv, tvb,
                                              offset, ssclv_len,
                                              "Unknown Sub-Sub-TLV: Type: %u, Length: %u",
                                              ssclv_code, ssclv_len);
@@ -4332,7 +4127,7 @@ dissect_lsp_srv6_locator_subclv(tvbuff_t *tvb, packet_info *pinfo,
         }
         break;
     default:
-        proto_tree_add_expert_format(subtree, pinfo, &ei_isis_lsp_unknown_subtlv, tvb,
+        proto_tree_add_expert_format(subtree, pinfo, &ei_isis_lsp_subtlv, tvb,
                                      offset, clv_len,
                                      "Unknown Sub-TLV: Type: %u, Length: %u", clv_code, clv_len);
         break;
@@ -4604,7 +4399,7 @@ dissect_lsp_mac_reachability(tvbuff_t *tvb, packet_info* pinfo _U_, proto_tree *
     offset += 2;
     proto_tree_add_item(tree, hf_isis_lsp_mac_reachability_confidence, tvb, offset, 1, ENC_NA);
     offset += 1;
-    proto_tree_add_item(tree, hf_isis_lsp_mac_reachability_reserved, tvb, offset, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item(tree, hf_isis_lsp_mac_reachability_reserved, tvb, offset, 2, ENC_NA);
     proto_tree_add_item(tree, hf_isis_lsp_mac_reachability_vlan, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
@@ -4811,12 +4606,6 @@ static const isis_clv_handle_t clv_l1_lsp_opts[] = {
         dissect_lsp_srlg_clv
     },
     {
-        ISIS_CLV_APPSPEC_SRLG,
-        "Application-Specific SRLG",
-        &ett_isis_lsp_clv_appspec_srlg,
-        dissect_lsp_appspec_srlg_clv
-    },
-    {
         ISIS_CLV_TE_ROUTER_ID,
         "Traffic Engineering Router ID",
         &ett_isis_lsp_clv_te_router_id,
@@ -5016,12 +4805,6 @@ static const isis_clv_handle_t clv_l2_lsp_opts[] = {
         "Shared Risk Link Group",
         &ett_isis_lsp_clv_srlg,
         dissect_lsp_srlg_clv
-    },
-    {
-        ISIS_CLV_APPSPEC_SRLG,
-        "Application-Specific SRLG",
-        &ett_isis_lsp_clv_appspec_srlg,
-        dissect_lsp_appspec_srlg_clv
     },
     {
         ISIS_CLV_TE_ROUTER_ID,
@@ -5393,38 +5176,6 @@ proto_register_isis_lsp(void)
         { &hf_isis_lsp_srlg_value,
             { "Shared Risk Link Group Value", "isis.lsp.srlg.value",
               FT_UINT32, BASE_DEC_HEX, NULL, 0x0,
-              NULL, HFILL }
-        },
-
-        /* rfc9479 */
-        { &hf_isis_lsp_appspec_srlg_system_id,
-            { "System ID", "isis.lsp.application_specific_srlg.system_id",
-              FT_SYSTEM_ID, BASE_NONE, NULL, 0x0,
-              NULL, HFILL }
-        },
-        { &hf_isis_lsp_appspec_srlg_pseudo_num,
-            { "Pseudonode num", "isis.lsp.application_specific_srlg.pseudo_num",
-              FT_UINT8, BASE_DEC, NULL, 0x0,
-              NULL, HFILL }
-        },
-        { &hf_isis_lsp_appspec_srlg_sub_tlv_length,
-            { "Sub-TLV length", "isis.lsp.application_specific_srlg.sub_tlv_len",
-              FT_UINT8, BASE_DEC, NULL, 0,
-              NULL, HFILL}
-        },
-        { &hf_isis_lsp_appspec_srlg_value,
-            { "Shared Risk Link Group Value", "isis.lsp.application_specific_srlg.value",
-              FT_UINT32, BASE_DEC_HEX, NULL, 0,
-              NULL, HFILL }
-        },
-        { &hf_isis_lsp_appspec_srlg_link_local_id,
-            { "Link Local Identifier", "isis.lsp.application_specific_srlg.link_local_id",
-              FT_UINT32, BASE_DEC, NULL, 0,
-              NULL, HFILL }
-        },
-        { &hf_isis_lsp_appspec_srlg_link_remote_id,
-            { "Link Remote Identifier", "isis.lsp.application_specific_srlg.link_remote_id",
-              FT_UINT32, BASE_DEC, NULL, 0,
               NULL, HFILL }
         },
 
@@ -5824,7 +5575,7 @@ proto_register_isis_lsp(void)
         },
         { &hf_isis_lsp_mt_id,
             { "Topology ID", "isis.lsp.mtid",
-              FT_UINT16, BASE_DEC|BASE_RANGE_STRING, RVALS(isis_mtid_strings), 0x0fff,
+              FT_UINT16, BASE_DEC|BASE_RANGE_STRING, RVALS(mtid_strings), 0x0fff,
               NULL, HFILL }
         },
         { &hf_isis_lsp_ip_reachability_ipv4_prefix,
@@ -5949,7 +5700,7 @@ proto_register_isis_lsp(void)
         },
         { &hf_isis_lsp_grp_macaddr_topology_id,
             { "Topology ID", "isis.lsp.grp_macaddr.mtid",
-              FT_UINT16, BASE_DEC|BASE_RANGE_STRING, RVALS(isis_mtid_strings), 0x0fff,
+              FT_UINT16, BASE_DEC|BASE_RANGE_STRING, RVALS(mtid_strings), 0x0fff,
               NULL, HFILL }
         },
         { &hf_isis_lsp_grp_macaddr_vlan_id,
@@ -5984,7 +5735,7 @@ proto_register_isis_lsp(void)
         },
         { &hf_isis_lsp_grp_ipv4addr_topology_id,
             { "Topology ID", "isis.lsp.grp_ipv4addr.mtid",
-              FT_UINT16, BASE_DEC|BASE_RANGE_STRING, RVALS(isis_mtid_strings), 0x0fff,
+              FT_UINT16, BASE_DEC|BASE_RANGE_STRING, RVALS(mtid_strings), 0x0fff,
               NULL, HFILL }
         },
         { &hf_isis_lsp_grp_ipv4addr_vlan_id,
@@ -6019,7 +5770,7 @@ proto_register_isis_lsp(void)
         },
         { &hf_isis_lsp_grp_ipv6addr_topology_id,
             { "Topology ID", "isis.lsp.grp_ipv6addr.mtid",
-              FT_UINT16, BASE_DEC|BASE_RANGE_STRING, RVALS(isis_mtid_strings), 0x0fff,
+              FT_UINT16, BASE_DEC|BASE_RANGE_STRING, RVALS(mtid_strings), 0x0fff,
               NULL, HFILL }
         },
         { &hf_isis_lsp_grp_ipv6addr_vlan_id,
@@ -6332,7 +6083,7 @@ proto_register_isis_lsp(void)
         },
         { &hf_isis_lsp_mt_cap_mtid,
             { "Topology ID", "isis.lsp.mt_cap.mtid",
-              FT_UINT16, BASE_DEC|BASE_RANGE_STRING, RVALS(isis_mtid_strings), 0x0fff,
+              FT_UINT16, BASE_DEC|BASE_RANGE_STRING, RVALS(mtid_strings), 0x0fff,
               NULL, HFILL }
         },
         { &hf_isis_lsp_eis_neighbors_reserved,
@@ -6924,7 +6675,7 @@ proto_register_isis_lsp(void)
             NULL, HFILL }
         },
 
-        /* rfc9350 */
+        /* draft-ietf-lsr-flex-algo-16 */
         { &hf_isis_lsp_clv_flex_algo_algorithm,
           { "Flex-Algorithm", "isis.lsp.flex_algorithm.algorithm",
             FT_UINT8, BASE_DEC, NULL, 0x0,
@@ -6944,26 +6695,6 @@ proto_register_isis_lsp(void)
           { "Priority", "isis.lsp.flex_algorithm.priority",
             FT_UINT8, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
-        },
-        { &hf_isis_lsp_clv_flex_algo_def_flags,
-            { "Flexible Algorithm Definition Flags", "isis.lsp.flex_algorithm.definition_flags",
-              FT_UINT8, BASE_HEX, NULL, 0x0,
-              NULL, HFILL }
-        },
-        { &hf_isis_lsp_clv_flex_algo_def_flags_m,
-            { "M-flag (M)", "isis.lsp.flex_algorithm.definition_flags.m",
-              FT_BOOLEAN, 8, TFS(&tfs_set_notset), FAD_DEF_FLAGS_M,
-              NULL, HFILL }
-        },
-        { &hf_isis_lsp_clv_flex_algo_srlg_value,
-            { "Shared Risk Link Group", "isis.lsp.flex_algorithm.srlg",
-              FT_UINT32, BASE_DEC, NULL, 0x0,
-              NULL, HFILL }
-        },
-        { &hf_isis_lsp_clv_flex_algo_prefix_metric,
-            { "Metric", "isis.lsp.flex_algorithm.prefix_metric",
-              FT_UINT32, BASE_DEC, NULL, 0x0,
-              NULL, HFILL }
         },
 
         /* rfc6232 */
@@ -7267,8 +6998,6 @@ proto_register_isis_lsp(void)
         &ett_isis_lsp_clv_nlpid_nlpid,
         &ett_isis_lsp_clv_hostname,
         &ett_isis_lsp_clv_srlg,
-        &ett_isis_lsp_clv_appspec_srlg,
-        &ett_isis_lsp_clv_appspec_srlg_subtlv,
         &ett_isis_lsp_clv_ipv4_int_addr,
         &ett_isis_lsp_clv_ipv6_int_addr, /* CLV 232 */
         &ett_isis_lsp_clv_mt_cap,
@@ -7341,7 +7070,7 @@ proto_register_isis_lsp(void)
         { &ei_isis_lsp_short_pdu, { "isis.lsp.short_pdu", PI_MALFORMED, PI_ERROR, "PDU length less than header length", EXPFILL }},
         { &ei_isis_lsp_long_pdu, { "isis.lsp.long_pdu", PI_MALFORMED, PI_ERROR, "PDU length greater than packet length", EXPFILL }},
         { &ei_isis_lsp_bad_checksum, { "isis.lsp.bad_checksum", PI_CHECKSUM, PI_ERROR, "Bad checksum", EXPFILL }},
-        { &ei_isis_lsp_unknown_subtlv, { "isis.lsp.subtlv.unknown", PI_PROTOCOL, PI_WARN, "Unknown SubTLV", EXPFILL }},
+        { &ei_isis_lsp_subtlv, { "isis.lsp.subtlv.unknown", PI_PROTOCOL, PI_WARN, "Unknown SubTLV", EXPFILL }},
         { &ei_isis_lsp_authentication, { "isis.lsp.authentication.unknown", PI_PROTOCOL, PI_WARN, "Unknown authentication type", EXPFILL }},
         { &ei_isis_lsp_short_clv, { "isis.lsp.short_clv", PI_MALFORMED, PI_ERROR, "Short CLV", EXPFILL }},
         { &ei_isis_lsp_long_clv, { "isis.lsp.long_clv", PI_MALFORMED, PI_ERROR, "Long CLV", EXPFILL }},
@@ -7349,6 +7078,7 @@ proto_register_isis_lsp(void)
         { &ei_isis_lsp_clv_mt, { "isis.lsp.clv_mt.malformed", PI_MALFORMED, PI_ERROR, "malformed MT-ID", EXPFILL }},
         { &ei_isis_lsp_clv_unknown, { "isis.lsp.clv.unknown", PI_UNDECODED, PI_NOTE, "Unknown option", EXPFILL }},
         { &ei_isis_lsp_malformed_subtlv, { "isis.lsp.subtlv.malformed", PI_MALFORMED, PI_ERROR, "malformed SubTLV", EXPFILL }},
+        { &ei_isis_lsp_unknown_subtlv, { "isis.lsp.subtlv.unknown", PI_UNDECODED, PI_NOTE, "Unknown SubTLV", EXPFILL }},
         { &ei_isis_lsp_reserved_not_zero, { "isis.lsp.reserved_not_zero", PI_PROTOCOL, PI_WARN, "Reserve bit not 0", EXPFILL }},
         { &ei_isis_lsp_length_invalid, { "isis.lsp.length.invalid", PI_PROTOCOL, PI_WARN, "Invalid length", EXPFILL }},
     };

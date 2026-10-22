@@ -14,7 +14,6 @@
 #include <ui/qt/utils/wireshark_mime_data.h>
 #include <ui/qt/models/filter_list_model.h>
 #include <ui/qt/models/profile_model.h>
-#include <app/application_flavor.h>
 
 #include <QFile>
 #include <QTextStream>
@@ -65,9 +64,9 @@ void FilterListModel::reload()
     }
 
     /* Try personal config file first */
-    QString fileName = gchar_free_to_qstring(get_persconffile_path(cfile, true, application_configuration_environment_prefix()));
+    QString fileName = gchar_free_to_qstring(get_persconffile_path(cfile, true));
     if (fileName.length() <= 0 || ! QFileInfo::exists(fileName))
-        fileName = gchar_free_to_qstring(get_datafile_path(cfile, application_configuration_environment_prefix()));
+        fileName = gchar_free_to_qstring(get_datafile_path(cfile));
     if (fileName.length() <= 0 || ! QFileInfo::exists(fileName))
         return;
 
@@ -151,17 +150,9 @@ QVariant FilterListModel::data(const QModelIndex &index, int role) const
     if (! index.isValid() || index.row() >= rowCount())
         return QVariant();
 
-    auto row = storage.at(index.row());
-    if (role == Qt::DisplayRole) {
-        switch (index.column()) {
-        case FilterListModel::ColumnName:
-            return row.name;
-        case FilterListModel::ColumnExpression:
-            return row.expression;
-        default:
-            break;
-        }
-    }
+    QStringList row = storage.at(index.row()).split("\n");
+    if (role == Qt::DisplayRole)
+        return row.at(index.column());
 
     return QVariant();
 }
@@ -171,20 +162,15 @@ bool FilterListModel::setData(const QModelIndex &index, const QVariant &value, i
     if (! index.isValid() || index.row() >= rowCount() || role != Qt::EditRole)
         return false;
 
-    auto row = storage.at(index.row());
-
-    switch (index.column()) {
-    case FilterListModel::ColumnName:
-        if (value.toString().contains("\""))
-            return false;
-        storage[index.row()].name = value.toString();
-        break;
-    case FilterListModel::ColumnExpression:
-        storage[index.row()].expression = value.toString();
-        break;
-    default:
+    QStringList row = storage.at(index.row()).split("\n");
+    if (row.count() <= index.column())
         return false;
-    }
+
+    if (index.column() == FilterListModel::ColumnName && value.toString().contains("\""))
+        return false;
+
+    row[index.column()] = value.toString();
+    storage[index.row()] = row.join("\n");
 
     return true;
 }
@@ -207,7 +193,7 @@ QModelIndex FilterListModel::addFilter(QString name, QString expression)
         return QModelIndex();
 
     beginInsertRows(QModelIndex(), rowCount(), rowCount());
-    storage.emplace_back(name, expression);
+    storage << QString("%1\n%2").arg(name).arg(expression);
     endInsertRows();
 
     return index(rowCount() - 1, 0);
@@ -220,7 +206,7 @@ QModelIndex FilterListModel::findByName(QString name)
 
     for (int cnt = 0; cnt < rowCount(); cnt++)
     {
-        if (storage.at(cnt).name == name)
+        if (storage.at(cnt).startsWith(QString("%1\n").arg(name)))
             return index(cnt, 0);
     }
 
@@ -234,7 +220,7 @@ QModelIndex FilterListModel::findByExpression(QString expression)
 
     for (int cnt = 0; cnt < rowCount(); cnt++)
     {
-        if (storage.at(cnt).expression == expression)
+        if (storage.at(cnt).endsWith(QString("\n%1").arg(expression)))
             return index(cnt, 0);
     }
 
@@ -263,13 +249,7 @@ void FilterListModel::saveList()
         default: ws_assert_not_reached();
     }
 
-    //Use the model object to pull the profile information
-    ProfileModel model;
-    QString profilePath;
-    const ProfileItem* currentProfile = model.getCurrentProfile();
-    if (currentProfile != Q_NULLPTR)
-        profilePath = currentProfile->getProfilePath();
-    filename = QStringLiteral("%1%2%3").arg(profilePath).arg("/").arg(cfile);
+    filename = QString("%1%2%3").arg(ProfileModel::activeProfilePath()).arg("/").arg(cfile);
     QFile file(filename);
 
     if (! file.open(QIODevice::WriteOnly | QIODevice::Text))
@@ -278,10 +258,14 @@ void FilterListModel::saveList()
     QTextStream out(&file);
     for (int row = 0; row < rowCount(); row++)
     {
-        QString line = QStringLiteral("\"%1\"").arg(index(row, ColumnName).data().toString().trimmed());
-        line.append(join_lines(QStringLiteral(" %1").arg(index(row, ColumnExpression).data().toString())));
+        QString line = QString("\"%1\"").arg(index(row, ColumnName).data().toString().trimmed());
+        line.append(QString(" %1").arg(index(row, ColumnExpression).data().toString()));
 
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
         out << line << Qt::endl;
+#else
+        out << line << endl;
+#endif
     }
 
     file.close();

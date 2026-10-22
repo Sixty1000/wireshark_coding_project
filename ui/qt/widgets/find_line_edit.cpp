@@ -8,7 +8,8 @@
  */
 
 #include <ui/qt/widgets/find_line_edit.h>
-#include <ui/qt/utils/theme_manager.h>
+#include <ui/qt/utils/color_utils.h>
+#include "epan/prefs.h"
 
 #include <QAction>
 #include <QKeyEvent>
@@ -47,12 +48,17 @@ void FindLineEdit::keyPressEvent(QKeyEvent *event)
 
 void FindLineEdit::validateText()
 {
+    QString style("QLineEdit { background-color: %1; }");
+
     if (!use_regex_ || text().isEmpty()) {
-        ThemeManager::setValidationState(this, QString());
+        setStyleSheet(style.arg(QString("")));
     } else {
         QRegularExpression regexp(text(), QRegularExpression::UseUnicodePropertiesOption);
-        ThemeManager::setValidationState(this,
-                regexp.isValid() ? QStringLiteral("valid") : QStringLiteral("invalid"));
+        if (regexp.isValid()) {
+            setStyleSheet(style.arg(ColorUtils::fromColorT(prefs.gui_text_valid).name()));
+        } else {
+            setStyleSheet(style.arg(ColorUtils::fromColorT(prefs.gui_text_invalid).name()));
+        }
     }
 }
 

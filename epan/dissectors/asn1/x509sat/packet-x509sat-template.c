@@ -23,6 +23,10 @@
 #include "packet-x509sat.h"
 #include "packet-x509if.h"
 
+#define PNAME  "X.509 Selected Attribute Types"
+#define PSNAME "X509SAT"
+#define PFNAME "x509sat"
+
 void proto_register_x509sat(void);
 void proto_reg_handoff_x509sat(void);
 
@@ -50,7 +54,7 @@ void proto_register_x509sat(void) {
   };
 
   /* Register protocol */
-  proto_x509sat = proto_register_protocol("X.509 Selected Attribute Types", "X509SAT", "x509sat");
+  proto_x509sat = proto_register_protocol(PNAME, PSNAME, PFNAME);
 
   /* Register fields and subtrees */
   proto_register_field_array(proto_x509sat, hf, array_length(hf));

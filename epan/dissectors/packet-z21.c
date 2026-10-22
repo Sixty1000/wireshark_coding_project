@@ -20,8 +20,6 @@
 #include <epan/packet.h>
 #include <epan/expert.h>
 #include <epan/prefs.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 #include "packet-udp.h"
 
 void proto_register_z21(void);
@@ -1429,7 +1427,7 @@ dissect_z21_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
                     proto_tree_add_string(z21_tree, hf_z21_booster_name, tvb, offset, 32, "");
                 }
                 else {
-                    proto_tree_add_string(z21_tree, hf_z21_booster_name, tvb, offset, 32, (char*)buf);
+                    proto_tree_add_string(z21_tree, hf_z21_booster_name, tvb, offset, 32, buf);
                 }
                 offset += 32;
             }
@@ -1447,7 +1445,7 @@ dissect_z21_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
                     proto_tree_add_string(z21_tree, hf_z21_decoder_name, tvb, offset, 32, "");
                 }
                 else {
-                    proto_tree_add_string(z21_tree, hf_z21_decoder_name, tvb, offset, 32, (char*)buf);
+                    proto_tree_add_string(z21_tree, hf_z21_decoder_name, tvb, offset, 32, buf);
                 }
                 offset += 32;
             }
@@ -2291,7 +2289,7 @@ proto_register_z21(void)
         },
         { &hf_z21_can_booster_power,
           { "CAN booster power", "z21.canboosterpower",
-            FT_UINT8, BASE_HEX, NULL, 0x0,
+            FT_UINT16, BASE_HEX, NULL, 0x0,
             NULL, HFILL }
         },
         { &hf_z21_zlink_message_type,

@@ -433,7 +433,7 @@ dissect_zcl_ias_ace_get_zone_status(tvbuff_t *tvb, proto_tree *tree, unsigned *o
 static void
 dissect_zcl_ias_ace_zone_status_changed(tvbuff_t *tvb, proto_tree *tree, unsigned *offset)
 {
-    unsigned length;
+    int length;
 
     /* Retrieve "Zone ID" field */
     proto_tree_add_item(tree, hf_zbee_zcl_ias_ace_zone_id, tvb, *offset, 1, ENC_LITTLE_ENDIAN);
@@ -836,6 +836,7 @@ void proto_register_zbee_zcl_ias_wd(void);
 void proto_reg_handoff_zbee_zcl_ias_wd(void);
 
 /* Command Dissector Helpers */
+static void dissect_zcl_ias_wd_attr_data                (proto_tree *tree, tvbuff_t *tvb, unsigned *offset, uint16_t attr_id, unsigned data_type, bool client_attr);
 static void dissect_zcl_ias_wd_start_warning            (tvbuff_t *tvb, proto_tree *tree, unsigned *offset);
 static void dissect_zcl_ias_wd_squawk                   (tvbuff_t *tvb, proto_tree *tree, unsigned *offset);
 
@@ -1033,14 +1034,14 @@ dissect_zcl_ias_wd_squawk(tvbuff_t *tvb, proto_tree *tree, unsigned *offset)
  *@param data_type attribute data type
  *@param client_attr ZCL client
 */
-static void
-dissect_zcl_ias_wd_attr_data(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, unsigned *offset, uint16_t attr_id, unsigned data_type, bool client_attr)
+void
+dissect_zcl_ias_wd_attr_data(proto_tree *tree, tvbuff_t *tvb, unsigned *offset, uint16_t attr_id, unsigned data_type, bool client_attr)
 {
     /* Dissect attribute data type and data */
     switch (attr_id) {
         case ZBEE_ZCL_ATTR_ID_IAS_WD_MAX_DURATION:
         default:
-            dissect_zcl_attr_data(tvb, pinfo, tree, offset, data_type, client_attr);
+            dissect_zcl_attr_data(tvb, tree, offset, data_type, client_attr);
             break;
     }
 
@@ -1121,7 +1122,7 @@ proto_reg_handoff_zbee_zcl_ias_wd(void)
                             hf_zbee_zcl_ias_wd_attr_id,
                             hf_zbee_zcl_ias_wd_srv_rx_cmd_id,
                             -1,
-                            dissect_zcl_ias_wd_attr_data
+                            (zbee_zcl_fn_attr_data)dissect_zcl_ias_wd_attr_data
                          );
 } /*proto_reg_handoff_zbee_zcl_ias_wd*/
 

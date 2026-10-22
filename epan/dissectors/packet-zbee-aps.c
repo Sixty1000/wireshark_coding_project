@@ -14,12 +14,11 @@
 #include "config.h"
 
 #include <epan/packet.h>
+#include <epan/exceptions.h>
 #include <epan/prefs.h>    /* req'd for packet-zbee-security.h */
 #include <epan/expert.h>
 #include <epan/reassemble.h>
 #include <epan/proto_data.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 
 #include "packet-zbee.h"
 #include "packet-zbee-nwk.h"
@@ -55,7 +54,6 @@ static unsigned   zbee_apf_transaction_len    (tvbuff_t *tvb, unsigned offset, u
 
 void dissect_zbee_aps_status_code(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset);
 void proto_register_zbee_aps(void);
-void proto_reg_handoff_zbee_aps(void);
 
 /********************
  * Global Variables *
@@ -160,9 +158,6 @@ static dissector_handle_t   zbee_apf_handle;
 /* Dissector List. */
 static dissector_table_t    zbee_aps_dissector_table;
 
-/* Cached protocol identifier */
-static int proto_zbee_nwk;
-
 /* Reassembly table. */
 static reassembly_table     zbee_aps_reassembly_table;
 
@@ -245,16 +240,12 @@ static const value_string zbee_aps_cmd_names[] = {
 
 /* APS Key Names */
 static const value_string zbee_aps_key_names[] = {
-    { ZBEE_APS_CMD_KEY_TC_MASTER,               "Trust Center Master Key" },
-    { ZBEE_APS_CMD_KEY_STANDARD_NWK,            "Standard Network Key" },
-    { ZBEE_APS_CMD_KEY_APP_MASTER,              "Application Master Key" },
-    { ZBEE_APS_CMD_KEY_APP_LINK,                "Application Link Key" },
-    { ZBEE_APS_CMD_KEY_TC_LINK,                 "Trust Center Link Key" },
-    { ZBEE_APS_CMD_KEY_HIGH_SEC_NWK,            "High-Security Network Key" },
-    { ZBEE_APS_CMD_KEY_EPHEMERAL_GLOBAL_AUTH,   "Ephemeral Global Authorization Key" },
-    { ZBEE_APS_CMD_KEY_EPHEMERAL_UNIQUE_AUTH,   "Ephemeral Unique Authorization Key" },
-    { ZBEE_APS_CMD_KEY_BASIC_AUTH,              "Basic Authorization Key" },
-    { ZBEE_APS_CMD_KEY_ADMIN_AUTH,              "Administrative Authorization Key" },
+    { ZBEE_APS_CMD_KEY_TC_MASTER,       "Trust Center Master Key" },
+    { ZBEE_APS_CMD_KEY_STANDARD_NWK,    "Standard Network Key" },
+    { ZBEE_APS_CMD_KEY_APP_MASTER,      "Application Master Key" },
+    { ZBEE_APS_CMD_KEY_APP_LINK,        "Application Link Key" },
+    { ZBEE_APS_CMD_KEY_TC_LINK,         "Trust Center Link Key" },
+    { ZBEE_APS_CMD_KEY_HIGH_SEC_NWK,    "High-Security Network Key" },
     { 0, NULL }
 };
 
@@ -579,9 +570,6 @@ const range_string zbee_aps_cid_names[] = {
     { ZBEE_ZCL_CID_POWER_PROFILE,                    ZBEE_ZCL_CID_POWER_PROFILE,                    "Power Profile"},
     { ZBEE_ZCL_CID_APPLIANCE_CONTROL,                ZBEE_ZCL_CID_APPLIANCE_CONTROL,                "Appliance Control"},
 
-/* Zigbee Direct (ZBD) */
-    { ZBEE_ZCL_ZBD_CONFIGURATION,                   ZBEE_ZCL_ZBD_CONFIGURATION,                   "ZBD Configuration"},
-
 /* Closures */
     { ZBEE_ZCL_CID_SHADE_CONFIG,                    ZBEE_ZCL_CID_SHADE_CONFIG,                    "Shade Configuration"},
     { ZBEE_ZCL_CID_DOOR_LOCK,                       ZBEE_ZCL_CID_DOOR_LOCK,                       "Door Lock"},
@@ -659,7 +647,6 @@ const range_string zbee_aps_cid_names[] = {
     {ZBEE_ZCL_CID_METER_IDENTIFICATION,             ZBEE_ZCL_CID_METER_IDENTIFICATION,             "Meter Identification"},
     {ZBEE_ZCL_CID_APPLIANCE_EVENTS_AND_ALERT,       ZBEE_ZCL_CID_APPLIANCE_EVENTS_AND_ALERT,       "Appliance Events And Alerts"},
     {ZBEE_ZCL_CID_APPLIANCE_STATISTICS,             ZBEE_ZCL_CID_APPLIANCE_STATISTICS,             "Appliance Statistics"},
-    {ZBEE_ZCL_CID_DIAGNOSTICS,                      ZBEE_ZCL_CID_DIAGNOSTICS,                      "Diagnostics"},
 
     {ZBEE_ZCL_CID_ZLL,                              ZBEE_ZCL_CID_ZLL,                              "ZLL Commissioning"},
 
@@ -814,7 +801,8 @@ dissect_zbee_aps(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
     /* Init. */
     memset(&packet, 0, sizeof(zbee_aps_packet));
 
-    nwk_hints = (zbee_nwk_hints_t *)p_get_proto_data(wmem_file_scope(), pinfo, proto_zbee_nwk, 0);
+    nwk_hints = (zbee_nwk_hints_t *)p_get_proto_data(wmem_file_scope(), pinfo,
+        proto_get_id_by_filter_name(ZBEE_PROTOABBREV_NWK), 0);
 
     /*  Create the protocol tree */
     proto_root = proto_tree_add_protocol_format(tree, proto_zbee_aps, tvb, offset, tvb_captured_length(tvb), "ZigBee Application Support Layer");
@@ -919,7 +907,7 @@ dissect_zbee_aps(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
         }
         else if ((packet.delivery == ZBEE_APS_FCF_GROUP) && (nwk->version >= ZBEE_VERSION_2007)) {
             /* Group addressing was added in ZigBee 2006, and contains only the
-             * source endpoint. (IMO, Broadcast deliveries should do the same).
+             * source endpoint. (IMO, Broacast deliveries should do the same).
              */
             packet.dst_present = false;
             packet.src_present = true;
@@ -1078,21 +1066,15 @@ dissect_zbee_aps_no_endpt:
         uint32_t        num_blocks;
         fragment_head   *frag_msg = NULL;
         tvbuff_t        *new_tvb;
-        uint32_t        counter;
 
         /* Set the fragmented flag. */
         pinfo->fragmented = true;
-
-        /* Compute the extended counter based on the 'raw packet' counter. This is particularly important in
-         * case of 'APS Relay' commands, which carry either APSDE-DATA or APS commands potentially originating
-         * from a different device than the 'APS Relay' command itself and can carry a different APS counter value. */
-        counter = zbee_aps_calculate_extended_counter(node_data_packet->extended_counter, packet.counter);
 
         /* The source address (short address and PAN ID) and APS Counter pair form a unique identifier
          * for each message (fragmented or not). Hash these together to
          * create the message id for the fragmentation handler.
          */
-        msg_id = ((nwk->src)<<16) + (counter & 0xffff);
+        msg_id = ((nwk->src)<<16) + (node_data_packet->extended_counter & 0xffff);
         if (nwk_hints) {
             msg_id ^= (nwk_hints->src_pan)<<16;
         }
@@ -1394,12 +1376,6 @@ dissect_zbee_aps_transport_key(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree
     proto_tree_add_uint(tree, hf_zbee_aps_cmd_key_type, tvb, offset, 1, key_type);
     offset += 1;
 
-    if ((key_type == ZBEE_APS_CMD_KEY_EPHEMERAL_GLOBAL_AUTH)
-        || (key_type == ZBEE_APS_CMD_KEY_EPHEMERAL_UNIQUE_AUTH)) {
-        /* APS Transport key frame with ephemeral keytype will not have Key descriptor field. */
-        return offset;
-    }
-
     /* Coincidentally, all the key descriptors start with the key. So
      * get and display it.
      */
@@ -1416,7 +1392,6 @@ dissect_zbee_aps_transport_key(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree
     switch (key_type) {
         case ZBEE_APS_CMD_KEY_STANDARD_NWK:
         case ZBEE_APS_CMD_KEY_HIGH_SEC_NWK:
-        case ZBEE_APS_CMD_KEY_BASIC_AUTH:
             {
                 /* Network Key */
                 uint8_t seqno;
@@ -2279,11 +2254,6 @@ void proto_register_zbee_aps(void)
     /* Register the App dissector. */
     zbee_apf_handle = register_dissector("zbee_apf", dissect_zbee_apf, proto_zbee_apf);
 } /* proto_register_zbee_aps */
-
-void proto_reg_handoff_zbee_aps(void)
-{
-    proto_zbee_nwk = proto_get_id_by_filter_name(ZBEE_PROTOABBREV_NWK);
-}
 
 /*
  * Editor modelines  -  https://www.wireshark.org/tools/modelines.html

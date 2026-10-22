@@ -14,9 +14,7 @@
 #include <wiretap/wtap.h>
 
 void proto_register_mime_encap(void);
-void event_register_mime_encap(void);
 void proto_reg_handoff_mime_encap(void);
-void event_reg_handoff_mime_encap(void);
 
 static int proto_mime_encap;
 
@@ -42,8 +40,8 @@ dissect_mime_encap(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 	return tvb_captured_length(tvb);
 }
 
-static void
-common_register_mime_encap(void)
+void
+proto_register_mime_encap(void)
 {
 	proto_mime_encap = proto_register_protocol("MIME file", "MIME_FILE", "mime_dlt");
 
@@ -52,33 +50,9 @@ common_register_mime_encap(void)
 }
 
 void
-proto_register_mime_encap(void)
-{
-	common_register_mime_encap();
-}
-
-void
-event_register_mime_encap(void)
-{
-	common_register_mime_encap();
-}
-
-static void
-common_reg_handoff_mime_encap(void)
-{
-	dissector_add_uint("wtap_encap", WTAP_ENCAP_MIME, mime_encap_handle);
-}
-
-void
 proto_reg_handoff_mime_encap(void)
 {
-	common_reg_handoff_mime_encap();
-}
-
-void
-event_reg_handoff_mime_encap(void)
-{
-	common_reg_handoff_mime_encap();
+	dissector_add_uint("wtap_encap", WTAP_ENCAP_MIME, mime_encap_handle);
 }
 
 /*

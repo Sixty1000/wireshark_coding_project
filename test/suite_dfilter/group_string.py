@@ -3,7 +3,8 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-# from suite_dfilter.dfiltertest import *
+import pytest
+from suite_dfilter.dfiltertest import *
 
 
 class TestDfilterString:
@@ -97,6 +98,14 @@ class TestDfilterString:
         dfilter = 'http.request.method[-2] == "D"'
         checkDFilterCount(dfilter, 0)
 
+    def xxxtest_stringz_1(self):
+            return self.DFilterCount(pkt_tftp,
+                    'tftp.type == "octet"', 1)
+
+    def xxxtest_stringz_2(self):
+            return self.DFilterCount(pkt_tftp,
+                    'tftp.type == "junk"', 0)
+
     def test_contains_1(self, checkDFilterCount):
         dfilter = 'http.request.method contains "E"'
         checkDFilterCount(dfilter, 1)
@@ -180,11 +189,6 @@ class TestDfilterString:
     def test_value_string_3(self, checkDFilterSucceed):
         dfilter = 'tcp.checksum.status == Unverified'
         checkDFilterSucceed(dfilter, 'Writing value strings without double quotes is deprecated')
-
-    def test_value_string_4(self, checkDFilterCount):
-        # Implicit conversion to value string with contains
-        dfilter = 'ip.proto contains "P"'
-        checkDFilterCount(dfilter, 1)
 
 class TestDfilterStringz:
     trace_file = "tftp.pcap"

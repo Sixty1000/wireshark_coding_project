@@ -11,7 +11,7 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include "packet-cisco-pid.h"
+#include <epan/cisco_pid.h>
 
 /*
  * See
@@ -46,7 +46,7 @@ dissect_cgmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 {
 	proto_item *ti;
 	proto_tree *cgmp_tree = NULL;
-	unsigned offset = 0;
+	int offset = 0;
 	uint8_t count;
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "CGMP");

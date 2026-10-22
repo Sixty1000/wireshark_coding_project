@@ -9,11 +9,9 @@
  *
  * for a copy of the DIX spec and
  *
- *    https://web.archive.org/web/20100616135342/http://stuff.mit.edu/people/jhawk/ctp.html
+ *    http://stuff.mit.edu/people/jhawk/ctp.html
  *
- * for a link to a page that includes for section 8:
- *
- *    https://web.archive.org/web/20100728134019/http://stuff.mit.edu/people/jhawk/ctp.pdf
+ * for section 8.
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
@@ -78,10 +76,9 @@ dissect_loop(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
     function = tvb_get_letohs(tvb, offset);
     if (offset == skip_offset) {
       col_add_str(pinfo->cinfo, COL_INFO,
-                    val_to_str(pinfo->pool, function, function_vals, "Unknown function (%u)"));
+                    val_to_str(function, function_vals, "Unknown function (%u)"));
 
-      ti = proto_tree_add_uint(loop_tree, hf_loop_relevant_function, tvb, offset, 2, function);
-      proto_item_set_generated(ti);
+      proto_tree_add_uint(loop_tree, hf_loop_relevant_function, tvb, offset, 2, function);
       set_info = false;
     }
     proto_tree_add_uint(loop_tree, hf_loop_function, tvb, offset, 2, function);

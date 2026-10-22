@@ -18,10 +18,9 @@
 #include <epan/packet.h>
 #include <epan/expert.h>
 #include <epan/charsets.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 
 #include "packet-t38.h"
+#include "packet-t30.h"
 
 void proto_register_t30(void);
 
@@ -158,7 +157,7 @@ static const value_string t30_control_vals[] = {
 #define T30_FC_CTR      0x23
 #define T30_FC_CSA      0x24
 
-// post-message responses - format X011 XXXX
+// post-message resopnses - format X011 XXXX
 #define T30_FC_MCF      0x31
 #define T30_FC_RTN      0x32
 #define T30_FC_RTP      0x33
@@ -272,7 +271,7 @@ static const value_string t30_facsimile_control_field_vals[] = {
     /* 0x88 */    { T30_FC_ISP,      "Internet Selective Polling Address" },
     { 0, NULL }
 };
-static value_string_ext t30_facsimile_control_field_vals_ext =
+value_string_ext t30_facsimile_control_field_vals_ext =
     VALUE_STRING_EXT_INIT(t30_facsimile_control_field_vals);
 
 static const value_string t30_facsimile_control_field_vals_short[] = {
@@ -328,7 +327,7 @@ static const value_string t30_facsimile_control_field_vals_short[] = {
     /* 0x88 */    { T30_FC_ISP,      "ISP" },
     { 0, NULL }
 };
-static value_string_ext t30_facsimile_control_field_vals_short_ext =
+value_string_ext t30_facsimile_control_field_vals_short_ext =
     VALUE_STRING_EXT_INIT(t30_facsimile_control_field_vals_short);
 
 static const value_string t30_data_signalling_rate_vals[] = {
@@ -494,7 +493,7 @@ reverse_byte(uint8_t val)
 
 #define LENGTH_T30_NUM  20
 static char *
-t30_get_string_numbers(wmem_allocator_t *pool, tvbuff_t *tvb, unsigned offset, unsigned len)
+t30_get_string_numbers(wmem_allocator_t *pool, tvbuff_t *tvb, int offset, int len)
 {
     char buf[LENGTH_T30_NUM+1];
     int    i;
@@ -510,12 +509,12 @@ t30_get_string_numbers(wmem_allocator_t *pool, tvbuff_t *tvb, unsigned offset, u
     buf[LENGTH_T30_NUM] = '\0';
 
     char *s = g_strstrip(buf);
-    return (char*)get_utf_8_string(pool, (uint8_t*)s, strlen(s));
+    return get_utf_8_string(pool, s, (int)strlen(s));
 
 }
 
 static void
-dissect_t30_numbers(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, unsigned len, proto_tree *tree, t38_packet_info* t38)
+dissect_t30_numbers(tvbuff_t *tvb, int offset, packet_info *pinfo, int len, proto_tree *tree, t38_packet_info* t38)
 {
     char *str_num;
 
@@ -529,7 +528,7 @@ dissect_t30_numbers(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, unsigned
             snprintf(t38->desc, MAX_T38_DESC, "Num: %s", str_num);
     }
     else {
-        proto_tree_add_expert_format_remaining(tree, pinfo, &ei_t30_bad_length, tvb, offset,
+        proto_tree_add_expert_format(tree, pinfo, &ei_t30_bad_length, tvb, offset, -1,
                             "MALFORMED OR SHORT PACKET: number of digits must be 20");
 
         col_append_str(pinfo->cinfo, COL_INFO, " [MALFORMED OR SHORT PACKET: number of digits must be 20]" );
@@ -537,7 +536,7 @@ dissect_t30_numbers(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, unsigned
 }
 
 static void
-dissect_t30_facsimile_coded_data(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, unsigned len, proto_tree *tree, t38_packet_info* t38)
+dissect_t30_facsimile_coded_data(tvbuff_t *tvb, int offset, packet_info *pinfo, int len, proto_tree *tree, t38_packet_info* t38)
 {
     uint8_t octet;
 
@@ -561,7 +560,7 @@ dissect_t30_facsimile_coded_data(tvbuff_t *tvb, unsigned offset, packet_info *pi
 }
 
 static void
-dissect_t30_non_standard_cap(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, unsigned len, proto_tree *tree)
+dissect_t30_non_standard_cap(tvbuff_t *tvb, int offset, packet_info *pinfo, int len, proto_tree *tree)
 {
     if (len < 2) {
         proto_tree_add_expert_format(tree, pinfo, &ei_t30_bad_length, tvb,
@@ -578,7 +577,7 @@ dissect_t30_non_standard_cap(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
 }
 
 static void
-dissect_t30_partial_page_signal(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, unsigned len, proto_tree *tree, t38_packet_info* t38)
+dissect_t30_partial_page_signal(tvbuff_t *tvb, int offset, packet_info *pinfo, int len, proto_tree *tree, t38_packet_info* t38)
 {
     uint8_t octet, page_count, block_count, frame_count;
 
@@ -616,7 +615,7 @@ dissect_t30_partial_page_signal(tvbuff_t *tvb, unsigned offset, packet_info *pin
 }
 
 static void
-dissect_t30_partial_page_request(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, unsigned len, proto_tree *tree)
+dissect_t30_partial_page_request(tvbuff_t *tvb, int offset, packet_info *pinfo, int len, proto_tree *tree)
 {
     int start_offset;
     int frame_count = 0;
@@ -651,14 +650,15 @@ dissect_t30_partial_page_request(tvbuff_t *tvb, unsigned offset, packet_info *pi
     proto_tree_add_uint(tree, hf_t30_partial_page_request_frame_count, tvb, offset, 1, frame_count);
     if (buf_top > buf+1) {
         buf_top[-2] = '\0';
-        proto_tree_add_string(tree, hf_t30_partial_page_request_frames, tvb, start_offset, offset - start_offset, buf);
+        proto_tree_add_string_format_value(tree, hf_t30_partial_page_request_frames, tvb, start_offset, offset - start_offset,
+                                     buf, "%s", buf);
     }
 
     col_append_fstr(pinfo->cinfo, COL_INFO, " - %d frames", frame_count);
 }
 
 static void
-dissect_t30_dis_dtc(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, unsigned len, proto_tree *tree, bool dis_dtc, t38_packet_info* t38)
+dissect_t30_dis_dtc(tvbuff_t *tvb, int offset, packet_info *pinfo, int len, proto_tree *tree, bool dis_dtc, t38_packet_info* t38)
 {
     uint8_t octet;
 
@@ -1397,11 +1397,6 @@ proto_register_t30(void)
     expert_register_field_array(expert_t30, ei, array_length(ei));
 
     register_dissector("t30.hdlc", dissect_t30_hdlc, proto_t30);
-
-    register_external_value_string_ext("t30_facsimile_control_field_vals_ext", &t30_facsimile_control_field_vals_ext);
-    register_external_value_string_ext("t30_facsimile_control_field_vals_short_ext", &t30_facsimile_control_field_vals_short_ext);
-
-
 
 }
 

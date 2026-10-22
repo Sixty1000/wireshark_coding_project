@@ -12,8 +12,7 @@
 
 #include "ws_symbol_export.h"
 
-#include <epan/reassemble.h>
-#include <epan/tap.h>
+#include <glibconfig.h>
 #include <wsutil/wsgcrypt.h>
 
 #ifdef __cplusplus
@@ -23,26 +22,16 @@ extern "C" {
 
 /**
  * Metadata for a STREAM frame.
- * https://www.rfc-editor.org/info/rfc9000/#section-19.8
- * This is passed to subdissectors as the data pointer.
+ * https://tools.ietf.org/html/draft-ietf-quic-transport-23#section-19.8
  */
 typedef struct _quic_stream_info {
     uint64_t    stream_id;      /**< 62-bit Stream ID. */
     uint64_t    stream_offset;  /**< 62-bit stream offset. */
     uint32_t    offset;         /**< Offset within the stream (different for reassembled data). */
+    uint32_t    inorder_offset; /**< Offset of the inorder data. */
     struct quic_info_data *quic_info;    /**< Opaque data structure to find the QUIC session. */
     bool        from_server;
-    bool        fin;            /**< True if the frame marks the end of the stream. */
 } quic_stream_info;
-
-/**
- * Metadata for a DATAGRAM frame.
- * https://datatracker.ietf.org/doc/html/rfc9221
- */
-typedef struct _quic_datagram_info {
-    struct quic_info_data *quic_info;    /**< Opaque data structure to find the QUIC session. */
-    bool        from_server;
-} quic_datagram_info;
 
 /*
  * Although the QUIC SCID/DCID length field can store at most 255, v1 limits the
@@ -128,30 +117,6 @@ quic_get_stream_id_ge(unsigned streamid, unsigned sub_stream_id, unsigned *sub_s
  */
 WS_DLL_PUBLIC bool
 quic_conn_data_get_conn_client_dcid_initial(struct _packet_info *pinfo, quic_cid_t *dcid);
-
-extern const reassembly_table_functions quic_reassembly_table_functions;
-
-/**
- * Data used to allow "Follow QUIC Stream" functionality
- * Also used by HTTP/3
- */
-typedef struct quic_follow_tap_data {
-    tvbuff_t *tvb;
-    uint64_t stream_id;
-    bool from_server;
-} quic_follow_tap_data_t;
-
-extern bool
-quic_get_sub_stream_id(unsigned streamid, unsigned sub_stream_id, bool le, unsigned *sub_stream_id_out);
-
-extern char *
-quic_follow_conv_filter(epan_dissect_t *edt _U_, packet_info *pinfo, unsigned *stream, unsigned *sub_stream);
-
-extern char *
-quic_follow_index_filter(unsigned stream, unsigned sub_stream);
-
-extern tap_packet_status
-follow_quic_tap_listener(void *tapdata, packet_info *pinfo, epan_dissect_t *edt _U_, const void *data, tap_flags_t flags _U_);
 
 #ifdef __cplusplus
 }

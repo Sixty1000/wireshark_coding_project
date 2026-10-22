@@ -43,7 +43,6 @@ ftype_register_none(void)
 		NULL,				/* hash */
 		NULL,				/* is_zero */
 		NULL,				/* is_negative */
-		NULL,				/* is_nan */
 		NULL,				/* len */
 		NULL,				/* slice */
 		NULL,				/* bitwise_and */

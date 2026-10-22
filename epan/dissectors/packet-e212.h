@@ -12,25 +12,14 @@
 #ifndef __PACKET_E212_H__
 #define __PACKET_E212_H__
 
-#include <wsutil/value_string.h>
+#include <epan/value_string.h>
 #include "ws_symbol_export.h"
-#include <epan/packet_info.h>
-#include <epan/address.h>
 
 extern value_string_ext E212_codes_ext;
 
 extern value_string_ext mcc_mnc_2digits_codes_ext;
 
 extern value_string_ext mcc_mnc_3digits_codes_ext;
-
-/** Structure passed via the "imsi" tap for each associated IMSI event. */
-typedef struct _tap_imsi_info_t {
-    uint32_t     frame_number;  /**< Frame number where IMSI was associated */
-    const char  *imsi;          /**< IMSI string */
-    address      src_addr;      /**< Source address of the packet */
-    address      dst_addr;      /**< Destination address of the packet */
-    const char  *protocol;      /**< Protocol name (e.g. "GTPv2", "PFCP") */
-} tap_imsi_info_t;
 
 typedef enum {
     E212_NONE,
@@ -44,11 +33,9 @@ typedef enum {
     E212_5GSTAI,
     E212_GUMMEI,
     E212_GUAMI,
-    E212_SERV_NET,
 } e212_number_type_t;
 
 char* dissect_e212_mcc_mnc_wmem_packet_str(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, e212_number_type_t number_type, bool little_endian);
-void add_assoc_imsi_item(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, const char* imsi_str);
 
 WS_DLL_PUBLIC
 int dissect_e212_mcc_mnc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, e212_number_type_t number_type, bool little_endian);
@@ -69,10 +56,6 @@ int dissect_e212_mcc_mnc_in_utf8_address(tvbuff_t *tvb, packet_info *pinfo _U_, 
  *
  * Note a tvbuff content of 0xf is considered a 'filler' and will end the
  * conversion.
- *
- * When skip_first is true, the high bit of the skipped nibble is treated as a odd/even indicator,
- * according to Figure 10.5.4/3GPP TS 24.008 Mobile Identity information element
- *
  * A wmem allocated string will be returned.
  */
 WS_DLL_PUBLIC

@@ -2349,7 +2349,7 @@ static void dissect_packet_trailer(proto_tree *gvsp_tree, tvbuff_t *tvb, int off
 static int dissect_gvsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
     proto_item *ti = NULL;
-    unsigned offset = 0;
+    int offset = 0;
     proto_tree *gvsp_tree = NULL;
     gvsp_packet_info info;
 
@@ -2384,7 +2384,7 @@ static int dissect_gvsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
     info.format &= 0x7F;
 
     /* Add packet format to info string */
-    col_append_fstr(pinfo->cinfo, COL_INFO, "%s ", val_to_str(pinfo->pool, info.format, formatnames, "Unknown Format (0x%x)"));
+    col_append_fstr(pinfo->cinfo, COL_INFO, "%s ", val_to_str(info.format, formatnames, "Unknown Format (0x%x)"));
 
     /* Dissect status */
     info.status = tvb_get_ntohs(tvb, offset);
@@ -2513,7 +2513,7 @@ static int dissect_gvsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 
 
     /* Add payload type to information string */
-    col_append_fstr(pinfo->cinfo, COL_INFO, "%s ", val_to_str_ext(pinfo->pool, info.payloadtype, &payloadtypenames_ext, "Unknown Payload Type (0x%x)"));
+    col_append_fstr(pinfo->cinfo, COL_INFO, "%s ", val_to_str_ext(info.payloadtype, &payloadtypenames_ext, "Unknown Payload Type (0x%x)"));
 
     /* Process packet types for specific payload types */
     switch (info.format)

@@ -181,8 +181,8 @@ kingfisher_checksum(tvbuff_t *tvb, int offset)
 }
 
 
-static int
-dissect_kingfisher(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, bool is_conv_dissector)
+static gboolean
+dissect_kingfisher(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gboolean is_conv_dissector)
 {
     kingfisher_packet_t kfp;
     proto_tree *kingfisher_tree;
@@ -212,37 +212,37 @@ dissect_kingfisher(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, bool is_
             func_string = val_to_str_const(tvb_get_uint8(tvb, 0), function_code_vals, "Unknown function");
             col_add_fstr(pinfo->cinfo, COL_INFO, "(%s)", func_string);
             proto_tree_add_protocol_format(tree, proto_kingfisher, tvb, 0, -1, "Kingfisher Protocol, %s", func_string);
-            return tvb_captured_length(tvb);
+            return TRUE;
         }
         /* otherwise it is way too short to be kingfisher */
-        return 0;
+        return FALSE;
     }
 
 
     /* Verify that it looks like kingfisher */
     /* the packet must be at least 9 bytes */
     if(tvb_reported_length(tvb)<9){
-        return 0;
+        return FALSE;
     }
 
     /* the function code must be known */
     kfp.function = tvb_get_uint8( tvb, 6 );
     if (try_val_to_str(kfp.function, function_code_vals) == NULL) {
         /* This appears not to be a kingfisher packet */
-        return 0;
+        return FALSE;
     }
 
     /* verify the length */
     kfp.length = tvb_get_uint8(tvb, 2);
     if((kfp.length+1) != (uint8_t)tvb_captured_length(tvb)){
-        return 0;
+        return FALSE;
     }
 
     /* verify the checksum */
     kfp.checksum = tvb_get_ntohs(tvb, kfp.length - 1);
     checksum = kingfisher_checksum(tvb, 0);
     if(kfp.checksum!=checksum){
-        return 0;
+        return FALSE;
     }
 
 
@@ -307,17 +307,17 @@ dissect_kingfisher(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, bool is_
     proto_tree_add_checksum(kingfisher_tree, tvb, kfp.length-1, hf_kingfisher_checksum, hf_kingfisher_checksum_status, &ei_kingfisher_checksum,
                             pinfo, checksum, ENC_BIG_ENDIAN, PROTO_CHECKSUM_VERIFY);
 
-    return tvb_captured_length(tvb);
+    return TRUE;
 }
 
 
-static int
+static gboolean
 dissect_kingfisher_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-    bool was_kingfisher;
+    gboolean was_kingfisher;
 
 
-    was_kingfisher=dissect_kingfisher(tvb, pinfo, tree, false);
+    was_kingfisher=dissect_kingfisher(tvb, pinfo, tree, FALSE);
 
     if(was_kingfisher){
         conversation_t *conversation;
@@ -331,13 +331,13 @@ dissect_kingfisher_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
         conversation_set_dissector(conversation, kingfisher_conv_handle);
     }
 
-    return was_kingfisher ? (int)tvb_captured_length(tvb) : 0;
+    return was_kingfisher;
 }
 
-static int
+static gboolean
 dissect_kingfisher_conv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-    return dissect_kingfisher(tvb, pinfo, tree, true);
+    return dissect_kingfisher(tvb, pinfo, tree, TRUE);
 }
 
 void

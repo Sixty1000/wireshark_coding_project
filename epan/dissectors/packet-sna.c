@@ -13,15 +13,13 @@
 #include "config.h"
 
 #include <epan/packet.h>
+#include <epan/llcsaps.h>
+#include <epan/ppptypes.h>
 #include <epan/address_types.h>
 #include <epan/prefs.h>
 #include <epan/reassemble.h>
 #include <epan/to_str.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 #include "wsutil/pint.h"
-#include "packet-ppp.h"
-#include "packet-llc.h"
 
 /*
  * See:
@@ -31,7 +29,7 @@
  * http://web.archive.org/web/20150522015710/http://www.protocols.com/pbook/sna.htm
  *
  * Systems Network Architecture Formats, GA27-3136-20:
- * https://publibfp.dhe.ibm.com/epubs/pdf/d50a5007.pdf
+ * https://publibz.boulder.ibm.com/cgi-bin/bookmgr/BOOKS/D50A5007/CCONTENTS
  *
  * Systems Network Architecture Management Services Formats, GC31-8302-03:
  * https://publibfp.boulder.ibm.com/cgi-bin/bookmgr/BOOKS/d50x4002/CCONTENTS
@@ -834,7 +832,7 @@ static int sna_fid_to_str_buf(const address *addr, char *buf, int buf_len _U_)
 
 	case 2:
 		addrdata = (const uint8_t *)addr->data;
-		word_to_hex(buf, pntohu16(&addrdata[0]));
+		word_to_hex(buf, pntoh16(&addrdata[0]));
 		buf[4] = '\0';
 		break;
 
@@ -1150,36 +1148,36 @@ dissect_optional(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 		}
 		switch(type) {
 			case 0x0d:
-				dissect_optional_0d(tvb_new_subset_length(tvb, offset,
-				    len << 2), sub_tree);
+				dissect_optional_0d(tvb_new_subset_length_caplen(tvb, offset,
+				    len << 2, -1), sub_tree);
 				break;
 			case 0x0e:
-				dissect_optional_0e(tvb_new_subset_length(tvb, offset,
-				    len << 2), pinfo, sub_tree);
+				dissect_optional_0e(tvb_new_subset_length_caplen(tvb, offset,
+				    len << 2, -1), pinfo, sub_tree);
 				break;
 			case 0x0f:
-				dissect_optional_0f(tvb_new_subset_length(tvb, offset,
-				    len << 2), pinfo, sub_tree);
+				dissect_optional_0f(tvb_new_subset_length_caplen(tvb, offset,
+				    len << 2, -1), pinfo, sub_tree);
 				break;
 			case 0x10:
-				dissect_optional_10(tvb_new_subset_length(tvb, offset,
-				    len << 2), pinfo, sub_tree);
+				dissect_optional_10(tvb_new_subset_length_caplen(tvb, offset,
+				    len << 2, -1), pinfo, sub_tree);
 				break;
 			case 0x12:
-				dissect_optional_12(tvb_new_subset_length(tvb, offset,
-				    len << 2), sub_tree);
+				dissect_optional_12(tvb_new_subset_length_caplen(tvb, offset,
+				    len << 2, -1), sub_tree);
 				break;
 			case 0x14:
-				dissect_optional_14(tvb_new_subset_length(tvb, offset,
-				    len << 2), pinfo, sub_tree);
+				dissect_optional_14(tvb_new_subset_length_caplen(tvb, offset,
+				    len << 2, -1), pinfo, sub_tree);
 				break;
 			case 0x22:
-				dissect_optional_22(tvb_new_subset_length(tvb, offset,
-				    len << 2), pinfo, sub_tree);
+				dissect_optional_22(tvb_new_subset_length_caplen(tvb, offset,
+				    len << 2, -1), pinfo, sub_tree);
 				break;
 			default:
-				call_data_dissector(tvb_new_subset_length(tvb, offset,
-				    len << 2), pinfo, sub_tree);
+				call_data_dissector(tvb_new_subset_length_caplen(tvb, offset,
+				    len << 2, -1), pinfo, sub_tree);
 		}
 		offset += (len << 2);
 	}
@@ -1324,15 +1322,15 @@ dissect_nlp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 		if (tvb_get_uint8(tvb, indx+subindx+1) == 5)
 			dissect_sna_control(tvb, indx + subindx, counter+2, nlp_tree, 1, LT);
 		else
-			call_data_dissector(tvb_new_subset_length(tvb, indx + subindx, counter+2),
-			    pinfo, nlp_tree);
+			call_data_dissector(tvb_new_subset_length_caplen(tvb, indx + subindx, counter+2,
+			    -1), pinfo, nlp_tree);
 
 		subindx += (counter+2);
 	}
 	if ((thdr_9 & 0x04) && ((thdr_len << 2) > subindx))
 		dissect_optional(
-		    tvb_new_subset_length(tvb, indx + subindx,
-		    (thdr_len << 2) - subindx),
+		    tvb_new_subset_length_caplen(tvb, indx + subindx,
+		    (thdr_len << 2) - subindx, -1),
 		    pinfo, nlp_tree);
 
 	indx += (thdr_len << 2);
@@ -1527,20 +1525,20 @@ dissect_xid(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 			case 0:
 				break;
 			case 1:
-				dissect_xid1(tvb_new_subset_length(tvb, 6, len-6),
+				dissect_xid1(tvb_new_subset_length_caplen(tvb, 6, len-6, -1),
 				    tree);
 				break;
 			case 2:
-				dissect_xid2(tvb_new_subset_length(tvb, 6, len-6),
+				dissect_xid2(tvb_new_subset_length_caplen(tvb, 6, len-6, -1),
 				    tree);
 				break;
 			case 3:
-				dissect_xid3(tvb_new_subset_length(tvb, 6, len-6),
+				dissect_xid3(tvb_new_subset_length_caplen(tvb, 6, len-6, -1),
 				    tree);
 				break;
 			default:
 				/* external standards organizations */
-				call_data_dissector(tvb_new_subset_length(tvb, 6, len-6),
+				call_data_dissector(tvb_new_subset_length_caplen(tvb, 6, len-6, -1),
 				    pinfo, tree);
 		}
 	}
@@ -2054,7 +2052,7 @@ dissect_fid(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
 	/* Summary information */
 	col_add_str(pinfo->cinfo, COL_INFO,
-		    val_to_str(pinfo->pool, th_fid, sna_th_fid_vals, "Unknown FID: %01x"));
+		    val_to_str(th_fid, sna_th_fid_vals, "Unknown FID: %01x"));
 
 	if (tree) {
 		/* --- TH --- */
@@ -2294,11 +2292,18 @@ dissect_sna_control(tvbuff_t *parent_tvb, int offset, int control_len,
 		proto_tree *tree, int hpr, enum parse parse)
 {
 	tvbuff_t	*tvb;
+	int		length, reported_length;
 	proto_tree	*sub_tree;
 	int		len, key;
 	int		ett;
 
-	tvb = tvb_new_subset_length(parent_tvb, offset, control_len);
+	length = tvb_captured_length_remaining(parent_tvb, offset);
+	reported_length = tvb_reported_length_remaining(parent_tvb, offset);
+	if (control_len < length)
+		length = control_len;
+	if (control_len < reported_length)
+		reported_length = control_len;
+	tvb = tvb_new_subset_length_caplen(parent_tvb, offset, length, reported_length);
 
 	sub_tree = NULL;
 

@@ -186,19 +186,6 @@ static lwm2m_resource_t lwm2m_oma_resources[] =
 	{ 0, 15, "Certificate Usage", DATA_TYPE_UNSIGNED_INTEGER, RESOURCE_FILL },
 	{ 0, 16, "TLS DTLS Ciphersuite", DATA_TYPE_UNSIGNED_INTEGER, RESOURCE_FILL },
 	{ 0, 17, "OSCORE Security Mode", DATA_TYPE_OBJLNK, RESOURCE_FILL },
-	{ 0, 18, "Groups To Use by Client", DATA_TYPE_UNSIGNED_INTEGER, RESOURCE_FILL },
-	{ 0, 19, "Signature Algorithms Supported by Server", DATA_TYPE_UNSIGNED_INTEGER, RESOURCE_FILL },
-	{ 0, 20, "Signature Algorithms To Use by Client", DATA_TYPE_UNSIGNED_INTEGER, RESOURCE_FILL },
-	{ 0, 21, "Signature Algorithm Certs Supported by Server", DATA_TYPE_UNSIGNED_INTEGER, RESOURCE_FILL },
-	{ 0, 22, "TLS 1.3 Features To Use by Client", DATA_TYPE_UNSIGNED_INTEGER, RESOURCE_FILL },
-	{ 0, 23, "TLS Extensions Supported by Server", DATA_TYPE_UNSIGNED_INTEGER, RESOURCE_FILL },
-	{ 0, 24, "TLS Extensions To Use by Client", DATA_TYPE_UNSIGNED_INTEGER, RESOURCE_FILL },
-	{ 0, 25, "Secondary LwM2M Server URI", DATA_TYPE_STRING, RESOURCE_FILL },
-	{ 0, 26, "MQTT Server", DATA_TYPE_OBJLNK, RESOURCE_FILL },
-	{ 0, 27, "LwM2M COSE Security", DATA_TYPE_OBJLNK, RESOURCE_FILL },
-	{ 0, 28, "RDS Destination Port", DATA_TYPE_INTEGER, RESOURCE_FILL },
-	{ 0, 29, "RDS Source Port", DATA_TYPE_INTEGER, RESOURCE_FILL },
-	{ 0, 30, "RDS Application ID", DATA_TYPE_STRING, RESOURCE_FILL },
 
 	/* LwM2M Server (1) */
 	{ 1, 0,  "Short Server ID", DATA_TYPE_INTEGER, RESOURCE_FILL },
@@ -225,10 +212,6 @@ static lwm2m_resource_t lwm2m_oma_resources[] =
 	{ 1, 21, "Trigger", DATA_TYPE_BOOLEAN, RESOURCE_FILL },
 	{ 1, 22, "Preferred Transport", DATA_TYPE_STRING, RESOURCE_FILL },
 	{ 1, 23, "Mute Send", DATA_TYPE_BOOLEAN, RESOURCE_FILL },
-	{ 1, 24, "Alternate APN Links", DATA_TYPE_OBJLNK, RESOURCE_FILL },
-	{ 1, 25, "Supported Server Versions", DATA_TYPE_STRING, RESOURCE_FILL },
-	{ 1, 26, "Default Notification Mode", DATA_TYPE_INTEGER, RESOURCE_FILL },
-	{ 1, 27, "Profile ID Hash Algorithm", DATA_TYPE_UNSIGNED_INTEGER, RESOURCE_FILL },
 
 	/* Access Control (2) */
 	{ 2, 0,  "Object ID", DATA_TYPE_INTEGER, RESOURCE_FILL },
@@ -274,8 +257,7 @@ static lwm2m_resource_t lwm2m_oma_resources[] =
 	{ 4, 9,  "SMNC", DATA_TYPE_INTEGER, RESOURCE_FILL },
 	{ 4, 10, "SMCC", DATA_TYPE_INTEGER, RESOURCE_FILL },
 	{ 4, 11, "SignalSNR", DATA_TYPE_INTEGER, RESOURCE_FILL },
-	{ 4, 12, "Location Area Code", DATA_TYPE_INTEGER, RESOURCE_FILL },
-	{ 4, 13, "Coverage Enhancement Level", DATA_TYPE_INTEGER, RESOURCE_FILL },
+	{ 4, 12, "LAC", DATA_TYPE_INTEGER, RESOURCE_FILL },
 
 	/* Firmware Update (5) */
 	{ 5, 0,  "Package", DATA_TYPE_OPAQUE, RESOURCE_FILL },
@@ -288,11 +270,6 @@ static lwm2m_resource_t lwm2m_oma_resources[] =
 	{ 5, 7,  "PkgVersion", DATA_TYPE_STRING, RESOURCE_FILL },
 	{ 5, 8,  "Firmware Update Protocol Support", DATA_TYPE_INTEGER, RESOURCE_FILL },
 	{ 5, 9,  "Firmware Update Delivery Method", DATA_TYPE_INTEGER, RESOURCE_FILL },
-	{ 5, 10, "Cancel", DATA_TYPE_NONE, RESOURCE_FILL },
-	{ 5, 11, "Severity", DATA_TYPE_INTEGER, RESOURCE_FILL },
-	{ 5, 12, "Last State Change Time", DATA_TYPE_TIME, RESOURCE_FILL },
-	{ 5, 13, "Maximum Defer Period", DATA_TYPE_UNSIGNED_INTEGER, RESOURCE_FILL },
-	{ 5, 14, "Automatic Upgrade at Download", DATA_TYPE_BOOLEAN, RESOURCE_FILL },
 
 	/* Location (6) */
 	{ 6, 0,  "Latitude", DATA_TYPE_FLOAT, RESOURCE_FILL },
@@ -321,7 +298,6 @@ static lwm2m_resource_t lwm2m_oma_resources[] =
 	{ 21, 3, "AEAD Algorithm", DATA_TYPE_INTEGER, RESOURCE_FILL },
 	{ 21, 4, "HMAC Algorithm", DATA_TYPE_INTEGER, RESOURCE_FILL },
 	{ 21, 5, "Master Salt", DATA_TYPE_STRING, RESOURCE_FILL },
-	{ 21, 6, "ID Context", DATA_TYPE_OPAQUE, RESOURCE_FILL },
 };
 static const unsigned num_lwm2m_oma_resources = array_length(lwm2m_oma_resources);
 
@@ -445,7 +421,7 @@ static void lwm2m_add_resource(lwm2m_resource_t *resource, hf_register_info *hf,
 	int *hf_id;
 
 	hf_id = g_new(int,1);
-	*hf_id = 0;
+	*hf_id = -1;
 
 	if (resource->field_name) {
 		resource_abbrev = g_strdup(resource->field_name);
@@ -459,7 +435,7 @@ static void lwm2m_add_resource(lwm2m_resource_t *resource, hf_register_info *hf,
 	}
 
 	resource->hf_id = hf_id;
-	resource->ett_id = 0;
+	resource->ett_id = -1;
 
 	hf->p_id = hf_id;
 	hf->hfinfo.name = g_strdup(resource->name);
@@ -743,8 +719,8 @@ addValueInterpretations(packet_info *pinfo, tvbuff_t *tvb, proto_tree *tlv_tree,
 		case DATA_TYPE_STRING:
 		case DATA_TYPE_CORELNK:
 		{
-			const char *strval;
-			proto_tree_add_item_ret_string(tlv_tree, *resource->hf_id, tvb, valueOffset, element->length_of_value, ENC_UTF_8, pinfo->pool, (const uint8_t**)&strval);
+			const uint8_t *strval;
+			proto_tree_add_item_ret_string(tlv_tree, *resource->hf_id, tvb, valueOffset, element->length_of_value, ENC_UTF_8, pinfo->pool, &strval);
 			proto_item_append_text(tlv_tree, ": %s", format_text(pinfo->pool, strval, strlen(strval)));
 			break;
 		}
@@ -806,7 +782,7 @@ addValueInterpretations(packet_info *pinfo, tvbuff_t *tvb, proto_tree *tlv_tree,
 		}
 		}
 	} else {
-		const char *str = (char*)tvb_get_string_enc(pinfo->pool, tvb, valueOffset, element->length_of_value, ENC_UTF_8);
+		uint8_t *str = tvb_get_string_enc(pinfo->pool, tvb, valueOffset, element->length_of_value, ENC_UTF_8);
 		if (isprint_utf8_string(str, element->length_of_value)) {
 			proto_tree_add_item(tlv_tree, hf_lwm2mtlv_value_string, tvb, valueOffset, element->length_of_value, ENC_UTF_8);
 		} else {
@@ -1173,7 +1149,7 @@ void proto_register_lwm2mtlv(void)
 	                                 &lwm2m_uat_object_names,
 	                                 &num_lwm2m_uat_object_names,
 	                                 UAT_AFFECTS_DISSECTION,
-	                                 NULL,
+	                                 "ChLwM2MResourceNames",
 	                                 lwm2m_object_name_copy_cb,
 	                                 lwm2m_object_name_update_cb,
 	                                 lwm2m_object_name_free_cb,
@@ -1188,7 +1164,7 @@ void proto_register_lwm2mtlv(void)
 	                              &lwm2m_uat_resources,
 	                              &num_lwm2m_uat_resources,
 	                              UAT_AFFECTS_DISSECTION|UAT_AFFECTS_FIELDS,
-	                              NULL,
+	                              "ChLwM2MResourceNames",
 	                              lwm2m_resource_copy_cb,
 	                              lwm2m_resource_update_cb,
 	                              lwm2m_resource_free_cb,

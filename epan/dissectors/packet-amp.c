@@ -30,7 +30,7 @@
 /*
  */
 static void
-add_value_time_to_tree(uint64_t value, int len, proto_tree *tree, tvbuff_t *tvb, unsigned offset, int hf_time_format)
+add_value_time_to_tree(uint64_t value, int len, proto_tree *tree, tvbuff_t *tvb, int offset, int hf_time_format)
 {
     nstime_t dtn_time;
 
@@ -206,10 +206,11 @@ typedef struct {
 // Decode the CBOR object at the given offset in the tvb.
 // The returned cborObj contains the object (with type) and the size
 // (including the CBOR identifier).
-static cborObj cbor_info(tvbuff_t *tvb, unsigned offset)
+static cborObj cbor_info(tvbuff_t *tvb, int offset)
 {
     int tmp = 0;
     cborObj ret;
+    ret.type = CBOR_UNKNOWN;
     ret.size = 0;
     ret.totalSize = 0;
     ret.uint = -1;
@@ -232,13 +233,13 @@ static cborObj cbor_info(tvbuff_t *tvb, unsigned offset)
             ret.uint = tvb_get_uint8(tvb, offset);
             ret.size += 1;
         } else if (theSize==25) { // next 2 bytes are uint16_t data
-            ret.uint = tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN);
+            ret.uint = tvb_get_uint16(tvb, offset, 0);
             ret.size += 2;
         } else if (theSize==26) { // next 4 bytes are uint32_t data
-            ret.uint = tvb_get_uint32(tvb, offset, ENC_BIG_ENDIAN);
+            ret.uint = tvb_get_uint32(tvb, offset, 0);
             ret.size += 4;
         } else if (theSize==27) { // next 8 bytes are uint64_t data
-            ret.uint = tvb_get_uint64(tvb, offset, ENC_BIG_ENDIAN);
+            ret.uint = tvb_get_uint64(tvb, offset, 0);
             ret.size += 8;
         }
         ret.totalSize = ret.size;
@@ -251,13 +252,13 @@ static cborObj cbor_info(tvbuff_t *tvb, unsigned offset)
             ret.uint = tvb_get_uint8(tvb, offset);
             ret.size += 1;
         } else if (theSize==25) { // next 2bytes are uint16_t data (length)
-            ret.uint = tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN);
+            ret.uint = tvb_get_uint16(tvb, offset, 0);
             ret.size += 2;
         } else if (theSize==26) { // next 4bytes are uint32_t data
-            ret.uint = tvb_get_uint32(tvb, offset, ENC_BIG_ENDIAN);
+            ret.uint = tvb_get_uint32(tvb, offset, 0);
             ret.size += 4;
         } else if (theSize==27) { // next byte is uint64_t data
-            ret.uint = tvb_get_uint64(tvb, offset, ENC_BIG_ENDIAN);
+            ret.uint = tvb_get_uint64(tvb, offset, 0);
             ret.size += 8;
         }
         ret.totalSize = ret.size+ret.uint;
@@ -273,15 +274,15 @@ static cborObj cbor_info(tvbuff_t *tvb, unsigned offset)
             ret.size += 1;
         } else if (theSize==25) // next 2bytes are uint16_t data
         {
-            ret.uint = tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN);
+            ret.uint = tvb_get_uint16(tvb, offset, 0);
             ret.size += 2;
         } else if (theSize==26) // next 4bytes are uint32_t data
         {
-            ret.uint = tvb_get_uint32(tvb, offset, ENC_BIG_ENDIAN);
+            ret.uint = tvb_get_uint32(tvb, offset, 0);
             ret.size += 4;
         } else if (theSize==27) // next byte is uint64_t data
         {
-            ret.uint = tvb_get_uint64(tvb, offset, ENC_BIG_ENDIAN);
+            ret.uint = tvb_get_uint64(tvb, offset, 0);
             ret.size += 8;
         }
         ret.totalSize = ret.size+ret.uint;
@@ -297,15 +298,15 @@ static cborObj cbor_info(tvbuff_t *tvb, unsigned offset)
             ret.size += 1;
         } else if (theSize==25) // next 2bytes are uint16_t data
         {
-            ret.uint = tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN);
+            ret.uint = tvb_get_uint16(tvb, offset, 0);
             ret.size += 2;
         } else if (theSize==26) // next 4bytes are uint32_t data
         {
-            ret.uint = tvb_get_uint32(tvb, offset, ENC_BIG_ENDIAN);
+            ret.uint = tvb_get_uint32(tvb, offset, 0);
             ret.size += 4;
         } else if (theSize==27) // next byte is uint64_t data
         {
-            ret.uint = tvb_get_uint64(tvb, offset, ENC_BIG_ENDIAN);
+            ret.uint = tvb_get_uint64(tvb, offset, 0);
             ret.size += 8;
         }
         // I know how many elements are in the array, but NOT the total
@@ -331,7 +332,7 @@ static cborObj cbor_info(tvbuff_t *tvb, unsigned offset)
 }
 
 void
-dissect_amp_as_subtree(tvbuff_t *tvb,  packet_info *pinfo, proto_tree *tree, unsigned offset)
+dissect_amp_as_subtree(tvbuff_t *tvb,  packet_info *pinfo, proto_tree *tree, int offset)
 {
     uint64_t messages = 0;
     unsigned int i=0;
@@ -361,7 +362,7 @@ dissect_amp_as_subtree(tvbuff_t *tvb,  packet_info *pinfo, proto_tree *tree, uns
     cborObj tmpObj3;
     cborObj tmpObj4;
     int reportHasTimestamp = 0;
-    unsigned report_types_offset = 0;
+    int report_types_offset = 0;
 
     amp_tree = proto_tree_add_subtree(tree, tvb, offset, -1, ett_amp_proto,
                                        &payload_item, "Payload Data: AMP Protocol");
@@ -393,7 +394,7 @@ dissect_amp_as_subtree(tvbuff_t *tvb,  packet_info *pinfo, proto_tree *tree, uns
         proto_tree_add_bitmask(amp_message_tree, tvb, offset, hf_amp_message_header, ett_amp_message_header,
                                amp_message_header, ENC_BIG_ENDIAN);
         offset += 1;
-        unsigned old_offset;
+        int old_offset;
 
         switch ( ampHeader & 0x07)
         {
@@ -408,7 +409,7 @@ dissect_amp_as_subtree(tvbuff_t *tvb,  packet_info *pinfo, proto_tree *tree, uns
             old_offset = offset;
             offset += (int) tmpObj.uint;
             if (offset < old_offset) {
-                proto_tree_add_expert_remaining(amp_tree, pinfo, &ei_amp_cbor_malformed, tvb, offset);
+                proto_tree_add_expert(amp_tree, pinfo, &ei_amp_cbor_malformed, tvb, offset, -1);
                 return;
             }
             break;
@@ -430,9 +431,9 @@ dissect_amp_as_subtree(tvbuff_t *tvb,  packet_info *pinfo, proto_tree *tree, uns
                 proto_tree_add_item(amp_report_set_tree, hf_amp_rx_name, tvb, offset,
                                     (int) tmpObj2.uint, ENC_ASCII|ENC_NA);
                 old_offset = offset;
-                offset +=  (unsigned)tmpObj2.uint;
+                offset += (int) tmpObj2.uint;
                 if (offset < old_offset) {
-                    proto_tree_add_expert_remaining(amp_tree, pinfo, &ei_amp_cbor_malformed, tvb, offset);
+                    proto_tree_add_expert(amp_tree, pinfo, &ei_amp_cbor_malformed, tvb, offset, -1);
                     return;
                 }
             }
@@ -448,7 +449,7 @@ dissect_amp_as_subtree(tvbuff_t *tvb,  packet_info *pinfo, proto_tree *tree, uns
                                                              ett_amp_report, &amp_report, "Report");
 
                 // Each Report is a:
-                //     Template [ARI]
+                //     Tempate [ARI]
                 //     Timestamp [TS] (opt)
                 //     Entries [TNVC] (bytestring containing a TNVC)
                 tmpObj3 = cbor_info(tvb, offset); // Should come back a CBOR array of size 2 or 3
@@ -461,7 +462,7 @@ dissect_amp_as_subtree(tvbuff_t *tvb,  packet_info *pinfo, proto_tree *tree, uns
                     reportHasTimestamp = 0;
                 }
 
-                // Template (bytestring); starts with ARI
+                // Tempate (bytestring); starts with ARI
                 tmpObj3 = cbor_info(tvb, offset);
                 offset += tmpObj3.size;
                 uint8_t ariFlags;
@@ -486,7 +487,7 @@ dissect_amp_as_subtree(tvbuff_t *tvb,  packet_info *pinfo, proto_tree *tree, uns
                 old_offset = offset;
                 offset += (int) tmpObj3.uint;
                 if (offset < old_offset) {
-                    proto_tree_add_expert_remaining(amp_tree, pinfo, &ei_amp_cbor_malformed, tvb, offset);
+                    proto_tree_add_expert(amp_tree, pinfo, &ei_amp_cbor_malformed, tvb, offset, -1);
                     return;
                 }
 
@@ -525,7 +526,7 @@ dissect_amp_as_subtree(tvbuff_t *tvb,  packet_info *pinfo, proto_tree *tree, uns
                 report_types_offset = offset;
                 offset += (int) tmpObj3.uint;
                 if (offset < report_types_offset) {
-                    proto_tree_add_expert_remaining(amp_tree, pinfo, &ei_amp_cbor_malformed, tvb, offset);
+                    proto_tree_add_expert(amp_tree, pinfo, &ei_amp_cbor_malformed, tvb, offset, -1);
                     return;
                 }
 

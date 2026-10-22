@@ -7,6 +7,7 @@
  */
 
 #include "config.h"
+
 #define WS_LOG_DOMAIN LOG_DOMAIN_DFILTER
 
 #include <string.h>
@@ -66,14 +67,11 @@ check_relation(dfwork_t *dfw, stnode_op_t st_op,
 		FtypeCanFunc can_func, bool allow_partial_value,
 		stnode_t *st_node, stnode_t *st_arg1, stnode_t *st_arg2);
 
-static ftenum_t
+static void
 semcheck(dfwork_t *dfw, stnode_t *st_node);
 
 enum mk_result {
-	MK_ERROR_BAD_TYPE, /* ftype doesn't support value_string */
-	MK_ERROR_NO_STRINGS, /* ftype supports value string, doesn't have one. */
-	MK_ERROR_BAD_VALUE, /* ftype has value_string, this value isn't in it. */
-	MK_ERROR = MK_ERROR_BAD_VALUE,
+	MK_ERROR,
 	MK_OK_BOOLEAN,
 	MK_OK_NUMBER,
 	MK_OK_STRING,
@@ -103,27 +101,14 @@ op_is_equality(stnode_op_t op)
 bool
 compatible_ftypes(ftenum_t a, ftenum_t b)
 {
-	/* FT_SCALAR is a pseudo-type used internally for TIME arithmetic
-	 * (multiply/divide). It is not a real field type and has no entry
-	 * in type_list[], so it must not reach the ftype_can_*() calls
-	 * below, which index type_list[] via FTYPE_LOOKUP. A type is
-	 * compatible with FT_SCALAR only if it is itself a scalar type
-	 * (FT_INT64 or FT_DOUBLE), per FT_IS_SCALAR(). */
-	if (b == FT_SCALAR) {
-		return FT_IS_SCALAR(a);
-	}
-	if (b >= FT_NUM_TYPES) {
-		ASSERT_FTYPE_NOT_REACHED(b);
-	}
-
 	switch (a) {
 		case FT_NONE:
 		case FT_BOOLEAN:
 		case FT_PROTOCOL:
-		case FT_ABSOLUTE_TIME: /* XXX - README.dissector says the time types are compatible */
+		case FT_ABSOLUTE_TIME:
 		case FT_RELATIVE_TIME:
-		case FT_IEEE_11073_SFLOAT: /* XXX - should be able to compare with DOUBLE (#19011) */
-		case FT_IEEE_11073_FLOAT:  /* XXX - should be able to compare with DOUBLE */
+		case FT_IEEE_11073_SFLOAT:
+		case FT_IEEE_11073_FLOAT:
 		case FT_IPv4:
 		case FT_IPv6:
 		case FT_GUID:
@@ -147,9 +132,8 @@ compatible_ftypes(ftenum_t a, ftenum_t b)
 		case FT_FCWWN:
 		case FT_REL_OID:
 		case FT_SYSTEM_ID:
-		case FT_EUI64:
 
-			return (b == FT_ETHER || b == FT_BYTES || b == FT_UINT_BYTES || b == FT_OID || b == FT_VINES || b == FT_FCWWN || b == FT_REL_OID || b == FT_SYSTEM_ID || b == FT_EUI64);
+			return (b == FT_ETHER || b == FT_BYTES || b == FT_UINT_BYTES || b == FT_OID || b == FT_VINES || b == FT_FCWWN || b == FT_REL_OID || b == FT_SYSTEM_ID);
 
 		case FT_UINT8:
 		case FT_UINT16:
@@ -164,6 +148,7 @@ compatible_ftypes(ftenum_t a, ftenum_t b)
 		case FT_UINT48:
 		case FT_UINT56:
 		case FT_UINT64:
+		case FT_EUI64:
 			return ftype_can_val_to_uinteger64(b);
 
 		case FT_INT8:
@@ -193,17 +178,6 @@ compatible_ftypes(ftenum_t a, ftenum_t b)
 
 	ws_assert_not_reached();
 	return false;
-}
-
-static void
-fail_if_nan_cmp(dfwork_t *dfw, stnode_t *st)
-{
-	if (stnode_type_id(st) == STTYPE_FVALUE) {
-		fvalue_t *fv = stnode_data(st);
-		if (ftype_can_is_nan(fvalue_type_ftenum(fv)) && fvalue_is_nan(fv)) {
-			FAIL(dfw, st, "NaN cannot be used in ordered comparisons");
-		}
-	}
 }
 
 void
@@ -242,10 +216,6 @@ dfilter_fvalue_from_literal(dfwork_t *dfw, ftenum_t ftype, stnode_t *st,
 	char *error_message = NULL;
 	enum mk_result res;
 
-	if (ftype == FT_SCALAR) {
-		ftype = FT_INT64;
-	}
-
 	fv = fvalue_from_literal(ftype, s, allow_partial_value, &error_message);
 	if (fv != NULL) {
 		g_free(error_message); // error_message is expected to be null
@@ -261,7 +231,7 @@ dfilter_fvalue_from_literal(dfwork_t *dfw, ftenum_t ftype, stnode_t *st,
 		 * Ignore previous errors if this can be mapped
 		 * to an item from value_string.
 		 */
-		if (res > MK_ERROR) {
+		if (res != MK_ERROR) {
 			df_error_free(&dfw->error);
 			add_compile_warning(dfw, "Interpreting the symbol \u2039%s\u203A as a %s value string. "
 					"Writing value strings without double quotes is deprecated. "
@@ -286,10 +256,6 @@ dfilter_fvalue_from_string(dfwork_t *dfw, ftenum_t ftype, stnode_t *st,
 	const GString *gs = stnode_string(st);
 	char *error_message = NULL;
 	enum mk_result res;
-
-	if (ftype == FT_SCALAR) {
-		ftype = FT_INT64;
-	}
 
 	fv = fvalue_from_string(ftype, gs->str, gs->len, &error_message);
 	if (fv != NULL) {
@@ -323,10 +289,6 @@ dfilter_fvalue_from_charconst(dfwork_t *dfw, ftenum_t ftype, stnode_t *st)
 	fvalue_t *fv;
 	unsigned long *nump = stnode_data(st);
 	char *error_message = NULL;
-
-	if (ftype == FT_SCALAR) {
-		ftype = FT_INT64;
-	}
 
 	fv = fvalue_from_charconst(ftype, *nump, &error_message);
 	if (fv != NULL) {
@@ -429,22 +391,30 @@ mk_uint64_fvalue(uint64_t val)
 	return fv;
 }
 
+/* Try to make an fvalue from a string using a value_string or true_false_string.
+ * This works only for ftypes that are integers. Returns the created fvalue_t*
+ * or NULL if impossible.
+ * If the mapping number<->string is unique convert the string to a number
+ * by inverting the value string function.
+ * Otherwise we compile it as a string and map the field value at runtime
+ * to a string for the comparison.
+ *
+ * XXX - This should check all hfinfo with the same abbreviation, not just the
+ * last registered. If there are multiple fields registered, then all the fields
+ * must map the same number (and only that number) to the string in order for
+ * optimizing into a number test to be valid (see #19111). Otherwise, we should
+ * allow the string match if it at least one field with the same abbreviation has
+ * a value string with that string as an entry.
+ */
 static enum mk_result
-mk_fvalue_from_hfinfo(const header_field_info *hfinfo, const char *s, uint64_t *valp)
+mk_fvalue_from_val_string(dfwork_t *dfw, header_field_info *hfinfo, const char *s, stnode_t *st)
 {
 	/* Early return? */
-	/* If registration of non-compatible fields to the same abbrev were
-	 * checked, we could do this check up front for the first hfinfo only -
-	 * except for FT_FRAMENUM, which is compatible with the integer types
-	 * and overloads strings.
-	 * (We could instead say that FT_FRAMENUM is compatible for comparing
-	 * with integer types but not for registering to the same abbrev.)
-	 */
 	switch(hfinfo->type) {
 		case FT_NONE:
 		case FT_PROTOCOL: /* hfinfo->strings contains the protocol_t */
-		case FT_FLOAT: /* XXX - FT_FLOAT can have strings for BASE_CUSTOM */
-		case FT_DOUBLE: /* XXX - FT_DOUBLE can have strings for BASE_CUSTOM */
+		case FT_FLOAT:
+		case FT_DOUBLE:
 		case FT_IEEE_11073_SFLOAT:
 		case FT_IEEE_11073_FLOAT:
 		case FT_ABSOLUTE_TIME:
@@ -469,7 +439,7 @@ mk_fvalue_from_hfinfo(const header_field_info *hfinfo, const char *s, uint64_t *
 		case FT_REL_OID:
 		case FT_SYSTEM_ID:
 		case FT_FRAMENUM: /* hfinfo->strings contains ft_framenum_type_t, not strings */
-			return MK_ERROR_BAD_TYPE;
+			return MK_ERROR;
 
 		case FT_BOOLEAN:
 		case FT_CHAR:
@@ -496,33 +466,39 @@ mk_fvalue_from_hfinfo(const header_field_info *hfinfo, const char *s, uint64_t *
 			ASSERT_FTYPE_NOT_REACHED(hfinfo->type);
 	}
 
-
-	/* Always handle FT_BOOLEAN (fallback to default tfs). */
-	if (hfinfo->type == FT_BOOLEAN) {
-		static const true_false_string  default_tf = { "True", "False" };
-		const true_false_string	*tf;
-		tf = hfinfo->strings ? (const true_false_string *)hfinfo->strings : &default_tf;
-
-		if (g_ascii_strcasecmp(s, tf->true_string) == 0) {
-			*valp = 1;
-			return MK_OK_BOOLEAN;
-		}
-		if (g_ascii_strcasecmp(s, tf->false_string) == 0) {
-			*valp = 0;
-			return MK_OK_BOOLEAN;
-		}
+	/* Do val_strings exist? */
+	if (!hfinfo->strings) {
+		dfilter_fail(dfw, DF_ERROR_GENERIC, stnode_location(st), "%s cannot accept strings as values.",
+				hfinfo->abbrev);
 		return MK_ERROR;
 	}
 
-	/* Do val_strings exist? */
-	if (!hfinfo->strings) {
-		return MK_ERROR_NO_STRINGS;
-	}
+	/* Reset the error message, since *something* interesting will happen,
+	 * and the error message will be more interesting than any error message
+	 * I happen to have now. */
+	df_error_free(&dfw->error);
 
+	fvalue_t *fv;
 	uint64_t val = 0, val_max = 0;
 	size_t count = 0;
 
-	if (hfinfo->display & BASE_RANGE_STRING) {
+	if (hfinfo->type == FT_BOOLEAN) {
+		const true_false_string	*tf = (const true_false_string *)hfinfo->strings;
+
+		if (g_ascii_strcasecmp(s, tf->true_string) == 0) {
+			fv = mk_boolean_fvalue(true);
+			stnode_replace(st, STTYPE_FVALUE, fv);
+			return MK_OK_BOOLEAN;
+		}
+		if (g_ascii_strcasecmp(s, tf->false_string) == 0) {
+			fv = mk_boolean_fvalue(false);
+			stnode_replace(st, STTYPE_FVALUE, fv);
+			return MK_OK_BOOLEAN;
+		}
+		dfilter_fail(dfw, DF_ERROR_GENERIC, stnode_location(st), "\"%s\" cannot be found among the possible values for %s.",
+								s, hfinfo->abbrev);
+	}
+	else if (hfinfo->display & BASE_RANGE_STRING) {
 		const range_string *vals = (const range_string *)hfinfo->strings;
 
 		while (vals->strptr != NULL && count <= 1) {
@@ -535,18 +511,27 @@ mk_fvalue_from_hfinfo(const header_field_info *hfinfo, const char *s, uint64_t *
 		}
 		if (count > 1) {
 			// More than one match, use a string.
+			fv = mk_string_fvalue(s);
+			stnode_replace(st, STTYPE_FVALUE, fv);
 			return MK_OK_STRING;
 		}
 		else if (count == 1) {
 			// If the range has a single value use an integer.
 			// Otherwise use a string.
 			if (val == val_max) {
-				*valp = val;
+				fv = mk_uint64_fvalue(val);
+				stnode_replace(st, STTYPE_FVALUE, fv);
 				return MK_OK_NUMBER;
 			}
 			else {
+				fv = mk_string_fvalue(s);
+				stnode_replace(st, STTYPE_FVALUE, fv);
 				return MK_OK_STRING;
 			}
+		}
+		else {
+			dfilter_fail(dfw, DF_ERROR_GENERIC, stnode_location(st), "\"%s\" cannot be found among the possible values for %s.",
+					s, hfinfo->abbrev);
 		}
 	}
 	else if (hfinfo->display & BASE_VAL64_STRING) {
@@ -563,38 +548,30 @@ mk_fvalue_from_hfinfo(const header_field_info *hfinfo, const char *s, uint64_t *
 		}
 		if (count > 1) {
 			// More than one match, use a string.
+			fv = mk_string_fvalue(s);
+			stnode_replace(st, STTYPE_FVALUE, fv);
 			return MK_OK_STRING;
 		}
 		else if (count == 1) {
 			// Only one match, convert string to number.
-			*valp = val;
+			fv = mk_uint64_fvalue(val);
+			stnode_replace(st, STTYPE_FVALUE, fv);
 			return MK_OK_NUMBER;
+		}
+		else {
+			dfilter_fail(dfw, DF_ERROR_GENERIC, stnode_location(st), "\"%s\" cannot be found among the possible values for %s.",
+					s, hfinfo->abbrev);
 		}
 	}
 	else if (hfinfo->display == BASE_CUSTOM) {
 		/*  We don't have a string catalog to compare to so just assume
 		 * the provided string is a valid custom representation. */
 		if (FT_IS_INTEGER(hfinfo->type)) {
-			/* Should always be true due to type check above. */
+			fv = mk_string_fvalue(s);
+			stnode_replace(st, STTYPE_FVALUE, fv);
 			return MK_OK_STRING;
 		}
-		/* FT_FLOAT and FT_DOUBLE can have BASE_CUSTOM functions but
-		 * they were disallowed above. Maybe they should be allowed?
-		 * That would take changes in dfvm.c try_value_string as well.
-		 */
-	}
-	else if (hfinfo->display & BASE_UNIT_STRING) {
-		/* XXX - Not yet supported in dfvm.c try_value_string. */
-		return MK_ERROR_NO_STRINGS;
-#if 0
-		/* We could optimize by parsing out the number at the
-		 * beginning. (That's harder for floats and doubles.) */
-		if (FT_IS_INTEGER(hfinfo->type)) {
-			/* Should always be true due to type check above. */
-			return MK_OK_STRING;
-		}
-		/* XXX - FT_FLOAT and FT_DOUBLE can be BASE_UNIT_STRING. */
-#endif
+		dfilter_fail(dfw, DF_ERROR_GENERIC, stnode_location(st), "%s must be an integer.", hfinfo->abbrev);
 	}
 	else {
 		const value_string *vals = (const value_string *)hfinfo->strings;
@@ -610,137 +587,22 @@ mk_fvalue_from_hfinfo(const header_field_info *hfinfo, const char *s, uint64_t *
 		}
 		if (count > 1) {
 			// More than one match, use a string.
+			fv = mk_string_fvalue(s);
+			stnode_replace(st, STTYPE_FVALUE, fv);
 			return MK_OK_STRING;
 		}
 		else if (count == 1) {
 			// Only one match, convert string to number.
-			*valp = val;
+			fv = mk_uint64_fvalue(val);
+			stnode_replace(st, STTYPE_FVALUE, fv);
 			return MK_OK_NUMBER;
 		}
-	}
-	return MK_ERROR;
-}
-
-/* Try to make an fvalue from a string using a value_string or true_false_string.
- * This works only for ftypes that are integers.
- * If the mapping number<->string is unique convert the string to a number
- * by inverting the value string function.
- * Otherwise we compile it as a string and map the field value at runtime
- * to a string for the comparison.
- */
-static enum mk_result
-mk_fvalue_from_val_string(dfwork_t *dfw, header_field_info *hfinfo, const char *s, stnode_t *st)
-{
-	fvalue_t *fv = NULL;
-	enum mk_result res;
-	uint64_t val = 0;
-
-	/* We might have more than one hfinfo with the same abbreviation. (#19111)
-	 * We can optimize to a number (or boolean) test if all fields map the
-	 * same value (and only that value) to the string.
-	 * Otherwise, allow a string match if at least one field with the
-	 * abbreviation has a value string with that string as an entry.
-	 */
-	while (hfinfo->same_name_prev_id != -1) {
-		/* Rewind (shouldn't be necessary.) */
-		hfinfo = proto_registrar_get_nth(hfinfo->same_name_prev_id);
-	}
-	/* Types of failures:
-	 * 1. ftype doesn't support value strings
-	 * 2. ftype supports value strings, but hfinfo doesn't have one
-	 * 3. hfinfo has a value string, but s is not among the possible values
-	 *
-	 * These are distinguished only for what error message, if any, we'll
-	 * produce (and whether it overrides any earlier error message.)
-	 * Report the highest number error from any hfinfo (i.e., if at least
-	 * one field does have a value string, prefer saying that "s" was not
-	 * among its values to reporting that the other fields didn't have
-	 * value strings.)
-	 */
-	res = mk_fvalue_from_hfinfo(hfinfo, s, &val);
-
-	while (res != MK_OK_STRING && hfinfo->same_name_next) {
-		enum mk_result prev_res = res;
-		uint64_t prev_val = val;
-		hfinfo = hfinfo->same_name_next;
-
-		res = mk_fvalue_from_hfinfo(hfinfo, s, &val);
-
-		switch (res) {
-
-		case MK_ERROR_BAD_TYPE:
-		case MK_ERROR_NO_STRINGS:
-		case MK_ERROR_BAD_VALUE:
-			if (prev_res > MK_ERROR) {
-				/* An earlier hfinfo has s, but not this.
-				 * Fall back to a string match. */
-				res = MK_OK_STRING;
-			} else {
-				res = MAX(res, prev_res);
-			}
-			break;
-
-		case MK_OK_BOOLEAN:
-		case MK_OK_NUMBER:
-			if (prev_res != res || val != prev_val) {
-				/* This field maps a single value to s,
-				 * but an earlier field maps a different
-				 * value or fails to match. Fall back to
-				 * a string match. */
-				res = MK_OK_STRING;
-			}
-			break;
-
-		case MK_OK_STRING:
-			break;
-		}
-	}
-
-	switch (res) {
-
-	case MK_OK_BOOLEAN:
-		fv = mk_boolean_fvalue((bool)val);
-		break;
-
-	case MK_OK_NUMBER:
-		fv = mk_uint64_fvalue(val);
-		break;
-
-	case MK_OK_STRING:
-		fv = mk_string_fvalue(s);
-		break;
-
-	case MK_ERROR_BAD_TYPE:
-		res = MK_ERROR;
-		break;
-
-	case MK_ERROR_NO_STRINGS:
-		dfilter_fail(dfw, DF_ERROR_GENERIC, stnode_location(st), "%s cannot accept strings as values.",
-				hfinfo->abbrev);
-		res = MK_ERROR;
-		break;
-
-	case MK_ERROR:
-		df_error_free(&dfw->error);
-		if (hfinfo->type == FT_BOOLEAN && hfinfo->same_name_next == NULL) {
-			// For a boolean (with only one field for the abbreviation),
-			// it's easy to show all possible values.
-			dfilter_fail(dfw, DF_ERROR_GENERIC, stnode_location(st), "expected \"%s\" or \"%s\", not \"%s\" for %s.",
-								tfs_get_string(true, hfinfo->strings), tfs_get_string(false, hfinfo->strings),
-								s, hfinfo->abbrev);
-		} else {
+		else {
 			dfilter_fail(dfw, DF_ERROR_GENERIC, stnode_location(st), "\"%s\" cannot be found among the possible values for %s.",
 					s, hfinfo->abbrev);
 		}
-		break;
 	}
-
-	if (fv) {
-		df_error_free(&dfw->error);
-		stnode_replace(st, STTYPE_FVALUE, fv);
-	}
-
-	return res;
+	return MK_ERROR;
 }
 
 static bool
@@ -756,7 +618,6 @@ is_bytes_type(enum ftenum type)
 		case FT_OID:
 		case FT_REL_OID:
 		case FT_SYSTEM_ID:
-		case FT_EUI64:
 			return true;
 
 		case FT_NONE:
@@ -795,6 +656,7 @@ is_bytes_type(enum ftenum type)
 		case FT_INT48:
 		case FT_INT56:
 		case FT_INT64:
+		case FT_EUI64:
 			return false;
 
 		case FT_NUM_TYPES:
@@ -900,10 +762,10 @@ find_logical_ftype(dfwork_t *dfw, stnode_t *st_node)
 }
 
 /* Check the semantics of an existence test. */
-static ftenum_t
+static void
 check_exists(dfwork_t *dfw, stnode_t *st_arg1)
 {
-	ftenum_t ftype = FT_NONE;
+
 	resolve_unparsed(dfw, st_arg1, true);
 
 	LOG_NODE(st_arg1);
@@ -914,9 +776,6 @@ check_exists(dfwork_t *dfw, stnode_t *st_arg1)
 			/* fall-through */
 		case STTYPE_REFERENCE:
 			/* This is OK */
-			if (dfw->flags & DF_RETURN_VALUES) {
-				ftype = sttype_field_ftenum(st_arg1);
-			}
 			break;
 		case STTYPE_STRING:
 		case STTYPE_LITERAL:
@@ -938,8 +797,6 @@ check_exists(dfwork_t *dfw, stnode_t *st_arg1)
 		case STTYPE_SLICE:
 			ASSERT_STTYPE_NOT_REACHED(stnode_type_id(st_arg1));
 	}
-
-	return ftype;
 }
 
 ftenum_t
@@ -1067,26 +924,19 @@ check_relation_LHS_FIELD(dfwork_t *dfw, stnode_op_t st_op,
 	hfinfo1 = sttype_field_hfinfo(st_arg1);
 	ftype1 = sttype_field_ftenum(st_arg1);
 	if (!can_func(ftype1)) {
-		/* For "matches" or "contains", implicitly convert to the value
-		 * string, if there is one. (FT_FRAMENUM and FT_PROTOCOL have a
-		 * pointer to something other than a value string in their
-		 * ->strings member, though we can't get here for a FT_PROTOCOL
-		 * because it supports comparisons on its bytes without
-		 * conversion.)
+		/* For "matches", implicitly convert to the value string, if
+		 * there is one. (FT_FRAMENUM and FT_PROTOCOL have a pointer
+		 * to something other than a value string in their ->strings
+		 * member, though we can't get here for a FT_PROTOCOL because
+		 * it supports "matches" on its bytes without conversion.)
 		 */
-		switch (st_op) {
-		case STNODE_OP_MATCHES:
-		case STNODE_OP_CONTAINS:
-			if (hfinfo1->strings != NULL && hfinfo1->type != FT_FRAMENUM && hfinfo1->type != FT_PROTOCOL) {
-				sttype_field_set_value_string(st_arg1, true);
-				break;
-			}
-		/* FALLTHROUGH */
-		default:
+		if (st_op == STNODE_OP_MATCHES && hfinfo1->strings != NULL && hfinfo1->type != FT_FRAMENUM && hfinfo1->type != FT_PROTOCOL) {
+			sttype_field_set_value_string(st_arg1, true);
+		}
+		else {
 			FAIL(dfw, st_arg1, "%s (type=%s) cannot participate in %s comparison.",
 					hfinfo1->abbrev, ftype_pretty_name(ftype1),
 					stnode_todisplay(st_node));
-			break;
 		}
 	}
 
@@ -1102,8 +952,6 @@ check_relation_LHS_FIELD(dfwork_t *dfw, stnode_op_t st_op,
 		}
 		/* Do this check even though you'd think that if
 		 * they're compatible, then can_func() would pass. */
-		/* XXX - Test this before compatible types and implicitly
-		 * convert to a value string in the STNODE_OP_CONTAINS case? */
 		if (!can_func(ftype2)) {
 			FAIL(dfw, st_arg2, "%s (type=%s) cannot participate in specified comparison.",
 					stnode_todisplay(st_arg2), ftype_pretty_name(ftype2));
@@ -1834,8 +1682,6 @@ check_test(dfwork_t *dfw, stnode_t *st_node)
 		case STNODE_OP_LT:
 		case STNODE_OP_LE:
 			check_relation(dfw, st_op, ftype_can_cmp, false, st_node, st_arg1, st_arg2);
-			fail_if_nan_cmp(dfw, st_arg1);
-			fail_if_nan_cmp(dfw, st_arg2);
 			break;
 		case STNODE_OP_CONTAINS:
 			check_relation_contains(dfw, st_node, st_arg1, st_arg2);
@@ -1860,7 +1706,7 @@ check_test(dfwork_t *dfw, stnode_t *st_node)
 	}
 }
 
-static ftenum_t
+static void
 check_nonzero(dfwork_t *dfw, stnode_t *st_node)
 {
 	ftenum_t ftype;
@@ -1885,8 +1731,6 @@ check_nonzero(dfwork_t *dfw, stnode_t *st_node)
 		FAIL(dfw, st_node, "Type %s cannot be assigned a truth value.",
 					ftype_pretty_name(ftype));
 	}
-
-	return ftype;
 }
 
 static const char *
@@ -2113,7 +1957,7 @@ check_arithmetic_LHS_TIME(dfwork_t *dfw, stnode_op_t st_op, stnode_t *st_node,
 			}
 			ftype2 = check_arithmetic(dfw, st_arg2, FT_SCALAR);
 			if (!FT_IS_SCALAR(ftype2)) {
-				FAIL(dfw, st_node, "Right hand side must be an integer or float type, not %s.", ftype_pretty_name(ftype2));
+				FAIL(dfw, st_node, "Right hand side must be an integer ou float type, not %s.", ftype_pretty_name(ftype2));
 			}
 			break;
 		default:
@@ -2223,15 +2067,9 @@ check_arithmetic(dfwork_t *dfw, stnode_t *st_node, ftenum_t logical_ftype)
 
 
 /* Check the entire syntax tree. */
-static ftenum_t
+static void
 semcheck(dfwork_t *dfw, stnode_t *st_node)
 {
-	/* Does FT_NONE make sense for tests and exists? We don't actually
-	 * return an fvalue in those cases, so, e.g., custom columns have
-	 * check marks, not boolean true/false.
-	 */
-	ftenum_t ftype = FT_NONE;
-
 	LOG_NODE(st_node);
 
 	dfw->field_count = 0;
@@ -2243,17 +2081,15 @@ semcheck(dfwork_t *dfw, stnode_t *st_node)
 		case STTYPE_ARITHMETIC:
 		case STTYPE_SLICE:
 		case STTYPE_FUNCTION:
-			ftype = check_nonzero(dfw, st_node);
+			check_nonzero(dfw, st_node);
 			break;
 		default:
-			ftype = check_exists(dfw, st_node);
+			check_exists(dfw, st_node);
 	}
 
 	if (dfw->field_count == 0) {
 		FAIL(dfw, st_node, "Constant expression is invalid.");
 	}
-
-	return ftype;
 }
 
 
@@ -2264,7 +2100,6 @@ bool
 dfw_semcheck(dfwork_t *dfw)
 {
 	volatile bool ok_filter = true;
-	volatile ftenum_t ftype = FT_NONE;
 
 	ws_debug("Starting semantic check (dfw = %p)", dfw);
 
@@ -2272,16 +2107,15 @@ dfw_semcheck(dfwork_t *dfw)
 	 * the semantic-checking, the semantic-checking code will
 	 * throw an exception if a problem is found. */
 	TRY {
-		ftype = semcheck(dfw, dfw->st_root);
+		semcheck(dfw, dfw->st_root);
 	}
 	CATCH(TypeError) {
 		ok_filter = false;
 	}
 	ENDTRY;
 
-	ws_debug("Semantic check (dfw = %p) returns %s, return type %s",
-			dfw, ok_filter ? "TRUE" : "FALSE", ftype_name(ftype));
-	dfw->ret_type = ftype;
+	ws_debug("Semantic check (dfw = %p) returns %s",
+			dfw, ok_filter ? "TRUE" : "FALSE");
 
 	return ok_filter;
 }

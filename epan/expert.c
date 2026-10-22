@@ -14,8 +14,9 @@
 #define WS_LOG_DOMAIN LOG_DOMAIN_EPAN
 
 #include <stdio.h>
+#include <stdlib.h>
 
-#include <epan/packet.h>
+#include "packet.h"
 #include "expert.h"
 #include "uat.h"
 #include "prefs.h"
@@ -25,7 +26,6 @@
 
 #include <wsutil/str_util.h>
 #include <wsutil/wslog.h>
-#include <wsutil/array.h>
 
 /* proto_expert cannot be static because it's referenced in the
  * print routines
@@ -60,12 +60,6 @@ static gpa_expertinfo_t gpa_expertinfo;
 
 /* Hash table of abbreviations and IDs */
 static GHashTable *gpa_name_map;
-static expert_field_info *same_name_expinfo;
-
-static void save_same_name_expinfo(void *data)
-{
-	same_name_expinfo = (expert_field_info*)data;
-}
 
 /* Deregistered expert infos */
 static GPtrArray *deregistered_expertinfos;
@@ -187,8 +181,8 @@ static void uat_expert_post_update_cb(void)
 #define EXPERT_REGISTRAR_GET_NTH(eiindex, expinfo)                                               \
 	if((unsigned)eiindex >= gpa_expertinfo.len && wireshark_abort_on_dissector_bug)   \
 		ws_error("Unregistered expert info! index=%d", eiindex);                          \
-	DISSECTOR_ASSERT_HINT((unsigned)eiindex < gpa_expertinfo.len, "Unregistered expert info."); \
-	DISSECTOR_ASSERT_HINT(gpa_expertinfo.ei[eiindex] != NULL, "Unregistered expert info.");	\
+	DISSECTOR_ASSERT_HINT((unsigned)eiindex < gpa_expertinfo.len, "Unregistered expert info!"); \
+	DISSECTOR_ASSERT_HINT(gpa_expertinfo.ei[eiindex] != NULL, "Unregistered expert info!");	\
 	expinfo = gpa_expertinfo.ei[eiindex];
 
 void
@@ -271,7 +265,7 @@ expert_init(void)
 	gpa_expertinfo.len           = 0;
 	gpa_expertinfo.allocated_len = 0;
 	gpa_expertinfo.ei            = NULL;
-	gpa_name_map                 = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, save_same_name_expinfo);
+	gpa_name_map                 = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, NULL);
 	uat_saved_fields             = g_array_new(false, false, sizeof(expert_field_info*));
 	deregistered_expertinfos     = g_ptr_array_new();
 }
@@ -323,7 +317,6 @@ expert_update_comment_count(uint64_t count)
 		highest_severity = 0;
 }
 
-//coverity[-alloc]
 expert_module_t *expert_register_protocol(int id)
 {
 	expert_module_t *module;
@@ -342,11 +335,9 @@ void
 expert_deregister_expertinfo (const char *abbrev)
 {
 	expert_field_info *expinfo = (expert_field_info*)g_hash_table_lookup(gpa_name_map, abbrev);
-	while (expinfo) {
+	if (expinfo) {
 		g_ptr_array_add(deregistered_expertinfos, gpa_expertinfo.ei[expinfo->id]);
 		g_hash_table_steal(gpa_name_map, abbrev);
-		expinfo->hf_info.hfinfo.blurb = NULL;
-		expinfo = expinfo->same_name_next;
 	}
 }
 
@@ -428,11 +419,7 @@ expert_register_field_init(expert_field_info *expinfo, expert_module_t *module)
 	expinfo->orig_severity = expinfo->severity;
 
 	/* save field name for lookup */
-	same_name_expinfo = NULL;
-	g_hash_table_replace(gpa_name_map, (void *)expinfo->name, expinfo);
-	if (same_name_expinfo) {
-		expinfo->same_name_next = same_name_expinfo;
-	}
+	g_hash_table_insert(gpa_name_map, (void *) (expinfo->name), expinfo);
 
 	return expinfo->id;
 }
@@ -469,7 +456,6 @@ expert_register_field_array(expert_module_t *module, ei_register_info *exp, cons
 		ptr->eiinfo.hf_info.p_id = &ptr->ids->hf;
 		ptr->eiinfo.hf_info.hfinfo.name = ptr->eiinfo.summary;
 		ptr->eiinfo.hf_info.hfinfo.abbrev = ptr->eiinfo.name;
-		ptr->eiinfo.hf_info.hfinfo.blurb = "Expert_Item";
 
 		proto_register_field_array(module->proto_id, &ptr->eiinfo.hf_info, 1);
 	}
@@ -531,15 +517,15 @@ expert_set_item_flags(proto_item *pi, const int group, const unsigned severity)
 }
 
 static proto_tree*
-expert_create_tree(proto_item *pi, packet_info* pinfo, int group, int severity, const char *msg)
+expert_create_tree(proto_item *pi, int group, int severity, const char *msg)
 {
 	proto_tree *tree;
 	proto_item *ti;
 
 	tree = proto_item_add_subtree(pi, ett_expert);
 	ti = proto_tree_add_protocol_format(tree, proto_expert, NULL, 0, 0, "Expert Info (%s/%s): %s",
-					    val_to_str(pinfo->pool, severity, expert_severity_vals, "Unknown (%u)"),
-					    val_to_str(pinfo->pool, group, expert_group_vals, "Unknown (%u)"),
+					    val_to_str(severity, expert_severity_vals, "Unknown (%u)"),
+					    val_to_str(group, expert_group_vals, "Unknown (%u)"),
 					    msg);
 	proto_item_set_generated(ti);
 
@@ -572,30 +558,18 @@ expert_set_info_vformat(packet_info *pinfo, proto_item *pi, int group, int sever
 		return NULL;
 	}
 
-	/* severity - the severity of this item
-	 * highest_severity - the highest severity in the entire capture,
-	 *	used to set the color/tooltip in the main status bar
-	 * pinfo->expert_severity - the highest severity of an item in the
-	 *	entire frame, used for setting COL_EXPERT. We always have
-	 *	packet_info at this point.
-	 * FI_GET_FLAG(PITEM_FINFO(pi)) - the highest severity of an item
-	 *	or its descendants, used to set the background color in
-	 *	proto_tree_model.cpp. Note we can't set or get this if an item
-	 *	is faked.
-	 */
 	if (severity > highest_severity) {
 		highest_severity = severity;
 	}
 
-	/* The item might be faked, but we still need to tap it even so, e.g.,
-	 * for the Expert Info dialog or CLI tap. */
+	/* XXX: can we get rid of these checks and make them programming errors instead now? */
 	if (pi != NULL && PITEM_FINFO(pi) != NULL) {
 		expert_set_item_flags(pi, group, severity);
 	}
 
-	if ((unsigned)severity > pinfo->expert_severity) {
-		pinfo->expert_severity = (unsigned)severity;
-		col_add_str(pinfo->cinfo, COL_EXPERT, val_to_str(pinfo->pool, severity, expert_severity_vals, "Unknown (%u)"));
+	if ((pi == NULL) || (PITEM_FINFO(pi) == NULL) ||
+		((unsigned)severity >= FI_GET_FLAG(PITEM_FINFO(pi), PI_SEVERITY_MASK))) {
+		col_add_str(pinfo->cinfo, COL_EXPERT, val_to_str(severity, expert_severity_vals, "Unknown (%u)"));
 	}
 
 	if (use_vaformat) {
@@ -612,7 +586,7 @@ expert_set_info_vformat(packet_info *pinfo, proto_item *pi, int group, int sever
 		ws_utf8_truncate(formatted, ITEM_LABEL_LENGTH - 1);
 	}
 
-	tree = expert_create_tree(pi, pinfo, group, severity, formatted);
+	tree = expert_create_tree(pi, group, severity, formatted);
 
 	if (hf_index <= 0) {
 		/* If no filterable expert info, just add the message */
@@ -652,6 +626,7 @@ expert_set_info_vformat(packet_info *pinfo, proto_item *pi, int group, int sever
 	if (pi != NULL && PITEM_FINFO(pi) != NULL) {
 		ei->pitem = pi;
 	}
+	/* XXX: remove this because we don't have an internal-only function now? */
 	else {
 		ei->pitem = NULL;
 	}
@@ -705,11 +680,11 @@ expert_add_info_format(packet_info *pinfo, proto_item *pi, expert_field *expinde
 /* Helper function for expert_add_expert() to work around compiler's special needs on ARM */
 static inline proto_item *
 proto_tree_add_expert_internal(proto_tree *tree, packet_info *pinfo, expert_field *expindex,
-		tvbuff_t *tvb, unsigned start, unsigned length, ...)
+		tvbuff_t *tvb, int start, int length, ...)
 {
 	expert_field_info *eiinfo;
 	proto_item        *ti;
-	unsigned           item_length, captured_length;
+	int                item_length, captured_length;
 	va_list            unused;
 
 	/* Look up the item */
@@ -718,67 +693,36 @@ proto_tree_add_expert_internal(proto_tree *tree, packet_info *pinfo, expert_fiel
 	/* Make sure this doesn't throw an exception when adding the item */
 	item_length = length;
 	captured_length = tvb_captured_length_remaining(tvb, start);
-	if (captured_length < item_length) {
+	if (captured_length < 0)
+		item_length = 0;
+	else if (captured_length < item_length)
 		item_length = captured_length;
-	}
 	ti = proto_tree_add_text_internal(tree, tvb, start, item_length, "%s", eiinfo->summary);
 	va_start(unused, length);
 	expert_set_info_vformat(pinfo, ti, eiinfo->group, eiinfo->severity, *eiinfo->hf_info.p_id, false, eiinfo->summary, unused);
 	va_end(unused);
 
 	/* But make sure it throws an exception *after* adding the item */
-	tvb_ensure_bytes_exist(tvb, start, length);
-
-	return ti;
-}
-
-static inline proto_item*
-proto_tree_add_expert_internal_remaining(proto_tree* tree, packet_info* pinfo, expert_field* expindex,
-	tvbuff_t* tvb, unsigned start, ...)
-{
-	expert_field_info* eiinfo;
-	proto_item*        ti;
-	unsigned           item_length, captured_length;
-	va_list            unused;
-
-	/* Look up the item */
-	EXPERT_REGISTRAR_GET_NTH(expindex->ei, eiinfo);
-
-	/* Make sure this doesn't throw an exception when adding the item */
-	captured_length = tvb_captured_length(tvb);
-	if (start >= captured_length) {
-		item_length = 0;
-	} else {
-		item_length = captured_length - start;
+	if (length != -1) {
+		tvb_ensure_bytes_exist(tvb, start, length);
 	}
-	ti = proto_tree_add_text_internal(tree, tvb, start, item_length, "%s", eiinfo->summary);
-	va_start(unused, start);
-	expert_set_info_vformat(pinfo, ti, eiinfo->group, eiinfo->severity, *eiinfo->hf_info.p_id, false, eiinfo->summary, unused);
-	va_end(unused);
-
 	return ti;
 }
+
 proto_item *
 proto_tree_add_expert(proto_tree *tree, packet_info *pinfo, expert_field *expindex,
-		tvbuff_t *tvb, unsigned start, unsigned length)
+		tvbuff_t *tvb, int start, int length)
 {
 	return proto_tree_add_expert_internal(tree, pinfo, expindex, tvb, start, length);
 }
 
-proto_item*
-proto_tree_add_expert_remaining(proto_tree* tree, packet_info* pinfo, expert_field* expindex,
-	tvbuff_t* tvb, unsigned start)
-{
-	return proto_tree_add_expert_internal_remaining(tree, pinfo, expindex, tvb, start);
-}
-
 proto_item *
 proto_tree_add_expert_format(proto_tree *tree, packet_info *pinfo, expert_field *expindex,
-		tvbuff_t *tvb, unsigned start, unsigned length, const char *format, ...)
+		tvbuff_t *tvb, int start, int length, const char *format, ...)
 {
 	va_list            ap;
 	expert_field_info *eiinfo;
-	unsigned           item_length, captured_length;
+	int                item_length, captured_length;
 	proto_item        *ti;
 
 	/* Look up the item */
@@ -787,9 +731,10 @@ proto_tree_add_expert_format(proto_tree *tree, packet_info *pinfo, expert_field 
 	/* Make sure this doesn't throw an exception when adding the item */
 	item_length = length;
 	captured_length = tvb_captured_length_remaining(tvb, start);
-	if (captured_length < item_length) {
+	if (captured_length < 0)
+		item_length = 0;
+	else if (captured_length < item_length)
 		item_length = captured_length;
-	}
 	va_start(ap, format);
 	ti = proto_tree_add_text_valist_internal(tree, tvb, start, item_length, format, ap);
 	va_end(ap);
@@ -799,40 +744,12 @@ proto_tree_add_expert_format(proto_tree *tree, packet_info *pinfo, expert_field 
 	va_end(ap);
 
 	/* But make sure it throws an exception *after* adding the item */
-	tvb_ensure_bytes_exist(tvb, start, length);
-
-	return ti;
-}
-
-proto_item*
-proto_tree_add_expert_format_remaining(proto_tree* tree, packet_info* pinfo, expert_field* expindex,
-	tvbuff_t* tvb, unsigned start, const char* format, ...)
-{
-	va_list            ap;
-	expert_field_info* eiinfo;
-	unsigned           item_length, captured_length;
-	proto_item* ti;
-
-	/* Look up the item */
-	EXPERT_REGISTRAR_GET_NTH(expindex->ei, eiinfo);
-
-	/* Make sure this doesn't throw an exception when adding the item */
-	captured_length = tvb_captured_length(tvb);
-	if (start >= captured_length) {
-		item_length = 0;
-	} else {
-		item_length = captured_length - start;
+	if (length != -1) {
+		tvb_ensure_bytes_exist(tvb, start, length);
 	}
-	va_start(ap, format);
-	ti = proto_tree_add_text_valist_internal(tree, tvb, start, item_length, format, ap);
-	va_end(ap);
-
-	va_start(ap, format);
-	expert_set_info_vformat(pinfo, ti, eiinfo->group, eiinfo->severity, *eiinfo->hf_info.p_id, true, format, ap);
-	va_end(ap);
-
 	return ti;
 }
+
 /*
  * Editor modelines  -  https://www.wireshark.org/tools/modelines.html
  *

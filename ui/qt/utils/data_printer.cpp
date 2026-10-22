@@ -35,55 +35,55 @@ void DataPrinter::toClipboard(DataPrinter::DumpType type, IDataPrintable * print
     switch(type)
     {
     case DP_GoLiteral:
-        clipboard_text += QStringLiteral("[]byte{");
+        clipboard_text += QString("[]byte{");
         for (int i = 0; i < printData.length(); i++) {
         if (i>0) clipboard_text += ", ";
-            clipboard_text += QStringLiteral("0x%1").arg((uint8_t) printData[i], 1, 16, QChar('0'));
+            clipboard_text += QString("0x%1").arg((uint8_t) printData[i], 1, 16, QChar('0'));
         }
-        clipboard_text += QStringLiteral("}");
+        clipboard_text += QString("}");
         break;
     case DP_CArray:
-        clipboard_text += QStringLiteral("unsigned char bytes[] = {");
+        clipboard_text += QString("unsigned char bytes[] = {");
         for (int i = 0; i < printData.length(); i++) {
         if (i>0) clipboard_text += ", ";
-            clipboard_text += QStringLiteral("0x%1").arg((uint8_t) printData[i], 1, 16, QChar('0'));
+            clipboard_text += QString("0x%1").arg((uint8_t) printData[i], 1, 16, QChar('0'));
         }
-        clipboard_text += QStringLiteral("};");
+        clipboard_text += QString("};");
         break;
     case DP_CString:
         // Beginning quote
-        clipboard_text += QStringLiteral("\"");
+        clipboard_text += QString("\"");
         for (int i = 0; i < printData.length(); i++) {
             // backslash and double quote are printable but
             // must be escaped in a C string.
             char ch = printData[i];
             switch (ch) {
             case '\"':
-                clipboard_text += QStringLiteral("\\\"");
+                clipboard_text += QString("\\\"");
                 break;
             case '\\':
-                clipboard_text += QStringLiteral("\\\\");
+                clipboard_text += QString("\\\\");
                 break;
             case '\a':
-                clipboard_text += QStringLiteral("\\a");
+                clipboard_text += QString("\\a");
                 break;
             case '\b':
-                clipboard_text += QStringLiteral("\\b");
+                clipboard_text += QString("\\b");
                 break;
             case '\f':
-                clipboard_text += QStringLiteral("\\f");
+                clipboard_text += QString("\\f");
                 break;
             case '\n':
-                clipboard_text += QStringLiteral("\\n");
+                clipboard_text += QString("\\n");
                 break;
             case '\r':
-                clipboard_text += QStringLiteral("\\r");
+                clipboard_text += QString("\\r");
                 break;
             case '\t':
-                clipboard_text += QStringLiteral("\\t");
+                clipboard_text += QString("\\t");
                 break;
             case '\v':
-                clipboard_text += QStringLiteral("\\v");
+                clipboard_text += QString("\\v");
                 break;
             default:
                 // ASCII printable
@@ -91,16 +91,16 @@ void DataPrinter::toClipboard(DataPrinter::DumpType type, IDataPrintable * print
                     clipboard_text += QChar(ch);
                 }
                 else {
-                    clipboard_text += QStringLiteral("\\%1").arg((uint8_t) printData[i], 3, 8, QChar('0'));
+                    clipboard_text += QString("\\%1").arg((uint8_t) printData[i], 3, 8, QChar('0'));
                 }
             }
         }
         // End quote
-        clipboard_text += QStringLiteral("\"");
+        clipboard_text += QString("\"");
         break;
     case DP_HexStream:
         for (int i = 0; i < printData.length(); i++)
-            clipboard_text += QStringLiteral("%1").arg((uint8_t) printData[i], 2, 16, QChar('0'));
+            clipboard_text += QString("%1").arg((uint8_t) printData[i], 2, 16, QChar('0'));
         break;
     case DP_UTF8Text:
         // This automatically compensates for invalid UTF-8 in the input
@@ -208,7 +208,7 @@ QString DataPrinter::hexTextDump(const QByteArray printData, bool showASCII)
     int cnt = 0;
     while (cnt < printData.length())
     {
-        byteStr += QStringLiteral(" %1").arg((uint8_t) printData[cnt], 2, 16, QChar('0'));
+        byteStr += QString(" %1").arg((uint8_t) printData[cnt], 2, 16, QChar('0'));
         if (showASCII)
         {
             QChar ch(printData[cnt]);
@@ -228,7 +228,7 @@ QString DataPrinter::hexTextDump(const QByteArray printData, bool showASCII)
     {
         int offset = cnt * 0x10;
 
-        clipboard_text += QStringLiteral("%1  ").arg(offset, 4, 16, QChar('0'));
+        clipboard_text += QString("%1  ").arg(offset, 4, 16, QChar('0'));
         clipboard_text += byteStr.mid(offset * 3, byteLineLength_ * 3);
 
         if (showASCII)

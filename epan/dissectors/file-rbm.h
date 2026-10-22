@@ -1,4 +1,4 @@
-/* file-rbm.h
+/* file-ruby_marshal.h
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>

@@ -26,6 +26,8 @@
 #include <epan/wmem_scopes.h>
 #include "packet-tcp.h"
 
+#include <wsutil/strtoi.h>
+
 /* bitmap length */
 #define BM_LEN 8
 
@@ -62,7 +64,7 @@ struct iso_type {
 };
 
 /* ISO 8583-1 version 1987 Bit type specification */
-static const struct iso_type iso_1987[128] = {
+static struct iso_type iso_1987[128] = {
   { ISO_TB, 0, 0 }, /*Bit 1*/
   { ISO_TN, 19, 2 }, /*Bit 2*/
   { ISO_TN, 6, 0 }, /*Bit 3*/
@@ -195,7 +197,7 @@ static const struct iso_type iso_1987[128] = {
 };
 
 /* ISO 8583-1 version 1993 Bit type specification */
-static const struct iso_type iso_1993[128] = {
+static struct iso_type  iso_1993[128] = {
   { ISO_TB, 0, 0 }, /*Bit 1*/
   { ISO_TN, 19, 2 }, /*Bit 2*/
   { ISO_TN, 6, 0 }, /*Bit 3*/
@@ -345,6 +347,8 @@ static int iso8583_data_bit[128];
 static int ett_iso8583;
 
 static expert_field ei_iso8583_MALFORMED;
+
+static struct iso_type *data_array;
 
 /* Types definitions */
 #define ASCII_CHARSET 1
@@ -517,18 +521,21 @@ static unsigned get_iso8583_msg_len(packet_info *pinfo _U_, tvbuff_t *tvb, int o
  */
 static char* bin2hex(wmem_allocator_t *pool, const uint8_t *bin, enum bin2hex_enum type, uint32_t len)
 {
+  char* ret;
   uint8_t ch;
   const uint8_t* str = bin;
   uint32_t size = len;
-  wmem_strbuf_t* buff;
+  char* buff;
 
-  buff = wmem_strbuf_new_sized(pool, size);
+  /* "size" characters, plus terminating NUL */
+  ret = (char *)wmem_alloc(pool, size + 1);
+  buff = ret;
   if(type == TYPE_BCD)
   {
     if(size % 2) /* odd */
     {
       ch = *str & 0x0f;
-      wmem_strbuf_append_c(buff, NIBBLE_2_ASCHEX(ch));
+      *buff++ = NIBBLE_2_ASCHEX(ch);
       str++;
       size--;
     }
@@ -538,12 +545,13 @@ static char* bin2hex(wmem_allocator_t *pool, const uint8_t *bin, enum bin2hex_en
   while(size-- > 0)
   {
     ch = (*str >> 4) & 0x0f;
-    wmem_strbuf_append_c(buff, NIBBLE_2_ASCHEX(ch));
+    *buff++ = NIBBLE_2_ASCHEX(ch);
     ch = *str & 0x0f;
-    wmem_strbuf_append_c(buff, NIBBLE_2_ASCHEX(ch));
+    *buff++ = NIBBLE_2_ASCHEX(ch);
     str++;
   }
-  return wmem_strbuf_finalize(buff);
+  *buff = '\0';
+  return ret;
 }
 
 static uint64_t hex2bin(const char* hexstr, int len)
@@ -569,32 +577,34 @@ static uint64_t hex2bin(const char* hexstr, int len)
       if((offset -2 + len) > iso8583_len)\
         return NULL
 
-static char *get_bit(const struct iso_type *data_type, int hf, packet_info *pinfo, tvbuff_t *tvb, int *off_set, proto_tree *tree, proto_item **exp, int *length, uint32_t iso8583_len)
+static char *get_bit(unsigned ind, packet_info *pinfo, tvbuff_t *tvb, unsigned *off_set, proto_tree *tree, proto_item **exp, int *length, uint32_t iso8583_len)
 {
   char aux[1024];
   char* ret=NULL;
   uint32_t len;
-  int offset = *off_set;
+  unsigned offset = *off_set;
   bool str_input = false;
 
   /* Check if it is a fixed or variable length
    * data field */
 
-  if(data_type->varlen == 0)
-    len = data_type->maxsize; /* fixed len */
+  if(data_array[ind].varlen == 0)
+    len = data_array[ind].maxsize; /* fixed len */
   else
   {
     /* var len*/
-    len = data_type->varlen;
+    len = data_array[ind].varlen;
 
     switch(charset_pref)
     {
       case ASCII_CHARSET:
       {
+        uint8_t* sizestr;
         checksize(len);
 
+        sizestr = tvb_get_string_enc(pinfo->pool, tvb, offset, len , ENC_ASCII);
         offset += len;
-        if (!tvb_get_string_uint(tvb, offset, len, ENC_STR_DEC, &len, NULL))
+        if (!ws_strtou32(sizestr, NULL, &len))
           return NULL;
         break;
       }
@@ -628,10 +638,10 @@ static char *get_bit(const struct iso_type *data_type, int hf, packet_info *pinf
 
   if(len > 0)
   {
-    if((unsigned)len > data_type->maxsize)
+    if((unsigned)len > data_array[ind].maxsize)
       return NULL;
 
-    if(data_type->type == ISO_TN || data_type->type == ISO_TXN)
+    if(data_array[ind].type == ISO_TN || data_array[ind].type == ISO_TXN)
     {
       if(charset_pref == ASCII_CHARSET)
       {
@@ -642,7 +652,7 @@ static char *get_bit(const struct iso_type *data_type, int hf, packet_info *pinf
       }
       else if(charset_pref == NUM_NIBBLE_CHARSET)
       {
-        uint32_t tlen = (len%2)? len/2 + 1 : len/2;
+        int tlen = (len%2)? len/2 + 1 : len/2;
         checksize(tlen);
         tvb_memcpy(tvb, aux, offset, tlen);
         if((ret = bin2hex(pinfo->pool, (uint8_t *)aux, TYPE_BCD, len)) == NULL)
@@ -653,11 +663,11 @@ static char *get_bit(const struct iso_type *data_type, int hf, packet_info *pinf
       }
       /* else */
     }
-    else if(data_type->type == ISO_TB || data_type->type == ISO_TZ)
+    else if(data_array[ind].type == ISO_TB || data_array[ind].type == ISO_TZ)
     {
       if( bin_encode_pref == BIN_ASCII_ENC)
       {
-        if(data_type->type == ISO_TB)
+        if(data_array[ind].type == ISO_TB)
           len*=2;
         *length = len;
         checksize(len);
@@ -684,9 +694,9 @@ static char *get_bit(const struct iso_type *data_type, int hf, packet_info *pinf
     }
     /* TODO: check type of ret content */
     if(str_input && tree != NULL)
-        *exp = proto_tree_add_string(tree, hf, tvb, offset, len, ret);
+        *exp = proto_tree_add_string(tree, iso8583_data_bit[ind], tvb, offset, len, ret);
     else if (tree != NULL)
-        *exp = proto_tree_add_item(tree, hf, tvb,
+        *exp = proto_tree_add_item(tree, iso8583_data_bit[ind], tvb,
               offset, len, ENC_ASCII);
 
     *off_set = offset + len;
@@ -748,7 +758,7 @@ static int get_bitmap(packet_info *pinfo, tvbuff_t *tvb, uint64_t* bitmap, unsig
 }
 
 static int dissect_databits(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
-    int offset, const struct iso_type *data_type_for_bit, int nofbitmaps, uint64_t *bitmap, uint32_t iso8583_len)
+    int offset, int nofbitmaps, uint64_t *bitmap, uint32_t iso8583_len)
 {
   proto_item *exp;
   int nofbits = nofbitmaps*64, i;
@@ -768,8 +778,8 @@ static int dissect_databits(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
     if(bitmap[i/64] & (((uint64_t)1)<< (63 -bit)))
     {
-      cod = get_bit(&data_type_for_bit[i], iso8583_data_bit[i], pinfo, tvb, &offset, tree, &exp, &len, iso8583_len);
-      if(cod == NULL || ! isstrtype_ok(data_type_for_bit[i].type, cod, len ))
+      cod = get_bit(i, pinfo, tvb, &offset, tree, &exp, &len, iso8583_len);
+      if(cod == NULL || ! isstrtype_ok(data_array[i].type, cod, len ))
       {
         if(!exp)
           exp = proto_tree_add_string(tree, iso8583_data_bit[i], tvb, offset, 0, "");
@@ -805,7 +815,7 @@ static int dissect_iso8583_msg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
   int nofbitmaps=0;
   unsigned ret;
   uint32_t iso8583_len;
-  const struct iso_type *data_type_for_bit;
+
 
   /* Check that the packet is long enough for it to belong to ISO 8583-1. */
   if (tvb_reported_length(tvb) < iso8583_MIN_LENGTH)
@@ -850,9 +860,9 @@ static int dissect_iso8583_msg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 
   /* check for message type format */
   if(msg_type[0] == '0')
-    data_type_for_bit = iso_1987;
+    data_array = iso_1987;
   else if (msg_type[0] == '1')
-    data_type_for_bit = iso_1993;
+    data_array = iso_1993;
   else
   {
     return 0;
@@ -892,7 +902,7 @@ static int dissect_iso8583_msg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
   {
     len=4;
     proto_tree_add_item(iso8583_tree, hf_iso8583_mti, tvb,
-        offset, len, ENC_ASCII);
+        offset, len, ENC_ASCII | ENC_NA);
   }
   else
   {
@@ -961,7 +971,7 @@ static int dissect_iso8583_msg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
   }
 
   /*DISSECT BITS*/
-  ret = dissect_databits(tvb, pinfo, iso8583_tree, offset, data_type_for_bit, nofbitmaps, bitmap,
+  ret = dissect_databits(tvb, pinfo, iso8583_tree, offset, nofbitmaps, bitmap,
     iso8583_len);
 
   return ret;
@@ -1009,7 +1019,7 @@ proto_register_iso8583(void)
 
   static hf_register_info hf_data[128];
 
-  static const char * const hf_data_blurb[128] = {
+  static const char *hf_data_blurb[128] = {
     /* Bit 1 */
     "Second Bit map present",
     /* Bit 2 */

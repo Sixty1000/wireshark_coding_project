@@ -27,8 +27,6 @@
 #include <epan/etypes.h>
 #include <epan/conversation.h>
 
-#include "data-usb.h"
-#include "data-errno.h"
 #include "packet-usbip.h"
 #include "packet-usb.h"
 #include "packet-tcp.h"
@@ -154,6 +152,10 @@ static value_string_ext usbip_speed_vals_ext = VALUE_STRING_EXT_INIT(usbip_speed
 static value_string_ext usbip_operation_vals_ext = VALUE_STRING_EXT_INIT(usbip_operation_vals);
 static value_string_ext usbip_urb_vals_ext = VALUE_STRING_EXT_INIT(usbip_urb_vals);
 
+extern value_string_ext ext_usb_vendors_vals;
+extern value_string_ext ext_usb_products_vals;
+extern value_string_ext linux_negative_errno_vals_ext;
+
 static const value_string usb_endpoint_direction_vals[] = {
     {USBIP_DIR_OUT, "OUT"                        },
     {USBIP_DIR_IN,  "IN"                         },
@@ -194,11 +196,11 @@ dissect_device(proto_tree *tree, tvbuff_t *tvb, int offset)
     uint32_t product_id;
 
     /* Device path on host (usually /sys/devices/usb/... */
-    proto_tree_add_item(tree, hf_usbip_path, tvb, offset, 256, ENC_ASCII);
+    proto_tree_add_item(tree, hf_usbip_path, tvb, offset, 256, ENC_ASCII | ENC_NA);
     offset += 256;
 
     /* Bus id string - Id of the bus the device is connected to */
-    proto_tree_add_item(tree, hf_usbip_busid, tvb, offset, 32, ENC_ASCII);
+    proto_tree_add_item(tree, hf_usbip_busid, tvb, offset, 32, ENC_ASCII | ENC_NA);
     offset += 32;
 
     /* bus number */
@@ -315,7 +317,7 @@ dissect_import_request(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb,
                        int offset)
 {
     col_set_str(pinfo->cinfo, COL_INFO, "Import Request");
-    proto_tree_add_item(tree, hf_usbip_busid, tvb, offset, 32, ENC_ASCII);
+    proto_tree_add_item(tree, hf_usbip_busid, tvb, offset, 32, ENC_ASCII | ENC_NA);
     return offset + 32;
 }
 
@@ -635,7 +637,7 @@ dissect_usbip_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                      void *data _U_)
 {
     uint16_t version;
-    unsigned offset = 0;
+    int offset = 0;
 
     proto_item *ti = NULL;
     proto_tree *usbip_tree = NULL;
@@ -744,7 +746,7 @@ get_usbip_message_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset,
             if (num_of_devs == 0)
                 return expected_size;
 
-            if (tvb_captured_length_remaining(tvb, offset) < (0x138 * num_of_devs))
+            if (tvb_captured_length_remaining(tvb, offset) < (int) (0x138 * num_of_devs))
                 return 0;
 
             for (i = 0; i < num_of_devs; i++) {

@@ -20,8 +20,6 @@
 
 #include <ui/qt/utils/qt_ui_utils.h>
 #include <ui/qt/widgets/qcustomplot.h>
-#include <ui/qt/utils/plot_theme.h>
-#include <ui/qt/utils/theme_manager.h>
 #include "sctp_graph_dialog.h"
 
 SCTPGraphArwndDialog::SCTPGraphArwndDialog(QWidget *parent, const sctp_assoc_info_t *assoc,
@@ -37,13 +35,12 @@ SCTPGraphArwndDialog::SCTPGraphArwndDialog(QWidget *parent, const sctp_assoc_inf
     selected_assoc_id = assoc->assoc_id;
 
     ui->setupUi(this);
-    PlotTheme::track(ui->sctpPlot);
     Qt::WindowFlags flags = Qt::Window | Qt::WindowSystemMenuHint
             | Qt::WindowMinimizeButtonHint
             | Qt::WindowMaximizeButtonHint
             | Qt::WindowCloseButtonHint;
     this->setWindowFlags(flags);
-    this->setWindowTitle(tr("SCTP Data and Adv. Rec. Window over Time: %1 Port1 %2 Port2 %3")
+    this->setWindowTitle(QString(tr("SCTP Data and Adv. Rec. Window over Time: %1 Port1 %2 Port2 %3"))
             .arg(gchar_free_to_qstring(cf_get_display_name(cap_file_))).arg(assoc->port1).arg(assoc->port2));
     if ((direction == 1 && assoc->n_array_tsn1 == 0) || (direction == 2 && assoc->n_array_tsn2 == 0)) {
         QMessageBox msgBox;
@@ -110,10 +107,9 @@ void SCTPGraphArwndDialog::drawArwndGraph(const sctp_assoc_info_t *selected_asso
     // Add Arwnd graph
     if (xa.size() > 0) {
         QCPGraph *gr = ui->sctpPlot->addGraph(ui->sctpPlot->xAxis, ui->sctpPlot->yAxis);
-        gr->setName(tr("Arwnd"));
-        const QColor color = ThemeManager::instance()->graphColor(4);
-        myScatter.setPen(QPen(color));
-        myScatter.setBrush(color);
+        gr->setName(QString(tr("Arwnd")));
+        myScatter.setPen(QPen(Qt::red));
+        myScatter.setBrush(Qt::red);
         ui->sctpPlot->graph(0)->setScatterStyle(myScatter);
         ui->sctpPlot->graph(0)->setLineStyle(QCPGraph::lsNone);
         ui->sctpPlot->graph(0)->setData(xa, ya);
@@ -168,7 +164,7 @@ void SCTPGraphArwndDialog::graphClicked(QCPAbstractPlottable* plottable, int, QM
             cf_goto_frame(cap_file_, frame_num, false);
         }
 
-        ui->hintLabel->setText(tr("<small><i>Graph %1: a_rwnd=%2 Time=%3 secs </i></small>")
+        ui->hintLabel->setText(QString(tr("<small><i>Graph %1: a_rwnd=%2 Time=%3 secs </i></small>"))
                                .arg(plottable->name())
                                .arg(ya.value(i))
                                .arg(xa.value(i)));

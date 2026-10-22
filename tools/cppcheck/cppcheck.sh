@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 #
 # cppcheck.sh
@@ -38,7 +38,6 @@ TARGET=""
 QUIET="--quiet"
 SUPPRESSIONS="--suppressions-list=$CPPCHECK_DIR/suppressions"
 INCLUDES="--includes-file=$CPPCHECK_DIR/includes"
-LIBRARIES="--library=gtk --library=qt --library=$CPPCHECK_DIR/glib-patches.cfg --library=$CPPCHECK_DIR/ws-includes.cfg"
 MODE="gcc"
 COLORIZE_HTML_MODE="no"
 OPEN_FILES="no"
@@ -135,17 +134,13 @@ if [ "$QUIET" = " " ]; then
     echo
 fi
 
-# cppcheck puts the report in stderr and its parsing errors (e.g.,
-# all files were excluded) in stdout, but we want to pipe stderr
-# to tee, etc. So swap them.
-
 # shellcheck disable=SC2086
 $CPPCHECK --force --enable=style $QUIET    \
-    $SUPPRESSIONS $INCLUDES $LIBRARIES \
+    $SUPPRESSIONS $INCLUDES \
     -i doc/ \
     -i epan/dissectors/asn1/ \
     --std=c11 --template=$TEMPLATE   \
-    -j $THREADS $TARGET $XML_ARG 3>&1 1>&2 2>&3 3>&- | colorize
+    -j $THREADS $TARGET $XML_ARG 2>&1 | colorize
 
 exit_cleanup
 

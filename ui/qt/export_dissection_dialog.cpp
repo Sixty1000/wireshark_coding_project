@@ -9,16 +9,16 @@
 
 #include "export_dissection_dialog.h"
 
+#include "ui/alert_box.h"
 #include "ui/help_url.h"
 #include "ui/util.h"
 
 #include <epan/print.h>
 #include <wsutil/filesystem.h>
-#include <wsutil/report_message.h>
 
 #include <ui/qt/utils/qt_ui_utils.h>
 
-#include <QStackedWidget>
+
 #include <QDialogButtonBox>
 #include <QGridLayout>
 #include <QPushButton>
@@ -55,8 +55,6 @@ ExportDissectionDialog::ExportDissectionDialog(QWidget *parent, capture_file *ca
     setAcceptMode(QFileDialog::AcceptSave);
     setLabelText(FileType, tr("Export As:"));
 
-    packet_format_stack_ = new PacketFormatStack(this);
-
     // export_type_map_keys() sorts alphabetically. We don't want that.
     name_filters
             << tr("Plain text (*.txt)")
@@ -86,10 +84,9 @@ ExportDissectionDialog::ExportDissectionDialog(QWidget *parent, capture_file *ca
     print_args_.range.process_filtered = true;
 
     packet_range_group_box_.initRange(&print_args_.range, selRange);
-
     h_box->addWidget(&packet_range_group_box_);
 
-    h_box->addWidget(packet_format_stack_, 0, Qt::AlignTop);
+    h_box->addWidget(&packet_format_group_box_, 0, Qt::AlignTop);
 
     if (button_box) {
         button_box->addButton(QDialogButtonBox::Help);
@@ -101,7 +98,7 @@ ExportDissectionDialog::ExportDissectionDialog(QWidget *parent, capture_file *ca
     if (save_bt_) {
         connect(&packet_range_group_box_, &PacketRangeGroupBox::validityChanged,
                 this, &ExportDissectionDialog::checkValidity);
-        connect(packet_format_stack_, &PacketFormatStack::formatChanged,
+        connect(&packet_format_group_box_, &PacketFormatGroupBox::formatChanged,
                 this, &ExportDissectionDialog::checkValidity);
         save_bt_->installEventFilter(this);
     }
@@ -149,18 +146,25 @@ void ExportDissectionDialog::dialogAccepted(const QStringList &selected)
         print_args_.print_dissections   = print_dissections_as_displayed;
         print_args_.print_hex           = false;
         print_args_.print_formfeed      = false;
-        print_args_.no_duplicate_keys   = false;
-        print_args_.json_compact        = false;
-        print_args_.csv_args            = {};
-        print_args_.carrays_args        = {false, true};
-
-        packet_format_stack_->updatePrintArgs(print_args_);
 
         switch (export_type_) {
         case export_type_text:      /* Text */
+            print_args_.print_summary = packet_format_group_box_.summaryEnabled();
+            print_args_.print_col_headings = packet_format_group_box_.includeColumnHeadingsEnabled();
+            print_args_.print_dissections = print_dissections_none;
+            if (packet_format_group_box_.detailsEnabled()) {
+                if (packet_format_group_box_.allCollapsedEnabled())
+                    print_args_.print_dissections = print_dissections_collapsed;
+                else if (packet_format_group_box_.asDisplayedEnabled())
+                    print_args_.print_dissections = print_dissections_as_displayed;
+                else if (packet_format_group_box_.allExpandedEnabled())
+                    print_args_.print_dissections = print_dissections_expanded;
+            }
+            print_args_.print_hex = packet_format_group_box_.bytesEnabled();
+            print_args_.hexdump_options = packet_format_group_box_.getHexdumpOptions();
             print_args_.stream = print_stream_text_new(true, print_args_.file);
             if (print_args_.stream == NULL) {
-                report_open_failure(print_args_.file, errno, true);
+                open_failure_alert_box(print_args_.file, errno, true);
                 return;
             }
             status = cf_print_packets(cap_file_, &print_args_, true);
@@ -188,10 +192,10 @@ void ExportDissectionDialog::dialogAccepted(const QStringList &selected)
             case CF_PRINT_OK:
                 break;
             case CF_PRINT_OPEN_ERROR:
-                report_open_failure(print_args_.file, errno, true);
+                open_failure_alert_box(print_args_.file, errno, true);
                 break;
             case CF_PRINT_WRITE_ERROR:
-                report_write_failure(print_args_.file, errno);
+                write_failure_alert_box(print_args_.file, errno);
                 break;
         }
 
@@ -205,7 +209,12 @@ void ExportDissectionDialog::dialogAccepted(const QStringList &selected)
 void ExportDissectionDialog::exportTypeChanged(QString name_filter)
 {
     export_type_ = export_type_map_.value(name_filter);
-    packet_format_stack_->setExportType(export_type_);
+    if (export_type_ == export_type_text) {
+        packet_format_group_box_.setEnabled(true);
+        print_args_.format = PR_FMT_TEXT;
+    } else {
+        packet_format_group_box_.setEnabled(false);
+    }
 
     checkValidity();
     setDefaultSuffix(export_extensions[export_type_]);
@@ -217,7 +226,14 @@ bool ExportDissectionDialog::isValid()
 
     if (!packet_range_group_box_.isValid()) valid = false;
 
-    if (!packet_format_stack_->isValid()) valid = false;
+    if (export_type_ == export_type_text) {
+        if (! packet_format_group_box_.summaryEnabled() &&
+            ! packet_format_group_box_.detailsEnabled() &&
+            ! packet_format_group_box_.bytesEnabled())
+        {
+            valid = false;
+        }
+    }
 
     return valid;
 }

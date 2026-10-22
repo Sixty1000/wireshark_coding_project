@@ -194,8 +194,8 @@ static const value_string dcom_boolean_vals[] = {
 
 
 
-static unsigned
-dissect_ICBABrowse_get_Count_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ICBABrowse_get_Count_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint32_t u32Count;
@@ -212,7 +212,7 @@ dissect_ICBABrowse_get_Count_resp(tvbuff_t *tvb, unsigned offset,
 
     if (u32HResult) {   /* !S_OK */
       col_append_fstr(pinfo->cinfo, COL_INFO, "-> %s",
-            val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
+            val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
     } else {
       col_append_fstr(pinfo->cinfo, COL_INFO, " Cnt=%u -> S_OK", u32Count);
     }
@@ -222,8 +222,8 @@ dissect_ICBABrowse_get_Count_resp(tvbuff_t *tvb, unsigned offset,
 }
 
 
-static unsigned
-dissect_ICBABrowse_BrowseItems_rqst(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ICBABrowse_BrowseItems_rqst(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint32_t u32Offset;
@@ -244,8 +244,8 @@ dissect_ICBABrowse_BrowseItems_rqst(tvbuff_t *tvb, unsigned offset,
 }
 
 
-static unsigned
-dissect_ICBABrowse_BrowseItems_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ICBABrowse_BrowseItems_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint32_t u32Pointer;
@@ -276,14 +276,14 @@ dissect_ICBABrowse_BrowseItems_resp(tvbuff_t *tvb, unsigned offset,
                 &u32HResult);
 
     col_append_fstr(pinfo->cinfo, COL_INFO, " -> %s",
-        val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
+        val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
 
     return offset;
 }
 
 
-static unsigned
-dissect_ICBABrowse2_get_Count2_rqst(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ICBABrowse2_get_Count2_rqst(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint32_t u32Selector;
@@ -302,8 +302,8 @@ dissect_ICBABrowse2_get_Count2_rqst(tvbuff_t *tvb, unsigned offset,
 
 
 
-static unsigned
-dissect_ICBABrowse2_BrowseItems2_rqst(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ICBABrowse2_BrowseItems2_rqst(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint32_t u32Selector;
@@ -327,8 +327,8 @@ dissect_ICBABrowse2_BrowseItems2_rqst(tvbuff_t *tvb, unsigned offset,
 }
 
 
-static unsigned
-dissect_ICBABrowse2_BrowseItems2_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ICBABrowse2_BrowseItems2_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint32_t u32Pointer;
@@ -359,14 +359,14 @@ dissect_ICBABrowse2_BrowseItems2_resp(tvbuff_t *tvb, unsigned offset,
                 &u32HResult);
 
     col_append_fstr(pinfo->cinfo, COL_INFO, " -> %s",
-        val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
+        val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
 
     return offset;
 }
 
 
-static unsigned
-dissect_ICBAPersist2_Save2_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ICBAPersist2_Save2_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint32_t u32Pointer;
@@ -391,18 +391,18 @@ dissect_ICBAPersist2_Save2_resp(tvbuff_t *tvb, unsigned offset,
                 &u32HResult);
 
     col_append_fstr(pinfo->cinfo, COL_INFO, " -> %s",
-        val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
+        val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
 
     return offset;
 }
 
 
 
-static unsigned
-dissect_get_BSTR_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_get_BSTR_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep, int hfindex)
 {
-    char    szStr[1000] = "";
+    char    szStr[1000];
     uint32_t u32MaxStr = sizeof(szStr);
     uint32_t u32Pointer;
     uint32_t u32HResult;
@@ -415,20 +415,22 @@ dissect_get_BSTR_resp(tvbuff_t *tvb, unsigned offset,
     if (u32Pointer) {
         offset = dissect_dcom_BSTR(tvb, offset, pinfo, tree, di, drep,
             hfindex, szStr, u32MaxStr);
+    } else {
+        szStr[0] = '\0';
     }
 
     offset = dissect_dcom_HRESULT(tvb, offset, pinfo, tree, di, drep,
                 &u32HResult);
 
     col_append_fstr(pinfo->cinfo, COL_INFO, ": \"%s\" -> %s", szStr,
-        val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
+        val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
 
     return offset;
 }
 
 
-static unsigned
-dissect_get_ProductionDate_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_get_ProductionDate_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint32_t u32HResult;
@@ -445,14 +447,14 @@ dissect_get_ProductionDate_resp(tvbuff_t *tvb, unsigned offset,
 
     col_append_fstr(pinfo->cinfo, COL_INFO, ": Date: %g -> %s",
         r8Date,
-        val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
+        val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
 
     return offset;
 }
 
 
-static unsigned
-dissect_get_SerialNo_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_get_SerialNo_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint32_t u32HResult;
@@ -472,14 +474,14 @@ dissect_get_SerialNo_resp(tvbuff_t *tvb, unsigned offset,
                 &u32HResult);
 
     col_append_fstr(pinfo->cinfo, COL_INFO, " -> %s",
-        val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
+        val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
 
     return offset;
 }
 
 
-static unsigned
-dissect_ICBATime_get_Time_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ICBATime_get_Time_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint32_t u32HResult;
@@ -496,14 +498,14 @@ dissect_ICBATime_get_Time_resp(tvbuff_t *tvb, unsigned offset,
 
     col_append_fstr(pinfo->cinfo, COL_INFO, ": Time: %g -> %s",
         r8Date,
-        val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
+        val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
 
     return offset;
 }
 
 
-static unsigned
-dissect_ICBATime_put_Time_rqst(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ICBATime_put_Time_rqst(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     double r8Date;
@@ -518,8 +520,8 @@ dissect_ICBATime_put_Time_rqst(tvbuff_t *tvb, unsigned offset,
 }
 
 
-static unsigned
-dissect_get_Producer_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_get_Producer_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
 
@@ -527,8 +529,8 @@ dissect_get_Producer_resp(tvbuff_t *tvb, unsigned offset,
 }
 
 
-static unsigned
-dissect_get_Product_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_get_Product_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
 
@@ -536,12 +538,12 @@ dissect_get_Product_resp(tvbuff_t *tvb, unsigned offset,
 }
 
 
-static unsigned
-dissect_ICBAPhysicalDevice_get_LogicalDevice_rqst(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ICBAPhysicalDevice_get_LogicalDevice_rqst(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint32_t     u32Pointer;
-    char         szStr[1000] = "";
+    char         szStr[1000];
     uint32_t     u32MaxStr = sizeof(szStr);
     char        *call;
 
@@ -553,6 +555,8 @@ dissect_ICBAPhysicalDevice_get_LogicalDevice_rqst(tvbuff_t *tvb, unsigned offset
     if (u32Pointer) {
         offset = dissect_dcom_BSTR(tvb, offset, pinfo, tree, di, drep,
             hf_cba_name, szStr, u32MaxStr);
+    } else {
+        szStr[0] = '\0';
     }
 
     if (strlen(szStr) > 0) {
@@ -566,8 +570,8 @@ dissect_ICBAPhysicalDevice_get_LogicalDevice_rqst(tvbuff_t *tvb, unsigned offset
 }
 
 
-static unsigned
-dissect_ICBAPhysicalDevice_get_LogicalDevice_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ICBAPhysicalDevice_get_LogicalDevice_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint32_t          u32HResult;
@@ -600,14 +604,14 @@ dissect_ICBAPhysicalDevice_get_LogicalDevice_resp(tvbuff_t *tvb, unsigned offset
                 &u32HResult);
 
     col_append_fstr(pinfo->cinfo, COL_INFO, " -> %s",
-          val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
+          val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
 
     return offset;
 }
 
 
-static unsigned
-dissect_ICBAPhysicalDevice2_Type_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ICBAPhysicalDevice2_Type_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint16_t u16MultiApp;
@@ -629,14 +633,14 @@ dissect_ICBAPhysicalDevice2_Type_resp(tvbuff_t *tvb, unsigned offset,
       col_append_fstr(pinfo->cinfo, COL_INFO, " App=%s Stack=%s -> %s",
           (u16MultiApp) ? "Multi" : "Single",
           (u16PROFInetDCOMStack) ? "PN-DCOM" : "MS-DCOM",
-          val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
+          val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
 
     return offset;
 }
 
 
-static unsigned
-dissect_PROFInetRevision_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_PROFInetRevision_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint16_t u16Major;
@@ -662,14 +666,14 @@ dissect_PROFInetRevision_resp(tvbuff_t *tvb, unsigned offset,
 
     col_append_fstr(pinfo->cinfo, COL_INFO, " Revision=%u.%u.%u.%u -> %s",
           u16Major, u16Minor, u16ServicePack, u16Build,
-          val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
+          val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
 
     return offset;
 }
 
 
-static unsigned
-dissect_ICBAPhysicalDevice2_get_PDevStamp_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ICBAPhysicalDevice2_get_PDevStamp_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint32_t u32PDevStamp;
@@ -686,14 +690,14 @@ dissect_ICBAPhysicalDevice2_get_PDevStamp_resp(tvbuff_t *tvb, unsigned offset,
 
     col_append_fstr(pinfo->cinfo, COL_INFO, " PDevStamp=0x%x -> %s",
           u32PDevStamp,
-          val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
+          val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
 
     return offset;
 }
 
 
-static unsigned
-dissect_Revision_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_Revision_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint16_t u16Major;
@@ -714,17 +718,17 @@ dissect_Revision_resp(tvbuff_t *tvb, unsigned offset,
 
     col_append_fstr(pinfo->cinfo, COL_INFO, ": %u.%u -> %s",
         u16Major, u16Minor,
-        val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
+        val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
 
     return offset;
 }
 
 
-static unsigned
-dissect_ICBALogicalDevice_get_Name_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ICBALogicalDevice_get_Name_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
-    char    szStr[1000] = "";
+    char    szStr[1000];
     uint32_t u32MaxStr = sizeof(szStr);
     uint32_t u32Pointer;
     uint32_t u32HResult;
@@ -737,20 +741,22 @@ dissect_ICBALogicalDevice_get_Name_resp(tvbuff_t *tvb, unsigned offset,
     if (u32Pointer) {
         offset = dissect_dcom_BSTR(tvb, offset, pinfo, tree, di, drep,
             hf_cba_name, szStr, u32MaxStr);
+    } else {
+        szStr[0] = '\0';
     }
 
     offset = dissect_dcom_HRESULT(tvb, offset, pinfo, tree, di, drep,
                 &u32HResult);
 
     col_append_fstr(pinfo->cinfo, COL_INFO, ": \"%s\" -> %s", szStr,
-        val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
+        val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
 
     return offset;
 }
 
 
-static unsigned
-dissect_RTAuto_get_Name_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_RTAuto_get_Name_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
 
@@ -758,8 +764,8 @@ dissect_RTAuto_get_Name_resp(tvbuff_t *tvb, unsigned offset,
 }
 
 
-static unsigned
-dissect_ICBALogicalDevice_get_ACCO_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ICBALogicalDevice_get_ACCO_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint32_t          u32HResult;
@@ -784,14 +790,14 @@ dissect_ICBALogicalDevice_get_ACCO_resp(tvbuff_t *tvb, unsigned offset,
     offset = dissect_dcom_HRESULT(tvb, offset, pinfo, tree, di, drep, &u32HResult);
 
     col_append_fstr(pinfo->cinfo, COL_INFO, " -> %s",
-        val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
+        val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
 
     return offset;
 }
 
 
-static unsigned
-dissect_ICBALogicalDevice_get_RTAuto_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ICBALogicalDevice_get_RTAuto_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint32_t u32HResult;
@@ -804,17 +810,17 @@ dissect_ICBALogicalDevice_get_RTAuto_resp(tvbuff_t *tvb, unsigned offset,
     offset = dissect_dcom_HRESULT(tvb, offset, pinfo, tree, di, drep, &u32HResult);
 
     col_append_fstr(pinfo->cinfo, COL_INFO, " -> %s",
-        val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
+        val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
 
     return offset;
 }
 
 
-static unsigned
-dissect_ICBALogicalDevice_Get_RTAuto_rqst(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ICBALogicalDevice_Get_RTAuto_rqst(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
-    char    szStr[1000] = "";
+    char    szStr[1000];
     uint32_t u32MaxStr = sizeof(szStr);
     uint32_t u32Pointer;
 
@@ -826,6 +832,8 @@ dissect_ICBALogicalDevice_Get_RTAuto_rqst(tvbuff_t *tvb, unsigned offset,
     if (u32Pointer) {
         offset = dissect_dcom_BSTR(tvb, offset, pinfo, tree, di, drep,
             hf_cba_name, szStr, u32MaxStr);
+    } else {
+        szStr[0] = '\0';
     }
 
     col_append_fstr(pinfo->cinfo, COL_INFO, ": \"%s\"", szStr);
@@ -835,13 +843,13 @@ dissect_ICBALogicalDevice_Get_RTAuto_rqst(tvbuff_t *tvb, unsigned offset,
 
 
 
-static unsigned
-dissect_ComponentInfo_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ComponentInfo_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
-    char    szStr[1000] = "";
+    char    szStr[1000];
     uint32_t u32MaxStr = sizeof(szStr);
-    char    szStr2[1000] = "";
+    char    szStr2[1000];
     uint32_t u32MaxStr2 = sizeof(szStr2);
     uint32_t u32HResult;
     uint32_t u32Pointer;
@@ -854,6 +862,8 @@ dissect_ComponentInfo_resp(tvbuff_t *tvb, unsigned offset,
     if (u32Pointer) {
         offset = dissect_dcom_BSTR(tvb, offset, pinfo, tree, di, drep,
             hf_cba_component_id, szStr, u32MaxStr);
+    } else {
+        szStr[0] = '\0';
     }
 
     offset = dissect_dcom_dcerpc_pointer(tvb, offset, pinfo, tree, di, drep,
@@ -861,20 +871,22 @@ dissect_ComponentInfo_resp(tvbuff_t *tvb, unsigned offset,
     if (u32Pointer) {
         offset = dissect_dcom_BSTR(tvb, offset, pinfo, tree, di, drep,
             hf_cba_component_version, szStr2, u32MaxStr2);
+    } else {
+        szStr2[0] = '\0';
     }
 
     offset = dissect_dcom_HRESULT(tvb, offset, pinfo, tree, di, drep, &u32HResult);
 
     col_append_fstr(pinfo->cinfo, COL_INFO, ": ID=\"%s\" Version=\"%s\" -> %s",
             szStr, szStr2,
-            val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
+            val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
 
     return offset;
 }
 
 
 static void
-dissect_PBAddressInfo(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
+dissect_PBAddressInfo(tvbuff_t *tvb, int offset, packet_info *pinfo,
                        proto_tree *tree, dcerpc_info *di, uint8_t *drep,
                        uint32_t u32VarType _U_, uint32_t u32ArraySize)
 {
@@ -901,8 +913,8 @@ dissect_PBAddressInfo(tvbuff_t *tvb, unsigned offset, packet_info *pinfo,
 }
 
 
-static unsigned
-dissect_PBAddressInfo_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_PBAddressInfo_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint32_t u32HResult;
@@ -914,14 +926,14 @@ dissect_PBAddressInfo_resp(tvbuff_t *tvb, unsigned offset,
     offset = dissect_dcom_HRESULT(tvb, offset, pinfo, tree, di, drep, &u32HResult);
 
     col_append_fstr(pinfo->cinfo, COL_INFO, " -> %s",
-        val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
+        val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
 
     return offset;
 }
 
 
-static unsigned
-dissect_Advise_rqst(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_Advise_rqst(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
 
@@ -934,8 +946,8 @@ dissect_Advise_rqst(tvbuff_t *tvb, unsigned offset,
 }
 
 
-static unsigned
-dissect_Advise_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_Advise_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint32_t u32Cookie;
@@ -952,14 +964,14 @@ dissect_Advise_resp(tvbuff_t *tvb, unsigned offset,
 
     col_append_fstr(pinfo->cinfo, COL_INFO, ": Cookie=0x%x -> %s",
         u32Cookie,
-        val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
+        val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
 
     return offset;
 }
 
 
-static unsigned
-dissect_Unadvise_rqst(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_Unadvise_rqst(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint32_t u32Cookie;
@@ -977,8 +989,8 @@ dissect_Unadvise_rqst(tvbuff_t *tvb, unsigned offset,
 }
 
 
-static unsigned
-dissect_ICBAState_get_State_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ICBAState_get_State_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint16_t u16State;
@@ -994,15 +1006,15 @@ dissect_ICBAState_get_State_resp(tvbuff_t *tvb, unsigned offset,
                         &u32HResult);
 
     col_append_fstr(pinfo->cinfo, COL_INFO, ": State=%s -> %s",
-        val_to_str(pinfo->pool, u16State, cba_state_vals, "Unknown (0x%08x)"),
-        val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
+        val_to_str(u16State, cba_state_vals, "Unknown (0x%08x)"),
+        val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
 
     return offset;
 }
 
 
-static unsigned
-dissect_ICBAStateEvent_OnStateChanged_rqst(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ICBAStateEvent_OnStateChanged_rqst(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint16_t u16NewState;
@@ -1018,15 +1030,15 @@ dissect_ICBAStateEvent_OnStateChanged_rqst(tvbuff_t *tvb, unsigned offset,
                         hf_cba_old_state, &u16OldState);
 
     col_append_fstr(pinfo->cinfo, COL_INFO, ": NewState=%s OldState=%s",
-        val_to_str(pinfo->pool, u16NewState, cba_state_vals, "Unknown (0x%04x)"),
-        val_to_str(pinfo->pool, u16OldState, cba_state_vals, "Unknown (0x%04x)") );
+        val_to_str(u16NewState, cba_state_vals, "Unknown (0x%04x)"),
+        val_to_str(u16OldState, cba_state_vals, "Unknown (0x%04x)") );
 
     return offset;
 }
 
 
-static unsigned
-dissect_ICBAGroupError_OnGroupErrorChanged_rqst(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ICBAGroupError_OnGroupErrorChanged_rqst(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint16_t u16NewGroupError;
@@ -1042,15 +1054,15 @@ dissect_ICBAGroupError_OnGroupErrorChanged_rqst(tvbuff_t *tvb, unsigned offset,
                         hf_cba_old_grouperror, &u16OldGroupError);
 
     col_append_fstr(pinfo->cinfo, COL_INFO, ": NewGE=%s OldGE=%s",
-        val_to_str(pinfo->pool, u16NewGroupError, cba_grouperror_vals, "Unknown (0x%04x)"),
-        val_to_str(pinfo->pool, u16OldGroupError, cba_grouperror_vals, "Unknown (0x%04x)") );
+        val_to_str(u16NewGroupError, cba_grouperror_vals, "Unknown (0x%04x)"),
+        val_to_str(u16OldGroupError, cba_grouperror_vals, "Unknown (0x%04x)") );
 
     return offset;
 }
 
 
-static unsigned
-dissect_ICBAPhysicalDevicePCEvent_OnLogicalDeviceAdded_rqst(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ICBAPhysicalDevicePCEvent_OnLogicalDeviceAdded_rqst(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint32_t u32Cookie;
@@ -1069,14 +1081,14 @@ dissect_ICBAPhysicalDevicePCEvent_OnLogicalDeviceAdded_rqst(tvbuff_t *tvb, unsig
 
     col_append_fstr(pinfo->cinfo, COL_INFO, ": Cookie=0x%x %s",
         u32Cookie,
-        val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
+        val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
 
     return offset;
 }
 
 
-static unsigned
-dissect_ICBAGroupError_GroupError_resp(tvbuff_t *tvb, unsigned offset,
+static int
+dissect_ICBAGroupError_GroupError_resp(tvbuff_t *tvb, int offset,
     packet_info *pinfo, proto_tree *tree, dcerpc_info *di, uint8_t *drep)
 {
     uint16_t u16GroupError;
@@ -1096,9 +1108,9 @@ dissect_ICBAGroupError_GroupError_resp(tvbuff_t *tvb, unsigned offset,
                         &u32HResult);
 
     col_append_fstr(pinfo->cinfo, COL_INFO, ": GroupError=%s Cookie=0x%x -> %s",
-        val_to_str(pinfo->pool, u16GroupError, cba_grouperror_vals, "Unknown (0x%08x)"),
+        val_to_str(u16GroupError, cba_grouperror_vals, "Unknown (0x%08x)"),
         u32Cookie,
-        val_to_str(pinfo->pool, u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
+        val_to_str(u32HResult, dcom_hresult_vals, "Unknown (0x%08x)") );
 
     return offset;
 }
@@ -1628,7 +1640,7 @@ void
 proto_reg_handoff_dcom_cba (void)
 {
     /* Register the CBA class ID */
-    guids_add_guid(&uuid_coclass_CBAPhysicalDevice, "CBA");
+    guids_add_uuid(&uuid_coclass_CBAPhysicalDevice, "CBA");
 
     /* Register the interfaces */
     dcerpc_init_uuid(proto_ICBAPhysicalDevice, ett_ICBAPhysicalDevice,

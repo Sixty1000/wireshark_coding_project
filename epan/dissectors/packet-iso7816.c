@@ -655,7 +655,8 @@ dissect_iso7816_cmd_apdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
     }
     offset += ret;
 
-	proto_tree_add_item_ret_uint8(tree, hf_iso7816_ins, tvb, offset, 1, ENC_BIG_ENDIAN, &ins);
+    ins = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item(tree, hf_iso7816_ins, tvb, offset, 1, ENC_BIG_ENDIAN);
     col_append_sep_str(pinfo->cinfo, COL_INFO, NULL,
             val_to_str_ext_const(ins, &iso7816_ins_ext, "Unknown instruction"));
     offset++;
@@ -873,12 +874,12 @@ proto_register_iso7816(void)
         },
         { &hf_iso7816_resp_in,
             { "Response In", "iso7816.resp_in",
-                FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_RESPONSE), 0x0,
+                FT_FRAMENUM, BASE_NONE, NULL, 0x0,
                 "The response to this command is in this frame", HFILL }
         },
         { &hf_iso7816_resp_to,
             { "Response To", "iso7816.resp_to",
-                FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_REQUEST), 0x0,
+                FT_FRAMENUM, BASE_NONE, NULL, 0x0,
                 "This is the response to the command in this frame", HFILL }
         },
         { &hf_iso7816_cla,

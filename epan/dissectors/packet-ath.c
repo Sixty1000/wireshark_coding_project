@@ -82,7 +82,7 @@ test_ath(tvbuff_t *tvb)
 static int
 dissect_ath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-  unsigned offset = 0;
+  int offset = 0;
 
   /* various lengths as reported in the packet itself */
   uint8_t hlen = 0;
@@ -152,7 +152,8 @@ dissect_ath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
       /* HOST LENGTH
        */
-      hlen_item = proto_tree_add_item_ret_uint8(ath_tree, hf_ath_hlen, tvb, offset, 1, ENC_BIG_ENDIAN, &hlen);
+      hlen_item = proto_tree_add_item(ath_tree, hf_ath_hlen, tvb, offset, 1, ENC_BIG_ENDIAN);
+      hlen = tvb_get_uint8(tvb, offset);
       offset += 1;
 
       /* HOST
@@ -177,7 +178,7 @@ dissect_ath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
        */
       proto_tree_add_item(ath_tree, hf_ath_comm, tvb, offset, clen, ENC_ASCII);
       if (clen != -1)
-        info_command = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, clen, ENC_ASCII);
+        info_command = tvb_get_string_enc(pinfo->pool, tvb, offset, clen, ENC_ASCII);
       offset += clen;
 
       /* DOMAIN LENGTH
@@ -189,7 +190,7 @@ dissect_ath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
        */
       proto_tree_add_item(ath_tree, hf_ath_domain, tvb, offset, dlen, ENC_ASCII);
       if (dlen != 0)
-        info_domain = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, dlen, ENC_ASCII);
+        info_domain = tvb_get_string_enc(pinfo->pool, tvb, offset, dlen, ENC_ASCII);
       offset += dlen;
 
       /* UNIQUEID
@@ -221,7 +222,7 @@ dissect_ath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
       proto_tree_add_item(ath_tree, hf_ath_begin, tvb, offset, 8, ENC_ASCII);
       offset += 8;
 
-      proto_tree_add_item(ath_tree, hf_ath_padding, tvb, offset, 2, ENC_BIG_ENDIAN);
+      proto_tree_add_item(ath_tree, hf_ath_padding, tvb, offset, 2, ENC_ASCII|ENC_NA);
       offset += 2;
 
       /* LENGTH
@@ -251,7 +252,8 @@ dissect_ath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
       /* HOST LENGTH
        */
-      hlen_item = proto_tree_add_item_ret_uint8(ath_tree, hf_ath_hlen, tvb, offset, 1, ENC_BIG_ENDIAN, &hlen);
+      hlen_item = proto_tree_add_item(ath_tree, hf_ath_hlen, tvb, offset, 1, ENC_BIG_ENDIAN);
+      hlen = tvb_get_uint8(tvb, offset);
       offset += 1;
 
       /* HOST
@@ -276,7 +278,7 @@ dissect_ath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
        */
       proto_tree_add_item(ath_tree, hf_ath_comm, tvb, offset, clen, ENC_ASCII);
       if (clen != -1)
-        info_command = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, clen, ENC_ASCII);
+        info_command = tvb_get_string_enc(pinfo->pool, tvb, offset, clen, ENC_ASCII);
       offset += clen;
 
       /* DOMAIN LENGTH
@@ -288,7 +290,7 @@ dissect_ath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
        */
       proto_tree_add_item(ath_tree, hf_ath_domain, tvb, offset, dlen, ENC_ASCII);
       if (dlen != 0)
-        info_domain = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, dlen, ENC_ASCII);
+        info_domain = tvb_get_string_enc(pinfo->pool, tvb, offset, dlen, ENC_ASCII);
       offset += dlen;
 
       /* UNIQUEID
@@ -311,7 +313,7 @@ dissect_ath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
       proto_tree_add_item(ath_tree, hf_ath_end, tvb, offset, 8, ENC_ASCII);
 
   } else {
-    proto_tree_add_expert_remaining(tree, pinfo, &ei_ath_hmark_invalid, tvb, offset);
+    proto_tree_add_expert(tree, pinfo, &ei_ath_hmark_invalid, tvb, offset, -1);
     return tvb_captured_length(tvb);
   }
 
@@ -378,7 +380,7 @@ proto_register_ath(void)
         HFILL }
     },
     { &hf_ath_hlen,
-      { "Host Length",  "ath.hlen", FT_UINT8, BASE_DEC, NULL, 0x0, "Host IP Length",
+      { "Host Length",  "ath.hlen", FT_INT8, BASE_DEC, NULL, 0x0, "Host IP Length",
         HFILL }
     },
     { &hf_ath_ipv4,

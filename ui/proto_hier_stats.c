@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "file.h"
+#include "frame_tvbuff.h"
 #include "ui/proto_hier_stats.h"
 #include "ui/progress_dlg.h"
 #include "epan/epan_dissect.h"
@@ -52,14 +53,8 @@ find_stat_node(GNode *parent_stat_node, const header_field_info *needle_hfinfo)
         needle_stat_node = g_node_first_child(up_parent_stat_node->parent);
         while (needle_stat_node) {
             hfinfo = STAT_NODE_HFINFO(needle_stat_node);
-
-            /* it's a good candidate when both id's are the same */
             if (hfinfo &&  hfinfo->id == needle_hfinfo->id) {
-
-                /* off-path subtrees aren't kept */
-                if( needle_stat_node == parent_stat_node)
-                    return needle_stat_node;
-
+                return needle_stat_node;
             }
             needle_stat_node = g_node_next_sibling(needle_stat_node);
         }
@@ -84,18 +79,8 @@ find_stat_node(GNode *parent_stat_node, const header_field_info *needle_hfinfo)
     return needle_stat_node;
 }
 
-static bool
-ph_node_is_proto(proto_node *ptree_node)
-{
-    if (!PNODE_FINFO(ptree_node))
-        return false;
 
-    const header_field_info *hfinfo = PNODE_FINFO(ptree_node)->hfinfo;
-    return proto_registrar_is_protocol(hfinfo->id) && hfinfo->id != pc_proto_id;
-}
-
-static void
-// NOLINTNEXTLINE(misc-no-recursion)
+    static void
 process_node(proto_node *ptree_node, GNode *parent_stat_node, ph_stats_t *ps)
 {
     field_info		*finfo;
@@ -105,6 +90,8 @@ process_node(proto_node *ptree_node, GNode *parent_stat_node, ph_stats_t *ps)
 
     finfo = PNODE_FINFO(ptree_node);
     /* We don't fake protocol nodes we expect them to have a field_info.
+     * Even with a faked proto tree, we don't fake nodes when PTREE_FINFO(tree)
+     * is NULL in order to avoid crashes here and elsewhere. (See epan/proto.c)
      */
     ws_assert(finfo);
 
@@ -134,15 +121,11 @@ process_node(proto_node *ptree_node, GNode *parent_stat_node, ph_stats_t *ps)
      * the tree to pick up embedded protocols not added to the toplevel of
      * the tree.
      */
-    while (proto_sibling_node) {
-        if (ph_node_is_proto(proto_sibling_node)) {
-            break;
-        }
+    while (proto_sibling_node && !proto_registrar_is_protocol(PNODE_FINFO(proto_sibling_node)->hfinfo->id)) {
         proto_sibling_node = proto_sibling_node->next;
     }
 
     if (proto_sibling_node) {
-        // We recurse here but we're limited by proto tree checks
         process_node(proto_sibling_node, stat_node, ps);
     } else {
         stats->num_pkts_last++;
@@ -163,10 +146,7 @@ process_tree(proto_tree *protocol_tree, ph_stats_t* ps)
      * "Packet comments" item that steals items from "Frame".
      */
     ptree_node = ((proto_node *)protocol_tree)->first_child;
-    while (ptree_node) {
-        if (ph_node_is_proto(ptree_node)) {
-            break;
-        }
+    while (ptree_node && (ptree_node->finfo->hfinfo->id == pc_proto_id || !proto_registrar_is_protocol(ptree_node->finfo->hfinfo->id))) {
         ptree_node = ptree_node->next;
     }
 
@@ -179,20 +159,22 @@ process_tree(proto_tree *protocol_tree, ph_stats_t* ps)
 
     static bool
 process_record(capture_file *cf, frame_data *frame, column_info *cinfo,
-               wtap_rec *rec, ph_stats_t* ps)
+               wtap_rec *rec, Buffer *buf, ph_stats_t* ps)
 {
     epan_dissect_t	edt;
     double		cur_time;
 
     /* Load the record from the capture file */
-    if (!cf_read_record(cf, frame, rec))
+    if (!cf_read_record(cf, frame, rec, buf))
         return false;	/* failure */
 
     /* Dissect the record   tree  not visible */
     epan_dissect_init(&edt, cf->epan, true, false);
     /* Don't fake protocols. We need them for the protocol hierarchy */
     epan_dissect_fake_protocols(&edt, false);
-    epan_dissect_run(&edt, cf->cd_t, rec, frame, cinfo);
+    epan_dissect_run(&edt, cf->cd_t, rec,
+                     frame_tvbuff_new_buffer(&cf->provider, frame, buf),
+                     frame, cinfo);
 
     /* Get stats from this protocol tree */
     process_tree(edt.tree, ps);
@@ -208,7 +190,6 @@ process_record(capture_file *cf, frame_data *frame, column_info *cinfo,
 
     /* Free our memory. */
     epan_dissect_cleanup(&edt);
-    wtap_rec_cleanup(rec);
 
     return true;	/* success */
 }
@@ -222,6 +203,7 @@ ph_stats_new(capture_file *cf)
     progdlg_t	*progbar = NULL;
     int		count;
     wtap_rec	rec;
+    Buffer	buf;
     float	progbar_val;
     char	status_str[100];
     int		progbar_nextstep;
@@ -257,7 +239,8 @@ ph_stats_new(capture_file *cf)
     /* Progress so far. */
     progbar_val = 0.0f;
 
-    wtap_rec_init(&rec, DEFAULT_INIT_BUFFER_SIZE_2048);
+    wtap_rec_init(&rec);
+    ws_buffer_init(&buf, 1514);
 
     for (framenum = 1; framenum <= cf->count; framenum++) {
         frame = frame_data_sequence_find(cf->provider.frames, framenum);
@@ -310,7 +293,6 @@ ph_stats_new(capture_file *cf)
            look only at those packets. */
         if (frame->passed_dfilter) {
 
-            // XXX - ordering these if's the other way around would be more performant
             if (frame->has_ts) {
                 if (ps->tot_packets == 0) {
                     double cur_time = nstime_to_sec(&frame->abs_ts);
@@ -327,7 +309,7 @@ ph_stats_new(capture_file *cf)
             ps->tot_packets++;
 
             /* we don't care about colinfo */
-            if (!process_record(cf, frame, NULL, &rec, ps)) {
+            if (!process_record(cf, frame, NULL, &rec, &buf, ps)) {
                 /*
                  * Give up, and set "stop_flag" so we
                  * just abort rather than popping up
@@ -344,6 +326,7 @@ ph_stats_new(capture_file *cf)
     }
 
     wtap_rec_cleanup(&rec);
+    ws_buffer_free(&buf);
 
     /* We're done calculating the statistics; destroy the progress bar
        if it was created. */

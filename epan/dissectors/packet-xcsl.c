@@ -69,15 +69,15 @@ static ws_mempbrk_pattern pbrk_param_end;
 static void dissect_xcsl_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree) {
 
     unsigned     offset = 0;
-    unsigned     length_remaining;
+    int          length_remaining;
     uint8_t      idx;
     bool         request;
     uint8_t      par;
-    char        *str;
+    uint8_t     *str;
     uint8_t      result;
     const char *code;
     unsigned     len;
-    unsigned     next_offset;
+    int          next_offset;
     proto_tree  *xcsl_tree = NULL;
 
     /* color support */
@@ -103,7 +103,8 @@ static void dissect_xcsl_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
     while ((length_remaining = tvb_reported_length_remaining(tvb, offset)) > 0) {
 
         /* get next item */
-        if (!tvb_ws_mempbrk_uint8_length(tvb, offset, length_remaining, &pbrk_param_end, &next_offset, NULL)) {
+        next_offset = tvb_ws_mempbrk_pattern_uint8(tvb, offset, length_remaining, &pbrk_param_end, NULL);
+        if (next_offset == -1) {
             len = length_remaining;
             next_offset = offset + len;
         } else {
@@ -116,7 +117,7 @@ static void dissect_xcsl_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
             continue;
         }
 
-        str = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, len, ENC_ASCII);
+        str = tvb_get_string_enc(pinfo->pool, tvb, offset, len, ENC_ASCII);
 
         /* Xcsl (Call Specification Language) protocol in brief :
          *
@@ -174,7 +175,7 @@ static void dissect_xcsl_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
                     if ( result >= XCSL_NONE ) {
                         result = XCSL_UNDEFINED;
                     }
-                    code = val_to_str(pinfo->pool, result, xcsl_action_vals, "Unknown: %d");
+                    code = val_to_str(result, xcsl_action_vals, "Unknown: %d");
 
                     /* Print result code and description */
                     xcsl_item = proto_tree_add_item(xcsl_tree, hf_xcsl_result, tvb, offset, len, ENC_ASCII);
@@ -226,10 +227,10 @@ static void dissect_xcsl_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 /* This function determines whether the first 4 octets equals to xcsl and the fifth is an ; or - */
 static bool dissect_xcsl_tcp_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_) {
 
-    char *protocol;
+    uint8_t *protocol;
 
     if (tvb_captured_length (tvb) >= 5) {
-        protocol = (char*)tvb_get_string_enc(pinfo->pool, tvb, 0, 5, ENC_ASCII);
+        protocol = tvb_get_string_enc(pinfo->pool, tvb, 0, 5, ENC_ASCII);
 
         if (strncmp(protocol,"xcsl",4) == 0 && (protocol[4] == ';' || protocol[4] == '-')) {
 

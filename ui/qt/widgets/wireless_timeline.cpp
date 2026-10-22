@@ -26,6 +26,7 @@
 #include <epan/dissectors/packet-ieee80211-radio.h>
 
 #include <epan/color_filters.h>
+#include "frame_tvbuff.h"
 
 #include <ui/qt/utils/color_utils.h>
 #include <ui/qt/utils/qt_ui_utils.h>
@@ -45,7 +46,7 @@
 
 #include <ui/qt/main_window.h>
 #include "packet_list.h"
-#include <ui/qt/models/packet_list_proxy_model.h>
+#include <ui/qt/models/packet_list_model.h>
 
 /* we start rendering this number of microseconds left of the left edge - to ensure
  * NAV lines are drawn correctly, and that small errors in time order don't prevent some
@@ -76,9 +77,8 @@ static void reset_rgb(float rgb[TIMELINE_HEIGHT][3])
 
 static void render_pixels(QPainter &p, int x, int width, float rgb[TIMELINE_HEIGHT][3], float ratio)
 {
-    int previous, i;
+    int previous = 0, i;
     for (i = 1; i <= TIMELINE_HEIGHT; i++) {
-        previous = i - 1;
         if (i != TIMELINE_HEIGHT &&
                 rgb[previous][0] == rgb[i][0] &&
                 rgb[previous][1] == rgb[i][1] &&
@@ -87,6 +87,7 @@ static void render_pixels(QPainter &p, int x, int width, float rgb[TIMELINE_HEIG
         if (rgb[previous][0] != 1.0 || rgb[previous][1] != 1.0 || rgb[previous][2] != 1.0) {
           p.fillRect(QRectF(x/ratio, previous, width/ratio, i-previous), pcolor(rgb[previous][0],rgb[previous][1],rgb[previous][2]));
         }
+        previous = i;
     }
     reset_rgb(rgb);
 }
@@ -109,7 +110,11 @@ static void accumulate_rgb(float rgb[TIMELINE_HEIGHT][3], int height, int dfilte
 
 void WirelessTimeline::mousePressEvent(QMouseEvent *event)
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0 ,0)
     start_x = last_x = event->position().x();
+#else
+    start_x = last_x = event->localPos().x();
+#endif
 }
 
 
@@ -118,8 +123,13 @@ void WirelessTimeline::mouseMoveEvent(QMouseEvent *event)
     if (event->buttons() == Qt::NoButton)
         return;
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0 ,0)
     qreal offset = event->position().x() - last_x;
     last_x = event->position().x();
+#else
+    qreal offset = event->localPos().x() - last_x;
+    last_x = event->localPos().x();
+#endif
 
     qreal shift = ((qreal) (end_tsf - start_tsf))/width() * offset;
     start_tsf -= shift;
@@ -135,7 +145,11 @@ void WirelessTimeline::mouseMoveEvent(QMouseEvent *event)
 
 void WirelessTimeline::mouseReleaseEvent(QMouseEvent *event)
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0 ,0)
     QPointF localPos = event->position();
+#else
+    QPointF localPos = event->localPos();
+#endif
     qreal offset = localPos.x() - start_x;
 
     /* if this was a drag, ignore it */
@@ -280,7 +294,7 @@ void WirelessTimeline::captureFileReadFinished()
 
 void WirelessTimeline::appInitialized()
 {
-    connect(mainApp->mainWindow(), &MainWindow::framesSelected, this, &WirelessTimeline::selectedFrameChanged);
+    connect(qobject_cast<MainWindow *>(mainApp->mainWindow()), &MainWindow::framesSelected, this, &WirelessTimeline::selectedFrameChanged);
 
     GString *error_string;
     error_string = register_tap_listener("wlan_radio_timeline", this, NULL, TL_REQUIRES_NOTHING, tap_timeline_reset, tap_timeline_packet, NULL/*tap_draw_cb tap_draw*/, NULL);
@@ -325,7 +339,7 @@ WirelessTimeline::WirelessTimeline(QWidget *parent) : QWidget(parent)
     capfile = NULL;
 
     radio_packet_list = g_hash_table_new(g_direct_hash, g_direct_equal);
-    mainApp->whenInitialized(this, [this]() { appInitialized(); });
+    connect(mainApp, &MainApplication::appInitialized, this, &WirelessTimeline::appInitialized);
 }
 
 WirelessTimeline::~WirelessTimeline()
@@ -339,12 +353,6 @@ WirelessTimeline::~WirelessTimeline()
 void WirelessTimeline::setPacketList(PacketList *packet_list)
 {
     this->packet_list = packet_list;
-    PacketListProxyModel *packet_list_model = qobject_cast<PacketListProxyModel *>(packet_list->model());
-    if (packet_list_model) {
-        connect(packet_list_model, &PacketListProxyModel::bgColorizationProgress,
-                this, &WirelessTimeline::bgColorizationProgress);
-    }
-
 }
 
 void WirelessTimeline::tap_timeline_reset(void* tapdata)
@@ -378,10 +386,10 @@ struct wlan_radio* WirelessTimeline::get_wlan_radio(uint32_t packet_num)
 void WirelessTimeline::doToolTip(struct wlan_radio *wr, QPoint pos, int x)
 {
     if (x < position(wr->start_tsf, 1.0)) {
-        QToolTip::showText(pos, QStringLiteral("Inter frame space %1 %2s").arg(wr->ifs).arg(UTF8_MICRO_SIGN));
+        QToolTip::showText(pos, QString("Inter frame space %1 " UTF8_MICRO_SIGN "s").arg(wr->ifs));
     } else {
-        QToolTip::showText(pos, QStringLiteral("Total duration %1 %2s\nNAV %3 %2s")
-                           .arg(wr->end_tsf-wr->start_tsf).arg(UTF8_MICRO_SIGN).arg(wr->nav));
+        QToolTip::showText(pos, QString("Total duration %1 " UTF8_MICRO_SIGN "s\nNAV %2 " UTF8_MICRO_SIGN "s")
+                           .arg(wr->end_tsf-wr->start_tsf).arg(wr->nav));
     }
 }
 
@@ -412,7 +420,11 @@ void WirelessTimeline::wheelEvent(QWheelEvent *event)
         zoom_level += steps;
         if (zoom_level < 0) zoom_level = 0;
         if (zoom_level > TIMELINE_MAX_ZOOM) zoom_level = TIMELINE_MAX_ZOOM;
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
         zoom(event->position().x() / width());
+#else
+        zoom(event->posF().x() / width());
+#endif
     }
 }
 
@@ -500,8 +512,8 @@ WirelessTimeline::paintEvent(QPaintEvent *qpe)
 
     zoom = ((double) width())/(end_tsf - start_tsf) * ratio;
 
-    /* background uses the palette window color so it adapts to the theme */
-    p.fillRect(0, 0, width(), TIMELINE_HEIGHT, palette().color(QPalette::Window));
+    /* background is light grey */
+    p.fillRect(0, 0, width(), TIMELINE_HEIGHT, QColor(240,240,240));
 
     /* background of packets visible in packet_list is white */
     int top = packet_list->indexAt(QPoint(0,0)).row();
@@ -514,15 +526,15 @@ WirelessTimeline::paintEvent(QPaintEvent *qpe)
 
     int x1 = top == -1 ? 0 : position(get_wlan_radio(topData->num)->start_tsf, ratio);
     int x2 = bottom == -1 ? width() : position(get_wlan_radio(botData->num)->end_tsf, ratio);
-    p.fillRect(QRectF(x1/ratio, 0, (x2-x1+1)/ratio, TIMELINE_HEIGHT), palette().color(QPalette::Base));
+    p.fillRect(QRectF(x1/ratio, 0, (x2-x1+1)/ratio, TIMELINE_HEIGHT), Qt::white);
 
-    /* background of current packet uses the palette highlight color */
+    /* background of current packet is blue */
     if (cfile.current_frame) {
         struct wlan_radio *wr = get_wlan_radio(cfile.current_frame->num);
         if (wr) {
             x1 = position(wr->start_tsf, ratio);
             x2 = position(wr->end_tsf, ratio);
-            p.fillRect(QRectF(x1/ratio, 0, (x2-x1+1)/ratio, TIMELINE_HEIGHT), palette().color(QPalette::Highlight));
+            p.fillRect(QRectF(x1/ratio, 0, (x2-x1+1)/ratio, TIMELINE_HEIGHT), Qt::blue);
         }
     }
 

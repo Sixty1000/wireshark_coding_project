@@ -22,7 +22,6 @@
 #include <epan/prefs.h>
 #include <wsutil/array.h>
 
-#include "packet-akp.h"
 #include "packet-ber.h"
 #include "packet-pkcs12.h"
 #include "packet-x509af.h"
@@ -30,6 +29,10 @@
 #include "packet-cms.h"
 
 #include <wsutil/wsgcrypt.h>
+
+#define PNAME  "PKCS#12: Personal Information Exchange"
+#define PSNAME "PKCS12"
+#define PFNAME "pkcs12"
 
 #define PKCS12_PBE_ARCFOUR_SHA1_OID     "1.2.840.113549.1.12.1.1"
 #define PKCS12_PBE_3DES_SHA1_OID	"1.2.840.113549.1.12.1.3"
@@ -47,17 +50,16 @@ static int ett_decrypted_pbe;
 
 static expert_field ei_pkcs12_octet_string_expected;
 
-/* We might want to make this a preference */
-#define MAX_ITER_COUNT 10000000U
 
 static const char *object_identifier_id;
-static unsigned iteration_count;
+static int iteration_count;
 static tvbuff_t *salt;
 static const char *password;
 static bool try_null_password;
 
 static int dissect_AuthenticatedSafe_OCTETSTRING_PDU(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data);
 static int dissect_SafeContents_OCTETSTRING_PDU(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data);
+static int dissect_PrivateKeyInfo_PDU(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data);
 
 #include "packet-pkcs12-hf.c"
 
@@ -81,8 +83,8 @@ generate_key_or_iv(packet_info *pinfo, unsigned int id, tvbuff_t *salt_tvb, unsi
   gcry_md_hd_t md;
   gcry_mpi_t num_b1 = NULL;
   size_t pwlen;
-  uint8_t hash[20], buf_b[64], buf_i[128], *p;
-  uint8_t *salt_p;
+  char hash[20], buf_b[64], buf_i[128], *p;
+  char *salt_p;
   int salt_size;
   size_t cur_keylen;
   size_t n;
@@ -91,45 +93,46 @@ generate_key_or_iv(packet_info *pinfo, unsigned int id, tvbuff_t *salt_tvb, unsi
   cur_keylen = 0;
 
   salt_size = tvb_captured_length(salt_tvb);
-  if (salt_size == 0) {
-    return false;
-  }
-  salt_p = (uint8_t *)tvb_memdup(pinfo->pool, salt_tvb, 0, salt_size);
+  salt_p = (char *)tvb_memdup(pinfo->pool, salt_tvb, 0, salt_size);
 
   if (pw == NULL)
     pwlen = 0;
   else
     pwlen = strlen(pw);
 
-  if (pwlen > 63 / 2) {
-    return false;
-  }
+  if (pwlen > 63 / 2)
+    {
+      return false;
+    }
 
   /* Store salt and password in BUF_I */
   p = buf_i;
   for (i = 0; i < 64; i++)
     *p++ = salt_p[i % salt_size];
-
-  if (pw) {
-    for (i = j = 0; i < 64; i += 2) {
-      *p++ = 0;
-      *p++ = pw[j];
-      if (++j > pwlen)	/* Note, that we include the trailing zero */
-        j = 0;
+  if (pw)
+    {
+      for (i = j = 0; i < 64; i += 2)
+	{
+	  *p++ = 0;
+	  *p++ = pw[j];
+	  if (++j > pwlen)	/* Note, that we include the trailing zero */
+	    j = 0;
+	}
     }
-  }
   else
     memset (p, 0, 64);
 
   for (;;) {
       err = gcry_md_open(&md, GCRY_MD_SHA1, 0);
-      if (gcry_err_code(err)) {
-        return false;
-      }
-      for (i = 0; i < 64; i++) {
-        unsigned char lid = id & 0xFF;
-        gcry_md_write (md, &lid, 1);
-      }
+      if (gcry_err_code(err))
+        {
+          return false;
+        }
+      for (i = 0; i < 64; i++)
+        {
+          unsigned char lid = id & 0xFF;
+          gcry_md_write (md, &lid, 1);
+	}
 
       gcry_md_write(md, buf_i, pw ? 128 : 64);
 
@@ -144,7 +147,8 @@ generate_key_or_iv(packet_info *pinfo, unsigned int id, tvbuff_t *salt_tvb, unsi
       for (i = 0; i < 20 && cur_keylen < req_keylen; i++)
         keybuf[cur_keylen++] = hash[i];
 
-      if (cur_keylen == req_keylen) {
+      if (cur_keylen == req_keylen)
+      {
         gcry_mpi_release (num_b1);
         return true;		/* ready */
       }
@@ -157,34 +161,38 @@ generate_key_or_iv(packet_info *pinfo, unsigned int id, tvbuff_t *salt_tvb, unsi
 
       rc = gcry_mpi_scan (&num_b1, GCRYMPI_FMT_USG, buf_b, n, &n);
 
-      if (rc != 0) {
-        return false;
-      }
+      if (rc != 0)
+        {
+          return false;
+        }
 
       gcry_mpi_add_ui (num_b1, num_b1, 1);
 
-      for (i = 0; i < 128; i += 64) {
-        gcry_mpi_t num_ij;
+      for (i = 0; i < 128; i += 64)
+        {
+          gcry_mpi_t num_ij;
 
-        n = 64;
-        rc = gcry_mpi_scan (&num_ij, GCRYMPI_FMT_USG, buf_i + i, n, &n);
+          n = 64;
+          rc = gcry_mpi_scan (&num_ij, GCRYMPI_FMT_USG, buf_i + i, n, &n);
 
-        if (rc != 0) {
-          return false;
+          if (rc != 0)
+            {
+              return false;
+            }
+
+          gcry_mpi_add (num_ij, num_ij, num_b1);
+          gcry_mpi_clear_highbit (num_ij, 64 * 8);
+
+          n = 64;
+
+          rc = gcry_mpi_print (GCRYMPI_FMT_USG, buf_i + i, n, &n, num_ij);
+          if (rc != 0)
+            {
+              return false;
+            }
+
+          gcry_mpi_release (num_ij);
         }
-
-        gcry_mpi_add (num_ij, num_ij, num_b1);
-        gcry_mpi_clear_highbit (num_ij, 64 * 8);
-
-        n = 64;
-
-        rc = gcry_mpi_print (GCRYMPI_FMT_USG, buf_i + i, n, &n, num_ij);
-        if (rc != 0) {
-          return false;
-        }
-
-        gcry_mpi_release (num_ij);
-      }
   }
 }
 
@@ -194,7 +202,7 @@ void PBE_reset_parameters(void)
 	salt = NULL;
 }
 
-int PBE_decrypt_data(dissector_t dissector, const char *description, tvbuff_t *encrypted_tvb, packet_info *pinfo, asn1_ctx_t *actx, proto_item *item)
+int PBE_decrypt_data(const char *object_identifier_id_param _U_, tvbuff_t *encrypted_tvb _U_, packet_info *pinfo _U_, asn1_ctx_t *actx _U_, proto_item *item _U_)
 {
 	const char	*encryption_algorithm;
 	gcry_cipher_hd_t cipher;
@@ -208,6 +216,7 @@ int PBE_decrypt_data(dissector_t dissector, const char *description, tvbuff_t *e
 	char		*iv = NULL;
 	char		*clear_data = NULL;
 	tvbuff_t	*clear_tvb = NULL;
+	const char      *oidname;
 	GString		*name;
 	proto_tree	*tree;
 	char		byte;
@@ -219,10 +228,6 @@ int PBE_decrypt_data(dissector_t dissector, const char *description, tvbuff_t *e
 	}
 
 	encryption_algorithm = x509af_get_last_algorithm_id();
-	if (encryption_algorithm == NULL) {
-		proto_item_append_text(item, " [Unknown encryption algorithm]");
-		return false;
-	}
 
 	/* these are the only encryption schemes we understand for now */
 	if(!strcmp(encryption_algorithm, PKCS12_PBE_3DES_SHA1_OID)) {
@@ -249,42 +254,6 @@ int PBE_decrypt_data(dissector_t dissector, const char *description, tvbuff_t *e
 
 	if((iteration_count == 0) || (salt == NULL)) {
 		proto_item_append_text(item, " [Insufficient parameters]");
-		return false;
-	}
-
-        /* Put some kind of sanity check limit on the iteration_count to avoid
-         * taking forever repeatedly hashing. RFC 8018 says:
-         * "This document follows the recommendations made in FIPS
-         * Special Publication 800-132 [NISTSP132], which says
-         *
-         *    The iteration count shall be selected as large as possible, as
-         *    long as the time required to generate the key using the entered
-         *    password is acceptable for the users. [...] A minimum iteration
-         *    count of 1,000 is recommended.  For especially critical keys, or
-         *    for very powerful systems or systems where user-perceived
-         *    performance is not critical, an iteration count of 10,000,000 may
-         *    be appropriate."
-         * https://datatracker.ietf.org/doc/html/rfc8018#section-4.2
-         *
-         * (Note NIST announced a decision to revise SP 800-132 in May 2023:
-         * https://csrc.nist.gov/News/2023/decision-to-revise-nist-sp-800-132
-         * although as of Dec 2025 has not published a draft.)
-         *
-         * Presumably "user-perceived performance is not critical" does not
-         * apply to us, although there may be "especially critical keys."
-         */
-        if (iteration_count > MAX_ITER_COUNT) {
-		proto_item_append_text(item, " [Iteration count exceeds max (%u > %u)]", iteration_count, MAX_ITER_COUNT);
-		return false;
-        }
-
-        if (encrypted_tvb == NULL) {
-		proto_item_append_text(item, " [Null input buffer]");
-		return false;
-        }
-	datalen = tvb_captured_length(encrypted_tvb);
-	if (!datalen) {
-		proto_item_append_text(item, " [Zero-length input buffer]");
 		return false;
 	}
 
@@ -321,6 +290,7 @@ int PBE_decrypt_data(dissector_t dissector, const char *description, tvbuff_t *e
 		  }
 	}
 
+	datalen = tvb_captured_length(encrypted_tvb);
 	clear_data = (char *)wmem_alloc(pinfo->pool, datalen);
 
 	err = gcry_cipher_decrypt (cipher, clear_data, datalen, (char *)tvb_memdup(pinfo->pool, encrypted_tvb, 0, datalen), datalen);
@@ -375,7 +345,8 @@ int PBE_decrypt_data(dissector_t dissector, const char *description, tvbuff_t *e
 	clear_tvb = tvb_new_child_real_data(encrypted_tvb,(const uint8_t *)clear_data, datalen, datalen);
 
 	name = g_string_new("");
-	g_string_printf(name, "Decrypted %s", description);
+	oidname = oid_resolved_from_string(pinfo->pool, object_identifier_id_param);
+	g_string_printf(name, "Decrypted %s", oidname ? oidname : object_identifier_id_param);
 
 	/* add it as a new source */
 	add_new_data_source(actx->pinfo, clear_tvb, name->str);
@@ -383,7 +354,7 @@ int PBE_decrypt_data(dissector_t dissector, const char *description, tvbuff_t *e
 	g_string_free(name, TRUE);
 
 	/* now try and decode it */
-	dissector(clear_tvb, actx->pinfo, tree, NULL);
+	call_ber_oid_callback(object_identifier_id_param, clear_tvb, 0, actx->pinfo, tree, NULL);
 
 	return true;
 }
@@ -480,7 +451,7 @@ void proto_register_pkcs12(void) {
   expert_module_t* expert_pkcs12;
 
   /* Register protocol */
-  proto_pkcs12 = proto_register_protocol("PKCS#12: Personal Information Exchange", "PKCS12", "pkcs12");
+  proto_pkcs12 = proto_register_protocol(PNAME, PSNAME, PFNAME);
 
   /* Register fields and subtrees */
   proto_register_field_array(proto_pkcs12, hf, array_length(hf));
@@ -513,12 +484,5 @@ void proto_reg_handoff_pkcs12(void) {
 
 	register_ber_oid_dissector("1.2.840.113549.1.9.22.1", dissect_X509Certificate_OCTETSTRING_PDU, proto_pkcs12, "x509Certificate");
 
-	register_ber_oid_dissector("1.2.840.113549.2.7", dissect_ber_oid_NULL_callback, proto_pkcs12, "id-hmacWithSHA1");
-	register_ber_oid_dissector("1.2.840.113549.2.8", dissect_ber_oid_NULL_callback, proto_pkcs12, "id-hmacWithSHA224");
-	register_ber_oid_dissector("1.2.840.113549.2.9", dissect_ber_oid_NULL_callback, proto_pkcs12, "id-hmacWithSHA256");
-	register_ber_oid_dissector("1.2.840.113549.2.10", dissect_ber_oid_NULL_callback, proto_pkcs12, "id-hmacWithSHA384");
-	register_ber_oid_dissector("1.2.840.113549.2.11", dissect_ber_oid_NULL_callback, proto_pkcs12, "id-hmacWithSHA512");
-	register_ber_oid_dissector("1.2.840.113549.2.12", dissect_ber_oid_NULL_callback, proto_pkcs12, "id-hmacWithSHA512-224");
-	register_ber_oid_dissector("1.2.840.113549.2.13", dissect_ber_oid_NULL_callback, proto_pkcs12, "id-hmacWithSHA512-256");
 }
 

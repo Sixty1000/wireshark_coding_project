@@ -32,7 +32,6 @@
 #include <epan/expert.h>
 #include <epan/conversation.h>
 #include <wiretap/wtap.h>
-#include <wsutil/array.h>
 
 #include "packet-rmt-common.h"
 #include "packet-lls.h"
@@ -84,7 +83,7 @@ try_decode_payload(tvbuff_t *tvb, packet_info *pinfo, proto_item *tree)
             char *col_info_text = wmem_strdup(pinfo->pool, col_get_text(pinfo->cinfo, COL_INFO));
             char *col_protocol_text = wmem_strdup(pinfo->pool, col_get_text(pinfo->cinfo, COL_PROTOCOL));
 
-            int mp4_dis = dissector_try_string_with_data(media_type_dissector_table, "video/mp4", tvb, pinfo, tree, true, NULL);
+            int mp4_dis = dissector_try_string(media_type_dissector_table, "video/mp4", tvb, pinfo, tree, NULL);
             char *col_protocol_text_mp4 = wmem_strdup(pinfo->pool,col_get_text(pinfo->cinfo, COL_PROTOCOL));
 
             /* Restore Protocol and Info columns and add MP4 Protocol Info */
@@ -100,13 +99,13 @@ try_decode_payload(tvbuff_t *tvb, packet_info *pinfo, proto_item *tree)
 static void
 try_uncompress(tvbuff_t *tvb, packet_info *pinfo, int offset, /*int len,*/ proto_item *ti)
 {
-    tvbuff_t *uncompress_tvb = tvb_child_uncompress_zlib(tvb, tvb, offset, tvb_captured_length_remaining(tvb, offset));
+    tvbuff_t *uncompress_tvb = tvb_uncompress_zlib(tvb, offset, tvb_captured_length(tvb) - offset);
     if (uncompress_tvb) {
         add_new_data_source(pinfo, uncompress_tvb, "Uncompressed Payload");
 
         proto_tree *uncompress_tree = proto_item_add_subtree(ti, ett_uncomp_payload);
         unsigned decomp_length = tvb_captured_length(uncompress_tvb);
-        proto_item *ti_uncomp = proto_tree_add_item(uncompress_tree, hf_uncomp_payload, uncompress_tvb, 0, decomp_length, ENC_NA);
+        proto_item *ti_uncomp = proto_tree_add_item(uncompress_tree, hf_uncomp_payload, uncompress_tvb, 0, decomp_length, ENC_ASCII);
         proto_item_set_generated(ti_uncomp);
 
         proto_tree *payload_tree = proto_item_add_subtree(ti_uncomp, ett_uncomp_decode);
@@ -209,7 +208,7 @@ dissect_alc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
     /* A/331 specifies start_offset field */
     int64_t object_start_offset = -1;
     if (lct.is_sp) {
-        object_start_offset = tvb_get_uint32(tvb, offset, ENC_BIG_ENDIAN);
+        object_start_offset = tvb_get_uint32(tvb, offset, 4);
         proto_tree_add_item(alc_tree, hf_object_start_offset, tvb, offset, 4, ENC_BIG_ENDIAN);
         offset += 4;
     }

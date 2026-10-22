@@ -9,7 +9,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Ref https://opennetworking.org/software-defined-standards/specifications/
+ * Ref https://www.opennetworking.org/sdn-resources/onf-specifications/openflow
  */
 
 #include "config.h"
@@ -17,9 +17,9 @@
 #include <epan/packet.h>
 #include <epan/etypes.h>
 #include <epan/expert.h>
+#include <epan/ipproto.h>
 #include <epan/addr_resolv.h>
 #include <wsutil/ws_roundup.h>
-#include <epan/iana-info.h>
 
 void proto_register_openflow_v6(void);
 void proto_reg_handoff_openflow_v6(void);
@@ -891,7 +891,6 @@ static expert_field ei_openflow_v6_port_desc_prop_undecoded;
 static expert_field ei_openflow_v6_port_stats_prop_undecoded;
 static expert_field ei_openflow_v6_meter_band_undecoded;
 static expert_field ei_openflow_v6_hello_element_undecoded;
-static expert_field ei_openflow_v6_hello_element_length_bad;
 static expert_field ei_openflow_v6_error_undecoded;
 static expert_field ei_openflow_v6_experimenter_undecoded;
 static expert_field ei_openflow_v6_portmod_prop_undecoded;
@@ -1110,7 +1109,7 @@ dissect_openflow_v6_oxs(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
     } else if (oxs_class == OFPXSC_EXPERIMENTER) {
         proto_tree_add_item(tree, hf_openflow_v6_oxs_experimenter_experimenter, tvb, offset, 4, ENC_BIG_ENDIAN);
 
-        proto_tree_add_item(tree, hf_openflow_v6_oxs_experimenter_value, tvb, offset+4, oxs_payload_length - 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item(tree, hf_openflow_v6_oxs_experimenter_value, tvb, offset+4, oxs_payload_length - 4, ENC_NA);
     }
     offset+=oxs_payload_length;
 
@@ -1386,7 +1385,7 @@ dissect_openflow_oxm_v6(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
             proto_tree_add_item(oxm_tree, hf_openflow_v6_oxm_value_vlan_vid, tvb, offset, 2, ENC_BIG_ENDIAN);
             offset+=2;
             if (header.oxm_hm) {
-                proto_tree_add_item(oxm_tree, hf_openflow_v6_oxm_mask_vlan, tvb, offset, 2, ENC_BIG_ENDIAN);
+                proto_tree_add_item(oxm_tree, hf_openflow_v6_oxm_mask_vlan, tvb, offset, 2, ENC_NA);
                 offset+=2;
             }
             break;
@@ -1660,7 +1659,7 @@ static const value_string openflow_v6_hello_element_type_values[] = {
 };
 
 static int
-dissect_openflow_hello_element_v6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, uint16_t length)
+dissect_openflow_hello_element_v6(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset, uint16_t length)
 {
     proto_tree *elem_tree;
     uint32_t elem_type;
@@ -1675,17 +1674,14 @@ dissect_openflow_hello_element_v6(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
 
     /* uint16_t length; */
     elem_length = tvb_get_ntohs(tvb, offset);
+    pad_length = (elem_length + 7)/8*8 - elem_length;
     proto_tree_add_item(elem_tree, hf_openflow_v6_hello_element_length, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset+=2;
 
-    if (elem_length < 4) {
-        proto_tree_add_expert_format(elem_tree, pinfo, &ei_openflow_v6_hello_element_length_bad,
-                                     tvb, offset - 2, 2, "Illegal hello element length: %u (must be >= 4)", elem_length);
-        return length;
+    if (elem_length >= 4) {
+        elem_length -= 4;
+        /* Otherwise expert info? */
     }
-
-    pad_length = (elem_length + 7)/8*8 - elem_length;
-    elem_length -= 4;
 
     switch (elem_type) {
     case OFPHET_VERSIONBITMAP:
@@ -2062,7 +2058,7 @@ dissect_openflow_error_v6(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tre
     switch(error_type) {
     case OFPET_HELLO_FAILED:
         /* uint8_t data[0]; contains an ASCII text string */
-        proto_tree_add_item(tree, hf_openflow_v6_error_data_text, tvb, offset, length - 12, ENC_ASCII);
+        proto_tree_add_item(tree, hf_openflow_v6_error_data_text, tvb, offset, length - 12, ENC_NA|ENC_ASCII);
         /*offset += length - 12;*/
         break;
 
@@ -2443,19 +2439,18 @@ dissect_openflow_action_header_v6(tvbuff_t *tvb, packet_info *pinfo _U_, proto_t
 
 
 static int
-dissect_openflow_action_v6(tvbuff_t *parent_tvb, packet_info *pinfo _U_, proto_tree *tree, int parent_offset, uint16_t length)
+dissect_openflow_action_v6(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset, uint16_t length _U_)
 {
     proto_tree *act_tree;
-    tvbuff_t *tvb;
     uint16_t act_type;
     uint16_t act_length;
-    int32_t offset = 0;
+    int32_t act_end;
 
-    act_type = tvb_get_ntohs(parent_tvb, parent_offset);
-    act_length = tvb_get_ntohs(parent_tvb, parent_offset + 2);
-    tvb = tvb_new_subset_length(parent_tvb, parent_offset, act_length);
+    act_type = tvb_get_ntohs(tvb, offset);
+    act_length = tvb_get_ntohs(tvb, offset + 2);
+    act_end = offset + act_length;
 
-    act_tree = proto_tree_add_subtree(tree, tvb, 0, act_length, ett_openflow_v6_action, NULL, "Action");
+    act_tree = proto_tree_add_subtree(tree, tvb, offset, act_length, ett_openflow_v6_action, NULL, "Action");
 
     offset = dissect_openflow_action_header_v6(tvb, pinfo, act_tree, offset, length);
 
@@ -2571,9 +2566,9 @@ dissect_openflow_action_v6(tvbuff_t *parent_tvb, packet_info *pinfo _U_, proto_t
         offset = dissect_openflow_oxm_v6(tvb, pinfo, act_tree, offset, length);
 
         /* padded to 64 bits */
-        if (offset < act_length) {
-            proto_tree_add_item(act_tree, hf_openflow_v6_action_set_field_pad, tvb, offset, act_length - offset, ENC_NA);
-            offset = act_length;
+        if (offset < act_end) {
+            proto_tree_add_item(act_tree, hf_openflow_v6_action_set_field_pad, tvb, offset, act_end - offset, ENC_NA);
+            offset = act_end;
         }
         break;
 
@@ -2595,13 +2590,13 @@ dissect_openflow_action_v6(tvbuff_t *parent_tvb, packet_info *pinfo _U_, proto_t
 
     case OFPAT_COPY_FIELD:
         /* uint16_t n_bits; */
-        proto_tree_add_item(act_tree, hf_openflow_v6_action_copy_field_n_bits, tvb, offset, 2, ENC_BIG_ENDIAN);
+        proto_tree_add_item(act_tree, hf_openflow_v6_action_copy_field_n_bits, tvb, offset, 2, ENC_NA);
         offset+=2;
         /* uint16_t src_offset; */
-        proto_tree_add_item(act_tree, hf_openflow_v6_action_copy_field_src_offset, tvb, offset, 2, ENC_BIG_ENDIAN);
+        proto_tree_add_item(act_tree, hf_openflow_v6_action_copy_field_src_offset, tvb, offset, 2, ENC_NA);
         offset+=2;
         /* uint16_t dst_offset; */
-        proto_tree_add_item(act_tree, hf_openflow_v6_action_copy_field_dst_offset, tvb, offset, 2, ENC_BIG_ENDIAN);
+        proto_tree_add_item(act_tree, hf_openflow_v6_action_copy_field_dst_offset, tvb, offset, 2, ENC_NA);
         offset+=2;
         /* uint8_t pad[2]; */
         proto_tree_add_item(act_tree, hf_openflow_v6_action_copy_field_pad, tvb, offset, 2, ENC_NA);
@@ -2610,7 +2605,7 @@ dissect_openflow_action_v6(tvbuff_t *parent_tvb, packet_info *pinfo _U_, proto_t
 
     case OFPAT_METER:
         /* uint32_t meter_id; */
-        proto_tree_add_item(act_tree, hf_openflow_v6_action_meter_id, tvb, offset, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item(act_tree, hf_openflow_v6_action_meter_id, tvb, offset, 4, ENC_NA);
         offset+=4;
         break;
 
@@ -2628,7 +2623,7 @@ dissect_openflow_action_v6(tvbuff_t *parent_tvb, packet_info *pinfo _U_, proto_t
         break;
     }
 
-    return parent_offset + offset;
+    return offset;
 }
 
 
@@ -3407,7 +3402,7 @@ dissect_openflow_groupmod_v6(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *
     offset+=4;
 
     /* uint16_t bucket_array_len; */
-    proto_tree_add_item(tree, hf_openflow_v6_groupmod_bucket_array_len, tvb, offset, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item(tree, hf_openflow_v6_groupmod_bucket_array_len, tvb, offset, 2, ENC_NA);
     offset+=2;
 
     /* uint8_t pad2[2]; */
@@ -3415,7 +3410,7 @@ dissect_openflow_groupmod_v6(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *
     offset+=2;
 
     /* uint32_t command_bucket_id;  */
-    proto_tree_add_item(tree, hf_openflow_v6_groupmod_command_bucket_id, tvb, offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item(tree, hf_openflow_v6_groupmod_command_bucket_id, tvb, offset, 4, ENC_NA);
     offset+=4;
 
     /* struct ofp_bucket buckets[0]; */
@@ -6403,11 +6398,6 @@ dissect_openflow_bundle_prop_v6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
 
     switch (prop_type) {
     case OFPBPT_TIME:
-        if (prop_len <= 4) {
-            expert_add_info(pinfo, prop_item, &ei_openflow_v6_length_too_short);
-            offset = length;
-            break;
-        }
         dissect_openflow_time_v6(tvb, pinfo, tree, offset, length);
         offset += prop_len - 4;
         break;
@@ -10655,10 +10645,6 @@ proto_register_openflow_v6(void)
         { &ei_openflow_v6_hello_element_undecoded,
             { "openflow_v6.hello_element.undecoded", PI_UNDECODED, PI_NOTE,
               "Unknown hello element body.", EXPFILL }
-        },
-        { &ei_openflow_v6_hello_element_length_bad,
-            { "openflow_v6.hello_element.length_bad", PI_MALFORMED, PI_ERROR,
-              "Illegal hello element length", EXPFILL }
         },
         { &ei_openflow_v6_error_undecoded,
             { "openflow_v6.error.undecoded", PI_UNDECODED, PI_NOTE,

@@ -47,7 +47,7 @@ static int
 dissect_telkonet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	proto_tree *ti, *telkonet_tree;
-	unsigned offset = 0;
+	int offset = 0;
 	telkonet_type_t type;
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "TELKONET");
@@ -55,7 +55,7 @@ dissect_telkonet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
 
 	type = (telkonet_type_t)tvb_get_uint8(tvb, offset);
 	col_add_fstr(pinfo->cinfo, COL_INFO, "Telkonet type: %s",
-		val_to_str(pinfo->pool, type, telkonet_type_vals, "Unknown (0x%02x)"));
+		val_to_str(type, telkonet_type_vals, "Unknown (0x%02x)"));
 
 	ti = proto_tree_add_item(tree, proto_telkonet, tvb, 0, 8, ENC_NA);
 	telkonet_tree = proto_item_add_subtree(ti, ett_telkonet);

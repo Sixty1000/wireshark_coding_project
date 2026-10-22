@@ -23,15 +23,47 @@ set(DISSECTOR_SRC
 	packet-pn-rt.c
 	packet-pn-rtc-one.c
 	packet-pn-rsi.c
-	packet-pn-sxp.c
 )
 
 set(DISSECTOR_SUPPORT_SRC
 	packet-pn.c
 )
 
-add_wireshark_epan_plugin_library(profinet
-	PLUGIN_LIBS LibXml2::LibXml2
+set(PLUGIN_FILES
+	plugin.c
+	${DISSECTOR_SRC}
+	${DISSECTOR_SUPPORT_SRC}
+)
+
+set_source_files_properties(
+	${PLUGIN_FILES}
+	PROPERTIES
+	COMPILE_FLAGS "${WERROR_COMMON_FLAGS}"
+)
+
+register_plugin_files(plugin.c
+	plugin
+	${DISSECTOR_SRC}
+	${DISSECTOR_SUPPORT_SRC}
+)
+
+add_wireshark_plugin_library(profinet epan)
+
+target_link_libraries(profinet epan)
+
+install_plugin(profinet epan)
+
+file(GLOB DISSECTOR_HEADERS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" "*.h")
+CHECKAPI(
+	NAME
+	  profinet
+	SWITCHES
+	  --group dissectors-prohibited
+	  --group dissectors-restricted
+	SOURCES
+	  ${DISSECTOR_SRC}
+	  ${DISSECTOR_SUPPORT_SRC}
+	  ${DISSECTOR_HEADERS}
 )
 
 #

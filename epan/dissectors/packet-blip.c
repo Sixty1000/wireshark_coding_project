@@ -22,8 +22,18 @@
 #include <epan/expert.h>
 #include <epan/strutil.h>
 #include "proto_data.h"
-#include <wsutil/zlib_compat.h>
 
+#if defined(HAVE_ZLIB) && !defined(HAVE_ZLIBNG)
+#define ZLIB_PREFIX(x) x
+#include <zlib.h>
+typedef z_stream zlib_stream;
+#endif /* HAVE_ZLIB */
+
+#ifdef HAVE_ZLIBNG
+#define ZLIB_PREFIX(x) zng_ ## x
+#include <zlib-ng.h>
+typedef zng_stream zlib_stream;
+#endif /* HAVE_ZLIBNG */
 void proto_reg_handoff_blip(void);
 void proto_register_blip(void);
 
@@ -47,7 +57,7 @@ typedef struct {
 #endif
 } blip_conversation_entry_t;
 
-#ifdef USE_ZLIB_OR_ZLIBNG
+#if defined (HAVE_ZLIB) || defined (HAVE_ZLIBNG)
 typedef enum
 {
 	no_error = 0,
@@ -117,7 +127,7 @@ static const val64_string msg_types[] = {
 };
 
 // Preferences
-#ifdef USE_ZLIB_OR_ZLIBNG
+#if defined (HAVE_ZLIB) || defined (HAVE_ZLIBNG)
 static unsigned max_uncompressed_size = 64; // Max uncompressed body size in Kb
 #endif
 
@@ -212,7 +222,7 @@ is_first_frame_in_msg(blip_conversation_entry_t *conversation_entry_ptr, packet_
 }
 
 static int
-handle_ack_message(tvbuff_t *tvb, _U_ packet_info *pinfo, proto_tree *blip_tree, unsigned offset, _U_ uint64_t value_frame_flags)
+handle_ack_message(tvbuff_t *tvb, _U_ packet_info *pinfo, proto_tree *blip_tree, int offset, _U_ uint64_t value_frame_flags)
 {
 	// This gets the number of ack bytes received  as a var int in order to find out how much to bump
 	// the offset for the next proto_tree item
@@ -253,7 +263,7 @@ get_blip_conversation(packet_info* pinfo)
 	return conversation_entry_ptr;
 }
 
-#ifdef USE_ZLIB_OR_ZLIBNG
+#if defined (HAVE_ZLIB) || defined (HAVE_ZLIBNG)
 static bool
 z_stream_destroy_cb(wmem_allocator_t *allocator _U_, wmem_cb_event_t event _U_, void *user_data)
 {
@@ -282,7 +292,7 @@ get_decompress_stream(packet_info* pinfo)
 }
 
 static tvbuff_t*
-decompress(packet_info* pinfo, proto_tree* tree, tvbuff_t* tvb, unsigned offset, int length)
+decompress(packet_info* pinfo, proto_tree* tree, tvbuff_t* tvb, int offset, int length)
 {
 	if(PINFO_FD_VISITED(pinfo)) {
 		const decompress_result_t* saved_data = (decompress_result_t *)p_get_proto_data(wmem_file_scope(), pinfo, proto_blip, 0);
@@ -302,7 +312,7 @@ decompress(packet_info* pinfo, proto_tree* tree, tvbuff_t* tvb, unsigned offset,
 			return NULL;
 		} else {
 			tvbuff_t* decompressedChild = tvb_new_child_real_data(tvb, (uint8_t *)saved_data->buf,
-				(unsigned)saved_data->size, (unsigned)saved_data->size);
+				(int)saved_data->size, (int)saved_data->size);
 			add_new_data_source(pinfo, decompressedChild, "Decompressed Payload");
 			return decompressedChild;
 		}
@@ -332,7 +342,7 @@ decompress(packet_info* pinfo, proto_tree* tree, tvbuff_t* tvb, unsigned offset,
 	decompress_stream->avail_in = length;
 	decompress_stream->next_out = decompress_buffer;
 	decompress_stream->avail_out = buffer_size;
-	size_t start = decompress_stream->total_out;
+	uLong start = decompress_stream->total_out;
 	int err = ZLIB_PREFIX(inflate)(decompress_stream, Z_NO_FLUSH);
 	if(err != Z_OK) {
 		proto_item* field = proto_tree_add_string(tree, hf_blip_message_body, tvb, offset, tvb_reported_length_remaining(tvb, offset), "<Error decompressing data>");
@@ -372,10 +382,10 @@ decompress(packet_info* pinfo, proto_tree* tree, tvbuff_t* tvb, unsigned offset,
 
 	// Shrink the buffer so that there is not wasted space on the end of it since
 	// it will be long lived in the file scope
-	size_t bodyLength = decompress_stream->total_out - start;
+	uLong bodyLength = decompress_stream->total_out - start;
 	Bytef* shortened_buffer = (Bytef *)wmem_memdup(wmem_file_scope(), decompress_buffer, bodyLength);
 
-	tvbuff_t* decompressedChild = tvb_new_child_real_data(tvb, shortened_buffer, (unsigned)bodyLength, (unsigned)bodyLength);
+	tvbuff_t* decompressedChild = tvb_new_child_real_data(tvb, shortened_buffer, (unsigned)bodyLength, (int)bodyLength);
 	add_new_data_source(pinfo, decompressedChild, "Decompressed Payload");
 	decompress_result_t* data_to_save = wmem_new0(wmem_file_scope(), decompress_result_t);
 	data_to_save->size = (size_t)bodyLength;
@@ -384,14 +394,14 @@ decompress(packet_info* pinfo, proto_tree* tree, tvbuff_t* tvb, unsigned offset,
 
 	return decompressedChild;
 }
-#endif /* USE_ZLIB_OR_ZLIBNG */
+#endif /* HAVE_ZLIB */
 
 static int
 dissect_blip(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, _U_ void *data)
 {
 
 	proto_tree *blip_tree;
-	unsigned offset = 0;
+	int offset = 0;
 
 	/* Set the protocol column to say BLIP */
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "BLIP");
@@ -467,16 +477,16 @@ dissect_blip(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, _U_ void *data
 	bool compressed = is_compressed(value_frame_flags);
 
 	if(compressed) {
-#ifdef USE_ZLIB_OR_ZLIBNG
+#if defined (HAVE_ZLIB) || defined (HAVE_ZLIBNG)
 		tvb_to_use = decompress(pinfo, blip_tree, tvb, offset, tvb_reported_length_remaining(tvb, offset) - BLIP_BODY_CHECKSUM_SIZE);
 		if(!tvb_to_use) {
 			return tvb_reported_length(tvb);
 		}
 		offset = 0;
-#else /* USE_ZLIB_OR_ZLIBNG */
+#else /* ! HAVE_ZLIB */
 		proto_tree_add_string(tree, hf_blip_message_body, tvb, offset, tvb_reported_length_remaining(tvb, offset), "<decompression support is not available>");
 		return tvb_reported_length(tvb);
-#endif /* USE_ZLIB_OR_ZLIBNG */
+#endif /* ! HAVE_ZLIB */
 	}
 
 	// Is this the first frame in a message?
@@ -602,7 +612,7 @@ proto_register_blip(void)
 
 	blip_handle = register_dissector("blip", dissect_blip, proto_blip);
 
-#ifdef USE_ZLIB_OR_ZLIBNG
+#ifdef HAVE_ZLIB
 	module_t *blip_module = prefs_register_protocol(proto_blip, NULL);
 	prefs_register_uint_preference(blip_module, "max_uncompressed_size",
 						"Maximum uncompressed message size (Kb)",
@@ -610,7 +620,7 @@ proto_register_blip(void)
 						"If a message is larger than this, then the packet containing "
 						"the message, as well as subsequent packets, will fail to "
 						"decompress", 10, &max_uncompressed_size);
-#endif /* USE_ZLIB_OR_ZLIBNG */
+#endif
 }
 
 void
@@ -619,12 +629,11 @@ proto_reg_handoff_blip(void)
 
 	// Register the blip dissector as a subprotocol dissector of "ws.protocol",
 	// matching any packets with a Web-Sec-Protocol header of "BLIP_3+CBMobile_2"
-	// "BLIP_3+CBMobile_3", or "BLIP_3+CBMobile_4"
+	// or "BLIP_3+CBMobile_3"
 	//
 	// See https://github.com/couchbase/sync_gateway/issues/3356#issuecomment-370958321 for
 	// more notes on how the websocket dissector routes packets down to subprotocol handlers.
 
-	dissector_add_string("ws.protocol", "BLIP_3+CBMobile_4", blip_handle);
 	dissector_add_string("ws.protocol", "BLIP_3+CBMobile_3", blip_handle);
 	dissector_add_string("ws.protocol", "BLIP_3+CBMobile_2", blip_handle);
 }

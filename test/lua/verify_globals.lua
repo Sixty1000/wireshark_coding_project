@@ -14,7 +14,6 @@ local filter = {
 
     -- differences in Lua versions
     "_VERSION",
-    "rex_pcre2._VERSION",
     "package.config",
     "utf8.charpattern" -- some versions allow overlong encodings
  }

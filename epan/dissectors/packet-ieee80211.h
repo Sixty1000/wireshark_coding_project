@@ -53,11 +53,6 @@ typedef struct ieee80211_tagged_field_data
   proto_item* item_tag_length;
 } ieee80211_tagged_field_data_t;
 
-int
-ieee_80211_add_tagged_parameters(tvbuff_t *tvb, int offset, packet_info *pinfo,
-                                  proto_tree *tree, int tagged_parameters_len, int ftype,
-                                  association_sanity_check_t *association_sanity_check);
-
 int add_tagged_field(packet_info *pinfo, proto_tree *tree,
                             tvbuff_t *tvb, int offset, int ftype,
                             const uint8_t *valid_element_ids,
@@ -90,10 +85,12 @@ float ieee80211_htrate(int mcs_index, bool bandwidth, bool short_gi);
 
 WS_DLL_PUBLIC value_string_ext ieee80211_supported_rates_vals_ext;
 
-extern value_string_ext ieee80211_reason_code_ext;
-extern value_string_ext ieee80211_status_code_ext;
+WS_DLL_PUBLIC
+bool is_broadcast_bssid(const address *bssid);
 
-extern const value_string wfa_subtype_vals[];
+#ifdef __cplusplus
+}
+#endif /* __cplusplus */
 
 /*
  * Extract the protocol version from the frame control field
@@ -128,11 +125,6 @@ extern const value_string wfa_subtype_vals[];
 #define IS_FRAME_EXTENSION(x) ((FCF_FRAME_TYPE(x) == 0x1 && FCF_FRAME_SUBTYPE(x) == 0x6) ? 1 : 0)
 
 /*
- * Convert MGT frame to FCF
- */
-#define MGT_TO_FCF(x) (((x) & 0x0F) << 4)
-
-/*
  * Convert the frame type and subtype from the frame control field into
  * one of the MGT_, CTRL_, or DATA_ values.
  * Now includes extension subtype in case present.
@@ -161,7 +153,7 @@ extern const value_string wfa_subtype_vals[];
 #define FLAG_TO_DS            0x01
 #define FLAG_FROM_DS          0x02
 #define FLAG_MORE_FRAGMENTS   0x04
-#define FLAG_RETRY            0x08    /* overloaded for S1G dynamic indication */
+#define FLAG_RETRY            0x08
 #define FLAG_POWER_MGT        0x10
 #define FLAG_MORE_DATA        0x20
 #define FLAG_PROTECTED        0x40
@@ -353,20 +345,13 @@ typedef struct anqp_info_dissector_data {
 #define WFA_SUBTYPE_WIFI_60G                   23
 #define WFA_SUBTYPE_NAN_ACTION                 24
 #define WFA_SUBTYPE_DPP                        26
-#define WFA_SUBTYPE_IEEE1905_MULTI_AP          27 /* 0x1B */
+#define WFA_SUBTYPE_IEEE1905_MULTI_AP          27 /* ox1B */
 #define WFA_SUBTYPE_OWE_TRANSITION_MODE        28
 #define WFA_SUBTYPE_TRANSITION_DISABLE_KDE     32
 #define WFA_SUBTYPE_QOS_MGMT                   34 /* 0x22 */
-#define WFA_SUBTYPE_WFA_CAPA                   35 /* 0x23 */
-#define WFA_SUBTYPE_RSN_OVERRIDE               41 /* 0x29 */
-#define WFA_SUBTYPE_RSN_OVERRIDE_2             42 /* 0x2A */
-#define WFA_SUBTYPE_RSNX_OVERRIDE              43 /* 0x2B */
-#define WFA_SUBTYPE_RSN_SELECTION              44 /* 0x2C */
-#define WFA_SUBTYPE_RSN_OVERRIDE_LINK_KDE      45 /* 0x2D */
 
 /* WFA Public Action Types */
 #define WFA_SUBTYPE_ACTION_QOS_MGMT          0x1A
-#define WFA_SUBTYPE_ACTION_CAPABILITIES      0x1B
 
 /* WFA vendor specific ANQP subtypes */
 #define WFA_ANQP_SUBTYPE_HS20                  17
@@ -408,7 +393,7 @@ typedef struct anqp_info_dissector_data {
 #define TAG_ERP_INFO                  42
 #define TAG_TS_DELAY                  43
 #define TAG_TCLAS_PROCESS             44
-#define TAG_HT_CAPABILITY             45 /* IEEE Std 802.11n */
+#define TAG_HT_CAPABILITY             45 /* IEEE Stc 802.11n/D2.0 */
 #define TAG_QOS_CAPABILITY            46
 #define TAG_ERP_INFO_OLD              47 /* IEEE Std 802.11g/D4.0 */
 #define TAG_RSN_IE                    48
@@ -424,7 +409,7 @@ typedef struct anqp_info_dissector_data {
 #define TAG_DSE_REG_LOCATION          58
 #define TAG_SUPPORTED_OPERATING_CLASSES             59 /* IEEE Std 802.11w-2009 */
 #define TAG_EXTENDED_CHANNEL_SWITCH_ANNOUNCEMENT    60 /* IEEE Std 802.11w-2009 */
-#define TAG_HT_OPERATION              61  /* IEEE Std 802.11n */
+#define TAG_HT_INFO                   61  /* IEEE Stc 802.11n/D2.0 */
 #define TAG_SECONDARY_CHANNEL_OFFSET  62  /* IEEE Stc 802.11n/D1.10/D2.0 */
 #define TAG_BSS_AVG_ACCESS_DELAY      63
 #define TAG_ANTENNA                   64
@@ -585,8 +570,6 @@ typedef struct anqp_info_dissector_data {
 #define TAG_ELEMENT_ID_EXTENSION     255  /* IEEE Std 802.11ai */
 
 extern const value_string ie_tag_num_vals[];
-extern value_string_ext ff_pa_action_codes_ext;
-extern const value_string ieee80211_rsn_cipher_vals[];
 
 unsigned
 add_ff_action(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, int offset,
@@ -595,25 +578,6 @@ add_ff_action(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, int offset,
 unsigned
 add_ff_action_public_fields(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo,
                             int offset, uint8_t code);
-
-void
-dissect_ieee80211_mgt(uint16_t fcf, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
-
-int
-dissect_mcs_set(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, int offset, bool basic, bool vendorspecific);
-
-int
-dissect_vht_mcs_set(proto_tree *tree, tvbuff_t *tvb, int offset);
-
-int
-dissect_ht_capabilities(proto_tree *tree, tvbuff_t *tvb, int offset, bool vendorspecific);
-
-int
-dissect_vht_capabilities(proto_tree *tree, tvbuff_t *tvb, int offset);
-
-#ifdef __cplusplus
-}
-#endif /* __cplusplus */
 
 /*
  * Editor modelines

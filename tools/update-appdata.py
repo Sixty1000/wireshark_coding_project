@@ -27,12 +27,12 @@ Assume that the tag for the most recent release doesn't exist and use
 today's date for it.
 '''
 
+from datetime import date
+import io
 import os.path
 import re
 import subprocess
 import time
-from datetime import date
-
 
 def main():
     this_dir = os.path.dirname(__file__)
@@ -49,7 +49,7 @@ def main():
         raise
 
     try:
-        ver_m = re.match(r'v(\d+\.\d+)\.(\d+)rc0.*', cur_rc0)
+        ver_m = re.match('v(\d+\.\d+)\.(\d+)rc0.*', cur_rc0)
         maj_min = ver_m.group(1)
         next_micro = ver_m.group(2)
     except Exception:
@@ -71,9 +71,8 @@ def main():
 
     for micro in range(int(next_micro) - 1, -1, -1):
         try:
-            # TODO: use subprocess.checkoutput() ?
             tag_date = subprocess.run(
-                ['git', 'log', '-1', '--format=%cd', '--date=format:%F', f'v{maj_min}.{micro}'],
+                ['git', 'log', '-1', '--format=%cd', '--date=format:%F', 'v{}.{}'.format(maj_min, micro)],
                 check=True,
                 encoding='UTF-8',
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout.strip()
@@ -84,7 +83,7 @@ def main():
             raise
 
     ax_lines = []
-    with open(appdata_xml, 'r', encoding='UTF-8') as ax_fd:
+    with io.open(appdata_xml, 'r', encoding='UTF-8') as ax_fd:
         in_releases = False
         for line in ax_fd:
             if '</releases>' in line:
@@ -96,7 +95,7 @@ def main():
                 in_releases = True
                 ax_lines.extend(release_tag_l)
 
-    with open(appdata_xml, 'w', encoding='UTF-8') as ax_fd:
+    with io.open(appdata_xml, 'w', encoding='UTF-8') as ax_fd:
         ax_fd.write(''.join(ax_lines))
 
 if __name__ == '__main__':

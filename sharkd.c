@@ -9,7 +9,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "config.h"
+#include <config.h>
 #define WS_LOG_DOMAIN  LOG_DOMAIN_MAIN
 
 #include <stdlib.h>
@@ -28,27 +28,27 @@
 #include <wsutil/filesystem.h>
 #include <wsutil/file_util.h>
 #include <wsutil/privileges.h>
+#include <wsutil/report_message.h>
 #include <wsutil/wslog.h>
 #include <wsutil/version_info.h>
-#include <wsutil/report_message.h>
-#include <app/application_flavor.h>
 #include <wiretap/wtap_opttypes.h>
 
 #include <epan/decode_as.h>
 #include <epan/timestamp.h>
 #include <epan/packet.h>
+#include "frame_tvbuff.h"
 #include <epan/disabled_protos.h>
 #include <epan/prefs.h>
 #include <epan/column.h>
 #include <epan/print.h>
 #include <epan/addr_resolv.h>
-#include <ui/util.h>
-#include <ui/ws_ui_util.h>
-#include <ui/decode_as_utils.h>
-#include <wsutil/filter_files.h>
-#include <ui/tap_export_pdu.h>
-#include <ui/failure_message.h>
-#include <wiretap/wtap.h>
+#include "ui/util.h"
+#include "ui/ws_ui_util.h"
+#include "ui/decode_as_utils.h"
+#include "wsutil/filter_files.h"
+#include "ui/tap_export_pdu.h"
+#include "ui/failure_message.h"
+#include "wtap.h"
 #include <epan/epan_dissect.h>
 #include <epan/tap.h>
 #include <epan/uat-int.h>
@@ -63,7 +63,6 @@
 #include <wsutil/plugins.h>
 #endif
 
-#include "globals.h"
 #include "sharkd.h"
 
 #define SHARKD_INIT_FAILED 1
@@ -71,50 +70,11 @@
 
 capture_file cfile;
 
+static uint32_t cum_bytes;
 static frame_data ref_frame;
 
-/*
- * The leading + ensures that getopt_long() does not permute the argv[]
- * entries.
- *
- * We have to make sure that the first getopt_long() preserves the content
- * of argv[] for the subsequent getopt_long() call.
- *
- * We use getopt_long() in both cases to ensure that we're using a routine
- * whose permutation behavior we can control in the same fashion on all
- * platforms, and so that, if we ever need to process a long argument before
- * doing further initialization, we can do so.
- *
- * Glibc and Solaris libc document that a leading + disables permutation
- * of options, regardless of whether POSIXLY_CORRECT is set or not; *BSD
- * and macOS don't document it, but do so anyway.
- *
- * We do *not* use a leading - because the behavior of a leading - is
- * platform-dependent.
- */
-
-static const struct ws_option long_options[] = {
-    {"api", ws_required_argument, NULL, 'a'},
-    {"foreground", ws_no_argument, NULL, LONGOPT_FOREGROUND},
-    {"help", ws_no_argument, NULL, 'h'},
-    {"version", ws_no_argument, NULL, 'v'},
-    {"config-profile", ws_required_argument, NULL, 'C'},
-    LONGOPT_WSLOG
-    {0, 0, 0, 0 }
-};
-
-const struct ws_option* sharkd_long_options(void)
-{
-    return long_options;
-}
-
-const char* sharkd_optstring(void)
-{
-#define OPTSTRING "+" "a:hmvC:"
-    static const char optstring[] = OPTSTRING;
-
-    return optstring;
-}
+static void sharkd_cmdarg_err(const char *msg_format, va_list ap);
+static void sharkd_cmdarg_err_cont(const char *msg_format, va_list ap);
 
 static void
 print_current_user(void)
@@ -143,23 +103,26 @@ main(int argc, char *argv[])
     char                *err_msg = NULL;
     e_prefs             *prefs_p;
     int                  ret = EXIT_SUCCESS;
-    const struct file_extension_info* file_extensions;
-    unsigned num_extensions;
-    epan_app_data_t app_data;
+    static const struct report_message_routines sharkd_report_routines = {
+        failure_message,
+        failure_message,
+        open_failure_message,
+        read_failure_message,
+        write_failure_message,
+        cfile_open_failure_message,
+        cfile_dump_open_failure_message,
+        cfile_read_failure_message,
+        cfile_write_failure_message,
+        cfile_close_failure_message
+    };
 
-    /* Future proof by zeroing out all data */
-    memset(&app_data, 0, sizeof(app_data));
-
-    /* Set the program name. */
-    g_set_prgname("sharkd");
-
-    cmdarg_err_init(stderr_cmdarg_err, stderr_cmdarg_err_cont);
+    cmdarg_err_init(sharkd_cmdarg_err, sharkd_cmdarg_err_cont);
 
     /* Initialize log handler early so we can have proper logging during startup. */
-    ws_log_init(vcmdarg_err, "SharkD Debug Console");
+    ws_log_init("sharkd", vcmdarg_err);
 
     /* Early logging command-line initialization. */
-    ws_log_parse_args(&argc, argv, sharkd_optstring(), sharkd_long_options(), vcmdarg_err, SHARKD_INIT_FAILED);
+    ws_log_parse_args(&argc, argv, vcmdarg_err, SHARKD_INIT_FAILED);
 
     ws_noisy("Finished log init and parsing command line log arguments");
 
@@ -175,25 +138,25 @@ main(int argc, char *argv[])
     /*
      * Attempt to get the pathname of the executable file.
      */
-    configuration_init_error = configuration_init(argv[0], "wireshark");
+    configuration_init_error = configuration_init(argv[0], NULL);
     if (configuration_init_error != NULL) {
         fprintf(stderr, "sharkd: Can't get pathname of sharkd program: %s.\n",
                 configuration_init_error);
     }
 
     /* Initialize the version information. */
-    ws_init_version_info("Sharkd", NULL, application_get_vcs_version_info,
+    ws_init_version_info("Sharkd",
                          epan_gather_compile_info,
                          epan_gather_runtime_info);
 
     if (sharkd_init(argc, argv) < 0)
     {
-        fputs("Cannot initialize sharkd.\n", stderr);
+        printf("cannot initialize sharkd\n");
         ret = SHARKD_INIT_FAILED;
         goto clean_exit;
     }
 
-    init_report_failure_message("sharkd");
+    init_report_message("sharkd", &sharkd_report_routines);
 
     timestamp_set_type(TS_RELATIVE);
     timestamp_set_precision(TS_PREC_AUTO);
@@ -204,29 +167,23 @@ main(int argc, char *argv[])
      * dissection-time handlers for file-type-dependent blocks can
      * register using the file type/subtype value for the file type.
      */
-    application_file_extensions(&file_extensions, &num_extensions);
-    wtap_init(true, application_configuration_environment_prefix(), file_extensions, num_extensions);
+    wtap_init(true);
 
     /* Register all dissectors; we must do this before checking for the
        "-G" flag, as the "-G" flag dumps information registered by the
        dissectors, and we must do it before we read the preferences, in
        case any dissectors register preferences. */
-    app_data.env_var_prefix = application_configuration_environment_prefix();
-    app_data.col_fmt = application_columns();
-    app_data.num_cols = application_num_columns();
-    app_data.register_func = register_all_protocols;
-    app_data.handoff_func = register_all_protocol_handoffs;
-    if (!epan_init(NULL, NULL, true, &app_data)) {
+    if (!epan_init(NULL, NULL, true)) {
         ret = SHARKD_EPAN_INIT_FAIL;
         goto clean_exit;
     }
 
-    codecs_init(application_configuration_environment_prefix());
+    codecs_init();
 
     /* Load libwireshark settings from the current profile. */
     prefs_p = epan_load_settings();
 
-    if (!color_filters_init(&err_msg, NULL, application_configuration_environment_prefix())) {
+    if (!color_filters_init(&err_msg, NULL)) {
         fprintf(stderr, "%s\n", err_msg);
         g_free(err_msg);
     }
@@ -261,29 +218,17 @@ sharkd_epan_new(capture_file *cf)
 {
     static const struct packet_provider_funcs funcs = {
         cap_file_provider_get_frame_ts,
-        cap_file_provider_get_start_ts,
-        cap_file_provider_get_end_ts,
         cap_file_provider_get_interface_name,
         cap_file_provider_get_interface_description,
-        cap_file_provider_get_modified_block,
-        cap_file_provider_get_process_id,
-        cap_file_provider_get_process_name,
-        cap_file_provider_get_process_uuid,
-        cap_file_provider_get_process_path,
-        cap_file_provider_get_process_cmdline,
-        cap_file_provider_get_process_parent_id,
-        cap_file_provider_get_process_user_id,
-        cap_file_provider_get_process_user_name,
-        cap_file_provider_get_process_start_time,
-        cap_file_provider_find_process_info,
+        cap_file_provider_get_modified_block
     };
 
     return epan_new(&cf->provider, &funcs);
 }
 
 static bool
-process_packet(capture_file *cf, epan_dissect_t *edt, int64_t offset,
-               wtap_rec *rec)
+process_packet(capture_file *cf, epan_dissect_t *edt,
+        int64_t offset, wtap_rec *rec, Buffer *buf)
 {
     frame_data     fdlocal;
     bool           passed;
@@ -295,7 +240,7 @@ process_packet(capture_file *cf, epan_dissect_t *edt, int64_t offset,
 
     /* The frame number of this packet, if we add it to the set of frames,
        would be one more than the count of frames in the file so far. */
-    frame_data_init(&fdlocal, cf->count + 1, rec, offset, cf->cum_bytes);
+    frame_data_init(&fdlocal, cf->count + 1, rec, offset, cum_bytes);
 
     /* If we're going to print packet information, or we're going to
        run a read filter, or display filter, or we're going to process taps, set up to
@@ -314,6 +259,10 @@ process_packet(capture_file *cf, epan_dissect_t *edt, int64_t offset,
         if (cf->dfcode)
             epan_dissect_prime_with_dfilter(edt, cf->dfcode);
 
+        /* This is the first and only pass, so prime the epan_dissect_t
+           with the hfids postdissectors want on the first pass. */
+        prime_epan_dissect_with_postdissector_wanted_hfids(edt);
+
         frame_data_set_before_dissect(&fdlocal, &cf->elapsed_time,
                 &cf->provider.ref, cf->provider.prev_dis);
         if (cf->provider.ref == &fdlocal) {
@@ -321,7 +270,9 @@ process_packet(capture_file *cf, epan_dissect_t *edt, int64_t offset,
             cf->provider.ref = &ref_frame;
         }
 
-        epan_dissect_run(edt, cf->cd_t, rec, &fdlocal, NULL);
+        epan_dissect_run(edt, cf->cd_t, rec,
+                frame_tvbuff_new_buffer(&cf->provider, &fdlocal, buf),
+                &fdlocal, NULL);
 
         /* Run the read filter if we have one. */
         if (cf->rfcode)
@@ -329,7 +280,7 @@ process_packet(capture_file *cf, epan_dissect_t *edt, int64_t offset,
     }
 
     if (passed) {
-        frame_data_set_after_dissect(&fdlocal, &cf->cum_bytes);
+        frame_data_set_after_dissect(&fdlocal, &cum_bytes);
         cf->provider.prev_cap = cf->provider.prev_dis = frame_data_sequence_add(cf->provider.frames, &fdlocal);
 
         /* If we're not doing dissection then there won't be any dependent frames.
@@ -365,6 +316,7 @@ load_cap_file(capture_file *cf, int max_packet_count, int64_t max_byte_count)
     char        *err_info = NULL;
     int64_t      data_offset;
     wtap_rec     rec;
+    Buffer       buf;
     epan_dissect_t *edt = NULL;
 
     {
@@ -393,10 +345,12 @@ load_cap_file(capture_file *cf, int max_packet_count, int64_t max_byte_count)
             edt = epan_dissect_new(cf->epan, create_proto_tree, false);
         }
 
-        wtap_rec_init(&rec, DEFAULT_INIT_BUFFER_SIZE_2048);
+        wtap_rec_init(&rec);
+        ws_buffer_init(&buf, 1514);
 
-        while (wtap_read(cf->provider.wth, &rec, &err, &err_info, &data_offset)) {
-            if (process_packet(cf, edt, data_offset, &rec)) {
+        while (wtap_read(cf->provider.wth, &rec, &buf, &err, &err_info, &data_offset)) {
+            if (process_packet(cf, edt, data_offset, &rec, &buf)) {
+                wtap_rec_reset(&rec);
                 /* Stop reading if we have the maximum number of packets;
                  * When the -c option has not been used, max_packet_count
                  * starts at 0, which practically means, never stop reading.
@@ -415,6 +369,7 @@ load_cap_file(capture_file *cf, int max_packet_count, int64_t max_byte_count)
         }
 
         wtap_rec_cleanup(&rec);
+        ws_buffer_free(&buf);
 
         /* Close the sequential I/O side, to free up memory it requires. */
         wtap_sequential_close(cf->provider.wth);
@@ -428,39 +383,10 @@ load_cap_file(capture_file *cf, int max_packet_count, int64_t max_byte_count)
     }
 
     if (err != 0) {
-        report_cfile_read_failure(cf->filename, err, err_info);
+        cfile_read_failure_message(cf->filename, err, err_info);
     }
 
     return err;
-}
-
-void
-cf_close(capture_file *cf)
-{
-    if (cf->state == FILE_CLOSED || cf->state == FILE_READ_PENDING)
-        return; /* Nothing to do */
-
-    if (cf->provider.wth) {
-        wtap_close(cf->provider.wth);
-        cf->provider.wth = NULL;
-    }
-
-    /* We have no file open... */
-    if (cf->filename != NULL) {
-        /* If it's a temporary file, remove it. */
-        if (cf->is_tempfile)
-            ws_unlink(cf->filename);
-        g_free(cf->filename);
-        cf->filename = NULL;
-    }
-
-    if (cf->provider.frames != NULL) {
-        free_frame_data_sequence(cf->provider.frames);
-        cf->provider.frames = NULL;
-    }
-
-    /* We have no file open. */
-    cf->state = FILE_CLOSED;
 }
 
 cf_status_t
@@ -469,13 +395,11 @@ cf_open(capture_file *cf, const char *fname, unsigned int type, bool is_tempfile
     wtap  *wth;
     char *err_info;
 
-    wth = wtap_open_offline(fname, type, err, &err_info, true, application_configuration_environment_prefix());
+    wth = wtap_open_offline(fname, type, err, &err_info, true);
     if (wth == NULL)
         goto fail;
 
-    /* The open succeeded.  Close whatever capture file we had open,
-       and fill in the information for this file. */
-    cf_close(cf);
+    /* The open succeeded.  Fill in the information for this file. */
 
     cf->provider.wth = wth;
     cf->f_datalen = 0; /* not used, but set it anyway */
@@ -501,7 +425,6 @@ cf_open(capture_file *cf, const char *fname, unsigned int type, bool is_tempfile
     cf->provider.ref = NULL;
     cf->provider.prev_dis = NULL;
     cf->provider.prev_cap = NULL;
-    cf->cum_bytes = 0;
 
     /* Create new epan session for dissection. */
     epan_free(cf->epan);
@@ -516,8 +439,29 @@ cf_open(capture_file *cf, const char *fname, unsigned int type, bool is_tempfile
     return CF_OK;
 
 fail:
-    report_cfile_open_failure(fname, *err, err_info);
+    cfile_open_failure_message(fname, *err, err_info);
     return CF_ERROR;
+}
+
+/*
+ * Report an error in command-line arguments.
+ */
+static void
+sharkd_cmdarg_err(const char *msg_format, va_list ap)
+{
+    fprintf(stderr, "sharkd: ");
+    vfprintf(stderr, msg_format, ap);
+    fprintf(stderr, "\n");
+}
+
+/*
+ * Report additional information for an error in command-line arguments.
+ */
+static void
+sharkd_cmdarg_err_cont(const char *msg_format, va_list ap)
+{
+    vfprintf(stderr, msg_format, ap);
+    fprintf(stderr, "\n");
 }
 
 cf_status_t
@@ -532,12 +476,6 @@ sharkd_load_cap_file(void)
     return load_cap_file(&cfile, 0, 0);
 }
 
-int
-sharkd_load_cap_file_with_limits(int max_packet_count, int64_t max_byte_count)
-{
-    return load_cap_file(&cfile, max_packet_count, max_byte_count);
-}
-
 frame_data *
 sharkd_get_frame(uint32_t framenum)
 {
@@ -546,7 +484,7 @@ sharkd_get_frame(uint32_t framenum)
 
 enum dissect_request_status
 sharkd_dissect_request(uint32_t framenum, uint32_t frame_ref_num,
-        uint32_t prev_dis_num, wtap_rec *rec,
+        uint32_t prev_dis_num, wtap_rec *rec, Buffer *buf,
         column_info *cinfo, uint32_t dissect_flags,
         sharkd_dissect_func_t cb, void *data,
         int *err, char **err_info)
@@ -559,7 +497,7 @@ sharkd_dissect_request(uint32_t framenum, uint32_t frame_ref_num,
     if (fdata == NULL)
         return DISSECT_REQUEST_NO_SUCH_FRAME;
 
-    if (!wtap_seek_read(cfile.provider.wth, fdata->file_off, rec, err, err_info)) {
+    if (!wtap_seek_read(cfile.provider.wth, fdata->file_off, rec, buf, err, err_info)) {
         if (cinfo != NULL)
             col_fill_in_error(cinfo, fdata, false, false /* fill_fd_columns */);
         return DISSECT_REQUEST_READ_ERROR; /* error reading the record */
@@ -585,7 +523,9 @@ sharkd_dissect_request(uint32_t framenum, uint32_t frame_ref_num,
     fdata->ref_time = (framenum == frame_ref_num);
     fdata->frame_ref_num = frame_ref_num;
     fdata->prev_dis_num = prev_dis_num;
-    epan_dissect_run(&edt, cfile.cd_t, rec, fdata, cinfo);
+    epan_dissect_run(&edt, cfile.cd_t, rec,
+            frame_tvbuff_new_buffer(&cfile.provider, fdata, buf),
+            fdata, cinfo);
 
     if (cinfo) {
         /* "Stringify" non frame_data vals */
@@ -596,6 +536,7 @@ sharkd_dissect_request(uint32_t framenum, uint32_t frame_ref_num,
             cinfo, (dissect_flags & SHARKD_DISSECT_FLAG_BYTES) ? edt.pi.data_src : NULL,
             data);
 
+    wtap_rec_reset(rec);
     epan_dissect_cleanup(&edt);
     return DISSECT_REQUEST_SUCCESS;
 }
@@ -605,6 +546,7 @@ sharkd_retap(void)
 {
     uint32_t         framenum;
     frame_data      *fdata;
+    Buffer           buf;
     wtap_rec         rec;
     int err;
     char *err_info = NULL;
@@ -631,7 +573,8 @@ sharkd_retap(void)
     create_proto_tree =
         (have_filtering_tap_listeners() || (tap_flags & TL_REQUIRES_PROTO_TREE));
 
-    wtap_rec_init(&rec, DEFAULT_INIT_BUFFER_SIZE_2048);
+    wtap_rec_init(&rec);
+    ws_buffer_init(&buf, 1514);
     epan_dissect_init(&edt, cfile.epan, create_proto_tree, false);
 
     reset_tap_listeners();
@@ -639,17 +582,21 @@ sharkd_retap(void)
     for (framenum = 1; framenum <= cfile.count; framenum++) {
         fdata = sharkd_get_frame(framenum);
 
-        if (!wtap_seek_read(cfile.provider.wth, fdata->file_off, &rec, &err, &err_info))
+        if (!wtap_seek_read(cfile.provider.wth, fdata->file_off, &rec, &buf, &err, &err_info))
             break;
 
         fdata->ref_time = false;
-        fdata->frame_ref_num = 1;
+        fdata->frame_ref_num = (framenum != 1) ? 1 : 0;
         fdata->prev_dis_num = framenum - 1;
-        epan_dissect_run_with_taps(&edt, cfile.cd_t, &rec, fdata, cinfo);
+        epan_dissect_run_with_taps(&edt, cfile.cd_t, &rec,
+                frame_tvbuff_new_buffer(&cfile.provider, fdata, &buf),
+                fdata, cinfo);
+        wtap_rec_reset(&rec);
         epan_dissect_reset(&edt);
     }
 
     wtap_rec_cleanup(&rec);
+    ws_buffer_free(&buf);
     epan_dissect_cleanup(&edt);
 
     draw_tap_listeners(true);
@@ -664,6 +611,7 @@ sharkd_filter(const char *dftext, uint8_t **result)
 
     uint32_t framenum, prev_dis_num = 0;
     uint32_t frames_count;
+    Buffer buf;
     wtap_rec rec;
     int err;
     char *err_info = NULL;
@@ -685,7 +633,8 @@ sharkd_filter(const char *dftext, uint8_t **result)
 
     frames_count = cfile.count;
 
-    wtap_rec_init(&rec, DEFAULT_INIT_BUFFER_SIZE_2048);
+    wtap_rec_init(&rec);
+    ws_buffer_init(&buf, 1514);
     epan_dissect_init(&edt, cfile.epan, true, false);
 
     passed_bits = 0;
@@ -699,16 +648,18 @@ sharkd_filter(const char *dftext, uint8_t **result)
             passed_bits = 0;
         }
 
-        if (!wtap_seek_read(cfile.provider.wth, fdata->file_off, &rec, &err, &err_info))
+        if (!wtap_seek_read(cfile.provider.wth, fdata->file_off, &rec, &buf, &err, &err_info))
             break;
 
         /* frame_data_set_before_dissect */
         epan_dissect_prime_with_dfilter(&edt, dfcode);
 
         fdata->ref_time = false;
-        fdata->frame_ref_num = 1;
+        fdata->frame_ref_num = (framenum != 1) ? 1 : 0;
         fdata->prev_dis_num = prev_dis_num;
-        epan_dissect_run(&edt, cfile.cd_t, &rec, fdata, NULL);
+        epan_dissect_run(&edt, cfile.cd_t, &rec,
+                frame_tvbuff_new_buffer(&cfile.provider, fdata, &buf),
+                fdata, NULL);
 
         if (dfilter_apply_edt(dfcode, &edt)) {
             passed_bits |= (1 << (framenum % 8));
@@ -717,6 +668,7 @@ sharkd_filter(const char *dftext, uint8_t **result)
 
         /* if passed or ref -> frame_data_set_after_dissect */
 
+        wtap_rec_reset(&rec);
         epan_dissect_reset(&edt);
     }
 
@@ -725,6 +677,7 @@ sharkd_filter(const char *dftext, uint8_t **result)
     result_bits[framenum / 8] = passed_bits;
 
     wtap_rec_cleanup(&rec);
+    ws_buffer_free(&buf);
     epan_dissect_cleanup(&edt);
 
     dfilter_free(dfcode);
@@ -756,20 +709,23 @@ sharkd_get_packet_block(const frame_data *fd)
         return wtap_block_ref(cap_file_provider_get_modified_block(&cfile.provider, fd));
     else
     {
-        wtap_rec rec; /* Record information */
+        wtap_rec rec; /* Record metadata */
+        Buffer buf;   /* Record data */
         wtap_block_t block;
         int err;
         char *err_info;
 
-        wtap_rec_init(&rec, DEFAULT_INIT_BUFFER_SIZE_2048);
+        wtap_rec_init(&rec);
+        ws_buffer_init(&buf, 1514);
 
-        if (!wtap_seek_read(cfile.provider.wth, fd->file_off, &rec, &err, &err_info))
+        if (!wtap_seek_read(cfile.provider.wth, fd->file_off, &rec, &buf, &err, &err_info))
         { /* XXX, what we can do here? */ }
 
         /* rec.block is owned by the record, steal it before it is gone. */
         block = wtap_block_ref(rec.block);
 
         wtap_rec_cleanup(&rec);
+        ws_buffer_free(&buf);
         return block;
     }
 }

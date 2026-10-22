@@ -9,53 +9,6 @@
 include(FindWSWinLibs)
 FindWSWinLibs("libpcap-*" "PCAP_HINTS")
 
-function(write_temp_pcap out_file_path)
-	# We already require Python in the project main CMakeLists.txt
-	# Writing a binary file that includes NULs is difficult from CMake,
-	# which wants to treat everything as a NUL terminated string.
-	find_package(Python3 3.6 REQUIRED)
-	string(CONCAT python_script [[
-with open(']] "${out_file_path}" [[', 'wb') as f:
-	f.write(b'\324\303\262\241\002\000\004\000\000\000\000\000\000\000\000\000\377\377\000\000\344\000\000\000Y\371I\\\262u\003\000)\000\000\000)\000\000\000E\000\000)\000\001\000\000@\006f\314\n\000\000\001\n\000\000\002\377\230\001\273\000\000\000e\000\000\000\311P\020 \000bO\000\000\027')
-]]
-	)
-	execute_process(
-		COMMAND "${Python3_EXECUTABLE}" -c ${python_script}
-		RESULT_VARIABLE python_result
-	)
-
-	if(NOT python_result EQUAL 0)
-		message(FATAL_ERROR "Python failed to write temp file ${out_file_path}")
-	endif()
-endfunction()
-
-set(_pcap_test_source [=[
-#include <pcap/pcap.h>
-#include <stdint.h>
-
-int main(void) {
-	char err_buf[PCAP_ERRBUF_SIZE];
-	struct pcap_pkthdr *pkt_header;
-	const uint8_t *pkt_data;
-	/* It is important to pick a file with non-zero usec so that
-	   the test works under all sizes and endianness. */
-	pcap_t *pcap_h = pcap_open_offline("@temp_pcap_file@", err_buf);
-
-	if (!pcap_h)
-		return 1;
-	if (pcap_next_ex(pcap_h, &pkt_header, &pkt_data) != 1)
-		return 2;
-	/* This doesn't access memory outside the struct whether we're
-	   using 32-bit time_t and libpcap 64-bit time_t, or vice versa,
-	   due to the presence of the caplen and len members. */
-	if (pkt_header->ts.tv_sec != 0x5c49f959 || pkt_header->ts.tv_usec != 0x000375b2)
-		return 3;
-
-	return 0;
-}
-]=]
-)
-
 #
 # First, try pkg-config on platforms other than Windows.
 #
@@ -142,71 +95,35 @@ if(NOT PC_PCAP_FOUND AND NOT WIN32)
 endif()
 
 #
-# CMake 3.25 adds a VALIDATOR option to find_path and find_library
-# that makes it easier to only find includes and libraries that have
-# necessary symbols and functions.
-#
-#function(pcap_include_check validator_result_var item)
-#  cmake_push_check_state()
-#  set( CMAKE_REQUIRED_INCLUDES "${item}" )
-#
-#  include(CheckSymbolExists)
-#
-#  # libpcap 1.5.0 (2013-11-07)
-#  check_symbol_exists(PCAP_ERROR_PROMISC_PERM_DENIED "pcap/pcap.h" HAVE_PCAP_ERROR_PROMISC_PERM_DENIED)
-#
-#  if (NOT HAVE_PCAP_ERROR_PROMISC_PERM_DENIED)
-#    set(${validator_result_var} FALSE PARENT_SCOPE)
-#  endif()
-#
-#  cmake_pop_check_state()
-#endfunction()
-
-#
 # Locate the actual include directory. For pkg-config the
 # PC_PCAP_INCLUDE_DIRS variable could be empty if the default
 # header search path is sufficient to locate the header file.
 # For macOS, the directory returned by pcap-config is wrong, so
 # this will make sure to find a valid path.
 #
-if (WIN32 AND (CMAKE_CROSSCOMPILING OR USE_MSYSTEM))
-  # For cross-compiling, just use the internal headers.
-  # We have to turn off the sysroot.
-  # (For cross-compiling where CMAKE_CROSSCOMPILING_EMULATOR
-  # is set we could possibly take the other path.)
-  find_path(PCAP_INCLUDE_DIR
-    NAMES
-      pcap/pcap.h
-    PATHS
-      "${CMAKE_SOURCE_DIR}/libpcap"
-    NO_DEFAULT_PATH
-    NO_CMAKE_FIND_ROOT_PATH
-    #VALIDATOR pcap_include_check
-  )
-else()
-  find_path(PCAP_INCLUDE_DIR
-    NAMES
-      pcap/pcap.h
-    HINTS
-      ${PC_PCAP_INCLUDE_DIRS}
-      ${PCAP_CONFIG_INCLUDE_DIRS}
-      "${PCAP_HINTS}/Include"
-    PATHS
-      "${CMAKE_SOURCE_DIR}/libpcap"
-    #VALIDATOR pcap_include_check
-  )
-endif()
+find_path(PCAP_INCLUDE_DIR
+  NAMES
+    pcap/pcap.h
+    pcap.h
+  PATH_SUFFIXES
+    wpcap
+  HINTS
+    ${PC_PCAP_INCLUDE_DIRS}
+    ${PCAP_CONFIG_INCLUDE_DIRS}
+    "${PCAP_HINTS}/Include"
+)
 
 # On Windows we load wpcap.dll explicitly and probe its functions in
 # capture\capture-wpcap.c. We don't want to link with pcap.lib since
 # that would bring in the non-capturing (null) pcap.dll from the vcpkg
-# library, similarly the non-capturing libpcap.dll from the MSYS2 library.
-if(WIN32)
+# library.
+if(WIN32 AND NOT CMAKE_CROSSCOMPILING)
   set(_pkg_required_vars PCAP_INCLUDE_DIR)
 else()
   find_library(PCAP_LIBRARY
     NAMES
       pcap
+      wpcap
     HINTS
       ${PC_PCAP_LIBRARY_DIRS}
       ${PCAP_CONFIG_LIBRARY_DIRS}
@@ -268,55 +185,39 @@ if(PCAP_FOUND)
   cmake_push_check_state()
   set( CMAKE_REQUIRED_INCLUDES ${PCAP_INCLUDE_DIRS} )
   set( CMAKE_REQUIRED_LIBRARIES ${PCAP_LIBRARIES} )
-  set( CMAKE_REQUIRED_DEFINITIONS ${LFS_DEFINITIONS} ${TIME64_DEFINITIONS} )
 
   include(CheckSymbolExists)
-  include(CheckSourceRuns)
 
-  if(WIN32)
+  if(WIN32 AND NOT CMAKE_CROSSCOMPILING)
     #
-    # Prepopulate some values. Npcap has these in its SDK, and compilation
-    # checks on Windows can be slow.  We check whether they're present at run
-    # time, when we load wpcap.dll, and work around their absence or report
-    # an error.
+    # Prepopulate some values. WinPcap 3.1 and later, and Npcap, have these
+    # in their SDK, and compilation checks on Windows can be slow.  We check
+    # whether they're present at run time, when we load wpcap.dll, and work
+    # around their absence or report an error.
     #
-    set(HAVE_PCAP_INIT TRUE)
+    set(HAVE_PCAP_FREECODE TRUE)
+    set(HAVE_PCAP_CREATE TRUE)
+    set(HAVE_PCAP_FREE_DATALINKS TRUE)
     set(HAVE_PCAP_OPEN TRUE)
     set(HAVE_PCAP_SETSAMPLING TRUE)
     set(HAVE_PCAP_SET_TSTAMP_PRECISION TRUE)
+    set(HAVE_PCAP_SET_TSTAMP_TYPE TRUE)
   else(WIN32)
     #
-    # Make sure we have at least libpcap 1.5, because we require at
-    # least libpcap 1.5's APIs.
+    # Make sure we have at least libpcap 0.8, because we require at
+    # least libpcap 0.8's APIs.
     #
-    # We check whether pcap_set_tstamp_precision is defined in the pcap header,
-    # using it as a proxy for all the 1.5 API's.  if not, we fail.
+    # We check whether pcap_lib_version is defined in the pcap header,
+    # using it as a proxy for all the 0.8 API's.  if not, we fail.
     #
-    check_function_exists( "pcap_set_tstamp_precision" HAVE_PCAP_SET_TSTAMP_PRECISION )
-    if( NOT HAVE_PCAP_SET_TSTAMP_PRECISION )
-      message(FATAL_ERROR "You need libpcap 1.5 or later")
-    endif()
+    check_symbol_exists( pcap_lib_version ${PCAP_INCLUDE_DIR}/pcap.h HAVE_PCAP_LIB_VERSION )
+    if( NOT HAVE_PCAP_LIB_VERSION )
+      message(FATAL_ERROR "You need libpcap 0.8 or later")
+    endif( NOT HAVE_PCAP_LIB_VERSION )
 
-    # pcap_init was introduced in libpcap 1.10, so if it is present we can
-    # assume other things about libpcap, even though, at least for the moment,
-    # we don't use pcap_init itself on non-Windows.
-    check_function_exists( "pcap_init" HAVE_PCAP_INIT )
-
-    if(NOT CMAKE_CROSSCOMPILING AND CMAKE_SIZEOF_VOID_P EQUAL 4)
-      # On 32-bit platforms, check whether libpcap was compiled with the same
-      # size time_t that we're using.
-      unset(PCAP_TEST_WORKS CACHE)
-      set(temp_pcap_file "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/temp.pcap")
-      write_temp_pcap(${temp_pcap_file})
-      string(CONFIGURE "${_pcap_test_source}" pcap_test_source @ONLY)
-      check_source_runs(C "${pcap_test_source}" PCAP_TEST_WORKS)
-
-      file(REMOVE temp_pcap_file)
-      if (NOT PCAP_TEST_WORKS)
-        message(FATAL_ERROR "Using libpcap to read a pcap offline failed, probably because libpcap was compiled with a different size time_t.")
-      endif()
-    endif()
-
+    check_function_exists( "pcap_freecode" HAVE_PCAP_FREECODE )
+    check_function_exists( "pcap_create" HAVE_PCAP_CREATE )
+    check_function_exists( "pcap_free_datalinks" HAVE_PCAP_FREE_DATALINKS )
     #
     # macOS Sonoma's libpcap includes stub versions of the remote-
     # capture APIs.  They are exported as "weakly linked symbols".
@@ -389,15 +290,25 @@ if(PCAP_FOUND)
     endif( HAVE_PCAP_OPEN )
   endif()
 
+  if( HAVE_PCAP_CREATE )
+    #
+    # If we have pcap_create(), we have pcap_set_buffer_size(), and
+    # can set the capture buffer size.
+    #
+    # Otherwise, if this is Windows, we have pcap_setbuff(), and can
+    # set the capture buffer size.
+    #
+    set( CAN_SET_CAPTURE_BUFFER_SIZE TRUE )
+  endif()
+  check_function_exists( "pcap_set_tstamp_precision" HAVE_PCAP_SET_TSTAMP_PRECISION )
+  check_function_exists( "pcap_set_tstamp_type" HAVE_PCAP_SET_TSTAMP_TYPE )
   # Remote pcap checks
   if( HAVE_PCAP_OPEN )
     set( HAVE_PCAP_REMOTE 1 )
   endif()
 
-  check_symbol_exists(PCAP_ERROR_PROMISC_PERM_DENIED "pcap/pcap.h" HAVE_PCAP_ERROR_PROMISC_PERM_DENIED)
-  if( NOT HAVE_PCAP_ERROR_PROMISC_PERM_DENIED )
-    message(FATAL_ERROR "You need libpcap 1.5 or later")
-  endif()
+  check_symbol_exists(PCAP_ERROR_PROMISC_PERM_DENIED ${PCAP_INCLUDE_DIR}/pcap.h HAVE_PCAP_ERROR_PROMISC_PERM_DENIED)
+  check_symbol_exists(PCAP_WARNING_TSTAMP_TYPE_NOTSUP ${PCAP_INCLUDE_DIR}/pcap.h HAVE_PCAP_WARNING_TSTAMP_TYPE_NOTSUP)
 
   cmake_pop_check_state()
 endif()

@@ -14,7 +14,7 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include "packet-ip.h"
+#include <epan/ipproto.h>
 
 void proto_register_ayiya(void);
 void proto_reg_handoff_ayiya(void);
@@ -78,7 +78,7 @@ static int
 dissect_ayiya(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
     proto_tree *ayiya_tree;
-    unsigned offset = 0;
+    int offset = 0;
     int idlen, siglen, ayiya_len;
     uint8_t next_header, opcode;
     tvbuff_t *payload;

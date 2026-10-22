@@ -20,6 +20,10 @@
 #include "packet-h235.h"
 #include "packet-h225.h"
 
+#define PNAME  "H235-SECURITY-MESSAGES"
+#define PSNAME "H.235"
+#define PFNAME "h235"
+
 #define OID_MIKEY         "0.0.8.235.0.3.76"
 #define OID_MIKEY_PS      "0.0.8.235.0.3.72"
 #define OID_MIKEY_DHHMAC  "0.0.8.235.0.3.73"
@@ -39,8 +43,8 @@ static int proto_h235;
 #include "packet-h235-ett.c"
 
 
-static unsigned
-dissect_xxx_ToBeSigned(tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_) {
+static int
+dissect_xxx_ToBeSigned(tvbuff_t *tvb, int offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_) {
   dissect_per_not_decoded_yet(tree, actx->pinfo, tvb, "ToBeSigned");
   return offset;
 }
@@ -62,7 +66,7 @@ void proto_register_h235(void) {
   };
 
   /* Register protocol */
-  proto_h235 = proto_register_protocol("H235-SECURITY-MESSAGES", "H.235", "h235");
+  proto_h235 = proto_register_protocol(PNAME, PSNAME, PFNAME);
 
   /* Register fields and subtrees */
   proto_register_field_array(proto_h235, hf, array_length(hf));

@@ -39,7 +39,7 @@ typedef struct _gvcp_transaction_t {
 	uint32_t addr_count;
 } gvcp_transaction_t;
 
-static wmem_array_t* gvcp_trans_array;
+wmem_array_t* gvcp_trans_array;
 
 /*
    structure to hold persistent info for each conversation
@@ -1912,7 +1912,7 @@ static void dissect_writemem_cmd(proto_tree *gvcp_telegram_tree, tvbuff_t *tvb, 
 
 static void dissect_event_cmd(proto_tree *gvcp_telegram_tree, tvbuff_t *tvb, packet_info *pinfo, int startoffset, int length, int extendedblockids)
 {
-	uint16_t eventid;
+	int32_t eventid;
 	int offset;
 	offset = startoffset;
 
@@ -1954,17 +1954,17 @@ static void dissect_event_cmd(proto_tree *gvcp_telegram_tree, tvbuff_t *tvb, pac
 			eventid = tvb_get_ntohs(tvb, offset);
 
 			/* Use range to determine type of event */
-			if (eventid <= 0x8000)
+			if ((eventid >= 0x0000) && (eventid <= 0x8000))
 			{
 				/* Standard ID */
 				proto_tree_add_item(gvcp_telegram_tree, hf_gvcp_eventcmd_id, tvb, offset, 2, ENC_BIG_ENDIAN);
 			}
-			else if (eventid <= 0x8FFF)
+			else if ((eventid >= 0x8001) && (eventid <= 0x8FFF))
 			{
 				/* Error */
 				proto_tree_add_item(gvcp_telegram_tree, hf_gvcp_eventcmd_error_id, tvb, offset, 2, ENC_BIG_ENDIAN);
 			}
-			else
+			else if ((eventid >= 0x9000) && (eventid <= 0xFFFF))
 			{
 				/* Device specific */
 				proto_tree_add_item(gvcp_telegram_tree, hf_gvcp_eventcmd_device_specific_id, tvb, offset, 2, ENC_BIG_ENDIAN);
@@ -2003,7 +2003,7 @@ static void dissect_event_cmd(proto_tree *gvcp_telegram_tree, tvbuff_t *tvb, pac
 
 static void dissect_eventdata_cmd(proto_tree *gvcp_telegram_tree, tvbuff_t *tvb, packet_info *pinfo, int startoffset, int extendedblockids)
 {
-	uint16_t eventid;
+	int32_t eventid;
 	int offset;
 	int data_length = 0;
 	offset = startoffset;
@@ -2027,17 +2027,17 @@ static void dissect_eventdata_cmd(proto_tree *gvcp_telegram_tree, tvbuff_t *tvb,
 		offset += 2;
 
 		/* Use range to determine type of event */
-		if (eventid <= 0x8000)
+		if ((eventid >= 0x0000) && (eventid <= 0x8000))
 		{
 			/* Standard ID */
 			proto_tree_add_item(gvcp_telegram_tree, hf_gvcp_eventcmd_id, tvb, offset, 2, ENC_BIG_ENDIAN);
 		}
-		else if (eventid <= 0x8FFF)
+		else if ((eventid >= 0x8001) && (eventid <= 0x8FFF))
 		{
 			/* Error */
 			proto_tree_add_item(gvcp_telegram_tree, hf_gvcp_eventcmd_error_id, tvb, offset, 2, ENC_BIG_ENDIAN);
 		}
-		else
+		else if ((eventid >= 0x9000) && (eventid <= 0xFFFF))
 		{
 			/* Device specific */
 			proto_tree_add_item(gvcp_telegram_tree, hf_gvcp_eventcmd_device_specific_id, tvb, offset, 2, ENC_BIG_ENDIAN);
@@ -2124,7 +2124,7 @@ static void dissect_discovery_ack(proto_tree *gvcp_telegram_tree, tvbuff_t *tvb,
 	int offset;
 	const uint8_t* string_manufacturer_name = NULL;
 	const uint8_t* string_serial_number = NULL;
-	unsigned string_length = 0;
+	int string_length = 0;
 	proto_tree *tree = NULL;
 
 	offset = startoffset;
@@ -2446,7 +2446,7 @@ static void dissect_pending_ack(proto_tree *gvcp_telegram_tree, tvbuff_t *tvb, p
 
 static int dissect_gvcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	proto_tree *gvcp_tree = NULL;
 	proto_tree *gvcp_tree_flag = NULL;
 	proto_tree *gvcp_telegram_tree = NULL;
@@ -2458,7 +2458,7 @@ static int dissect_gvcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 	int scheduledactioncommand = -1;
 	int ack_code = -1;
 	const char* ack_string = NULL;
-	uint32_t request_id = 0;
+	int request_id = 0;
 	char key_code = 0;
 	proto_item *ti = NULL;
 	proto_item *item = NULL;
@@ -2496,7 +2496,7 @@ static int dissect_gvcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 	if (key_code == 0x42)
 	{
 		command = tvb_get_ntohs(tvb, offset+2);
-		command_string = val_to_str(pinfo->pool, command, commandnames,"Unknown Command (0x%x)");
+		command_string = val_to_str(command, commandnames,"Unknown Command (0x%x)");
 
 		/* Add the Command name string to the Info column */
 		col_append_fstr(pinfo->cinfo, COL_INFO, "> %s ", command_string);
@@ -2542,7 +2542,7 @@ static int dissect_gvcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 	{
 		int status = tvb_get_ntohs(tvb, offset);
 		col_append_fstr(pinfo->cinfo, COL_INFO, "< %s %s",
-			ack_string, val_to_str(pinfo->pool, status, statusnames_short, "Unknown status (0x%04X)"));
+			ack_string, val_to_str(status, statusnames_short, "Unknown status (0x%04X)"));
 
 		gvcp_tree = proto_tree_add_subtree_format(gvcp_tree, tvb, offset+2, tvb_captured_length(tvb)-2,
 												ett_gvcp_ack, NULL, "Acknowledge Header: %s", ack_string);
@@ -2573,7 +2573,8 @@ static int dissect_gvcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 	offset += 2;
 
 	/* Add the request ID */
-	proto_tree_add_item_ret_uint(gvcp_tree, hf_gvcp_request_id, tvb, offset, 2, ENC_BIG_ENDIAN, &request_id);
+	proto_tree_add_item(gvcp_tree, hf_gvcp_request_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+	request_id = tvb_get_ntohs(tvb, offset);
 	offset += 2;
 
 	conversation = find_or_create_conversation(pinfo);
@@ -4284,13 +4285,13 @@ void proto_register_gvcp(void)
 		/* Request/Response tracking */
 		{ &hf_gvcp_response_in,
 		{ "Response In", "gvcp.response_in",
-		FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_RESPONSE), 0x0,
+		FT_FRAMENUM, BASE_NONE, NULL, 0x0,
 		"The response to this GVCP request is in this frame", HFILL
 		}},
 
 		{ &hf_gvcp_response_to,
 		{ "Request In", "gvcp.response_to",
-		FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_REQUEST), 0x0,
+		FT_FRAMENUM, BASE_NONE, NULL, 0x0,
 		"This is a response to the GVCP request in this frame", HFILL
 		}},
 

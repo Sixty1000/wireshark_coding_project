@@ -10,7 +10,7 @@
 #ifndef PACKET_ATN_ULCS_H
 #define PACKET_ATN_ULCS_H
 
-#include <epan/packet.h>
+#include "packet.h"
 
 #include <epan/wmem_scopes.h>
 

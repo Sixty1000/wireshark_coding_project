@@ -155,33 +155,6 @@ static int hf_glusterfs_flock_len;
 static int hf_glusterfs_flock_pid;
 static int hf_glusterfs_flock_owner;
 
-/* rchecksum */
-static int hf_glusterfs_rchecksum_len;
-static int hf_glusterfs_rchecksum_flags;
-static int hf_glusterfs_weak_checksum;
-static int hf_glusterfs_strong_checksum;
-
-/* ipc */
-static int hf_glusterfs_ipc_op;
-
-/* gf_proto_lease */
-static int hf_glusterfs_lease_cmd;
-static int hf_glusterfs_lease_type;
-static int hf_glusterfs_lease_id;
-static int hf_glusterfs_lease_flags;
-
-/* gfs3_locklist */
-static int hf_glusterfs_client_uid;
-static int hf_glusterfs_lk_flags;
-
-/* copy_file_range (source/destination pairs) */
-static int hf_glusterfs_copy_gfid1;
-static int hf_glusterfs_copy_gfid2;
-static int hf_glusterfs_copy_fd_in;
-static int hf_glusterfs_copy_fd_out;
-static int hf_glusterfs_copy_off_in;
-static int hf_glusterfs_copy_off_out;
-
 /* statfs */
 static int hf_glusterfs_bsize;
 static int hf_glusterfs_frsize;
@@ -248,13 +221,11 @@ static int ett_glusterfs_iatt;
 static int ett_glusterfs_entry;
 static int ett_glusterfs_flock;
 static int ett_glusterfs_fsync_flags;
-static int ett_glusterfs_lease;
-static int ett_glusterfs_locklist;
 static int ett_gluster_dict;
 static int ett_gluster_dict_items;
 
 static int
-glusterfs_rpc_dissect_gfid(proto_tree *tree, tvbuff_t *tvb, int hfindex, unsigned offset)
+glusterfs_rpc_dissect_gfid(proto_tree *tree, tvbuff_t *tvb, int hfindex, int offset)
 {
 	proto_tree_add_item(tree, hfindex, tvb, offset, 16, ENC_NA);
 	offset += 16;
@@ -264,7 +235,7 @@ glusterfs_rpc_dissect_gfid(proto_tree *tree, tvbuff_t *tvb, int hfindex, unsigne
 
 static int
 glusterfs_rpc_dissect_mode(proto_tree *tree, tvbuff_t *tvb, int hfindex,
-								unsigned offset)
+								int offset)
 {
 	static int * const mode_bits[] = {
 		&hf_glusterfs_mode_suid,
@@ -293,9 +264,9 @@ glusterfs_rpc_dissect_mode(proto_tree *tree, tvbuff_t *tvb, int hfindex,
 /*
  * from rpc/xdr/src/glusterfs3-xdr.c:xdr_gf_iatt()
  */
-unsigned
+int
 glusterfs_rpc_dissect_gf_iatt(proto_tree *tree, tvbuff_t *tvb, int hfindex,
-								unsigned offset)
+								int offset)
 {
 	proto_item *iatt_item;
 	proto_tree *iatt_tree;
@@ -346,7 +317,7 @@ glusterfs_rpc_dissect_gf_iatt(proto_tree *tree, tvbuff_t *tvb, int hfindex,
 }
 
 static int
-glusterfs_rpc_dissect_gf_flock(proto_tree *tree, tvbuff_t *tvb, unsigned offset)
+glusterfs_rpc_dissect_gf_flock(proto_tree *tree, tvbuff_t *tvb, int offset)
 {
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_flock_type, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_flock_whence, offset);
@@ -361,7 +332,7 @@ glusterfs_rpc_dissect_gf_flock(proto_tree *tree, tvbuff_t *tvb, unsigned offset)
 }
 
 static int
-glusterfs_rpc_dissect_gf_2_flock(proto_tree *tree, tvbuff_t *tvb, unsigned offset)
+glusterfs_rpc_dissect_gf_2_flock(proto_tree *tree, tvbuff_t *tvb, int offset)
 {
 	proto_item *flock_item;
 	proto_tree *flock_tree;
@@ -406,7 +377,7 @@ static const value_string glusterfs_accmode_vals[] = {
 };
 
 static int
-glusterfs_rpc_dissect_flags(proto_tree *tree, tvbuff_t *tvb, unsigned offset)
+glusterfs_rpc_dissect_flags(proto_tree *tree, tvbuff_t *tvb, int offset)
 {
 	bool rdonly;
 	uint32_t accmode;
@@ -458,7 +429,7 @@ glusterfs_rpc_dissect_flags(proto_tree *tree, tvbuff_t *tvb, unsigned offset)
 }
 
 static int
-glusterfs_rpc_dissect_statfs(proto_tree *tree, tvbuff_t *tvb, unsigned offset)
+glusterfs_rpc_dissect_statfs(proto_tree *tree, tvbuff_t *tvb, int offset)
 {
 	static int * const flag_bits[] = {
 		&hf_glusterfs_mnt_flag_rdonly,
@@ -497,13 +468,12 @@ glusterfs_rpc_dissect_statfs(proto_tree *tree, tvbuff_t *tvb, unsigned offset)
 }
 
 /* function for dissecting and adding a gluster dict_t to the tree */
-unsigned
-gluster_rpc_dissect_dict(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, int hfindex, unsigned offset)
+int
+gluster_rpc_dissect_dict(proto_tree *tree, tvbuff_t *tvb, int hfindex, int offset)
 {
 	char *key, *value;
 	const char *name;
-	int roundup, value_len;
-	unsigned key_len;
+	int roundup, value_len, key_len;
 	uint32_t i, items, len;
 	int start_offset, start_offset2;
 
@@ -550,7 +520,7 @@ gluster_rpc_dissect_dict(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, in
 		offset += 4;
 
 		/* read the key, '\0' terminated */
-		key = (char*)tvb_get_stringz_enc(pinfo->pool, tvb, offset, &key_len, ENC_ASCII);
+		key = tvb_get_stringz_enc(wmem_packet_scope(), tvb, offset, &key_len, ENC_ASCII);
 		start_offset2 = offset;
 		offset += key_len;
 
@@ -566,7 +536,7 @@ gluster_rpc_dissect_dict(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, in
 
 			tvb_get_ntohguid(tvb, offset, &gfid);
 
-			gfid_s = guid_to_str(pinfo->pool, &gfid);
+			gfid_s = guid_to_str(wmem_packet_scope(), &gfid);
 			dict_item = proto_tree_add_guid_format(subtree, hf_glusterfs_gfid,
 					tvb, offset, 16, &gfid,
 					"%s: %s", key, gfid_s);
@@ -578,7 +548,7 @@ gluster_rpc_dissect_dict(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, in
 					tvb_get_letohl(tvb, offset + 4),
 					tvb_get_letohl(tvb, offset + 8));
 		} else {
-			value = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, value_len, ENC_ASCII);
+			value = tvb_get_string_enc(wmem_packet_scope(), tvb, offset, value_len, ENC_ASCII);
 			dict_item = proto_tree_add_string_format(subtree, hf_gluster_dict_value, tvb, offset, value_len, value, "%s: %s",
 					key, value);
 		}
@@ -603,7 +573,7 @@ gluster_rpc_dissect_dict(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, in
  */
 static int
 glusterfs_rpc_dissect_gfx_iatt(proto_tree *tree, tvbuff_t *tvb, int hfindex,
-								unsigned offset)
+								int offset)
 {
 	proto_item *iatt_item;
 	proto_tree *iatt_tree;
@@ -665,7 +635,7 @@ glusterfs_rpc_dissect_gfx_iatt(proto_tree *tree, tvbuff_t *tvb, int hfindex,
 
 /* function for dissecting and adding a gluster4_0 dict_t to the tree */
 static int
-gluster_rpc4_0_dissect_dict(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, int hfindex, unsigned offset)
+gluster_rpc4_0_dissect_dict(proto_tree *tree, tvbuff_t *tvb, int hfindex, int offset)
 {
 	char *key, *value;
 	const char *name;
@@ -710,7 +680,7 @@ gluster_rpc4_0_dissect_dict(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb,
 		offset += 4;
 
 		/* read the key, '\0' terminated */
-		key = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, key_len, ENC_ASCII);
+		key = tvb_get_string_enc(wmem_packet_scope(), tvb, offset, key_len, ENC_ASCII);
 		start_offset2 = offset;
 		offset += key_len;
 
@@ -736,7 +706,7 @@ gluster_rpc4_0_dissect_dict(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb,
 			val_len = tvb_get_ntohl(tvb, offset);
 			val_len = rpc_roundup(val_len);
 			offset += 4;
-			value = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, val_len, ENC_ASCII);
+			value = tvb_get_string_enc(wmem_packet_scope(), tvb, offset, val_len, ENC_ASCII);
 			dict_item = proto_tree_add_string_format(subtree, hf_gluster_dict_value, tvb, offset, val_len, value, "%s: %s",
 								key, value);
 		} else if (val_type == 8) {
@@ -745,15 +715,12 @@ gluster_rpc4_0_dissect_dict(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb,
 		} else if (val_type == 7) {
 			val_len = 16;
 			tvb_get_ntohguid(tvb, offset, &gfid);
-			gfid_s = guid_to_str(pinfo->pool, &gfid);
+			gfid_s = guid_to_str(wmem_packet_scope(), &gfid);
 			dict_item = proto_tree_add_guid_format(subtree, hf_glusterfs_gfid,
 								tvb, offset, val_len, &gfid,
 								"%s: %s", key, gfid_s);
-		/* GF_DATA_TYPE_PTR and GF_DATA_TYPE_STR_OLD share the XDR opaque<>
-		 * arm, whose payload is padded to a 4-byte boundary. */
-		} else if (val_type == 6 || val_type == 1) {
+		} else if (val_type == 6) {
 			val_len = tvb_get_ntohl(tvb, offset);
-			val_len = rpc_roundup(val_len);
 			offset += 4;
 
 			/* read the value, possibly '\0' terminated */
@@ -765,7 +732,7 @@ gluster_rpc4_0_dissect_dict(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb,
 						!strncmp("originator_uuid", key, 15))) {
 				tvb_get_ntohguid(tvb, offset, &gfid);
 
-				gfid_s = guid_to_str(pinfo->pool, &gfid);
+				gfid_s = guid_to_str(wmem_packet_scope(), &gfid);
 				dict_item = proto_tree_add_guid_format(subtree, hf_glusterfs_gfid,
 						tvb, offset, 16, &gfid,
 						"%s: %s", key, gfid_s);
@@ -777,7 +744,7 @@ gluster_rpc4_0_dissect_dict(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb,
 						tvb_get_letohl(tvb, offset + 4),
 						tvb_get_letohl(tvb, offset + 8));
 			} else {
-				value = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, val_len, ENC_ASCII);
+				value = tvb_get_string_enc(wmem_packet_scope(), tvb, offset, val_len, ENC_ASCII);
 				dict_item = proto_tree_add_string_format(subtree, hf_gluster_dict_value, tvb, offset, val_len, value, "%s: %s",
 						key, value);
 			}
@@ -1007,8 +974,8 @@ static const value_string glusterfs_error_codes[] = {
 };
 static value_string_ext glusterfs_error_codes_ext = VALUE_STRING_EXT_INIT(glusterfs_error_codes);
 
-unsigned
-gluster_dissect_common_reply(tvbuff_t *tvb, unsigned offset,
+int
+gluster_dissect_common_reply(tvbuff_t *tvb, int offset,
 				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
 	proto_item *errno_item;
@@ -1033,7 +1000,7 @@ gluster_local_dissect_common_reply(tvbuff_t *tvb,
 }
 
 static int
-_glusterfs_gfs3_common_readdir_reply(tvbuff_t *tvb, proto_tree *tree, unsigned offset)
+_glusterfs_gfs3_common_readdir_reply(tvbuff_t *tvb, proto_tree *tree, int offset)
 {
 	proto_item *errno_item;
 	unsigned op_errno;
@@ -1056,7 +1023,7 @@ static int
 glusterfs_gfs3_op_unlink_reply(tvbuff_t *tvb,
 				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gf_iatt(tree, tvb,
 					hf_glusterfs_preparent_iatt, offset);
@@ -1068,13 +1035,13 @@ glusterfs_gfs3_op_unlink_reply(tvbuff_t *tvb,
 
 static int
 glusterfs_gfs3_op_unlink_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_pargfid, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_path, offset, NULL);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_bname, offset, NULL);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_path, offset, NULL);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_bname, offset, NULL);
 	return offset;
 }
 
@@ -1082,7 +1049,7 @@ static int
 glusterfs_gfs3_op_statfs_reply(tvbuff_t *tvb, packet_info *pinfo,
 							proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
 	offset = glusterfs_rpc_dissect_statfs(tree, tvb, offset);
@@ -1091,12 +1058,12 @@ glusterfs_gfs3_op_statfs_reply(tvbuff_t *tvb, packet_info *pinfo,
 
 static int
 glusterfs_gfs3_op_statfs_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_path, offset, NULL);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_path, offset, NULL);
 
 	return offset;
 }
@@ -1105,7 +1072,7 @@ static int
 glusterfs_gfs3_op_flush_call(tvbuff_t *tvb,
 				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
@@ -1114,14 +1081,14 @@ glusterfs_gfs3_op_flush_call(tvbuff_t *tvb,
 
 static int
 glusterfs_gfs3_op_setxattr_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_path, offset, NULL);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_path, offset, NULL);
 
 	return offset;
 }
@@ -1130,7 +1097,7 @@ static int
 glusterfs_gfs3_op_opendir_reply(tvbuff_t *tvb, packet_info *pinfo,
 							proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
@@ -1141,10 +1108,10 @@ static int
 glusterfs_gfs3_op_opendir_call(tvbuff_t *tvb,
 				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_path, offset, NULL);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_path, offset, NULL);
 
 	return offset;
 }
@@ -1154,7 +1121,7 @@ static int
 glusterfs_gfs3_op_create_reply(tvbuff_t *tvb, packet_info *pinfo,
 							proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
 	offset = glusterfs_rpc_dissect_gf_iatt(tree, tvb, hf_glusterfs_iatt,
@@ -1171,15 +1138,15 @@ glusterfs_gfs3_op_create_reply(tvbuff_t *tvb, packet_info *pinfo,
 /* rpc/xdr/src/glusterfs3-xdr.c:xdr_gfs3_create_req */
 static int
 glusterfs_gfs3_op_create_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_pargfid, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
 	offset = glusterfs_rpc_dissect_mode(tree, tvb, hf_glusterfs_mode, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_path, offset, NULL);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_bname, offset, NULL);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_path, offset, NULL);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_bname, offset, NULL);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -1188,28 +1155,28 @@ static int
 glusterfs_gfs3_op_lookup_reply(tvbuff_t *tvb, packet_info *pinfo,
 							proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
 	offset = glusterfs_rpc_dissect_gf_iatt(tree, tvb, hf_glusterfs_iatt,
 								offset);
 	offset = glusterfs_rpc_dissect_gf_iatt(tree, tvb,
 					hf_glusterfs_postparent_iatt, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs3_op_lookup_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_pargfid, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_path, offset, NULL);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_bname, offset, NULL);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_path, offset, NULL);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_bname, offset, NULL);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -1221,7 +1188,7 @@ glusterfs_gfs3_op_inodelk_call(tvbuff_t *tvb,
 	proto_item *flock_item;
 	proto_tree *flock_tree;
 	int start_offset;
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_cmd, offset);
@@ -1232,19 +1199,19 @@ glusterfs_gfs3_op_inodelk_call(tvbuff_t *tvb,
 	offset = glusterfs_rpc_dissect_gf_flock(flock_tree, tvb, offset);
 	proto_item_set_len (flock_item, offset - start_offset);
 
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_path, offset, NULL);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_volume, offset, NULL);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_path, offset, NULL);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_volume, offset, NULL);
 	return offset;
 }
 
-static unsigned
-_glusterfs_gfs_op_readdir_entry(tvbuff_t *tvb, packet_info* pinfo, unsigned offset, proto_tree *tree,
+static int
+_glusterfs_gfs_op_readdir_entry(tvbuff_t *tvb, int offset, proto_tree *tree,
 				bool iatt, bool proto_4_0, bool dict)
 {
 	proto_item *entry_item;
 	proto_tree *entry_tree;
 	const char* path = NULL;
-	unsigned start_offset = offset;
+	int start_offset = offset;
 
 	entry_tree = proto_tree_add_subtree(tree, tvb, offset, -1, ett_glusterfs_entry, &entry_item, "Entry");
 
@@ -1252,7 +1219,7 @@ _glusterfs_gfs_op_readdir_entry(tvbuff_t *tvb, packet_info* pinfo, unsigned offs
 	offset = dissect_rpc_uint64(tvb, entry_tree, hf_glusterfs_entry_off, offset);
 	offset = dissect_rpc_uint32(tvb, entry_tree, hf_glusterfs_entry_len, offset);
 	offset = dissect_rpc_uint32(tvb, entry_tree, hf_glusterfs_entry_type, offset);
-	offset = dissect_rpc_string(tvb, pinfo, entry_tree, hf_glusterfs_entry_path, offset, &path);
+	offset = dissect_rpc_string(tvb, entry_tree, hf_glusterfs_entry_path, offset, &path);
 
 	proto_item_append_text(entry_item, " Path: %s", path);
 
@@ -1266,9 +1233,9 @@ _glusterfs_gfs_op_readdir_entry(tvbuff_t *tvb, packet_info* pinfo, unsigned offs
 	}
 	if (dict) {
 		if (proto_4_0)
-			offset = gluster_rpc4_0_dissect_dict(entry_tree, pinfo, tvb, hf_glusterfs_dict, offset);
+			offset = gluster_rpc4_0_dissect_dict(entry_tree, tvb, hf_glusterfs_dict, offset);
 		else
-			offset = gluster_rpc_dissect_dict(entry_tree, pinfo, tvb, hf_glusterfs_dict, offset);
+			offset = gluster_rpc_dissect_dict(entry_tree, tvb, hf_glusterfs_dict, offset);
 	}
 
 	proto_item_set_len (entry_item, offset - start_offset);
@@ -1277,44 +1244,46 @@ _glusterfs_gfs_op_readdir_entry(tvbuff_t *tvb, packet_info* pinfo, unsigned offs
 }
 
 static int
-glusterfs_gfs3_op_readdirp_entry(tvbuff_t *tvb, unsigned offset,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_op_readdirp_entry(tvbuff_t *tvb, int offset,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	return _glusterfs_gfs_op_readdir_entry(tvb, pinfo, offset, tree, true, false, false);
+	return _glusterfs_gfs_op_readdir_entry(tvb, offset, tree, true, false, false);
 }
 
 static int
-glusterfs_gfs3_3_op_readdir_entry(tvbuff_t *tvb, unsigned offset,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_readdir_entry(tvbuff_t *tvb, int offset,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	return _glusterfs_gfs_op_readdir_entry(tvb, pinfo, offset, tree, false, false, false);
+	return _glusterfs_gfs_op_readdir_entry(tvb, offset, tree, false, false, false);
 }
 
 static int
-glusterfs_gfs3_3_op_readdirp_entry(tvbuff_t *tvb, unsigned offset,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_readdirp_entry(tvbuff_t *tvb, int offset,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	return _glusterfs_gfs_op_readdir_entry(tvb, pinfo, offset, tree, true, false, true);
+	return _glusterfs_gfs_op_readdir_entry(tvb, offset, tree, true, false, true);
 }
 
 static int
-glusterfs_gfs4_0_op_readdir_entry(tvbuff_t *tvb, unsigned offset,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs4_0_op_readdir_entry(tvbuff_t *tvb, int offset,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	return _glusterfs_gfs_op_readdir_entry(tvb, pinfo, offset, tree, false, true, false);
+	return _glusterfs_gfs_op_readdir_entry(tvb, offset, tree, false, true, false);
 }
 
 static int
-glusterfs_gfs4_0_op_readdirp_entry(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs4_0_op_readdirp_entry(tvbuff_t *tvb, int offset,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	return _glusterfs_gfs_op_readdir_entry(tvb, pinfo, offset, tree, true, true, true);
+	return _glusterfs_gfs_op_readdir_entry(tvb, offset, tree, true, true, true);
 }
 
 /* details in xlators/storage/posix/src/posix.c:posix_fill_readdir() */
 static int
-glusterfs_gfs3_op_readdirp_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_op_readdirp_reply(tvbuff_t *tvb, packet_info *pinfo,
+							proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	offset = _glusterfs_gfs3_common_readdir_reply(tvb, tree, offset);
 	offset = dissect_rpc_list(tvb, pinfo, tree, offset,
 				  glusterfs_gfs3_op_readdirp_entry, NULL);
@@ -1323,9 +1292,10 @@ glusterfs_gfs3_op_readdirp_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 }
 
 static int
-glusterfs_gfs3_op_readdirp_call(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_op_readdirp_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
@@ -1335,9 +1305,10 @@ glusterfs_gfs3_op_readdirp_call(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tre
 }
 
 static int
-glusterfs_gfs3_op_setattr_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+glusterfs_gfs3_op_setattr_reply(tvbuff_t *tvb, packet_info *pinfo,
+							proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
 	offset = glusterfs_rpc_dissect_gf_iatt(tree, tvb,
@@ -1348,8 +1319,8 @@ glusterfs_gfs3_op_setattr_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
 	return offset;
 }
 
-static unsigned
-glusterfs_rpc_dissect_setattr(proto_tree *tree, tvbuff_t *tvb, unsigned offset)
+static int
+glusterfs_rpc_dissect_setattr(proto_tree *tree, tvbuff_t *tvb, int offset)
 {
 	static int * const flag_bits[] = {
 		&hf_glusterfs_setattr_set_mode,
@@ -1363,7 +1334,7 @@ glusterfs_rpc_dissect_setattr(proto_tree *tree, tvbuff_t *tvb, unsigned offset)
 	};
 
 	proto_tree_add_bitmask(tree, tvb, offset, hf_glusterfs_setattr_valid,
-			ett_glusterfs_setattr_valid, flag_bits, ENC_BIG_ENDIAN);
+			ett_glusterfs_setattr_valid, flag_bits, ENC_NA);
 	offset += 4;
 
 	return offset;
@@ -1372,14 +1343,14 @@ glusterfs_rpc_dissect_setattr(proto_tree *tree, tvbuff_t *tvb, unsigned offset)
 static int
 glusterfs_gfs3_op_setattr_call(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid,
 								offset);
 	offset = glusterfs_rpc_dissect_gf_iatt(tree, tvb, hf_glusterfs_iatt,
 								offset);
 	offset = glusterfs_rpc_dissect_setattr(tree, tvb, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_path, offset, NULL);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_path, offset, NULL);
 
 	return offset;
 }
@@ -1387,25 +1358,27 @@ glusterfs_gfs3_op_setattr_call(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree
 /*GlusterFS 3_3 fops */
 
 static int
-glusterfs_gfs3_3_op_stat_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_stat_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	return offset;
 
 }
 
 static int
-glusterfs_gfs3_3_op_stat_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+glusterfs_gfs3_3_op_stat_reply(tvbuff_t *tvb, packet_info *pinfo,
+							 proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
 	offset = glusterfs_rpc_dissect_gf_iatt(tree, tvb, hf_glusterfs_iatt,
 								offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict,
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict,
 								offset);
 
 	return offset;
@@ -1413,9 +1386,10 @@ glusterfs_gfs3_3_op_stat_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 
 /* glusterfs_gfs3_3_op_mknod_reply() is also used as a ..mkdir_reply() */
 static int
-glusterfs_gfs3_3_op_mknod_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+glusterfs_gfs3_3_op_mknod_reply(tvbuff_t *tvb, packet_info *pinfo,
+							proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
 	offset = glusterfs_rpc_dissect_gf_iatt(tree, tvb, hf_glusterfs_iatt,
@@ -1424,152 +1398,162 @@ glusterfs_gfs3_3_op_mknod_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
 					hf_glusterfs_preparent_iatt, offset);
 	offset = glusterfs_rpc_dissect_gf_iatt(tree, tvb,
 					hf_glusterfs_postparent_iatt, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict,
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict,
 								offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_mknod_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_mknod_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_pargfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
 	offset = glusterfs_rpc_dissect_mode(tree, tvb, hf_glusterfs_mode, offset);
 	offset = glusterfs_rpc_dissect_mode(tree, tvb, hf_glusterfs_umask, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_bname, offset, NULL);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_bname, offset, NULL);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_mkdir_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_mkdir_call(tvbuff_t *tvb,
+				packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	const char *name = NULL;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_pargfid, offset);
 	offset = glusterfs_rpc_dissect_mode(tree, tvb, hf_glusterfs_mode, offset);
 	offset = glusterfs_rpc_dissect_mode(tree, tvb, hf_glusterfs_umask, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_bname, offset, &name);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_bname, offset, &name);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	col_append_fstr(pinfo->cinfo, COL_INFO, ", Filename: %s", name);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_readlink_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+glusterfs_gfs3_3_op_readlink_reply(tvbuff_t *tvb,
+					packet_info *pinfo, proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
 	offset = glusterfs_rpc_dissect_gf_iatt(tree, tvb, hf_glusterfs_iatt,
 								offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_path, offset,
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_path, offset,
 									NULL);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict,
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict,
 								offset);
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_readlink_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_readlink_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_size, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 /* glusterfs_gfs3_3_op_unlink_reply() is also used for ...rmdir_reply() */
 static int
-glusterfs_gfs3_3_op_unlink_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+glusterfs_gfs3_3_op_unlink_reply(tvbuff_t *tvb, packet_info *pinfo,
+							proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
 	offset = glusterfs_rpc_dissect_gf_iatt(tree, tvb,
 					hf_glusterfs_preparent_iatt, offset);
 	offset = glusterfs_rpc_dissect_gf_iatt(tree, tvb,
 					hf_glusterfs_postparent_iatt, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_unlink_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_unlink_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
 	unsigned xflags;
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_pargfid, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_bname, offset, NULL);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_bname, offset, NULL);
 	xflags = tvb_get_ntohl(tvb, offset);
 	proto_tree_add_uint_format(tree, hf_glusterfs_xflags, tvb, offset, 4, xflags, "Flags: 0%02o", xflags);
 	offset += 4;
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_rmdir_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_rmdir_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
 	unsigned xflags;
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_pargfid, offset);
 	xflags = tvb_get_ntohl(tvb, offset);
 	proto_tree_add_uint_format(tree, hf_glusterfs_xflags, tvb, offset, 4, xflags, "Flags: 0%02o", xflags);
 	offset += 4;
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_bname, offset, NULL);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_bname, offset, NULL);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_symlink_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_symlink_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_pargfid, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_bname, offset, NULL);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_bname, offset, NULL);
 	offset = glusterfs_rpc_dissect_mode(tree, tvb, hf_glusterfs_umask, offset);
 
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_linkname, offset, NULL);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_linkname, offset, NULL);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_rename_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_rename_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_oldgfid, offset);
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_newgfid, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_oldbname, offset, NULL);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_newbname, offset, NULL);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_oldbname, offset, NULL);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_newbname, offset, NULL);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_rename_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+glusterfs_gfs3_3_op_rename_reply(tvbuff_t *tvb, packet_info *pinfo,
+							proto_tree *tree, void* data)
 {
 	proto_tree *old_tree, *new_tree;
 	proto_item *old_item, *new_item;
 	int start_offset;
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
 	offset = glusterfs_rpc_dissect_gf_iatt(tree, tvb, hf_glusterfs_iatt,
@@ -1592,238 +1576,256 @@ glusterfs_gfs3_3_op_rename_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 					hf_glusterfs_postparent_iatt, offset);
 	proto_item_set_len (new_item, offset - start_offset);
 
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_link_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_link_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_oldgfid, offset);
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_newgfid, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_newbname, offset, NULL);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_newbname, offset, NULL);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_truncate_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_truncate_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_open_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+glusterfs_gfs3_3_op_open_reply(tvbuff_t *tvb, packet_info *pinfo,
+							proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_open_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_open_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_read_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+glusterfs_gfs3_3_op_read_reply(tvbuff_t *tvb, packet_info *pinfo,
+							proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
 	offset = glusterfs_rpc_dissect_gf_iatt(tree, tvb, hf_glusterfs_iatt,
 								offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_size, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict,
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict,
 								offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_read_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_read_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_size, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_write_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_write_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_size, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_statfs_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+glusterfs_gfs3_3_op_statfs_reply(tvbuff_t *tvb, packet_info *pinfo,
+							proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
 	offset = glusterfs_rpc_dissect_statfs(tree, tvb, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_statfs_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_statfs_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_flush_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_flush_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_setxattr_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_setxattr_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_getxattr_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_getxattr_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_namelen, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_name, offset, NULL);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_name, offset, NULL);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 
 static int
-glusterfs_gfs3_3_op_getxattr_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+glusterfs_gfs3_3_op_getxattr_reply(tvbuff_t *tvb,
+					packet_info *pinfo, proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_removexattr_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_removexattr_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_name, offset, NULL);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_name, offset, NULL);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_fsync_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_fsync_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
 	static int * const flag_bits[] = {
 		&hf_glusterfs_fsync_flag_datasync,
 		&hf_glusterfs_fsync_flag_unknown,
 		NULL
 	};
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 
 	proto_tree_add_bitmask(tree, tvb, offset,
 			hf_glusterfs_fsync_flags,
-			ett_glusterfs_fsync_flags, flag_bits, ENC_BIG_ENDIAN);
+			ett_glusterfs_fsync_flags, flag_bits, ENC_NA);
 	offset += 4;
 
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_opendir_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+glusterfs_gfs3_3_op_opendir_reply(tvbuff_t *tvb,
+				packet_info *pinfo, proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_opendir_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_opendir_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_create_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+glusterfs_gfs3_3_op_create_reply(tvbuff_t *tvb, packet_info *pinfo,
+							proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
 	offset = glusterfs_rpc_dissect_gf_iatt(tree, tvb, hf_glusterfs_iatt,
@@ -1833,119 +1835,127 @@ glusterfs_gfs3_3_op_create_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 					hf_glusterfs_preparent_iatt, offset);
 	offset = glusterfs_rpc_dissect_gf_iatt(tree, tvb,
 					hf_glusterfs_postparent_iatt, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 
 static int
-glusterfs_gfs3_3_op_create_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_create_call(tvbuff_t *tvb,
+				packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	const char *name = NULL;
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_pargfid, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
 	offset = glusterfs_rpc_dissect_mode(tree, tvb, hf_glusterfs_mode, offset);
 	offset = glusterfs_rpc_dissect_mode(tree, tvb, hf_glusterfs_umask, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_bname, offset, &name);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_bname, offset, &name);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	col_append_fstr(pinfo->cinfo, COL_INFO, ", Filename: %s", name);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_ftruncate_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_ftruncate_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_fstat_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_fstat_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_fstat_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+glusterfs_gfs3_3_op_fstat_reply(tvbuff_t *tvb, packet_info *pinfo,
+							proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
 	offset = glusterfs_rpc_dissect_gf_iatt(tree, tvb, hf_glusterfs_iatt,
 								offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict,
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict,
 								offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_lk_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_lk_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_cmd, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_type, offset);
 	offset = glusterfs_rpc_dissect_gf_2_flock(tree, tvb, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_lk_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+glusterfs_gfs3_3_op_lk_reply(tvbuff_t *tvb,
+				packet_info *pinfo, proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
 	offset = glusterfs_rpc_dissect_gf_2_flock(tree, tvb, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_access_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_access_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_mask, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_lookup_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_lookup_call(tvbuff_t *tvb,
+				packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	const char *name = NULL;
 	int length;
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_pargfid, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
 	length = tvb_get_letohl(tvb, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_bname, offset, &name);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_bname, offset, &name);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	if(length == 0)
 		col_append_str(pinfo->cinfo, COL_INFO, ", Filename: (nameless, by GFID)");
 	else
@@ -1955,51 +1965,55 @@ glusterfs_gfs3_3_op_lookup_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
 }
 
 static int
-glusterfs_gfs3_3_op_readdir_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_readdir_reply(tvbuff_t *tvb,
+				packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = _glusterfs_gfs3_common_readdir_reply(tvb, tree, offset);
 	offset = dissect_rpc_list(tvb, pinfo, tree, offset,
 				  glusterfs_gfs3_3_op_readdir_entry, NULL);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_readdir_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_readdir_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_size, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_inodelk_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_inodelk_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_cmd, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_type, offset);
 	offset = glusterfs_rpc_dissect_gf_2_flock(tree, tvb, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_volume, offset, NULL);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_volume, offset, NULL);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_finodelk_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+glusterfs_gfs3_3_op_finodelk_call(tvbuff_t *tvb,
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
@@ -2008,43 +2022,43 @@ glusterfs_gfs3_3_op_finodelk_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_type, offset);
 	offset = glusterfs_rpc_dissect_gf_2_flock(tree, tvb, offset);
 
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_volume, offset, NULL);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_volume, offset, NULL);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs3_3_op_entrylk_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_cmd, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_type, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_entrylk_namelen, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_name, offset, NULL);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_volume, offset, NULL);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_name, offset, NULL);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_volume, offset, NULL);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs3_3_op_fentrylk_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_cmd, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_type, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_entrylk_namelen, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_name, offset, NULL);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_volume, offset, NULL);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_name, offset, NULL);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_volume, offset, NULL);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -2053,70 +2067,70 @@ static int
 glusterfs_gfs3_3_op_xattrop_reply(tvbuff_t *tvb,
 				packet_info *pinfo, proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs3_3_op_xattrop_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs3_3_op_fxattrop_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs3_3_op_fgetxattr_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_namelen, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_name, offset, NULL);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_name, offset, NULL);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 gluter_gfs3_3_op_fsetxattr_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -2125,30 +2139,30 @@ static int
 glusterfs_gfs3_3_op_setattr_reply(tvbuff_t *tvb, packet_info *pinfo,
 							proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
 	offset = glusterfs_rpc_dissect_gf_iatt(tree, tvb,
 					hf_glusterfs_preop_iatt, offset);
 	offset = glusterfs_rpc_dissect_gf_iatt(tree, tvb,
 					hf_glusterfs_postop_iatt, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs3_3_op_setattr_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid,
 								offset);
 	offset = glusterfs_rpc_dissect_gf_iatt(tree, tvb, hf_glusterfs_iatt,
 								offset);
 	offset = glusterfs_rpc_dissect_setattr(tree, tvb, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -2157,12 +2171,12 @@ static int
 glusterfs_gfs3_3_op_readdirp_reply(tvbuff_t *tvb,
 				packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = _glusterfs_gfs3_common_readdir_reply(tvb, tree, offset);
 	offset = dissect_rpc_list(tvb, pinfo, tree, offset,
 				  glusterfs_gfs3_3_op_readdirp_entry, NULL);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -2170,71 +2184,71 @@ glusterfs_gfs3_3_op_readdirp_reply(tvbuff_t *tvb,
 /* READDIRP and DISCARD both use this */
 static int
 glusterfs_gfs3_3_op_readdirp_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_size, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs3_3_op_release_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs3_3_op_releasedir_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs3_3_op_fremovexattr_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_name, offset, NULL);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_name, offset, NULL);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs3_3_op_fallocate_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_size, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -2243,7 +2257,7 @@ static int
 glusterfs_gfs3_3_op_zerofill_call(tvbuff_t *tvb,
 				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
@@ -2257,26 +2271,26 @@ static int
 glusterfs_gfs3_3_op_seek_reply(tvbuff_t *tvb, packet_info *pinfo,
 			       proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs3_3_op_seek_call(tvbuff_t *tvb, packet_info *pinfo,
+glusterfs_gfs3_3_op_seek_call(tvbuff_t *tvb, packet_info *pinfo _U_,
 			      proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_whence, offset);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -2287,10 +2301,10 @@ int
 glusterfs_gfs3_3_op_common_reply(tvbuff_t *tvb, packet_info *pinfo,
 							proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
-	offset = gluster_rpc_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -2300,12 +2314,12 @@ glusterfs_gfs3_3_op_common_reply(tvbuff_t *tvb, packet_info *pinfo,
 
 static int
 glusterfs_gfs4_0_op_stat_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	return offset;
 
 }
@@ -2314,10 +2328,10 @@ static int
 glusterfs_gfs4_0_op_common_iatt_reply(tvbuff_t *tvb, packet_info *pinfo,
 							 proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	offset = glusterfs_rpc_dissect_gfx_iatt(tree, tvb, hf_glusterfs_iattx,
 								offset);
 	return offset;
@@ -2328,10 +2342,10 @@ static int
 glusterfs_gfs4_0_op_common_3iatt_reply(tvbuff_t *tvb, packet_info *pinfo,
 							proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict,
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict,
 								offset);
 	offset = glusterfs_rpc_dissect_gfx_iatt(tree, tvb, hf_glusterfs_iattx,
 								offset);
@@ -2345,16 +2359,16 @@ glusterfs_gfs4_0_op_common_3iatt_reply(tvbuff_t *tvb, packet_info *pinfo,
 
 static int
 glusterfs_gfs4_0_op_mknod_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_pargfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
 	offset = glusterfs_rpc_dissect_mode(tree, tvb, hf_glusterfs_mode, offset);
 	offset = glusterfs_rpc_dissect_mode(tree, tvb, hf_glusterfs_umask, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_bname, offset, NULL);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_bname, offset, NULL);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -2363,14 +2377,14 @@ static int
 glusterfs_gfs4_0_op_mkdir_call(tvbuff_t *tvb,
 				packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	const char *name = NULL;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_pargfid, offset);
 	offset = glusterfs_rpc_dissect_mode(tree, tvb, hf_glusterfs_mode, offset);
 	offset = glusterfs_rpc_dissect_mode(tree, tvb, hf_glusterfs_umask, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_bname, offset, &name);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_bname, offset, &name);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	col_append_fstr(pinfo->cinfo, COL_INFO, ", Filename: %s", name);
 
 	return offset;
@@ -2380,25 +2394,25 @@ static int
 glusterfs_gfs4_0_op_readlink_reply(tvbuff_t *tvb,
 					packet_info *pinfo, proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict,
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict,
 								offset);
 	offset = glusterfs_rpc_dissect_gfx_iatt(tree, tvb, hf_glusterfs_iattx,
 								offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_path, offset,
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_path, offset,
 									NULL);
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_readlink_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_size, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -2408,10 +2422,10 @@ static int
 glusterfs_gfs4_0_op_common_2parent_iatt_reply(tvbuff_t *tvb, packet_info *pinfo,
 							proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	offset = glusterfs_rpc_dissect_gfx_iatt(tree, tvb,
 					hf_glusterfs_preparent_iattx, offset);
 	offset = glusterfs_rpc_dissect_gfx_iatt(tree, tvb,
@@ -2422,65 +2436,65 @@ glusterfs_gfs4_0_op_common_2parent_iatt_reply(tvbuff_t *tvb, packet_info *pinfo,
 
 static int
 glusterfs_gfs4_0_op_unlink_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
 	unsigned xflags;
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_pargfid, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_bname, offset, NULL);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_bname, offset, NULL);
 	xflags = tvb_get_ntohl(tvb, offset);
 	proto_tree_add_uint_format(tree, hf_glusterfs_xflags, tvb, offset, 4, xflags, "Flags: 0%02o", xflags);
 	offset += 4;
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_rmdir_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
 	unsigned xflags;
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_pargfid, offset);
 	xflags = tvb_get_ntohl(tvb, offset);
 	proto_tree_add_uint_format(tree, hf_glusterfs_xflags, tvb, offset, 4, xflags, "Flags: 0%02o", xflags);
 	offset += 4;
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_bname, offset, NULL);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_bname, offset, NULL);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_symlink_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_pargfid, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_bname, offset, NULL);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_bname, offset, NULL);
 	offset = glusterfs_rpc_dissect_mode(tree, tvb, hf_glusterfs_umask, offset);
 
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_linkname, offset, NULL);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_linkname, offset, NULL);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_rename_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_oldgfid, offset);
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_newgfid, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_oldbname, offset, NULL);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_newbname, offset, NULL);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_oldbname, offset, NULL);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_newbname, offset, NULL);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -2492,10 +2506,10 @@ glusterfs_gfs4_0_op_rename_reply(tvbuff_t *tvb, packet_info *pinfo,
 	proto_tree *old_tree, *new_tree;
 	proto_item *old_item, *new_item;
 	int start_offset;
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	offset = glusterfs_rpc_dissect_gfx_iatt(tree, tvb, hf_glusterfs_iattx,
 								offset);
 
@@ -2521,27 +2535,27 @@ glusterfs_gfs4_0_op_rename_reply(tvbuff_t *tvb, packet_info *pinfo,
 
 static int
 glusterfs_gfs4_0_op_link_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_oldgfid, offset);
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_newgfid, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_newbname, offset, NULL);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_newbname, offset, NULL);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_truncate_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -2550,22 +2564,22 @@ static int
 glusterfs_gfs4_0_op_open_reply(tvbuff_t *tvb, packet_info *pinfo,
 							proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_open_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -2574,13 +2588,13 @@ static int
 glusterfs_gfs4_0_op_read_reply(tvbuff_t *tvb, packet_info *pinfo,
 							proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
 	offset = glusterfs_rpc_dissect_gfx_iatt(tree, tvb, hf_glusterfs_iattx,
 								offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_size, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict,
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict,
 								offset);
 
 	return offset;
@@ -2588,32 +2602,32 @@ glusterfs_gfs4_0_op_read_reply(tvbuff_t *tvb, packet_info *pinfo,
 
 static int
 glusterfs_gfs4_0_op_read_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_size, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_write_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_size, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -2622,10 +2636,10 @@ static int
 glusterfs_gfs4_0_op_statfs_reply(tvbuff_t *tvb, packet_info *pinfo,
 							proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	offset = glusterfs_rpc_dissect_statfs(tree, tvb, offset);
 
 	return offset;
@@ -2633,53 +2647,53 @@ glusterfs_gfs4_0_op_statfs_reply(tvbuff_t *tvb, packet_info *pinfo,
 
 static int
 glusterfs_gfs4_0_op_statfs_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_flush_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_setxattr_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_getxattr_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_namelen, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_name, offset, NULL);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_name, offset, NULL);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -2689,11 +2703,11 @@ static int
 glusterfs_gfs4_0_op_common_dict_reply(tvbuff_t *tvb,
 					packet_info *pinfo, proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	offset = glusterfs_rpc_dissect_gfx_iatt(tree, tvb,
 					hf_glusterfs_preop_iattx, offset);
 	offset = glusterfs_rpc_dissect_gfx_iatt(tree, tvb,
@@ -2704,48 +2718,48 @@ glusterfs_gfs4_0_op_common_dict_reply(tvbuff_t *tvb,
 
 static int
 glusterfs_gfs4_0_op_removexattr_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_name, offset, NULL);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_name, offset, NULL);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_fsync_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
 	static int * const flag_bits[] = {
 		&hf_glusterfs_fsync_flag_datasync,
 		&hf_glusterfs_fsync_flag_unknown,
 		NULL
 	};
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 
 	proto_tree_add_bitmask(tree, tvb, offset,
 			hf_glusterfs_fsync_flags,
-			ett_glusterfs_fsync_flags, flag_bits, ENC_BIG_ENDIAN);
+			ett_glusterfs_fsync_flags, flag_bits, ENC_NA);
 	offset += 4;
 
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_opendir_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -2754,10 +2768,10 @@ static int
 glusterfs_gfs4_0_op_create_reply(tvbuff_t *tvb, packet_info *pinfo,
 							proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	offset = glusterfs_rpc_dissect_gfx_iatt(tree, tvb, hf_glusterfs_iattx,
 								offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
@@ -2775,14 +2789,14 @@ glusterfs_gfs4_0_op_create_call(tvbuff_t *tvb,
 				packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	const char *name = NULL;
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_pargfid, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
 	offset = glusterfs_rpc_dissect_mode(tree, tvb, hf_glusterfs_mode, offset);
 	offset = glusterfs_rpc_dissect_mode(tree, tvb, hf_glusterfs_umask, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_bname, offset, &name);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_bname, offset, &name);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	col_append_fstr(pinfo->cinfo, COL_INFO, ", Filename: %s", name);
 
 	return offset;
@@ -2790,43 +2804,43 @@ glusterfs_gfs4_0_op_create_call(tvbuff_t *tvb,
 
 static int
 glusterfs_gfs4_0_op_ftruncate_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_fstat_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_lk_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_cmd, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_type, offset);
 	offset = glusterfs_rpc_dissect_gf_2_flock(tree, tvb, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -2835,10 +2849,10 @@ static int
 glusterfs_gfs4_0_op_lk_reply(tvbuff_t *tvb,
 				packet_info *pinfo, proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	offset = glusterfs_rpc_dissect_gf_2_flock(tree, tvb, offset);
 
 	return offset;
@@ -2846,13 +2860,13 @@ glusterfs_gfs4_0_op_lk_reply(tvbuff_t *tvb,
 
 static int
 glusterfs_gfs4_0_op_access_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_mask, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	return offset;
 }
 
@@ -2862,14 +2876,14 @@ glusterfs_gfs4_0_op_lookup_call(tvbuff_t *tvb,
 {
 	const char *name = NULL;
 	int length;
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_pargfid, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
 	length = tvb_get_letohl(tvb, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_bname, offset, &name);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_bname, offset, &name);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	if(length == 0)
 		col_append_str(pinfo->cinfo, COL_INFO, ", Filename: (nameless, by GFID)");
 	else
@@ -2882,10 +2896,10 @@ static int
 glusterfs_gfs4_0_op_readdir_reply(tvbuff_t *tvb,
 				packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = _glusterfs_gfs3_common_readdir_reply(tvb, tree, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	offset = dissect_rpc_list(tvb, pinfo, tree, offset,
 				  glusterfs_gfs4_0_op_readdir_entry, NULL);
 
@@ -2894,40 +2908,40 @@ glusterfs_gfs4_0_op_readdir_reply(tvbuff_t *tvb,
 
 static int
 glusterfs_gfs4_0_op_readdir_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_size, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_inodelk_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_cmd, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_type, offset);
 	offset = glusterfs_rpc_dissect_gf_2_flock(tree, tvb, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_volume, offset, NULL);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_volume, offset, NULL);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_finodelk_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
@@ -2936,102 +2950,102 @@ glusterfs_gfs4_0_op_finodelk_call(tvbuff_t *tvb,
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_type, offset);
 	offset = glusterfs_rpc_dissect_gf_2_flock(tree, tvb, offset);
 
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_volume, offset, NULL);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_volume, offset, NULL);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_entrylk_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_cmd, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_type, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_entrylk_namelen, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_name, offset, NULL);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_volume, offset, NULL);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_name, offset, NULL);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_volume, offset, NULL);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_fentrylk_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_cmd, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_type, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_entrylk_namelen, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_name, offset, NULL);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_volume, offset, NULL);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_name, offset, NULL);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_volume, offset, NULL);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_xattrop_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_fxattrop_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
-	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_fgetxattr_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_namelen, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_name, offset, NULL);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_name, offset, NULL);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 gluter_gfs4_0_op_fsetxattr_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -3040,10 +3054,10 @@ static int
 glusterfs_gfs4_0_op_common_2iatt_reply(tvbuff_t *tvb, packet_info *pinfo,
 							proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	offset = glusterfs_rpc_dissect_gfx_iatt(tree, tvb,
 					hf_glusterfs_preop_iattx, offset);
 	offset = glusterfs_rpc_dissect_gfx_iatt(tree, tvb,
@@ -3054,25 +3068,25 @@ glusterfs_gfs4_0_op_common_2iatt_reply(tvbuff_t *tvb, packet_info *pinfo,
 
 static int
 glusterfs_gfs4_0_op_setattr_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid,
 								offset);
 	offset = glusterfs_rpc_dissect_gfx_iatt(tree, tvb, hf_glusterfs_iattx,
 								offset);
 	offset = glusterfs_rpc_dissect_setattr(tree, tvb, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_fsetattr_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid,
 								offset);
@@ -3080,7 +3094,7 @@ glusterfs_gfs4_0_op_fsetattr_call(tvbuff_t *tvb,
 	offset = glusterfs_rpc_dissect_gfx_iatt(tree, tvb, hf_glusterfs_iattx,
 								offset);
 	offset = glusterfs_rpc_dissect_setattr(tree, tvb, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -3089,99 +3103,98 @@ static int
 glusterfs_gfs4_0_op_readdirp_reply(tvbuff_t *tvb,
 				packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = _glusterfs_gfs3_common_readdir_reply(tvb, tree, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	offset = dissect_rpc_list(tvb, pinfo, tree, offset,
 				  glusterfs_gfs4_0_op_readdirp_entry, NULL);
 
 	return offset;
 }
 
-/* used by READDIRP (DISCARD now uses the ZEROFILL decoder) */
+/* READDIRP and DISCARD both use this */
 static int
 glusterfs_gfs4_0_op_readdirp_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_size, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_release_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_releasedir_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_fremovexattr_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_name, offset, NULL);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_name, offset, NULL);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_fallocate_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = glusterfs_rpc_dissect_flags(tree, tvb, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
-	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_size64, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_size, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
 
 static int
 glusterfs_gfs4_0_op_zerofill_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
+				packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_size64, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -3190,26 +3203,26 @@ static int
 glusterfs_gfs4_0_op_seek_reply(tvbuff_t *tvb, packet_info *pinfo,
 			       proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
 
 	return offset;
 }
 
 static int
-glusterfs_gfs4_0_op_seek_call(tvbuff_t *tvb, packet_info *pinfo,
+glusterfs_gfs4_0_op_seek_call(tvbuff_t *tvb, packet_info *pinfo _U_,
 			      proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
 	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_whence, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -3220,233 +3233,10 @@ static int
 glusterfs_gfs4_0_op_common_reply(tvbuff_t *tvb, packet_info *pinfo,
 							proto_tree *tree, void* data)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-
-	return offset;
-}
-
-
-/* gf_proto_lease: cmd, lease_type, lease_id[16], lease_flags (glusterfs4-xdr.x) */
-static int
-glusterfs_rpc_dissect_gf_proto_lease(proto_tree *tree, tvbuff_t *tvb, unsigned offset)
-{
-	proto_item *lease_item;
-	proto_tree *lease_tree;
-	int start_offset = offset;
-
-	lease_tree = proto_tree_add_subtree(tree, tvb, offset, -1, ett_glusterfs_lease, &lease_item, "Lease");
-
-	offset = dissect_rpc_uint32(tvb, lease_tree, hf_glusterfs_lease_cmd, offset);
-	offset = dissect_rpc_uint32(tvb, lease_tree, hf_glusterfs_lease_type, offset);
-	proto_tree_add_item(lease_tree, hf_glusterfs_lease_id, tvb, offset, 16, ENC_NA);
-	offset += 16;
-	offset = dissect_rpc_uint32(tvb, lease_tree, hf_glusterfs_lease_flags, offset);
-
-	proto_item_set_len(lease_item, offset - start_offset);
-
-	return offset;
-}
-
-/* one gfs3_locklist node: flock, client_uid<>, lk_flags (glusterfs4-xdr.x).
- * The leading "value follows" boolean of the *nextentry list is consumed by
- * dissect_rpc_list(); this reads a single element body. */
-static int
-glusterfs_gfs4_0_locklist_entry(tvbuff_t *tvb, unsigned offset,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
-{
-	proto_item *lock_item;
-	proto_tree *lock_tree;
-	unsigned start_offset = offset;
-
-	lock_tree = proto_tree_add_subtree(tree, tvb, offset, -1, ett_glusterfs_locklist, &lock_item, "Lock");
-
-	offset = glusterfs_rpc_dissect_gf_2_flock(lock_tree, tvb, offset);
-	offset = dissect_rpc_string(tvb, pinfo, lock_tree, hf_glusterfs_client_uid, offset, NULL);
-	offset = dissect_rpc_uint32(tvb, lock_tree, hf_glusterfs_lk_flags, offset);
-
-	proto_item_set_len(lock_item, offset - start_offset);
-
-	return offset;
-}
-
-static int
-glusterfs_gfs4_0_op_rchecksum_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
-{
-	unsigned offset = 0;
-
-	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
-	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_fd, offset);
-	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
-	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_rchecksum_len, offset);
-	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_rchecksum_flags, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-
-	return offset;
-}
-
-static int
-glusterfs_gfs4_0_op_rchecksum_reply(tvbuff_t *tvb, packet_info *pinfo,
-				proto_tree *tree, void* data)
-{
-	unsigned offset = 0;
-	int len;
-
-	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_rchecksum_flags, offset);
-	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_weak_checksum, offset);
-
-	len = tvb_get_ntohl(tvb, offset);
-	offset += 4;
-	proto_tree_add_item(tree, hf_glusterfs_strong_checksum, tvb, offset, len, ENC_NA);
-	offset += rpc_roundup(len); /* opaque<> padded to the XDR 4-byte boundary */
-
-	return offset;
-}
-
-static int
-glusterfs_gfs4_0_op_ipc_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
-{
-	unsigned offset = 0;
-
-	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_ipc_op, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-
-	return offset;
-}
-
-static int
-glusterfs_gfs4_0_op_lease_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
-{
-	unsigned offset = 0;
-
-	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
-	offset = glusterfs_rpc_dissect_gf_proto_lease(tree, tvb, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-
-	return offset;
-}
-
-static int
-glusterfs_gfs4_0_op_lease_reply(tvbuff_t *tvb, packet_info *pinfo,
-				proto_tree *tree, void* data)
-{
-	unsigned offset = 0;
-
-	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-	offset = glusterfs_rpc_dissect_gf_proto_lease(tree, tvb, offset);
-
-	return offset;
-}
-
-static int
-glusterfs_gfs4_0_op_getactivelk_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
-{
-	unsigned offset = 0;
-
-	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-
-	return offset;
-}
-
-static int
-glusterfs_gfs4_0_op_getactivelk_reply(tvbuff_t *tvb, packet_info *pinfo,
-				proto_tree *tree, void* data)
-{
-	unsigned offset = 0;
-
-	offset = gluster_dissect_common_reply(tvb, offset, pinfo, tree, data);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-	offset = dissect_rpc_list(tvb, pinfo, tree, offset,
-				  glusterfs_gfs4_0_locklist_entry, NULL);
-
-	return offset;
-}
-
-static int
-glusterfs_gfs4_0_op_setactivelk_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
-{
-	unsigned offset = 0;
-
-	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
-	offset = dissect_rpc_list(tvb, pinfo, tree, offset,
-				  glusterfs_gfs4_0_locklist_entry, NULL);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-
-	return offset;
-}
-
-static int
-glusterfs_gfs4_0_op_icreate_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
-{
-	unsigned offset = 0;
-
-	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_gfid, offset);
-	offset = glusterfs_rpc_dissect_mode(tree, tvb, hf_glusterfs_mode, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-
-	return offset;
-}
-
-static int
-glusterfs_gfs4_0_op_namelink_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
-{
-	unsigned offset = 0;
-
-	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_pargfid, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_bname, offset, NULL);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-
-	return offset;
-}
-
-static int
-glusterfs_gfs4_0_op_put_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
-{
-	unsigned offset = 0;
-
-	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_pargfid, offset);
-	offset = dissect_rpc_string(tvb, pinfo, tree, hf_glusterfs_bname, offset, NULL);
-	offset = glusterfs_rpc_dissect_mode(tree, tvb, hf_glusterfs_mode, offset);
-	offset = glusterfs_rpc_dissect_mode(tree, tvb, hf_glusterfs_umask, offset);
-	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_flags, offset);
-	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_offset, offset);
-	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_size, offset);
-	/* gfx_put_req carries two dicts: xattr then xdata */
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
-
-	return offset;
-}
-
-static int
-glusterfs_gfs4_0_op_copy_file_range_call(tvbuff_t *tvb,
-				packet_info *pinfo, proto_tree *tree, void* data _U_)
-{
-	unsigned offset = 0;
-
-	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_copy_gfid1, offset);
-	offset = glusterfs_rpc_dissect_gfid(tree, tvb, hf_glusterfs_copy_gfid2, offset);
-	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_copy_fd_in, offset);
-	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_copy_fd_out, offset);
-	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_copy_off_in, offset);
-	offset = dissect_rpc_uint64(tvb, tree, hf_glusterfs_copy_off_out, offset);
-	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_size, offset);
-	offset = dissect_rpc_uint32(tvb, tree, hf_glusterfs_flags, offset);
-	offset = gluster_rpc4_0_dissect_dict(tree, pinfo, tvb, hf_glusterfs_dict, offset);
+	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 
 	return offset;
 }
@@ -3898,10 +3688,7 @@ static const vsff glusterfs4_0_fop_proc[] = {
 		GFS3_OP_FSETXATTR, "FSETXATTR",
 		gluter_gfs4_0_op_fsetxattr_call, glusterfs_gfs4_0_op_common_reply
 	},
-	{
-		GFS3_OP_RCHECKSUM, "RCHECKSUM",
-		glusterfs_gfs4_0_op_rchecksum_call, glusterfs_gfs4_0_op_rchecksum_reply
-	},
+	{ GFS3_OP_RCHECKSUM, "RCHECKSUM", dissect_rpc_unknown, dissect_rpc_unknown },
 	{
 		GFS3_OP_SETATTR, "SETATTR",
 		glusterfs_gfs4_0_op_setattr_call, glusterfs_gfs4_0_op_common_2iatt_reply
@@ -3933,50 +3720,15 @@ static const vsff glusterfs4_0_fop_proc[] = {
 	},
 	{
 		GFS3_OP_DISCARD, "DISCARD",
-		/* gfx_discard_req is byte-identical to gfx_zerofill_req */
-		glusterfs_gfs4_0_op_zerofill_call, glusterfs_gfs4_0_op_common_2iatt_reply
+		glusterfs_gfs4_0_op_readdirp_call, glusterfs_gfs4_0_op_common_2iatt_reply
 	},
 	{
 		GFS3_OP_ZEROFILL, "ZEROFILL",
 		glusterfs_gfs4_0_op_zerofill_call, glusterfs_gfs4_0_op_common_2iatt_reply
 	},
 	{
-		GFS3_OP_IPC, "IPC",
-		glusterfs_gfs4_0_op_ipc_call, glusterfs_gfs4_0_op_common_reply
-	},
-	{
 		GFS3_OP_SEEK, "SEEK",
 		glusterfs_gfs4_0_op_seek_call, glusterfs_gfs4_0_op_seek_reply
-	},
-	/* COMPOUND was removed from GlusterFS; no wire struct in glusterfs4-xdr.x */
-	{ GFS3_OP_COMPOUND, "COMPOUND", dissect_rpc_unknown, dissect_rpc_unknown },
-	{
-		GFS3_OP_LEASE, "LEASE",
-		glusterfs_gfs4_0_op_lease_call, glusterfs_gfs4_0_op_lease_reply
-	},
-	{
-		GFS3_OP_GETACTIVELK, "GETACTIVELK",
-		glusterfs_gfs4_0_op_getactivelk_call, glusterfs_gfs4_0_op_getactivelk_reply
-	},
-	{
-		GFS3_OP_SETACTIVELK, "SETACTIVELK",
-		glusterfs_gfs4_0_op_setactivelk_call, glusterfs_gfs4_0_op_common_reply
-	},
-	{
-		GFS3_OP_ICREATE, "ICREATE",
-		glusterfs_gfs4_0_op_icreate_call, glusterfs_gfs4_0_op_common_iatt_reply
-	},
-	{
-		GFS3_OP_NAMELINK, "NAMELINK",
-		glusterfs_gfs4_0_op_namelink_call, glusterfs_gfs4_0_op_common_2iatt_reply
-	},
-	{
-		GFS3_OP_PUT, "PUT",
-		glusterfs_gfs4_0_op_put_call, glusterfs_gfs4_0_op_common_3iatt_reply
-	},
-	{
-		GFS3_OP_COPY_FILE_RANGE, "COPY_FILE_RANGE",
-		glusterfs_gfs4_0_op_copy_file_range_call, glusterfs_gfs4_0_op_common_3iatt_reply
 	},
 	{ 0, NULL, NULL, NULL }
 };
@@ -4031,6 +3783,7 @@ static const value_string glusterfs3_1_fop_proc_vals[] = {
 	{ GFS3_OP_SETATTR,      "SETATTR" },
 	{ GFS3_OP_FSETATTR,     "FSETATTR" },
 	{ GFS3_OP_READDIRP,     "READDIRP" },
+	{ GFS3_OP_FORGET,       "FORGET" },
 	{ GFS3_OP_RELEASE,      "RELEASE" },
 	{ GFS3_OP_RELEASEDIR,   "RELEASEDIR" },
 	{ GFS3_OP_FREMOVEXATTR, "FREMOVEXATTR" },
@@ -4039,14 +3792,6 @@ static const value_string glusterfs3_1_fop_proc_vals[] = {
 	{ GFS3_OP_ZEROFILL,     "ZEROFILL" },
 	{ GFS3_OP_IPC,	  "IPC" },
 	{ GFS3_OP_SEEK,	 "SEEK" },
-	{ GFS3_OP_COMPOUND, "COMPOUND" },
-	{ GFS3_OP_LEASE, "LEASE" },
-	{ GFS3_OP_GETACTIVELK, "GETACTIVELK" },
-	{ GFS3_OP_SETACTIVELK, "SETACTIVELK" },
-	{ GFS3_OP_ICREATE, "ICREATE" },
-	{ GFS3_OP_NAMELINK, "NAMELINK" },
-	{ GFS3_OP_PUT, "PUT" },
-	{ GFS3_OP_COPY_FILE_RANGE, "COPY_FILE_RANGE" },
 	{ 0, NULL }
 };
 static value_string_ext glusterfs3_1_fop_proc_vals_ext = VALUE_STRING_EXT_INIT(glusterfs3_1_fop_proc_vals);
@@ -4547,84 +4292,6 @@ proto_register_glusterfs(void)
 				BASE_NONE, NULL, 0, NULL, HFILL }
 		},
 
-		/* rchecksum */
-		{ &hf_glusterfs_rchecksum_len,
-			{ "Checksum Length", "glusterfs.rchecksum.len", FT_UINT32,
-				BASE_DEC, NULL, 0, NULL, HFILL }
-		},
-		{ &hf_glusterfs_rchecksum_flags,
-			{ "Checksum Flags", "glusterfs.rchecksum.flags", FT_UINT32,
-				BASE_HEX, NULL, 0, NULL, HFILL }
-		},
-		{ &hf_glusterfs_weak_checksum,
-			{ "Weak Checksum", "glusterfs.rchecksum.weak", FT_UINT32,
-				BASE_HEX, NULL, 0, NULL, HFILL }
-		},
-		{ &hf_glusterfs_strong_checksum,
-			{ "Strong Checksum", "glusterfs.rchecksum.strong", FT_BYTES,
-				BASE_NONE, NULL, 0, NULL, HFILL }
-		},
-
-		/* ipc */
-		{ &hf_glusterfs_ipc_op,
-			{ "Op", "glusterfs.ipc.op", FT_INT32,
-				BASE_DEC, NULL, 0, NULL, HFILL }
-		},
-
-		/* gf_proto_lease */
-		{ &hf_glusterfs_lease_cmd,
-			{ "Lease Command", "glusterfs.lease.cmd", FT_UINT32,
-				BASE_DEC, NULL, 0, NULL, HFILL }
-		},
-		{ &hf_glusterfs_lease_type,
-			{ "Lease Type", "glusterfs.lease.type", FT_UINT32,
-				BASE_DEC, NULL, 0, NULL, HFILL }
-		},
-		{ &hf_glusterfs_lease_id,
-			{ "Lease ID", "glusterfs.lease.id", FT_BYTES,
-				BASE_NONE, NULL, 0, NULL, HFILL }
-		},
-		{ &hf_glusterfs_lease_flags,
-			{ "Lease Flags", "glusterfs.lease.flags", FT_UINT32,
-				BASE_HEX, NULL, 0, NULL, HFILL }
-		},
-
-		/* gfs3_locklist */
-		{ &hf_glusterfs_client_uid,
-			{ "Client UID", "glusterfs.client_uid", FT_STRING,
-				BASE_NONE, NULL, 0, NULL, HFILL }
-		},
-		{ &hf_glusterfs_lk_flags,
-			{ "Lock Flags", "glusterfs.lk_flags", FT_UINT32,
-				BASE_HEX, NULL, 0, NULL, HFILL }
-		},
-
-		/* copy_file_range (source/destination pairs) */
-		{ &hf_glusterfs_copy_gfid1,
-			{ "Source GFID", "glusterfs.copy.gfid1", FT_GUID,
-				BASE_NONE, NULL, 0, NULL, HFILL }
-		},
-		{ &hf_glusterfs_copy_gfid2,
-			{ "Destination GFID", "glusterfs.copy.gfid2", FT_GUID,
-				BASE_NONE, NULL, 0, NULL, HFILL }
-		},
-		{ &hf_glusterfs_copy_fd_in,
-			{ "Source FD", "glusterfs.copy.fd_in", FT_UINT64,
-				BASE_DEC, NULL, 0, NULL, HFILL }
-		},
-		{ &hf_glusterfs_copy_fd_out,
-			{ "Destination FD", "glusterfs.copy.fd_out", FT_UINT64,
-				BASE_DEC, NULL, 0, NULL, HFILL }
-		},
-		{ &hf_glusterfs_copy_off_in,
-			{ "Source Offset", "glusterfs.copy.off_in", FT_UINT64,
-				BASE_DEC, NULL, 0, NULL, HFILL }
-		},
-		{ &hf_glusterfs_copy_off_out,
-			{ "Destination Offset", "glusterfs.copy.off_out", FT_UINT64,
-				BASE_DEC, NULL, 0, NULL, HFILL }
-		},
-
 		/* statvfs descriptions from 'man 2 statvfs' on Linix */
 		{ &hf_glusterfs_bsize,
 			{ "File system block size", "glusterfs.statfs.bsize",
@@ -4773,7 +4440,7 @@ proto_register_glusterfs(void)
 		},
 		{ &hf_glusterfs_setattr_set_reserved,
 			{ "Reserved", "glusterfs.setattr.set_reserved",
-				FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0xffffffc0,
+				FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0xffffffcf,
 				NULL, HFILL }
 		},
 		{ &hf_glusterfs_xflags,
@@ -4849,8 +4516,6 @@ proto_register_glusterfs(void)
 		&ett_glusterfs_iatt,
 		&ett_glusterfs_flock,
 		&ett_glusterfs_fsync_flags,
-		&ett_glusterfs_lease,
-		&ett_glusterfs_locklist,
 		&ett_gluster_dict,
 		&ett_gluster_dict_items
 	};

@@ -17,7 +17,6 @@
 #include <epan/uat.h>
 #include <epan/expert.h>
 #include <wsutil/str_util.h>
-#include <wsutil/array.h>
 
 #include <epan/tap.h>
 #include <epan/export_object.h>
@@ -32,6 +31,10 @@ void proto_register_imf(void);
 void proto_reg_handoff_imf(void);
 
 static int imf_eo_tap;
+
+#define PNAME  "Internet Message Format"
+#define PSNAME "IMF"
+#define PFNAME "imf"
 
 static int proto_imf;
 
@@ -192,19 +195,19 @@ imf_eo_packet(void *tapdata, packet_info *pinfo, epan_dissect_t *edt _U_, const 
 struct imf_field {
   char         *name;           /* field name - in lower case for matching purposes */
   int          *hf_id;          /* wireshark field */
-  void         (*subdissector)(tvbuff_t *tvb, unsigned offset, unsigned length, proto_item *item, packet_info *pinfo);
+  void         (*subdissector)(tvbuff_t *tvb, int offset, int length, proto_item *item, packet_info *pinfo);
   bool         add_to_col_info; /* add field to column info */
 };
 
 #define NO_SUBDISSECTION NULL
 
-static void dissect_imf_mailbox(tvbuff_t *tvb, unsigned offset, unsigned length, proto_item *item, packet_info *pinfo);
-static void dissect_imf_address(tvbuff_t *tvb, unsigned offset, unsigned length, proto_item *item, packet_info *pinfo);
-static void dissect_imf_address_list(tvbuff_t *tvb, unsigned offset, unsigned length, proto_item *item, packet_info *pinfo);
-static void dissect_imf_mailbox_list(tvbuff_t *tvb, unsigned offset, unsigned length, proto_item *item, packet_info *pinfo);
-static void dissect_imf_siolabel(tvbuff_t *tvb, unsigned offset, unsigned length, proto_item *item, packet_info *pinfo);
+static void dissect_imf_mailbox(tvbuff_t *tvb, int offset, int length, proto_item *item, packet_info *pinfo);
+static void dissect_imf_address(tvbuff_t *tvb, int offset, int length, proto_item *item, packet_info *pinfo);
+static void dissect_imf_address_list(tvbuff_t *tvb, int offset, int length, proto_item *item, packet_info *pinfo);
+static void dissect_imf_mailbox_list(tvbuff_t *tvb, int offset, int length, proto_item *item, packet_info *pinfo);
+static void dissect_imf_siolabel(tvbuff_t *tvb, int offset, int length, proto_item *item, packet_info *pinfo);
 
-static const struct imf_field imf_fields[] = {
+static struct imf_field imf_fields[] = {
   {"unknown-extension",                   &hf_imf_extension_type, NO_SUBDISSECTION, false}, /* unknown extension */
   {"date",                                &hf_imf_date, NO_SUBDISSECTION, false}, /* date-time */
   {"from",                                &hf_imf_from, dissect_imf_mailbox_list , true}, /* mailbox_list */
@@ -383,14 +386,14 @@ UAT_VS_DEF(header_fields, add_to_col_info, header_field_t, unsigned, 0, "No")
 static dissector_table_t media_type_dissector_table;
 
 static void
-dissect_imf_address(tvbuff_t *tvb, unsigned offset, unsigned length, proto_item *item, packet_info *pinfo)
+dissect_imf_address(tvbuff_t *tvb, int offset, int length, proto_item *item, packet_info *pinfo)
 {
   proto_tree *group_tree;
   proto_item *group_item;
-  unsigned addr_pos;
+  int addr_pos;
 
   /* if there is a colon present it is a group */
-  if(!tvb_find_uint8_length(tvb, offset, length, ':', &addr_pos)) {
+  if((addr_pos = tvb_find_uint8(tvb, offset, length, ':')) == -1) {
 
     /* there isn't - so it must be a mailbox */
     dissect_imf_mailbox(tvb, offset, length, item, pinfo);
@@ -422,10 +425,10 @@ dissect_imf_address(tvbuff_t *tvb, unsigned offset, unsigned length, proto_item 
 }
 
 static void
-dissect_imf_mailbox(tvbuff_t *tvb, unsigned offset, unsigned length, proto_item *item, packet_info *pinfo _U_)
+dissect_imf_mailbox(tvbuff_t *tvb, int offset, int length, proto_item *item, packet_info *pinfo _U_)
 {
   proto_tree *mbox_tree;
-  unsigned    addr_pos, end_pos;
+  int        addr_pos, end_pos;
 
   mbox_tree = proto_item_add_subtree(item, ett_imf_mailbox);
 
@@ -435,7 +438,7 @@ dissect_imf_mailbox(tvbuff_t *tvb, unsigned offset, unsigned length, proto_item 
      anything before the opening angle bracket
   */
 
-  if(!tvb_find_uint8_length(tvb, offset, length, '<', &addr_pos)) {
+  if((addr_pos = tvb_find_uint8(tvb, offset, length, '<')) == -1) {
     /* we can't find an angle bracket - the whole field is therefore the address */
 
     (void) proto_tree_add_item(mbox_tree, hf_imf_address, tvb, offset, length, ENC_ASCII);
@@ -453,23 +456,23 @@ dissect_imf_mailbox(tvbuff_t *tvb, unsigned offset, unsigned length, proto_item 
     if(offset != addr_pos) { /* there is a display name */
       (void) proto_tree_add_item(mbox_tree, hf_imf_display_name, tvb, offset, addr_pos - offset - 1, ENC_ASCII);
     }
+    end_pos = tvb_find_uint8(tvb, addr_pos + 1, length - (addr_pos + 1 - offset), '>');
 
-    if(!tvb_find_uint8_length(tvb, addr_pos + 1, length - (addr_pos + 1 - offset), '>', &end_pos)) {
+    if(end_pos != -1) {
       (void) proto_tree_add_item(mbox_tree, hf_imf_address, tvb, addr_pos + 1, end_pos - addr_pos - 1, ENC_ASCII);
     }
   }
 }
 
 static void
-dissect_imf_address_list(tvbuff_t *tvb, unsigned offset, unsigned length, proto_item *item, packet_info *pinfo)
+dissect_imf_address_list(tvbuff_t *tvb, int offset, int length, proto_item *item, packet_info *pinfo)
 {
   proto_item *addr_item = NULL;
   proto_tree *tree = NULL;
-  unsigned    count = 0;
-  unsigned    item_offset;
-  unsigned    end_offset;
-  unsigned    item_length;
-  bool        end_offset_found;
+  int         count = 0;
+  int         item_offset;
+  int         end_offset;
+  int         item_length;
 
   /* a comma separated list of addresses */
   tree = proto_item_add_subtree(item, ett_imf_address_list);
@@ -478,9 +481,11 @@ dissect_imf_address_list(tvbuff_t *tvb, unsigned offset, unsigned length, proto_
 
   do {
 
+    end_offset = tvb_find_uint8(tvb, item_offset, length - (item_offset - offset), ',');
+
     count++; /* increase the number of items */
-    end_offset_found = tvb_find_uint8_length(tvb, item_offset, length - (item_offset - offset), ',', &end_offset);
-    if(end_offset_found == false) {
+
+    if(end_offset == -1) {
       /* length is to the end of the buffer */
       item_length = length - (item_offset - offset);
     } else {
@@ -489,25 +494,24 @@ dissect_imf_address_list(tvbuff_t *tvb, unsigned offset, unsigned length, proto_
     addr_item = proto_tree_add_item(tree, hf_imf_address_list_item, tvb, item_offset, item_length, ENC_ASCII);
     dissect_imf_address(tvb, item_offset, item_length, addr_item, pinfo);
 
-    if(end_offset_found == true) {
+    if(end_offset != -1) {
       item_offset = end_offset + 1;
     }
-  } while(end_offset_found == true);
+  } while(end_offset != -1);
 
   /* now indicate the number of items found */
   proto_item_append_text(item, ", %d item%s", count, plurality(count, "", "s"));
 }
 
 static void
-dissect_imf_mailbox_list(tvbuff_t *tvb, unsigned offset, unsigned length, proto_item *item, packet_info *pinfo)
+dissect_imf_mailbox_list(tvbuff_t *tvb, int offset, int length, proto_item *item, packet_info *pinfo)
 {
   proto_item *mbox_item = NULL;
   proto_tree *tree = NULL;
-  unsigned    count = 0;
-  unsigned    item_offset;
-  unsigned    end_offset;
-  unsigned    item_length;
-  bool        end_offset_found;
+  int         count = 0;
+  int         item_offset;
+  int         end_offset;
+  int         item_length;
 
   /* a comma separated list of mailboxes */
   tree = proto_item_add_subtree(item, ett_imf_mailbox_list);
@@ -516,11 +520,11 @@ dissect_imf_mailbox_list(tvbuff_t *tvb, unsigned offset, unsigned length, proto_
 
   do {
 
-    end_offset_found = tvb_find_uint8_length(tvb, item_offset, length - (item_offset - offset), ',', &end_offset);
+    end_offset = tvb_find_uint8(tvb, item_offset, length - (item_offset - offset), ',');
 
     count++; /* increase the number of items */
 
-    if(end_offset_found == false) {
+    if(end_offset == -1) {
       /* length is to the end of the buffer */
       item_length = length - (item_offset - offset);
     } else {
@@ -529,24 +533,23 @@ dissect_imf_mailbox_list(tvbuff_t *tvb, unsigned offset, unsigned length, proto_
     mbox_item = proto_tree_add_item(tree, hf_imf_mailbox_list_item, tvb, item_offset, item_length, ENC_ASCII);
     dissect_imf_mailbox(tvb, item_offset, item_length, mbox_item, pinfo);
 
-    if(end_offset_found == true) {
+    if(end_offset != -1) {
       item_offset = end_offset + 1;
     }
-  } while(end_offset_found == true);
+  } while(end_offset != -1);
 
   /* now indicate the number of items found */
   proto_item_append_text(item, ", %d item%s", count, plurality(count, "", "s"));
 }
 
 static void
-dissect_imf_siolabel(tvbuff_t *tvb, unsigned offset, unsigned length, proto_item *item, packet_info *pinfo)
+dissect_imf_siolabel(tvbuff_t *tvb, int offset, int length, proto_item *item, packet_info *pinfo)
 {
   proto_tree *tree = NULL;
   proto_item *sub_item = NULL;
-  unsigned    item_offset, item_length;
-  unsigned    value_offset, value_length;
-  unsigned    end_offset;
-  bool        end_offset_found;
+  int         item_offset, item_length;
+  int         value_offset, value_length;
+  int         end_offset;
   tvbuff_t   *label_tvb;
   char       *type = NULL;
   wmem_strbuf_t  *label_string = wmem_strbuf_new(pinfo->pool, "");
@@ -556,24 +559,29 @@ dissect_imf_siolabel(tvbuff_t *tvb, unsigned offset, unsigned length, proto_item
   item_offset = offset;
 
   do {
-    end_offset_found = tvb_find_uint8_length(tvb, item_offset, length - (item_offset - offset), ';', &end_offset);
+    end_offset = tvb_find_uint8(tvb, item_offset, length - (item_offset - offset), ';');
 
     /* skip leading space */
-    item_offset = tvb_skip_wsp(tvb, item_offset, end_offset);
+    while (g_ascii_isspace(tvb_get_uint8(tvb, item_offset))) {
+      item_offset++;
+    }
 
-    if (end_offset_found == false) {
+    if (end_offset == -1) {
       /* length is to the end of the buffer */
-      tvb_find_line_end_length(tvb, item_offset, length - (item_offset - offset), &item_length, NULL);
+      item_length = tvb_find_line_end(tvb, item_offset, length - (item_offset - offset), NULL, false);
     } else {
       item_length = end_offset - item_offset;
     }
 
-    tvb_find_uint8_length(tvb, item_offset, length - (item_offset - offset), '=', &value_offset);
-    value_offset  = value_offset +1;
-    value_offset = tvb_skip_wsp(tvb, value_offset, end_offset);
+    value_offset = tvb_find_uint8(tvb, item_offset, length - (item_offset - offset), '=') + 1;
+    while (g_ascii_isspace(tvb_get_uint8(tvb, value_offset))) {
+      value_offset++;
+    }
 
     value_length = item_length - (value_offset - item_offset);
-    value_length = tvb_skip_wsp_return(tvb, value_offset + value_length - 1);
+    while (g_ascii_isspace(tvb_get_uint8(tvb, value_offset + value_length - 1))) {
+      value_length--;
+    }
 
     if (tvb_strneql(tvb, item_offset, "marking", 7) == 0) {
       const uint8_t* marking;
@@ -587,16 +595,15 @@ dissect_imf_siolabel(tvbuff_t *tvb, unsigned offset, unsigned length, proto_item
       proto_tree_add_item(tree, hf_imf_siolabel_bgcolor, tvb, value_offset, value_length, ENC_ASCII);
 
     } else if (tvb_strneql(tvb, item_offset, "type", 4) == 0) {
-      type = (char*)tvb_get_string_enc(pinfo->pool, tvb, value_offset + 1, value_length - 2, ENC_ASCII); /* quoted */
+      type = tvb_get_string_enc(pinfo->pool, tvb, value_offset + 1, value_length - 2, ENC_ASCII); /* quoted */
       proto_tree_add_item(tree, hf_imf_siolabel_type, tvb, value_offset, value_length, ENC_ASCII);
 
     } else if (tvb_strneql(tvb, item_offset, "label", 5) == 0) {
-      char *label = (char*)tvb_get_string_enc(pinfo->pool, tvb, value_offset + 1, value_length - 2, ENC_ASCII); /* quoted */
+      char *label = tvb_get_string_enc(pinfo->pool, tvb, value_offset + 1, value_length - 2, ENC_ASCII); /* quoted */
       wmem_strbuf_append(label_string, label);
 
       if (tvb_get_uint8(tvb, item_offset + 5) == '*') { /* continuations */
-        int num;
-        tvb_get_string_int(tvb, item_offset + 6, value_offset - item_offset + 6, ENC_STR_DEC, &num, NULL);
+        int num = (int)strtol(tvb_get_string_enc(pinfo->pool, tvb, item_offset + 6, value_offset - item_offset + 6, ENC_ASCII), NULL, 10);
         proto_tree_add_string_format(tree, hf_imf_siolabel_label, tvb, value_offset, value_length,
                                      label, "Label[%d]: \"%s\"", num, label);
       } else {
@@ -608,10 +615,10 @@ dissect_imf_siolabel(tvbuff_t *tvb, unsigned offset, unsigned length, proto_item
       expert_add_info(pinfo, sub_item, &ei_imf_unknown_param);
     }
 
-    if (end_offset_found == true) {
+    if (end_offset != -1) {
       item_offset = end_offset + 1;
     }
-  } while (end_offset_found == true);
+  } while (end_offset != -1);
 
   if (type && wmem_strbuf_get_len(label_string) > 0) {
     if (strcmp (type, ":ess") == 0) {
@@ -627,46 +634,52 @@ dissect_imf_siolabel(tvbuff_t *tvb, unsigned offset, unsigned length, proto_item
 }
 
 static void
-dissect_imf_content_type(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, unsigned length, proto_item *item,
-                         const char **type, const char **parameters)
+dissect_imf_content_type(tvbuff_t *tvb, packet_info *pinfo, int offset, int length, proto_item *item,
+                         const uint8_t **type, const uint8_t **parameters)
 {
-  unsigned first_colon;
-  unsigned end_offset;
-  unsigned len;
-  int t_offset;
+  int first_colon;
+  int end_offset;
+  int len;
+  int i;
   proto_tree *ct_tree;
 
   /* first strip any whitespace */
-  tvb_skip_wsp(tvb, offset, length);
+  for(i = 0; i < length; i++) {
+    if(!g_ascii_isspace(tvb_get_uint8(tvb, offset + i))) {
+      offset += i;
+      break;
+    }
+  }
 
   /* find the first colon - there has to be a colon as there will have to be a boundary */
-  first_colon = tvb_find_uint8_length(tvb, offset, length, ';', &first_colon);
+  first_colon = tvb_find_uint8(tvb, offset, length, ';');
 
-  if(tvb_find_uint8_length(tvb, offset, length, ';', &first_colon)) {
+  if(first_colon != -1) {
     ct_tree = proto_item_add_subtree(item, ett_imf_content_type);
 
     len = first_colon - offset;
-    proto_tree_add_item_ret_string(ct_tree, hf_imf_content_type_type, tvb, offset, len, ENC_ASCII|ENC_NA, pinfo->pool, (const uint8_t**)type);
-    t_offset = imf_find_field_end (tvb, first_colon + 1, offset + length, NULL);
-    if (t_offset == -1) {
+    proto_tree_add_item_ret_string(ct_tree, hf_imf_content_type_type, tvb, offset, len, ENC_ASCII|ENC_NA, pinfo->pool, type);
+    end_offset = imf_find_field_end (tvb, first_colon + 1, offset + length, NULL);
+    if (end_offset == -1) {
        /* No end found */
        return;
     }
-    end_offset = (unsigned)t_offset;
     len = end_offset - (first_colon + 1) - 2;  /* Do not include the last CRLF */
-    proto_tree_add_item_ret_string(ct_tree, hf_imf_content_type_parameters, tvb, first_colon + 1, len, ENC_ASCII|ENC_NA, pinfo->pool, (const uint8_t**)parameters);
+    proto_tree_add_item_ret_string(ct_tree, hf_imf_content_type_parameters, tvb, first_colon + 1, len, ENC_ASCII|ENC_NA, pinfo->pool, parameters);
   }
 }
 
 
 int
-imf_find_field_end(tvbuff_t *tvb, unsigned offset, unsigned max_length, bool *last_field)
+imf_find_field_end(tvbuff_t *tvb, int offset, int max_length, bool *last_field)
 {
 
   while(offset < max_length) {
 
     /* look for CR */
-    if(tvb_find_uint8_length(tvb, offset, max_length - offset, '\r', &offset)) {
+    offset = tvb_find_uint8(tvb, offset, max_length - offset, '\r');
+
+    if(offset != -1) {
       /* protect against buffer overrun and only then look for next char */
         if (++offset < max_length && tvb_get_uint8(tvb, offset) == '\n') {
         /* OK - so we have found CRLF */
@@ -713,21 +726,19 @@ dissect_imf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
   proto_item  *item;
   proto_tree  *unknown_tree, *text_tree;
-  const char *content_type_str = NULL;
+  const uint8_t *content_type_str = NULL;
   char  *content_encoding_str = NULL;
-  const char *parameters = NULL;
+  const uint8_t *parameters = NULL;
   int   hf_id;
-  unsigned start_offset = 0;
-  unsigned value_offset = 0;
-  unsigned unknown_offset = 0;
-  unsigned end_offset = 0;
-  int t_offset;
-  unsigned max_length;
-  bool end_offset_found;
-  char *key;
+  int   start_offset = 0;
+  int   value_offset = 0;
+  int   unknown_offset = 0;
+  int   end_offset = 0;
+  int    max_length;
+  uint8_t *key;
   bool last_field = false;
   tvbuff_t *next_tvb;
-  const struct imf_field *f_info;
+  struct imf_field *f_info;
   imf_eo_t *eo_info = NULL;
 
   if (have_tap_listener(imf_eo_tap)) {
@@ -740,7 +751,7 @@ dissect_imf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
   /* Want to preserve existing protocol name and show that it is carrying IMF */
   col_append_str(pinfo->cinfo, COL_PROTOCOL, "/");
   col_set_fence(pinfo->cinfo, COL_PROTOCOL);
-  col_set_str(pinfo->cinfo, COL_PROTOCOL, "IMF");
+  col_set_str(pinfo->cinfo, COL_PROTOCOL, PSNAME);
 
   col_clear(pinfo->cinfo, COL_INFO);
 
@@ -757,24 +768,24 @@ dissect_imf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
   while(!last_field) {
 
     /* look for a colon first */
-    end_offset_found = tvb_find_uint8_length(tvb, start_offset, max_length - start_offset, ':', &end_offset);
+    end_offset = tvb_find_uint8(tvb, start_offset, max_length - start_offset, ':');
 
-    if(end_offset_found == false) {
+    if(end_offset == -1) {
       /* we couldn't find another colon - strange - we should have broken out of here by now */
       /* XXX: flag an error */
       break;
     } else {
-      key = (char*)tvb_get_string_enc(pinfo->pool, tvb, start_offset, end_offset - start_offset, ENC_ASCII);
+      key = tvb_get_string_enc(pinfo->pool, tvb, start_offset, end_offset - start_offset, ENC_ASCII);
 
       /* convert to lower case */
       ascii_strdown_inplace (key);
 
       /* look up the key in built-in fields */
-      f_info = (const struct imf_field *)wmem_map_lookup(imf_field_table, key);
+      f_info = (struct imf_field *)wmem_map_lookup(imf_field_table, key);
 
       if(f_info == NULL && custom_field_table) {
         /* look up the key in custom fields */
-        f_info = (const struct imf_field *)g_hash_table_lookup(custom_field_table, key);
+        f_info = (struct imf_field *)g_hash_table_lookup(custom_field_table, key);
       }
 
       if(f_info == NULL) {
@@ -788,11 +799,10 @@ dissect_imf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
       /* value starts immediately after the colon */
       start_offset = end_offset+1;
 
-      t_offset = imf_find_field_end(tvb, start_offset, max_length, &last_field);
-      if(t_offset == -1) {
+      end_offset = imf_find_field_end(tvb, start_offset, max_length, &last_field);
+      if(end_offset == -1) {
         break;   /* Something's fishy */
       }
-      end_offset = (unsigned)t_offset;
 
       /* remove any leading whitespace */
 
@@ -832,9 +842,9 @@ dissect_imf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
         /* if sender or subject, store for sending to the tap */
         if (eo_info && have_tap_listener(imf_eo_tap)) {
           if (*f_info->hf_id == hf_imf_from) {
-            eo_info->sender_data = (char*)tvb_get_string_enc(pinfo->pool, tvb, value_offset, end_offset - value_offset - 2, ENC_ASCII|ENC_NA);
+            eo_info->sender_data = tvb_get_string_enc(pinfo->pool, tvb, value_offset, end_offset - value_offset - 2, ENC_ASCII|ENC_NA);
           } else if(*f_info->hf_id == hf_imf_subject) {
-            eo_info->subject_data = (char*)tvb_get_string_enc(pinfo->pool, tvb, value_offset, end_offset - value_offset - 2, ENC_ASCII|ENC_NA);
+            eo_info->subject_data = tvb_get_string_enc(pinfo->pool, tvb, value_offset, end_offset - value_offset - 2, ENC_ASCII|ENC_NA);
           }
         }
       }
@@ -846,7 +856,7 @@ dissect_imf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
                                  &content_type_str, &parameters);
 
       } else if (hf_id == hf_imf_content_transfer_encoding) {
-        content_encoding_str = (char*)tvb_get_string_enc (pinfo->pool, tvb, value_offset, end_offset - value_offset - 2, ENC_ASCII);
+        content_encoding_str = tvb_get_string_enc (pinfo->pool, tvb, value_offset, end_offset - value_offset - 2, ENC_ASCII);
       } else if(f_info->subdissector) {
 
         /* we have a subdissector */
@@ -862,7 +872,7 @@ dissect_imf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
     end_offset += 2;
   }
 
-  if (end_offset_found == false) {
+  if (end_offset == -1) {
     end_offset = 0;
   }
 
@@ -877,7 +887,7 @@ dissect_imf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
     col_set_fence(pinfo->cinfo, COL_INFO);
 
     if(content_encoding_str && !g_ascii_strncasecmp(content_encoding_str, "base64", 6)) {
-      char *string_data = (char*)tvb_get_string_enc(pinfo->pool, tvb, end_offset, tvb_reported_length(tvb) - end_offset, ENC_ASCII);
+      char *string_data = tvb_get_string_enc(pinfo->pool, tvb, end_offset, tvb_reported_length(tvb) - end_offset, ENC_ASCII);
       next_tvb = base64_to_tvb(tvb, string_data);
       add_new_data_source(pinfo, next_tvb, content_encoding_str);
     } else {
@@ -887,7 +897,7 @@ dissect_imf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
     content_info.type = MEDIA_CONTAINER_OTHER;
     content_info.media_str = parameters;
     content_info.data = NULL;
-    dissector_try_string_with_data(media_type_dissector_table, content_type_str, next_tvb, pinfo, tree, true, (void*)&content_info);
+    dissector_try_string(media_type_dissector_table, content_type_str, next_tvb, pinfo, tree, (void*)&content_info);
   } else {
 
     /* just show the lines or highlight the rest of the buffer as message text */
@@ -901,7 +911,7 @@ dissect_imf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
       /*
        * Find the end of the line.
        */
-      tvb_find_line_end_remaining(tvb, start_offset, NULL, &end_offset);
+      tvb_find_line_end(tvb, start_offset, -1, &end_offset, false);
 
       /*
        * Put this line.
@@ -1341,9 +1351,9 @@ proto_register_imf(void)
 
   module_t *imf_module;
   expert_module_t* expert_imf;
-  const struct imf_field *f;
+  struct imf_field *f;
 
-  proto_imf = proto_register_protocol("Internet Message Format", "IMF", "imf");
+  proto_imf = proto_register_protocol(PNAME, PSNAME, PFNAME);
 
   proto_register_field_array(proto_imf, hf, array_length(hf));
   proto_register_subtree_array(ett, array_length(ett));
@@ -1351,7 +1361,7 @@ proto_register_imf(void)
   expert_register_field_array(expert_imf, ei, array_length(ei));
 
   /* Allow dissector to find be found by name. */
-  imf_handle = register_dissector("imf", dissect_imf, proto_imf);
+  imf_handle = register_dissector(PFNAME, dissect_imf, proto_imf);
 
   imf_module = prefs_register_protocol(proto_imf, NULL);
   prefs_register_uat_preference(imf_module, "custom_header_fields", "Custom IMF headers",

@@ -1,4 +1,4 @@
-/* packet-xmpp-core.h
+/* xmpp-core.h
  *
  * Copyright 2011, Mariusz Okroj <okrojmariusz[]gmail.com>
  *

@@ -1,6 +1,6 @@
 /** @file
  *
- * Definitions for handling circuit-switched protocols
+ * Definititions for handling circuit-switched protocols
  * which are handled as streams, and don't have lengths
  * and IDs such as are required for reassemble.h
  *
@@ -10,7 +10,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-#pragma once
+
+#ifndef STREAM_H
+#define STREAM_H
+
 #include <epan/tvbuff.h>
 #include <epan/reassemble.h>
 #include "ws_symbol_export.h"
@@ -48,39 +51,28 @@ typedef struct stream_pdu_fragment stream_pdu_fragment_t;
 
 struct conversation;
 
-/**
- * @brief Initialise a new stream. Call this when you first identify a distinct
+/* initialise a new stream. Call this when you first identify a distinct
  * stream. The conversation pointer is just used as a key to look up the stream.
- * @param conv Pointer to the conversation structure.
- * @param p2p_dir The peer-to-peer direction.
- * @return Pointer to the newly created stream, or NULL on failure.
  */
 WS_DLL_PUBLIC stream_t *stream_new ( const struct conversation *conv, int p2p_dir );
 
-/**
- * @brief Retrieve a previously-created stream.
- * @param conv Pointer to the conversation structure.
- * @param p2p_dir The peer-to-peer direction.
- * @return Pointer to the retrieved stream, or NULL if not found.
+/* retrieve a previously-created stream.
+ *
+ * Returns null if no matching stream was found.
  */
 WS_DLL_PUBLIC stream_t *find_stream ( const struct conversation *conv, int p2p_dir );
 
 
 
-/**
- * @brief See if we've seen this fragment before.
- * @param stream Pointer to the stream structure.
- * @param framenum The frame number.
- * @param offset The byte offset within the frame.
- * @return Pointer to the found fragment, or NULL if not found.
- */
+/* see if we've seen this fragment before.
+
+   The framenum and offset are just hash keys, so can be any values unique
+   to this frame, but the idea is that you use the number of the frame being
+   disassembled, and the byte-offset within that frame.
+*/
 WS_DLL_PUBLIC stream_pdu_fragment_t *stream_find_frag( stream_t *stream, uint32_t framenum, uint32_t offset );
 
-/**
- *
- * @brief Add a new fragment to the fragment tables for the stream.
- *
- *  The framenum and
+/* add a new fragment to the fragment tables for the stream. The framenum and
  * offset are keys allowing future access with stream_find_frag(), tvb is the
  * fragment to be added, and pinfo is the information for the frame containing
  * this fragment. more_frags should be set if this is the final fragment in the
@@ -92,52 +84,27 @@ WS_DLL_PUBLIC stream_pdu_fragment_t *stream_find_frag( stream_t *stream, uint32_
  *
  * This essentially means that you can only add fragments on the first pass
  * through the stream.
- * @param stream Pointer to the stream structure.
- * @param framenum The frame number of the fragment.
- * @param offset The byte offset within the frame.
- * @param tvb The TVBuffer containing the fragment data.
- * @param pinfo Pointer to the packet information structure for the frame containing this fragment.
- * @param more_frags Set to true if this is the final fragment in the PDU, false otherwise.
- * @return Pointer to the newly added fragment, or NULL on failure.
  */
 WS_DLL_PUBLIC stream_pdu_fragment_t *stream_add_frag( stream_t *stream, uint32_t framenum, uint32_t offset,
 					tvbuff_t *tvb, packet_info *pinfo, bool more_frags );
 
-/**
- * @brief Get the length of a fragment previously found by stream_find_frag().
- * @param frag A fragment within the PDU.
- * @return The length of the fragment.
+/* Get the length of a fragment previously found by stream_find_frag().
  */
 extern uint32_t stream_get_frag_length( const stream_pdu_fragment_t *frag);
 
-/**
- * @brief Get a handle on the top of the chain of fragment_datas underlying this PDU
- *
+/* Get a handle on the top of the chain of fragment_datas underlying this PDU
  * frag can be any fragment within a PDU, and it will always return the head of
  * the chain
  *
  * Returns NULL until the last fragment is added.
- *
- * @param frag A fragment within the PDU.
- * @return A pointer to the fragment list for the PDU, or NULL if not complete
  */
-WS_DLL_PUBLIC fragment_head *stream_get_frag_data( const stream_pdu_fragment_t *frag);
+extern fragment_head *stream_get_frag_data( const stream_pdu_fragment_t *frag);
 
-/**
- * @brief Process reassembled data; if this is the last fragment, put the fragment
+/*
+ * Process reassembled data; if this is the last fragment, put the fragment
  * information into the protocol tree, and construct a tvbuff with the
  * reassembled data, otherwise just put a "reassembled in" item into the
  * protocol tree.
- *
- * @param tvb The original TVBuffer containing the fragment data.
- * @param offset The offset within the TVBuffer where the fragment starts.
- * @param pinfo Packet information structure.
- * @param name Name of the reassembled data source.
- * @param frag A fragment within the PDU.
- * @param fit Pointer to the fragment items structure.
- * @param update_col_infop Pointer to a boolean indicating whether to update column info.
- * @param tree Protocol tree for displaying fragment information.
- * @return A new TVBuffer containing the reassembled data, or NULL if not applicable.
  */
 WS_DLL_PUBLIC tvbuff_t *stream_process_reassembled(
     tvbuff_t *tvb, int offset, packet_info *pinfo,
@@ -145,19 +112,13 @@ WS_DLL_PUBLIC tvbuff_t *stream_process_reassembled(
     const struct _fragment_items *fit,
     bool *update_col_infop, proto_tree *tree);
 
-/**
- * @brief Get the PDU number. PDUs are numbered from zero within a stream.
- * @param frag A fragment within the PDU.
- * @return The PDU number.
+/* Get the PDU number. PDUs are numbered from zero within a stream.
+ * frag can be any fragment within a PDU.
  */
 extern uint32_t stream_get_pdu_no( const stream_pdu_fragment_t *frag);
 
-/**
- * @brief Initializes stream-related data structures and reassembly tables.
- */
+/* initialise the stream routines */
 void stream_init( void );
-
-/**
- * @brief Cleans up stream-related data structures and reassembly tables.
- */
 void stream_cleanup( void );
+
+#endif /* STREAM_H */

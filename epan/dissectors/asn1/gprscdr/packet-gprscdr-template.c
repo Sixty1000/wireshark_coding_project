@@ -27,6 +27,10 @@
 #include "packet-gtp.h"
 #include "packet-gtpv2.h"
 
+#define PNAME  "GPRS CDR"
+#define PSNAME "GPRSCDR"
+#define PFNAME "gprscdr"
+
 void proto_register_gprscdr(void);
 
 /* Define the GPRS CDR proto */
@@ -45,7 +49,6 @@ static int ett_gprscdr_userlocationinformation;
 
 static expert_field ei_gprscdr_not_dissected;
 static expert_field ei_gprscdr_choice_not_found;
-static expert_field ei_gprscdr_timestamp_wrong_format;
 
 /* Global variables */
 static const char *obj_id;
@@ -140,12 +143,11 @@ proto_register_gprscdr(void)
   static ei_register_info ei[] = {
     { &ei_gprscdr_not_dissected, { "gprscdr.not_dissected", PI_UNDECODED, PI_WARN, "Not dissected", EXPFILL }},
     { &ei_gprscdr_choice_not_found, { "gprscdr.error.choice_not_found", PI_MALFORMED, PI_WARN, "GPRS CDR Error: This choice field(Record type) was not found", EXPFILL }},
-    { &ei_gprscdr_timestamp_wrong_format, { "gprscdr.timestamp.wrong_format", PI_MALFORMED, PI_ERROR, "Bad TimeStamp format", EXPFILL }},
   };
 
   expert_module_t* expert_gprscdr;
 
-  proto_gprscdr = proto_register_protocol("GPRS CDR", "GPRSCDR", "gprscdr");
+  proto_gprscdr = proto_register_protocol(PNAME, PSNAME, PFNAME);
 
   proto_register_field_array(proto_gprscdr, hf, array_length(hf));
   proto_register_subtree_array(ett, array_length(ett));

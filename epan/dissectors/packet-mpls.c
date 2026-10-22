@@ -41,11 +41,12 @@
 #include <epan/packet.h>
 #include <epan/expert.h>
 
+#include <epan/ppptypes.h>
 #include <epan/etypes.h>
 #include <epan/prefs.h>
+#include <epan/ipproto.h>
 #include <epan/decode_as.h>
 #include <epan/proto_data.h>
-#include <epan/iana-info.h>
 
 #include "packet-ppp.h"
 #include "packet-mpls.h"
@@ -56,7 +57,6 @@
 #include "packet-l2tp.h"
 #include "packet-vxlan.h"
 #include "packet-nsh.h"
-
 
 void proto_register_mpls(void);
 void proto_reg_handoff_mpls(void);
@@ -312,7 +312,7 @@ dissect_pw_ach(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _
     unsigned    channel_type;
 
     if (tvb_reported_length_remaining(tvb, 0) < 4) {
-        proto_tree_add_expert_remaining(tree, pinfo, &ei_mpls_pw_ach_error_processing_message, tvb, 0);
+        proto_tree_add_expert(tree, pinfo, &ei_mpls_pw_ach_error_processing_message, tvb, 0, -1);
         return tvb_captured_length(tvb);
     }
 
@@ -398,7 +398,7 @@ dissect_pw_mcw(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _
     tvbuff_t *next_tvb;
 
     if (tvb_reported_length_remaining(tvb, 0) < 4) {
-        proto_tree_add_expert_remaining(tree, pinfo, &ei_mpls_pw_mcw_error_processing_message, tvb, 0);
+        proto_tree_add_expert(tree, pinfo, &ei_mpls_pw_mcw_error_processing_message, tvb, 0, -1);
         return tvb_captured_length(tvb);
     }
 
@@ -499,7 +499,7 @@ dissect_mpls(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
         offset += 4;
 
         if ((label == MPLS_LABEL_GACH) && !bos) {
-            proto_tree_add_expert_remaining(tree, pinfo, &ei_mpls_invalid_label, tvb, 0);
+            proto_tree_add_expert(tree, pinfo, &ei_mpls_invalid_label, tvb, 0, -1);
         }
 
         if ((label == MPLS_LABEL_GACH) && bos) {
@@ -524,7 +524,7 @@ dissect_mpls(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
      * Is there an explicit label-to-dissector binding?
      * If so, use it.
      */
-    found = dissector_try_uint_with_data(mpls_subdissector_table, label,
+    found = dissector_try_uint_new(mpls_subdissector_table, label,
                                next_tvb, pinfo, tree, false, &mplsinfo);
     if (found) {
         /* Yes, there is. */
@@ -546,7 +546,7 @@ dissect_mpls(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
      * Use the 1st nibble logic (see BCP 128 (RFC 4928), RFC 4385 and 5586).
      * https://datatracker.ietf.org/doc/html/draft-ietf-mpls-1stnibble-06
      */
-    if (dissector_try_uint_with_data(mpls_pfn_subdissector_table, first_nibble,
+    if (dissector_try_uint_new(mpls_pfn_subdissector_table, first_nibble,
         next_tvb, pinfo, tree, false, &mplsinfo)) {
 
         payload_handle = dissector_get_uint_handle(mpls_pfn_subdissector_table, first_nibble);
@@ -670,17 +670,17 @@ proto_register_mpls(void)
     static build_valid_func mpls_da_build_value[1] = {mpls_value};
     static decode_as_value_t mpls_da_values = {mpls_prompt, 1, mpls_da_build_value};
     static decode_as_t mpls_da = {"mpls", "mpls.label", 1, 0, &mpls_da_values, NULL, NULL,
-                                  decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL, NULL, NULL };
+                                  decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL};
 
     static build_valid_func mpls_pfn_da_build_value[1] = {mpls_pfn_value};
     static decode_as_value_t mpls_pfn_da_values = {mpls_pfn_prompt, 1, mpls_pfn_da_build_value};
     static decode_as_t mpls_pfn_da = {"mpls", "mpls.pfn", 1, 0, &mpls_pfn_da_values, NULL, NULL,
-                                  decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL, NULL, NULL };
+                                  decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL};
 
     static build_valid_func pw_ach_da_build_value[1] = {pw_ach_value};
     static decode_as_value_t pw_ach_da_values = {pw_ach_prompt, 1, pw_ach_da_build_value};
     static decode_as_t pw_ach_da = {"pwach", "pwach.channel_type", 1, 0, &pw_ach_da_values, NULL, NULL,
-                                  decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL, NULL, NULL };
+                                  decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL};
 
     expert_module_t* expert_mpls;
     module_t * module_mpls;

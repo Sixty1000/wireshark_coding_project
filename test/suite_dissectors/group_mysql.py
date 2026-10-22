@@ -140,7 +140,6 @@ class TestMySQL:
                         "Packet Number: 2",
                         "Response Code: OK Packet (0x00)",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x4002",
                         "Warnings: 0",
                         "Session tracking data",
@@ -165,7 +164,6 @@ class TestMySQL:
                         "Packet Number: 1",
                         "Response Code: OK Packet (0x00)",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x4002",
                         "Warnings: 0",
                         "Session tracking data",
@@ -190,7 +188,6 @@ class TestMySQL:
                         "Packet Number: 1",
                         "Response Code: OK Packet (0x00)",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x4002",
                         "Warnings: 0",
                         "Session tracking data",
@@ -215,7 +212,6 @@ class TestMySQL:
                         "Packet Number: 1",
                         "Response Code: OK Packet (0x00)",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x4000",
                         "Warnings: 0",
                         "Session tracking data",
@@ -240,7 +236,6 @@ class TestMySQL:
                         "Packet Number: 1",
                         "Response Code: OK Packet (0x00)",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x0000",
                         "Warnings: 0",
                     ],
@@ -384,7 +379,6 @@ class TestMySQL:
                         "Packet Number: 1",
                         "Response Code: OK Packet (0x00)",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x0000",
                         "Warnings: 0",
                     ],
@@ -510,7 +504,6 @@ class TestMySQL:
                         "Response Code: EOF Packet (0xfe)",
                         "EOF marker: 254",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x0021",
                         "Warnings: 0",
                     ],
@@ -534,7 +527,6 @@ class TestMySQL:
                         "Packet Number: 1",
                         "Response Code: OK Packet (0x00)",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x0001",
                         "Warnings: 0",
                     ],
@@ -607,14 +599,14 @@ class TestMySQL:
 
         print(summary)
 
-        for pkt, summ in summary.items():
-            for mysqlpkt in summ:
+        for pkt in summary:
+            for mysqlpkt in summary[pkt]:
                 assert (
-                    summ[mysqlpkt]["showname"]
+                    summary[pkt][mysqlpkt]["showname"]
                     == expected[pkt][mysqlpkt]["showname"]
                 )
                 assert (
-                    summ[mysqlpkt]["fields"]
+                    summary[pkt][mysqlpkt]["fields"]
                     == expected[pkt][mysqlpkt]["fields"]
                 )
 
@@ -667,7 +659,6 @@ class TestMySQL:
                         "Packet Number: 2",
                         "Response Code: OK Packet (0x00)",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x0002",
                         "Warnings: 0",
                     ],
@@ -716,7 +707,6 @@ class TestMySQL:
                         "Response Code: EOF Packet (0xfe)",
                         "EOF marker: 254",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x0002",
                         "Warnings: 0",
                     ],
@@ -800,7 +790,6 @@ class TestMySQL:
                         "Response Code: EOF Packet (0xfe)",
                         "EOF marker: 254",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x0002",
                         "Warnings: 0",
                     ],
@@ -885,7 +874,6 @@ class TestMySQL:
                         "Response Code: EOF Packet (0xfe)",
                         "EOF marker: 254",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x0002",
                         "Warnings: 0",
                     ],
@@ -968,14 +956,14 @@ class TestMySQL:
 
         print(summary)
 
-        for pkt, summ in summary.items():
+        for pkt in summary:
             for mysqlpkt in summary[pkt]:
                 assert (
-                    summ[mysqlpkt]["showname"]
+                    summary[pkt][mysqlpkt]["showname"]
                     == expected[pkt][mysqlpkt]["showname"]
                 )
                 assert (
-                    summ[mysqlpkt]["fields"]
+                    summary[pkt][mysqlpkt]["fields"]
                     == expected[pkt][mysqlpkt]["fields"]
                 )
 
@@ -1028,7 +1016,6 @@ class TestMySQL:
                         "Packet Number: 2",
                         "Response Code: OK Packet (0x00)",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x0002",
                         "Warnings: 0",
                     ],
@@ -1077,7 +1064,6 @@ class TestMySQL:
                         "Response Code: EOF Packet (0xfe)",
                         "EOF marker: 254",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x0002",
                         "Warnings: 0",
                     ],
@@ -1161,7 +1147,6 @@ class TestMySQL:
                         "Response Code: EOF Packet (0xfe)",
                         "EOF marker: 254",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x0002",
                         "Warnings: 0",
                     ],
@@ -1246,7 +1231,6 @@ class TestMySQL:
                         "Response Code: EOF Packet (0xfe)",
                         "EOF marker: 254",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x0002",
                         "Warnings: 0",
                     ],
@@ -1329,14 +1313,14 @@ class TestMySQL:
 
         print(summary)
 
-        for pkt, summ in summary.items():
+        for pkt in summary:
             for mysqlpkt in summary[pkt]:
                 assert (
-                    summ[mysqlpkt]["showname"]
+                    summary[pkt][mysqlpkt]["showname"]
                     == expected[pkt][mysqlpkt]["showname"]
                 )
                 assert (
-                    summ[mysqlpkt]["fields"]
+                    summary[pkt][mysqlpkt]["fields"]
                     == expected[pkt][mysqlpkt]["fields"]
                 )
 
@@ -1389,7 +1373,6 @@ class TestMySQL:
                         "Packet Number: 2",
                         "Response Code: OK Packet (0x00)",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x0002",
                         "Warnings: 0",
                     ],
@@ -1438,7 +1421,6 @@ class TestMySQL:
                         "Response Code: EOF Packet (0xfe)",
                         "EOF marker: 254",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x0002",
                         "Warnings: 0",
                     ],
@@ -1522,7 +1504,6 @@ class TestMySQL:
                         "Response Code: EOF Packet (0xfe)",
                         "EOF marker: 254",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x0002",
                         "Warnings: 0",
                     ],
@@ -1607,7 +1588,6 @@ class TestMySQL:
                         "Response Code: EOF Packet (0xfe)",
                         "EOF marker: 254",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x0002",
                         "Warnings: 0",
                     ],
@@ -1690,14 +1670,14 @@ class TestMySQL:
 
         print(summary)
 
-        for pkt, summ in summary.items():
-            for mysqlpkt in summ:
+        for pkt in summary:
+            for mysqlpkt in summary[pkt]:
                 assert (
-                    summ[mysqlpkt]["showname"]
+                    summary[pkt][mysqlpkt]["showname"]
                     == expected[pkt][mysqlpkt]["showname"]
                 )
                 assert (
-                    summ[mysqlpkt]["fields"]
+                    summary[pkt][mysqlpkt]["fields"]
                     == expected[pkt][mysqlpkt]["fields"]
                 )
 
@@ -1750,7 +1730,6 @@ class TestMySQL:
                         "Packet Number: 2",
                         "Response Code: OK Packet (0x00)",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x0002",
                         "Warnings: 0",
                     ],
@@ -1799,7 +1778,6 @@ class TestMySQL:
                         "Response Code: EOF Packet (0xfe)",
                         "EOF marker: 254",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x0002",
                         "Warnings: 0",
                     ],
@@ -1883,7 +1861,6 @@ class TestMySQL:
                         "Response Code: EOF Packet (0xfe)",
                         "EOF marker: 254",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x0002",
                         "Warnings: 0",
                     ],
@@ -1968,7 +1945,6 @@ class TestMySQL:
                         "Response Code: EOF Packet (0xfe)",
                         "EOF marker: 254",
                         "Affected Rows: 0",
-                        "Last INSERT ID: 0",
                         "Server Status: 0x0002",
                         "Warnings: 0",
                     ],
@@ -2051,13 +2027,13 @@ class TestMySQL:
 
         print(summary)
 
-        for pkt, summ in summary.items():
-            for mysqlpkt in summ:
+        for pkt in summary:
+            for mysqlpkt in summary[pkt]:
                 assert (
-                    summ[mysqlpkt]["showname"]
+                    summary[pkt][mysqlpkt]["showname"]
                     == expected[pkt][mysqlpkt]["showname"]
                 )
                 assert (
-                    summ[mysqlpkt]["fields"]
+                    summary[pkt][mysqlpkt]["fields"]
                     == expected[pkt][mysqlpkt]["fields"]
                 )

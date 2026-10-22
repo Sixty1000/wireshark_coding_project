@@ -12,7 +12,7 @@
 #ifndef __CAPTURE_GLOBALS_H__
 #define __CAPTURE_GLOBALS_H__
 
-#include "ui/capture_opts.h"
+#include "capture_opts.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -544,7 +544,7 @@ static int * const a11_flags[] = {
 };
 
 static void
-decode_sse(proto_tree *ext_tree, packet_info *pinfo, tvbuff_t *tvb, unsigned offset, unsigned ext_len, proto_item *ext_len_item)
+decode_sse(proto_tree *ext_tree, packet_info *pinfo, tvbuff_t *tvb, int offset, unsigned ext_len, proto_item *ext_len_item)
 {
     uint8_t     msid_len;
     uint8_t     msid_start_offset;
@@ -613,7 +613,8 @@ decode_sse(proto_tree *ext_tree, packet_info *pinfo, tvbuff_t *tvb, unsigned off
                     "Cannot decode MSID Length - SSE too short");
         return;
     }
-    proto_tree_add_item_ret_uint8(ext_tree, hf_a11_ses_msid_len, tvb, offset, 1, ENC_BIG_ENDIAN, &msid_len);
+    msid_len =  tvb_get_uint8(tvb, offset);
+    proto_tree_add_item(ext_tree, hf_a11_ses_msid_len, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset  += 1;
     ext_len -= 1;
 
@@ -658,7 +659,7 @@ decode_sse(proto_tree *ext_tree, packet_info *pinfo, tvbuff_t *tvb, unsigned off
 }
 
 static void
-decode_bcmcs(proto_tree* ext_tree, packet_info *pinfo, tvbuff_t* tvb, unsigned offset, unsigned ext_len, proto_item *ext_len_item)
+decode_bcmcs(proto_tree* ext_tree, packet_info *pinfo, tvbuff_t* tvb, int offset, unsigned ext_len, proto_item *ext_len_item)
 {
 
     uint8_t bc_stype, entry_len;
@@ -699,7 +700,7 @@ decode_bcmcs(proto_tree* ext_tree, packet_info *pinfo, tvbuff_t* tvb, unsigned o
     }
     break;
     default:
-        proto_tree_add_expert_format_remaining(ext_tree, pinfo, &ei_a11_session_data_not_dissected, tvb, offset, "Session Data Type %u Not dissected yet", bc_stype);
+        proto_tree_add_expert_format(ext_tree, pinfo, &ei_a11_session_data_not_dissected, tvb, offset, -1, "Session Data Type %u Not dissected yet", bc_stype);
         return;
     }
 
@@ -708,7 +709,7 @@ decode_bcmcs(proto_tree* ext_tree, packet_info *pinfo, tvbuff_t* tvb, unsigned o
 
 /* RADIUS attributed */
 static void
-dissect_a11_radius( tvbuff_t *tvb, packet_info *pinfo, unsigned offset, proto_tree *tree, unsigned app_len)
+dissect_a11_radius( tvbuff_t *tvb, packet_info *pinfo, int offset, proto_tree *tree, int app_len)
 {
     proto_tree *radius_tree;
 
@@ -732,7 +733,7 @@ dissect_a11_radius( tvbuff_t *tvb, packet_info *pinfo, unsigned offset, proto_tr
 static const char *
 dissect_3gpp2_service_option_profile(proto_tree  *tree, tvbuff_t  *tvb, packet_info *pinfo)
 {
-    unsigned offset = 0;
+    int    offset = 0;
     uint8_t sub_type, sub_type_length;
     proto_item *pi;
 
@@ -743,7 +744,8 @@ dissect_3gpp2_service_option_profile(proto_tree  *tree, tvbuff_t  *tvb, packet_i
     while (tvb_reported_length_remaining(tvb,offset) > 0) {
         sub_type_length = tvb_get_uint8(tvb,offset+1);
 
-        proto_tree_add_item_ret_uint8(tree, hf_a11_sub_type, tvb, offset, 1, ENC_BIG_ENDIAN, &sub_type);
+        sub_type = tvb_get_uint8(tvb,offset);
+        proto_tree_add_item(tree, hf_a11_sub_type, tvb, offset, 1, ENC_BIG_ENDIAN);
         offset += 1;
         pi = proto_tree_add_item(tree, hf_a11_sub_type_length, tvb, offset, 1, ENC_BIG_ENDIAN);
         offset += 1;
@@ -778,7 +780,7 @@ static const char *
 dissect_3gpp2_radius_aut_flow_profile_ids(proto_tree  *tree, tvbuff_t  *tvb, packet_info *pinfo)
 {
     proto_tree *sub_tree;
-    unsigned    offset = 0;
+    int         offset = 0;
     proto_item *item;
     uint8_t     sub_type, sub_type_length;
     uint32_t    value;
@@ -809,7 +811,7 @@ dissect_3gpp2_radius_aut_flow_profile_ids(proto_tree  *tree, tvbuff_t  *tvb, pac
 
 /* Code to dissect Additional Session Info */
 static void
-dissect_ase(tvbuff_t *tvb, unsigned offset, unsigned ase_len, proto_tree *ext_tree)
+dissect_ase(tvbuff_t *tvb, int offset, unsigned ase_len, proto_tree *ext_tree)
 {
     unsigned clen = 0; /* consumed length */
 
@@ -818,7 +820,7 @@ dissect_ase(tvbuff_t *tvb, unsigned offset, unsigned ase_len, proto_tree *ext_tr
         uint8_t     srid           = tvb_get_uint8(tvb, offset+1);
         uint16_t    service_option = tvb_get_ntohs(tvb,  offset+2);
         uint8_t     entry_length;
-        unsigned    entry_start_offset;
+        int         entry_start_offset;
 
         /* Entry Length */
         entry_start_offset = offset;
@@ -933,7 +935,7 @@ dissect_ase(tvbuff_t *tvb, unsigned offset, unsigned ase_len, proto_tree *ext_tr
 #define A11_FQI_DSCP_INCLUDED 0x40
 
 static void
-dissect_fwd_qosinfo_flags(tvbuff_t *tvb, unsigned offset, proto_tree *ext_tree, uint8_t *p_dscp_included)
+dissect_fwd_qosinfo_flags(tvbuff_t *tvb, int offset, proto_tree *ext_tree, uint8_t *p_dscp_included)
 {
     uint8_t flags = tvb_get_uint8(tvb, offset);
 
@@ -951,7 +953,7 @@ dissect_fwd_qosinfo_flags(tvbuff_t *tvb, unsigned offset, proto_tree *ext_tree, 
 }
 
 static void
-dissect_fqi_entry_flags(tvbuff_t *tvb, unsigned offset, proto_tree *ext_tree, uint8_t dscp_enabled)
+dissect_fqi_entry_flags(tvbuff_t *tvb, int offset, proto_tree *ext_tree, uint8_t dscp_enabled)
 {
     proto_item *ti = proto_tree_add_item(ext_tree, hf_a11_fqi_entry_flag, tvb, offset, 1, ENC_BIG_ENDIAN);
     proto_tree *flags_tree = proto_item_add_subtree(ti, ett_a11_fqi_entry_flags);
@@ -964,7 +966,7 @@ dissect_fqi_entry_flags(tvbuff_t *tvb, unsigned offset, proto_tree *ext_tree, ui
 }
 
 static void
-dissect_rqi_entry_flags(tvbuff_t *tvb, unsigned offset, proto_tree *ext_tree)
+dissect_rqi_entry_flags(tvbuff_t *tvb, int offset, proto_tree *ext_tree)
 {
     proto_item *ti = proto_tree_add_item(ext_tree, hf_a11_rqi_entry_flag, tvb, offset, 1, ENC_BIG_ENDIAN);
     proto_tree *flags_tree = proto_item_add_subtree(ti, ett_a11_rqi_entry_flags);
@@ -974,9 +976,9 @@ dissect_rqi_entry_flags(tvbuff_t *tvb, unsigned offset, proto_tree *ext_tree)
 
 /* Code to dissect Forward QoS Info */
 static void
-dissect_fwd_qosinfo(tvbuff_t *tvb, unsigned offset, proto_tree *ext_tree)
+dissect_fwd_qosinfo(tvbuff_t *tvb, int offset, proto_tree *ext_tree)
 {
-    unsigned clen         = 0;    /* consumed length */
+    int    clen         = 0;    /* consumed length */
     uint8_t flow_count;
     uint8_t flow_index;
     uint8_t dscp_enabled = 0;
@@ -1019,7 +1021,8 @@ dissect_fwd_qosinfo(tvbuff_t *tvb, unsigned offset, proto_tree *ext_tree)
 
 
         /* Requested QoS Length */
-        proto_tree_add_item_ret_uint8(flow_tree, hf_a11_fqi_requested_qoslen, tvb, offset+clen, 1, ENC_BIG_ENDIAN, &requested_qos_len);
+        requested_qos_len = tvb_get_uint8(tvb, offset+clen);
+        proto_tree_add_item(flow_tree, hf_a11_fqi_requested_qoslen, tvb, offset+clen, 1, ENC_BIG_ENDIAN);
         clen++;
 
         /* Requested QoS Blob */
@@ -1057,7 +1060,8 @@ dissect_fwd_qosinfo(tvbuff_t *tvb, unsigned offset, proto_tree *ext_tree)
         }
 
         /* Granted QoS Length */
-        proto_tree_add_item_ret_uint8(flow_tree, hf_a11_fqi_granted_qoslen, tvb, offset+clen, 1, ENC_BIG_ENDIAN, &granted_qos_len);
+        granted_qos_len = tvb_get_uint8(tvb, offset+clen);
+        proto_tree_add_item(flow_tree, hf_a11_fqi_granted_qoslen, tvb, offset+clen, 1, ENC_BIG_ENDIAN);
         clen++;
 
         /* Granted QoS Blob */
@@ -1076,9 +1080,9 @@ dissect_fwd_qosinfo(tvbuff_t *tvb, unsigned offset, proto_tree *ext_tree)
 
 /* Code to dissect Reverse QoS Info */
 static void
-dissect_rev_qosinfo(tvbuff_t *tvb, unsigned offset, proto_tree *ext_tree)
+dissect_rev_qosinfo(tvbuff_t *tvb, int offset, proto_tree *ext_tree)
 {
-    unsigned clen = 0;            /* consumed length */
+    int    clen = 0;            /* consumed length */
     uint8_t flow_count;
     uint8_t flow_index;
 
@@ -1116,7 +1120,8 @@ dissect_rev_qosinfo(tvbuff_t *tvb, unsigned offset, proto_tree *ext_tree)
         clen++;
 
         /* Requested QoS Length */
-        proto_tree_add_item_ret_uint8(flow_tree, hf_a11_rqi_requested_qoslen, tvb, offset+clen, 1, ENC_BIG_ENDIAN, &requested_qos_len);
+        requested_qos_len = tvb_get_uint8(tvb, offset+clen);
+        proto_tree_add_item(flow_tree, hf_a11_rqi_requested_qoslen, tvb, offset+clen, 1, ENC_BIG_ENDIAN);
         clen++;
 
         /* Requested QoS Blob */
@@ -1153,7 +1158,8 @@ dissect_rev_qosinfo(tvbuff_t *tvb, unsigned offset, proto_tree *ext_tree)
         }
 
         /* Granted QoS Length */
-        proto_tree_add_item_ret_uint8(flow_tree, hf_a11_rqi_granted_qoslen, tvb, offset+clen, 1, ENC_BIG_ENDIAN, &granted_qos_len);
+        granted_qos_len = tvb_get_uint8(tvb, offset+clen);
+        proto_tree_add_item(flow_tree, hf_a11_rqi_granted_qoslen, tvb, offset+clen, 1, ENC_BIG_ENDIAN);
         clen++;
 
         /* Granted QoS Blob */
@@ -1173,11 +1179,11 @@ dissect_rev_qosinfo(tvbuff_t *tvb, unsigned offset, proto_tree *ext_tree)
 
 /* Code to dissect Subscriber QoS Profile */
 static void
-dissect_subscriber_qos_profile(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, unsigned ext_len, proto_tree *ext_tree)
+dissect_subscriber_qos_profile(tvbuff_t *tvb, packet_info *pinfo, int offset, int ext_len, proto_tree *ext_tree)
 {
     proto_tree *exts_tree;
 
-    unsigned qos_profile_len = ext_len;
+    int qos_profile_len = ext_len;
 
     exts_tree =
         proto_tree_add_subtree_format(ext_tree, tvb, offset, 0, ett_a11_subscriber_profile, NULL,
@@ -1196,14 +1202,15 @@ dissect_subscriber_qos_profile(tvbuff_t *tvb, packet_info *pinfo, unsigned offse
 
 /* Code to dissect Forward QoS Update Info */
 static void
-dissect_fwd_qosupdate_info(tvbuff_t *tvb, unsigned offset, proto_tree *ext_tree)
+dissect_fwd_qosupdate_info(tvbuff_t *tvb, int offset, proto_tree *ext_tree)
 {
-    unsigned clen = 0;            /* consumed length */
+    int    clen = 0;            /* consumed length */
     uint8_t flow_count;
     uint8_t flow_index;
 
     /* Flow Count */
-    proto_tree_add_item_ret_uint8(ext_tree, hf_a11_fqui_flowcount, tvb, offset+clen, 1, ENC_BIG_ENDIAN, &flow_count);
+    flow_count = tvb_get_uint8(tvb, offset+clen);
+    proto_tree_add_item(ext_tree, hf_a11_fqui_flowcount, tvb, offset+clen, 1, ENC_BIG_ENDIAN);
     clen++;
 
     for (flow_index=0; flow_index<flow_count; flow_index++) {
@@ -1237,14 +1244,15 @@ dissect_fwd_qosupdate_info(tvbuff_t *tvb, unsigned offset, proto_tree *ext_tree)
 
 /* Code to dissect Reverse QoS Update Info */
 static void
-dissect_rev_qosupdate_info(tvbuff_t *tvb, unsigned offset, proto_tree *ext_tree)
+dissect_rev_qosupdate_info(tvbuff_t *tvb, int offset, proto_tree *ext_tree)
 {
-    unsigned clen = 0;            /* consumed length */
+    int    clen = 0;            /* consumed length */
     uint8_t flow_count;
     uint8_t flow_index;
 
     /* Flow Count */
-    proto_tree_add_item_ret_uint8(ext_tree, hf_a11_rqui_flowcount, tvb, offset+clen, 1, ENC_BIG_ENDIAN, &flow_count);
+    flow_count = tvb_get_uint8(tvb, offset+clen);
+    proto_tree_add_item(ext_tree, hf_a11_rqui_flowcount, tvb, offset+clen, 1, ENC_BIG_ENDIAN);
     clen++;
 
     for (flow_index=0; flow_index<flow_count; flow_index++) {
@@ -1276,7 +1284,7 @@ dissect_rev_qosupdate_info(tvbuff_t *tvb, unsigned offset, proto_tree *ext_tree)
 
 /* Code to dissect extensions */
 static void
-dissect_a11_extensions( tvbuff_t *tvb, packet_info *pinfo, unsigned offset, proto_tree *tree)
+dissect_a11_extensions( tvbuff_t *tvb, packet_info *pinfo, int offset, proto_tree *tree)
 {
     proto_tree *exts_tree;
     proto_tree *ext_tree;
@@ -1315,7 +1323,7 @@ dissect_a11_extensions( tvbuff_t *tvb, packet_info *pinfo, unsigned offset, prot
 
         ext_tree = proto_tree_add_subtree_format(exts_tree, tvb, offset, ext_len + hdrLen,
                                  ett_a11_ext, NULL, "Extension: %s",
-                                 val_to_str_ext(pinfo->pool, ext_type, &a11_ext_types_ext,
+                                 val_to_str_ext(ext_type, &a11_ext_types_ext,
                                             "Unknown Extension %u"));
 
         proto_tree_add_uint(ext_tree, hf_a11_ext_type, tvb, offset, 1, ext_type);

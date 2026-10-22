@@ -1,4 +1,4 @@
-/* packet-ldap.c
+/* packet-ldap-template.c
  * Routines for ldap packet dissection
  *
 * See RFC 3494 (LDAP v2), RFC 4511 (LDAP v3), and RFC 2222 (SASL).
@@ -84,7 +84,6 @@
 #include <epan/expert.h>
 #include <epan/uat.h>
 #include <epan/charsets.h>
-#include <epan/tfs.h>
 #include <wsutil/str_util.h>
 #include <wsutil/array.h>
 #include "packet-frame.h"
@@ -102,6 +101,10 @@
 #include "packet-ber.h"
 #include "packet-per.h"
 #include "packet-dns.h"
+
+#define PNAME  "Lightweight Directory Access Protocol"
+#define PSNAME "LDAP"
+#define PFNAME "ldap"
 
 void proto_register_ldap(void);
 void proto_reg_handoff_ldap(void);
@@ -133,7 +136,6 @@ static int hf_mscldap_netlogon_ipaddress_family;
 static int hf_mscldap_netlogon_ipaddress_port;
 static int hf_mscldap_netlogon_ipaddress;
 static int hf_mscldap_netlogon_ipaddress_ipv4;
-static int hf_mscldap_netlogon_ipaddress_zero;
 static int hf_mscldap_netlogon_opcode;
 static int hf_mscldap_netlogon_flags;
 static int hf_mscldap_netlogon_flags_pdc;
@@ -163,7 +165,6 @@ static int hf_mscldap_username_z;
 static int hf_mscldap_username;
 static int hf_mscldap_sitename;
 static int hf_mscldap_clientsitename;
-static int hf_mscldap_nextclosestsitename;
 static int hf_mscldap_netlogon_lm_token;
 static int hf_mscldap_netlogon_nt_token;
 static int hf_ldap_sid;
@@ -229,7 +230,7 @@ static dissector_handle_t cldap_handle;
 static void prefs_register_ldap(void); /* forward declaration for use in preferences registration */
 
 
-/* different types of rpc calls on top of ms cldap */
+/* different types of rpc calls ontop of ms cldap */
 #define MSCLDAP_RPC_NETLOGON  1
 
 /* Message type Choice values */
@@ -526,7 +527,7 @@ get_hf_for_header(char* attribute_type)
 {
   int* hf_id = NULL;
 
-  if (attribute_types_hash && attribute_type) {
+  if (attribute_types_hash) {
     hf_id = (int*) g_hash_table_lookup(attribute_types_hash, attribute_type);
   } else {
     hf_id = NULL;
@@ -633,8 +634,8 @@ static char *ldapvalue_string;
 /* if the octet string contain all printable ASCII characters, then
  * display it as a string, othervise just display it in hex.
  */
-static unsigned
-dissect_ldap_AssertionValue(bool implicit_tag, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index)
+static int
+dissect_ldap_AssertionValue(bool implicit_tag, tvbuff_t *tvb, int offset, asn1_ctx_t *actx _U_, proto_tree *tree, int hf_index)
 {
   int8_t ber_class;
   bool pc, ind, is_ascii;
@@ -667,7 +668,7 @@ dissect_ldap_AssertionValue(bool implicit_tag, tvbuff_t *tvb, unsigned offset, a
 
     /* this octet string contains an NT SID */
     sid_tvb=tvb_new_subset_length(tvb, offset, len);
-    dissect_nt_sid(sid_tvb, actx->pinfo, 0, tree, "SID", &tmpstr, hf_index);
+    dissect_nt_sid(sid_tvb, 0, tree, "SID", &tmpstr, hf_index);
     ldapvalue_string=tmpstr;
 
     goto finished;
@@ -720,7 +721,7 @@ dissect_ldap_AssertionValue(bool implicit_tag, tvbuff_t *tvb, unsigned offset, a
 
   /* convert the string into a printable string */
   if(is_ascii){
-    ldapvalue_string= (char*)tvb_get_string_enc(actx->pinfo->pool, tvb, offset, len, ENC_UTF_8|ENC_NA);
+    ldapvalue_string= tvb_get_string_enc(actx->pinfo->pool, tvb, offset, len, ENC_UTF_8|ENC_NA);
   } else {
     ldapvalue_string= tvb_bytes_to_str_punct(actx->pinfo->pool, tvb, offset, len, ':');
   }
@@ -751,8 +752,9 @@ static int Filter_length;
 static int Filter_elements;
 
 /* Global variables */
-static unsigned MessageID;
+static int MessageID =-1;
 static int ProtocolOp = -1;
+static int result;
 static proto_item *ldm_tree; /* item to add text to */
 
 static void ldap_do_protocolop(packet_info *pinfo)
@@ -761,7 +763,7 @@ static void ldap_do_protocolop(packet_info *pinfo)
 
   if (do_protocolop) {
 
-    valstr = val_to_str(pinfo->pool, ProtocolOp, ldap_ProtocolOp_choice_vals, "Unknown (%u)");
+    valstr = val_to_str(ProtocolOp, ldap_ProtocolOp_choice_vals, "Unknown (%u)");
 
     col_append_fstr(pinfo->cinfo, COL_INFO, "%s(%u) ", valstr, MessageID);
 
@@ -928,6 +930,7 @@ dissect_ldap_payload(tvbuff_t *tvb, packet_info *pinfo,
   unsigned msg_len = 0;
   int messageOffset = 0;
   unsigned headerLength = 0;
+  unsigned length = 0;
   tvbuff_t *msg_tvb = NULL;
   int8_t ber_class;
   bool pc, ind = 0;
@@ -983,8 +986,19 @@ one_more_pdu:
      * Construct a tvbuff containing the amount of the payload we have
      * available.  Make its reported length the amount of data in the
      * LDAP message.
+     *
+     * XXX - if reassembly isn't enabled. the subdissector will throw a
+     * BoundsError exception, rather than a ReportedBoundsError exception.
+     * We really want a tvbuff where the length is "length", the reported
+     * length is "plen", and the "if the snapshot length were infinite"
+     * length is the minimum of the reported length of the tvbuff handed
+     * to us and "plen", with a new type of exception thrown if the offset
+     * is within the reported length but beyond that third length, with
+     * that exception getting the "Unreassembled Packet" error.
      */
-    msg_tvb = tvb_new_subset_length(tvb, offset, msg_len);
+    length = length_remaining;
+    if (length > msg_len) length = msg_len;
+    msg_tvb = tvb_new_subset_length_caplen(tvb, offset, length, msg_len);
 
     /*
      * Now dissect the LDAP message.
@@ -1029,6 +1043,7 @@ ldap_frame_end(void)
   Filter_elements = 0;
   Filter_length = 0;
   do_protocolop = false;
+  result = 0;
 
 /* seems to be ok, but reset just in case */
   matching_rule_string = NULL;
@@ -1040,6 +1055,7 @@ static void
   int offset = 0;
   conversation_t *conversation;
   bool doing_sasl_security = false;
+  unsigned length_remaining;
   ldap_conv_info_t *ldap_info = NULL;
   proto_item *ldap_item = NULL;
   proto_tree *ldap_tree = NULL;
@@ -1078,7 +1094,7 @@ static void
     }
   }
 
-  tvb_ensure_captured_length_remaining(tvb, offset);
+  length_remaining = tvb_ensure_captured_length_remaining(tvb, offset);
 
   /* It might still be a packet containing a SASL security layer
   * but it's just that we never saw the BIND packet.
@@ -1150,7 +1166,7 @@ static void
   if (doing_sasl_security && tvb_get_uint8(tvb, offset) == 0) {
     proto_tree *sasl_tree;
     tvbuff_t *sasl_tvb;
-    unsigned sasl_len, sasl_msg_len;
+    unsigned sasl_len, sasl_msg_len, length;
     /*
     * Yes.  The frame begins with a 4-byte big-endian length.
     * And we know we have at least 6 bytes
@@ -1180,8 +1196,19 @@ static void
     /*
     * Construct a tvbuff containing the amount of the payload we have
     * available.  Make its reported length the amount of data in the PDU.
+    *
+    * XXX - if reassembly isn't enabled. the subdissector will throw a
+    * BoundsError exception, rather than a ReportedBoundsError exception.
+    * We really want a tvbuff where the length is "length", the reported
+    * length is "plen", and the "if the snapshot length were infinite"
+    * length is the minimum of the reported length of the tvbuff handed
+    * to us and "plen", with a new type of exception thrown if the offset
+    * is within the reported length but beyond that third length, with
+    * that exception getting the "Unreassembled Packet" error.
     */
-    sasl_tvb = tvb_new_subset_length(tvb, offset, sasl_msg_len);
+    length = length_remaining;
+    if (length > sasl_msg_len) length = sasl_msg_len;
+    sasl_tvb = tvb_new_subset_length_caplen(tvb, offset, length, sasl_msg_len);
 
     proto_tree_add_uint(ldap_tree, hf_ldap_sasl_buffer_length, sasl_tvb, 0, 4, sasl_len);
 
@@ -1193,6 +1220,7 @@ static void
       (strcmp(ldap_info->auth_mech, "GSSAPI") == 0))) {
         tvbuff_t *gssapi_tvb = NULL;
         int ver_len;
+        int tmp_length;
         gssapi_encrypt_info_t gssapi_encrypt;
 
         /*
@@ -1203,7 +1231,10 @@ static void
         * the token, from which we compute the offset in the tvbuff at
         * which the plaintext data, i.e. the LDAP message, begins.
         */
-        gssapi_tvb = tvb_new_subset_length(sasl_tvb, 4, sasl_len);
+        tmp_length = tvb_reported_length_remaining(sasl_tvb, 4);
+        if ((unsigned)tmp_length > sasl_len)
+          tmp_length = sasl_len;
+        gssapi_tvb = tvb_new_subset_length_caplen(sasl_tvb, 4, tmp_length, sasl_len);
 
         /* Attempt decryption of the GSSAPI wrapped data if possible */
         memset(&gssapi_encrypt, 0, sizeof(gssapi_encrypt));
@@ -1292,11 +1323,11 @@ int dissect_mscldap_string(wmem_allocator_t *scope, tvbuff_t *tvb, int offset, i
 {
   int compr_len;
   const char *name;
-  int name_len;
+  unsigned name_len;
 
   /* The name data MUST start at offset 0 of the tvb */
-  compr_len = get_dns_name(scope, tvb, offset, max_len, 0, &name, &name_len);
-  *str = (char*)get_utf_8_string(scope, (const uint8_t*)name, name_len);
+  compr_len = get_dns_name(tvb, offset, max_len, 0, &name, &name_len);
+  *str = get_utf_8_string(scope, name, name_len);
   return offset + compr_len;
 }
 
@@ -1399,7 +1430,7 @@ static int dissect_NetLogon_PDU(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
   uint16_t itype;
   uint16_t len;
   uint32_t version;
-  unsigned fn_len;
+  int fn_len;
   proto_item *item;
 
   ldm_tree = NULL;
@@ -1558,30 +1589,23 @@ static int dissect_NetLogon_PDU(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
         old_offset = offset + 4;
         item = proto_tree_add_item(tree, hf_mscldap_netlogon_ipaddress, tvb, old_offset, 4, ENC_BIG_ENDIAN);
 
-        proto_tree *subtree;
+        if (tree) {
+          proto_tree *subtree;
 
-        subtree = proto_item_add_subtree(item, ett_mscldap_ipdetails);
+          subtree = proto_item_add_subtree(item, ett_mscldap_ipdetails);
 
-        /* get sockaddr family */
-        proto_tree_add_item(subtree, hf_mscldap_netlogon_ipaddress_family, tvb, offset, 2, ENC_LITTLE_ENDIAN);
-        offset +=2;
+          /* get sockaddr family */
+          proto_tree_add_item(subtree, hf_mscldap_netlogon_ipaddress_family, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+          offset +=2;
 
-        /* get sockaddr port */
-        proto_tree_add_item(subtree, hf_mscldap_netlogon_ipaddress_port, tvb, offset, 2, ENC_LITTLE_ENDIAN);
-        offset +=2;
+          /* get sockaddr port */
+          proto_tree_add_item(subtree, hf_mscldap_netlogon_ipaddress_port, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+          offset +=2;
 
-        /* get IP address */
-        proto_tree_add_item(subtree, hf_mscldap_netlogon_ipaddress_ipv4, tvb, offset, 4, ENC_BIG_ENDIAN);
-        offset += 4;
+          /* get IP address */
+          proto_tree_add_item(subtree, hf_mscldap_netlogon_ipaddress_ipv4, tvb, offset, 4, ENC_BIG_ENDIAN);
+        }
 
-        /* sin_zero (reserved 8 bytes, MUST be set to zero and ignored on receipt) */
-        proto_tree_add_item(subtree, hf_mscldap_netlogon_ipaddress_zero, tvb, offset, 8, ENC_NA);
-        offset += 8;
-      }
-      if ((version & NETLOGON_NT_VERSION_WITH_CLOSEST_SITE) == NETLOGON_NT_VERSION_WITH_CLOSEST_SITE){
-          old_offset=offset;
-          offset=dissect_mscldap_string(pinfo->pool, tvb, offset, 255, &str);
-          proto_tree_add_string(tree, hf_mscldap_nextclosestsitename, tvb, old_offset, offset-old_offset, str);
       }
 
       break;
@@ -1655,7 +1679,7 @@ dissect_ldap_oid(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* 
    *       proto_tree_add_oid() instead.
    */
 
-  oid=(char*)tvb_get_string_enc(pinfo->pool, tvb, 0, tvb_reported_length(tvb), ENC_UTF_8|ENC_NA);
+  oid=tvb_get_string_enc(pinfo->pool, tvb, 0, tvb_reported_length(tvb), ENC_UTF_8|ENC_NA);
   if(!oid){
     return tvb_captured_length(tvb);
   }
@@ -1681,7 +1705,7 @@ dissect_ldap_oid(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* 
 #define LDAP_ACCESSMASK_ADS_CONTROL_ACCESS  0x00000100
 
 static void
-ldap_specific_rights(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint32_t access)
+ldap_specific_rights(tvbuff_t *tvb, int offset, proto_tree *tree, uint32_t access)
 {
   static int * const access_flags[] = {
     &hf_ldap_AccessMask_ADS_CONTROL_ACCESS,
@@ -1714,12 +1738,12 @@ dissect_ldap_nt_sec_desc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 }
 
 static int
-dissect_ldap_sid(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+dissect_ldap_sid(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
   char *tmpstr;
 
   /* this octet string contains an NT SID */
-  dissect_nt_sid(tvb, pinfo, 0, tree, "SID", &tmpstr, hf_ldap_sid);
+  dissect_nt_sid(tvb, 0, tree, "SID", &tmpstr, hf_ldap_sid);
   ldapvalue_string=tmpstr;
   return tvb_captured_length(tvb);
 }
@@ -1879,11 +1903,11 @@ void proto_register_ldap(void) {
         NULL, HFILL }},
     { &hf_ldap_response_in,
       { "Response In", "ldap.response_in",
-        FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_RESPONSE), 0x0,
+        FT_FRAMENUM, BASE_NONE, NULL, 0x0,
         "The response to this LDAP request is in this frame", HFILL }},
     { &hf_ldap_response_to,
       { "Response To", "ldap.response_to",
-        FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_REQUEST), 0x0,
+        FT_FRAMENUM, BASE_NONE, NULL, 0x0,
         "This is a response to the LDAP request in this frame", HFILL }},
     { &hf_ldap_time,
       { "Time", "ldap.time",
@@ -1909,11 +1933,6 @@ void proto_register_ldap(void) {
       { "Port", "mscldap.netlogon.ipaddress.port",
         FT_UINT16, BASE_DEC, NULL, 0x0,
         NULL, HFILL }},
-
-    { &hf_mscldap_netlogon_ipaddress_zero,
-      { "Reserved", "mscldap.netlogon.ipaddress.zero",
-        FT_BYTES, BASE_NONE, NULL, 0x0,
-        "MUST be set to zero", HFILL }},
 
     { &hf_mscldap_netlogon_ipaddress,
       { "IP Address","mscldap.netlogon.ipaddress",
@@ -1999,11 +2018,6 @@ void proto_register_ldap(void) {
       { "Client Site", "mscldap.clientsitename",
         FT_STRING, BASE_NONE, NULL, 0x0,
         "Site name of the client", HFILL }},
-
-    { &hf_mscldap_nextclosestsitename,
-      { "Next Closest Site", "mscldap.nextclosestsitename",
-        FT_STRING, BASE_NONE, NULL, 0x0,
-        "Name of the site that is closest by cost to ClientSiteName without being equal", HFILL }},
 
     { &hf_ldap_sid,
       { "Sid", "ldap.sid",
@@ -2190,7 +2204,7 @@ void proto_register_ldap(void) {
 
   static ei_register_info ei[] = {
      { &ei_ldap_exceeded_filter_length, { "ldap.exceeded_filter_length", PI_UNDECODED, PI_ERROR, "Filter length exceeds number. Giving up", EXPFILL }},
-     { &ei_ldap_too_many_filter_elements, { "ldap.too_many_filter_elements", PI_UNDECODED, PI_ERROR, "Found too many filter elements. Giving up.", EXPFILL }},
+     { &ei_ldap_too_many_filter_elements, { "ldap.too_many_filter_elements", PI_UNDECODED, PI_ERROR, "Found more than %%u filter elements. Giving up.", EXPFILL }},
   };
 
   expert_module_t* expert_ldap;
@@ -2198,7 +2212,7 @@ void proto_register_ldap(void) {
   uat_t *attributes_uat;
 
   /* Register protocol */
-  proto_ldap = proto_register_protocol("Lightweight Directory Access Protocol", "LDAP", "ldap");
+  proto_ldap = proto_register_protocol(PNAME, PSNAME, PFNAME);
   /* Register fields and subtrees */
   proto_register_field_array(proto_ldap, hf, array_length(hf));
   proto_register_subtree_array(ett, array_length(ett));
@@ -2258,8 +2272,6 @@ void proto_register_ldap(void) {
 void
 proto_reg_handoff_ldap(void)
 {
-  dissector_handle_t ldap_sid_handle = NULL;
-
   dissector_add_uint_with_preference("udp.port", UDP_PORT_CLDAP, cldap_handle);
 
   gssapi_handle = find_dissector_add_dependency("gssapi", proto_ldap);
@@ -2276,7 +2288,10 @@ proto_reg_handoff_ldap(void)
 
 /*  http://msdn.microsoft.com/library/default.asp?url=/library/en-us/dsml/dsml/ldap_controls_and_session_support.asp */
 /*  https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-adts/3c5e87db-4728-4f29-b164-01dd7d7391ea */
+  oid_add_from_string("LDAP_PAGED_RESULT_OID_STRING","1.2.840.113556.1.4.319");
   oid_add_from_string("LDAP_SERVER_SHOW_DELETED_OID","1.2.840.113556.1.4.417");
+  oid_add_from_string("LDAP_SERVER_SORT_OID","1.2.840.113556.1.4.473");
+  oid_add_from_string("LDAP_SERVER_RESP_SORT_OID","1.2.840.113556.1.4.474");
   oid_add_from_string("LDAP_SERVER_CROSSDOM_MOVE_TARGET_OID","1.2.840.113556.1.4.521");
   oid_add_from_string("LDAP_SERVER_NOTIFICATION_OID","1.2.840.113556.1.4.528");
   oid_add_from_string("LDAP_SERVER_EXTENDED_DN_OID","1.2.840.113556.1.4.529");
@@ -2290,6 +2305,7 @@ proto_reg_handoff_ldap(void)
   oid_add_from_string("LDAP_MATCHING_RULE_BIT_AND", "1.2.840.113556.1.4.803");
   oid_add_from_string("LDAP_MATCHING_RULE_BIT_OR","1.2.840.113556.1.4.804");
   oid_add_from_string("LDAP_SERVER_TREE_DELETE_OID","1.2.840.113556.1.4.805");
+  oid_add_from_string("LDAP_SERVER_DIRSYNC_OID","1.2.840.113556.1.4.841");
   oid_add_from_string("LDAP_SERVER_GET_STATS_OID","1.2.840.113556.1.4.970");
   oid_add_from_string("LDAP_SERVER_VERIFY_NAME_OID","1.2.840.113556.1.4.1338");
   oid_add_from_string("LDAP_SERVER_DOMAIN_SCOPE_OID","1.2.840.113556.1.4.1339");
@@ -2368,20 +2384,11 @@ proto_reg_handoff_ldap(void)
   oid_add_from_string("iPlanet Replication Modrdn Extra Mods Control",                              "2.16.840.1.113730.3.4.999");
 
 
-  ldap_sid_handle = create_dissector_handle(dissect_ldap_sid, proto_ldap);
   dissector_add_string("ldap.name", "netlogon", create_dissector_handle(dissect_NetLogon_PDU, proto_cldap));
   dissector_add_string("ldap.name", "objectGUID", create_dissector_handle(dissect_ldap_guid, proto_ldap));
   dissector_add_string("ldap.name", "supportedControl", create_dissector_handle(dissect_ldap_oid, proto_ldap));
   dissector_add_string("ldap.name", "supportedCapabilities", create_dissector_handle(dissect_ldap_oid, proto_ldap));
-  dissector_add_string("ldap.name", "mS-DS-CreatorSID", ldap_sid_handle);
-  dissector_add_string("ldap.name", "msDS-QuotaTrustee", ldap_sid_handle);
-  dissector_add_string("ldap.name", "objectSid", ldap_sid_handle);
-  dissector_add_string("ldap.name", "securityIdentifier", ldap_sid_handle);
-  dissector_add_string("ldap.name", "sIDHistory", ldap_sid_handle);
-  dissector_add_string("ldap.name", "syncWithSID", ldap_sid_handle);
-  dissector_add_string("ldap.name", "tokenGroups", ldap_sid_handle);
-  dissector_add_string("ldap.name", "tokenGroupsGlobalAndUniversal", ldap_sid_handle);
-  dissector_add_string("ldap.name", "tokenGroupsNoGCAcceptable", ldap_sid_handle);
+  dissector_add_string("ldap.name", "objectSid", create_dissector_handle(dissect_ldap_sid, proto_ldap));
   dissector_add_string("ldap.name", "nTSecurityDescriptor", create_dissector_handle(dissect_ldap_nt_sec_desc, proto_ldap));
 
 #include "packet-ldap-dis-tab.c"

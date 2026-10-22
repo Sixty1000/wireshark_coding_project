@@ -25,10 +25,7 @@ Then all files ending with _.lua_ are loaded from the global plugins
 directory and its subdirectories. Then all files ending with _.lua_ in the
 personal Lua plugins directory and its subdirectories are loaded. The
 files are processed in ASCIIbetical order (compared byte-by-byte, as `strcmp`),
-descending into each subdirectory depth-first in order. A subdirectory in the
-global or personal plugin directories containing a `init.lua` is loaded as a
-package, where the `init.lua` file is the entry-point of the module and
-responsible for loading any additional submodules within its directory tree.
+descending into each subdirectory depth-first in order.
 
 Whether or not Lua scripts are enabled can be controlled via the
 _$$enable_lua$$_ variable. Lua scripts are enabled by
@@ -86,12 +83,6 @@ are initialized and before reading any file.
 This means that Lua dissectors can add themselves to tables registered by compiled
 dissectors, but not vice versa; compiled dissectors cannot add themselves to
 dissector tables registered by Lua dissectors.
-
-To align more closely with Lua conventions, Wireshark treats any directory in
-either the global or personal plugin directory that contains a `init.lua` file as a
-package, and will only load the `init.lua` script from that directory. The script is
-then responsible for requiring any additional dependencies, allowing for more control
-over the loading order within the package.
 ====
 
 Wireshark for Windows uses a modified Lua runtime
@@ -433,7 +424,6 @@ include::{build_dir}/wsluarm_src/wslua_file.adoc[]
 include::{build_dir}/wsluarm_src/wslua_dir.adoc[]
 include::{build_dir}/wsluarm_src/wslua_int64.adoc[]
 include::{build_dir}/wsluarm_src/wslua_struct.adoc[]
-include::{build_dir}/wsluarm_src/wslua_gcrypt.adoc[]
 
 [#lua_module_PCRE2]
 
@@ -444,23 +434,3 @@ real regex engine is more useful. Wireshark comes with Perl Compatible Regular
 Expressions version 2 (PCRE2). This engine is exposed into Wireshark’s Lua engine through the
 well-known Lrexlib library. The module is loaded in the global environment using
 the "rex_pcre2" table. The manual is available at https://rrthomas.github.io/lrexlib/manual.html.
-
-=== Bitwise Operations
-
-Lua 5.3 and greater has native https://www.lua.org/manual/5.4/manual.html#3.4.2[bitwise operators].
-The https://www.lua.org/manual/5.2/manual.html#6.7[bit32 library] introduced
-in Lua 5.2 is in Lua 5.3, albeit https://www.lua.org/manual/5.3/manual.html#8[deprecated],
-but not present in Lua 5.4. For maximum backwards compatibility, all versions of Wireshark
-with Lua support include the Lua BitOp library, which has been ported to be compatible with
-Lua 5.3 and 5.4. The BitOp API reference is available at https://bitop.luajit.org/api.html.
-The API is similar to that of the `bit32` library, and in many cases can function as a drop
-in replacement for code written to use that library by simply replacing a
-`bit32 = require("bit32")` statement with `bit32 = bit`.
-
-[NOTE]
-The library is already loaded in the global environment as the `bit` table; a
-statement like `local bit = require("bit")` is not necessary in Lua dissectors.
-On Wireshark versions prior to 4.6 this will give an error (unless another copy
-of the BitOp library is also accessible to the system Lua outside the Wireshark
-distributed code.) On Wireshark version 4.6 and later such statements behave as
-expected but are largely superfluous.

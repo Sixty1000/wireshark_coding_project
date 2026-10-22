@@ -19,8 +19,8 @@ with 2 functions:
 Ported to Python from rdps.c.
 '''
 
-import os.path
 import sys
+import os.path
 
 
 def ps_clean_string(raw_str):
@@ -36,19 +36,19 @@ def ps_clean_string(raw_str):
 
 
 def start_code(fd, name):
-    fd.write(f"static const char ps_{name}[] =\n")
+    fd.write("static const char ps_%s[] =\n" % name)
     
 
 def write_code(fd, raw_str):
     ps_str = ps_clean_string(raw_str)
-    fd.write(f"\t\"{ps_str}\"\n")
+    fd.write("\t\"%s\"\n" % ps_str)
 
 
 def end_code(fd, name):
     fd.write(";\n")
     fd.write("\n")
-    fd.write("void print_ps_" + name + "(FILE *fd) {\n")
-    fd.write("\tfwrite(ps_" + name + ", sizeof ps_" + name + " - 1, 1, fd);\n")
+    fd.write("void print_ps_%s(FILE *fd) {\n" % name)
+    fd.write("\tfwrite(ps_%s, sizeof ps_%s - 1, 1, fd);\n" % ( name, name ) )
     fd.write("}\n\n\n")
 
 

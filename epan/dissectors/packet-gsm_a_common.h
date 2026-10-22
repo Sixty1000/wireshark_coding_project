@@ -79,7 +79,7 @@
 typedef uint16_t (*elem_fcn)(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string, int string_len);
 typedef void (*msg_fcn)(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len);
 
-/* globals needed as a result of splitting the packet-gsm_a.c into several files
+/* globals needed as a result of spltting the packet-gsm_a.c into several files
  * until further restructuring can take place to make them more modular
  */
 
@@ -88,103 +88,102 @@ extern const value_string protocol_discriminator_vals[];
 extern const value_string gsm_a_pd_short_str_vals[];
 
 extern uint16_t de_cld_party_bcd_num(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string, int string_len);
-extern uint16_t de_clg_party_bcd_num(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string, int string_len);
 
 /* Needed to share the packet-gsm_a_common.c functions */
 extern value_string_ext gsm_bssmap_elem_strings_ext;
 extern int ett_gsm_bssmap_elem[];
-extern const elem_fcn bssmap_elem_fcn[];
+extern elem_fcn bssmap_elem_fcn[];
 extern int hf_gsm_a_bssmap_elem_id;
 
 extern value_string_ext gsm_dtap_elem_strings_ext;
 extern int ett_gsm_dtap_elem[];
-extern const elem_fcn dtap_elem_fcn[];
+extern elem_fcn dtap_elem_fcn[];
 extern int hf_gsm_a_dtap_elem_id;
 
 extern value_string_ext gsm_rp_elem_strings_ext;
 extern int ett_gsm_rp_elem[];
-extern const elem_fcn rp_elem_fcn[];
+extern elem_fcn rp_elem_fcn[];
 extern int hf_gsm_a_rp_elem_id;
 
 extern value_string_ext gsm_rr_elem_strings_ext;
 extern int ett_gsm_rr_elem[];
-extern const elem_fcn rr_elem_fcn[];
+extern elem_fcn rr_elem_fcn[];
 extern int hf_gsm_a_rr_elem_id;
 extern void get_rr_msg_params(uint8_t oct, const char **msg_str, int *ett_tree, int *hf_idx, msg_fcn *msg_fcn);
 
 extern value_string_ext gsm_common_elem_strings_ext;
 extern int ett_gsm_common_elem[];
-extern const elem_fcn common_elem_fcn[];
+extern elem_fcn common_elem_fcn[];
 extern int hf_gsm_a_common_elem_id;
 
 extern value_string_ext gsm_gm_elem_strings_ext;
 extern int ett_gsm_gm_elem[];
-extern const elem_fcn gm_elem_fcn[];
+extern elem_fcn gm_elem_fcn[];
 extern int hf_gsm_a_gm_elem_id;
 extern void get_gmm_msg_params(uint8_t oct, const char **msg_str, int *ett_tree, int *hf_idx, msg_fcn *msg_fcn);
 extern void get_sm_msg_params(uint8_t oct, const char **msg_str, int *ett_tree, int *hf_idx, msg_fcn *msg_fcn);
 
 extern value_string_ext gsm_bsslap_elem_strings_ext;
 extern int ett_gsm_bsslap_elem[];
-extern const elem_fcn bsslap_elem_fcn[];
+extern elem_fcn bsslap_elem_fcn[];
 extern int hf_gsm_a_bsslap_elem_id;
 
 extern value_string_ext gsm_bssmap_le_elem_strings_ext;
 extern int ett_gsm_bssmap_le_elem[];
-extern const elem_fcn bssmap_le_elem_fcn[];
+extern elem_fcn bssmap_le_elem_fcn[];
 extern int hf_gsm_bssmap_le_elem_id;
 
 extern value_string_ext nas_eps_common_elem_strings_ext;
 extern int ett_nas_eps_common_elem[];
-extern const elem_fcn nas_eps_common_elem_fcn[];
+extern elem_fcn nas_eps_common_elem_fcn[];
 extern int hf_nas_eps_common_elem_id;
 
 extern value_string_ext nas_emm_elem_strings_ext;
 extern int ett_nas_eps_emm_elem[];
-extern const elem_fcn emm_elem_fcn[];
+extern elem_fcn emm_elem_fcn[];
 extern int hf_nas_eps_emm_elem_id;
 
 extern value_string_ext nas_esm_elem_strings_ext;
 extern int ett_nas_eps_esm_elem[];
-extern const elem_fcn esm_elem_fcn[];
+extern elem_fcn esm_elem_fcn[];
 extern int hf_nas_eps_esm_elem_id;
 
 extern value_string_ext sgsap_elem_strings_ext;
 extern int ett_sgsap_elem[];
-extern const elem_fcn sgsap_elem_fcn[];
+extern elem_fcn sgsap_elem_fcn[];
 extern int hf_sgsap_elem_id;
 
 extern value_string_ext bssgp_elem_strings_ext;
 extern int ett_bssgp_elem[];
-extern const elem_fcn bssgp_elem_fcn[];
+extern elem_fcn bssgp_elem_fcn[];
 extern int hf_bssgp_elem_id;
 
 extern value_string_ext gmr1_ie_common_strings_ext;
-extern const elem_fcn gmr1_ie_common_func[];
+extern elem_fcn gmr1_ie_common_func[];
 extern int ett_gmr1_ie_common[];
 
 extern value_string_ext gmr1_ie_rr_strings_ext;
-extern const elem_fcn gmr1_ie_rr_func[];
+extern elem_fcn gmr1_ie_rr_func[];
 extern int ett_gmr1_ie_rr[];
 
 extern value_string_ext nas_5gs_common_elem_strings_ext;
 extern int ett_nas_5gs_common_elem[];
-extern const elem_fcn nas_5gs_common_elem_fcn[];
+extern elem_fcn nas_5gs_common_elem_fcn[];
 extern int hf_nas_5gs_common_elem_id;
 
 extern value_string_ext nas_5gs_mm_elem_strings_ext;
 extern int ett_nas_5gs_mm_elem[];
-extern const elem_fcn nas_5gs_mm_elem_fcn[];
+extern elem_fcn nas_5gs_mm_elem_fcn[];
 extern int hf_nas_5gs_mm_elem_id;
 
 extern value_string_ext nas_5gs_sm_elem_strings_ext;
 extern int ett_nas_5gs_sm_elem[];
-extern const elem_fcn nas_5gs_sm_elem_fcn[];
+extern elem_fcn nas_5gs_sm_elem_fcn[];
 extern int hf_nas_5gs_sm_elem_id;
 
 extern value_string_ext nas_5gs_updp_elem_strings_ext;
 extern int ett_nas_5gs_updp_elem[];
-extern const elem_fcn nas_5gs_updp_elem_fcn[];
+extern elem_fcn nas_5gs_updp_elem_fcn[];
 extern int hf_nas_5gs_updp_elem_id;
 
 extern sccp_assoc_info_t* sccp_assoc;
@@ -235,7 +234,7 @@ extern int hf_3gpp_tmsi;
 #define NAS_5GS_PDU_TYPE_SM         18
 #define NAS_5GS_PDU_TYPE_UPDP       19
 
-extern const char* get_gsm_a_msg_string(wmem_allocator_t* pool, int pdu_type, int idx);
+extern const char* get_gsm_a_msg_string(int pdu_type, int idx);
 
 /*
  * this should be set on a per message basis, if possible
@@ -363,8 +362,8 @@ extern const char* get_gsm_a_msg_string(wmem_allocator_t* pool, int pdu_type, in
         SEV_elem_funcs = nas_5gs_updp_elem_fcn; \
         break; \
     default: \
-        proto_tree_add_expert_format_remaining(tree, pinfo, ei_unknown, \
-            tvb, curr_offset, \
+        proto_tree_add_expert_format(tree, pinfo, ei_unknown, \
+            tvb, curr_offset, -1, \
             "Unknown PDU type (%u) gsm_a_common", SEV_pdu_type); \
         return(consumed); \
     }
@@ -455,7 +454,7 @@ WS_DLL_PUBLIC uint16_t elem_v_short(tvbuff_t *tvb, proto_tree *tree, packet_info
             tvb, curr_offset, 0, \
             "Missing Mandatory element (0x%02x) %s%s, rest of dissection is suspect", \
             EMT_iei, \
-            get_gsm_a_msg_string(pinfo->pool, EMT_pdu_type, EMT_elem_idx), \
+            get_gsm_a_msg_string(EMT_pdu_type, EMT_elem_idx), \
             /* coverity[array_null] */ \
             (EMT_elem_name_addition == NULL) ? "" : EMT_elem_name_addition \
             ); \
@@ -481,7 +480,7 @@ WS_DLL_PUBLIC uint16_t elem_v_short(tvbuff_t *tvb, proto_tree *tree, packet_info
             tvb, curr_offset, 0, \
             "Missing Mandatory element (0x%02x) %s%s, rest of dissection is suspect", \
             EMT_iei, \
-            get_gsm_a_msg_string(pinfo->pool, EMT_pdu_type, EMT_elem_idx), \
+            get_gsm_a_msg_string(EMT_pdu_type, EMT_elem_idx), \
             /* coverity[array_null] */ \
             (EMT_elem_name_addition == NULL) ? "" : EMT_elem_name_addition \
             ); \
@@ -502,7 +501,7 @@ WS_DLL_PUBLIC uint16_t elem_v_short(tvbuff_t *tvb, proto_tree *tree, packet_info
             tvb, curr_offset, 0, \
             "Missing Mandatory element (0x%02x) %s%s, rest of dissection is suspect", \
             EMT_iei, \
-            get_gsm_a_msg_string(pinfo->pool, EMT_pdu_type, EMT_elem_idx), \
+            get_gsm_a_msg_string(EMT_pdu_type, EMT_elem_idx), \
             /* coverity[array_null] */ \
             (EMT_elem_name_addition == NULL) ? "" : EMT_elem_name_addition \
             ); \
@@ -511,7 +510,6 @@ WS_DLL_PUBLIC uint16_t elem_v_short(tvbuff_t *tvb, proto_tree *tree, packet_info
 #define ELEM_OPT_TLV(EOT_iei, EOT_pdu_type, EOT_elem_idx, EOT_elem_name_addition) \
 {\
     if ((signed)curr_len <= 0) return; \
-    /* coverity[overrun-call:FALSE] */ \
     if ((consumed = elem_tlv(tvb, tree, pinfo, (uint8_t) EOT_iei, EOT_pdu_type, EOT_elem_idx, curr_offset, curr_len, EOT_elem_name_addition)) > 0) \
     { \
         curr_offset += consumed; \
@@ -522,7 +520,6 @@ WS_DLL_PUBLIC uint16_t elem_v_short(tvbuff_t *tvb, proto_tree *tree, packet_info
 #define ELEM_OPT_TELV(EOT_iei, EOT_pdu_type, EOT_elem_idx, EOT_elem_name_addition) \
 {\
     if ((signed)curr_len <= 0) return; \
-    /* coverity[overrun-call:FALSE] */ \
     if ((consumed = elem_telv(tvb, tree, pinfo, (uint8_t) EOT_iei, EOT_pdu_type, EOT_elem_idx, curr_offset, curr_len, EOT_elem_name_addition)) > 0) \
     { \
         curr_offset += consumed; \
@@ -543,7 +540,6 @@ WS_DLL_PUBLIC uint16_t elem_v_short(tvbuff_t *tvb, proto_tree *tree, packet_info
 #define ELEM_MAND_TV(EMT_iei, EMT_pdu_type, EMT_elem_idx, EMT_elem_name_addition, ei_mandatory) \
 {\
     if (((signed)curr_len > 0) && \
-        /* coverity[overrun-call:FALSE] */ \
         ((consumed = elem_tv(tvb, tree, pinfo, (uint8_t) EMT_iei, EMT_pdu_type, EMT_elem_idx, curr_offset, EMT_elem_name_addition)) > 0)) \
     { \
         curr_offset += consumed; \
@@ -555,7 +551,7 @@ WS_DLL_PUBLIC uint16_t elem_v_short(tvbuff_t *tvb, proto_tree *tree, packet_info
             tvb, curr_offset, 0, \
             "Missing Mandatory element (0x%02x) %s%s, rest of dissection is suspect", \
             EMT_iei, \
-            get_gsm_a_msg_string(pinfo->pool, EMT_pdu_type, EMT_elem_idx), \
+            get_gsm_a_msg_string(EMT_pdu_type, EMT_elem_idx), \
             /* coverity[array_null] */ \
             (EMT_elem_name_addition == NULL) ? "" : EMT_elem_name_addition \
         ); \
@@ -565,7 +561,6 @@ WS_DLL_PUBLIC uint16_t elem_v_short(tvbuff_t *tvb, proto_tree *tree, packet_info
 #define ELEM_OPT_TV(EOT_iei, EOT_pdu_type, EOT_elem_idx, EOT_elem_name_addition) \
 {\
     if ((signed)curr_len <= 0) return; \
-    /* coverity[overrun-call:FALSE] */ \
     if ((consumed = elem_tv(tvb, tree, pinfo, (uint8_t) EOT_iei, EOT_pdu_type, EOT_elem_idx, curr_offset, EOT_elem_name_addition)) > 0) \
     { \
         curr_offset += consumed; \
@@ -576,7 +571,6 @@ WS_DLL_PUBLIC uint16_t elem_v_short(tvbuff_t *tvb, proto_tree *tree, packet_info
 #define ELEM_OPT_TV_SHORT(EOT_iei, EOT_pdu_type, EOT_elem_idx, EOT_elem_name_addition) \
 {\
     if ((signed)curr_len <= 0) return; \
-    /* coverity[overrun-call:FALSE] */ \
     if ((consumed = elem_tv_short(tvb, tree, pinfo, EOT_iei, EOT_pdu_type, EOT_elem_idx, curr_offset, EOT_elem_name_addition)) > 0) \
     { \
         curr_offset += consumed; \
@@ -607,7 +601,7 @@ WS_DLL_PUBLIC uint16_t elem_v_short(tvbuff_t *tvb, proto_tree *tree, packet_info
         proto_tree_add_expert_format(tree, pinfo, &ei_mandatory,\
             tvb, curr_offset, 0, \
             "Missing Mandatory element %s%s, rest of dissection is suspect", \
-            get_gsm_a_msg_string(pinfo->pool, EML_pdu_type, EML_elem_idx), \
+            get_gsm_a_msg_string(EML_pdu_type, EML_elem_idx), \
             /* coverity[array_null] */ \
             (EML_elem_name_addition == NULL) ? "" : EML_elem_name_addition \
         ); \
@@ -627,7 +621,7 @@ WS_DLL_PUBLIC uint16_t elem_v_short(tvbuff_t *tvb, proto_tree *tree, packet_info
         proto_tree_add_expert_format(tree, pinfo, &ei_mandatory,\
             tvb, curr_offset, 0, \
             "Missing Mandatory element %s%s, rest of dissection is suspect", \
-            get_gsm_a_msg_string(pinfo->pool, EML_pdu_type, EML_elem_idx), \
+            get_gsm_a_msg_string(EML_pdu_type, EML_elem_idx), \
             /* coverity[array_null] */ \
             (EML_elem_name_addition == NULL) ? "" : EML_elem_name_addition \
         ); \
@@ -647,7 +641,7 @@ WS_DLL_PUBLIC uint16_t elem_v_short(tvbuff_t *tvb, proto_tree *tree, packet_info
         proto_tree_add_expert_format(tree, pinfo, &ei_mandatory,\
             tvb, curr_offset, 0, \
             "Missing Mandatory element %s%s, rest of dissection is suspect", \
-            get_gsm_a_msg_string(pinfo->pool, EMV_pdu_type, EMV_elem_idx), \
+            get_gsm_a_msg_string(EMV_pdu_type, EMV_elem_idx), \
             /* coverity[array_null] */ \
             (EMV_elem_name_addition == NULL) ? "" : EMV_elem_name_addition \
         ); \
@@ -668,8 +662,8 @@ WS_DLL_PUBLIC uint16_t elem_v_short(tvbuff_t *tvb, proto_tree *tree, packet_info
         proto_tree_add_expert_format(tree, pinfo, &ei_mandatory,\
             tvb, curr_offset, 0, \
             "Missing Mandatory elements %s %s, rest of dissection is suspect", \
-            get_gsm_a_msg_string(pinfo->pool, EMV_pdu_type1, EMV_elem_idx1), \
-            get_gsm_a_msg_string(pinfo->pool, EMV_pdu_type2, EMV_elem_idx2) \
+            get_gsm_a_msg_string(EMV_pdu_type1, EMV_elem_idx1), \
+            get_gsm_a_msg_string(EMV_pdu_type2, EMV_elem_idx2) \
             /* coverity[array_null] */ \
         ); \
     } \
@@ -736,7 +730,6 @@ uint16_t de_cn_common_gsm_map_nas_sys_info(tvbuff_t *tvb, proto_tree *tree, pack
 uint16_t de_cs_domain_spec_sys_info(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string, int string_len);
 uint16_t de_ps_domain_spec_sys_info(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string, int string_len);
 uint16_t de_plmn_list(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string, int string_len);
-uint16_t de_emerg_num_list(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo, uint32_t offset, unsigned len, char* add_string, int string_len);
 WS_DLL_PUBLIC
 uint16_t de_ms_cm_1(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string, int string_len);
 WS_DLL_PUBLIC
@@ -749,7 +742,6 @@ uint16_t de_sm_apn(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t
 uint16_t de_sm_cause(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string, int string_len);
 uint16_t de_sm_mbms_prot_conf_opt(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string _U_, int string_len _U_);
 uint16_t de_sm_pco(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string, int string_len);
-WS_DLL_PUBLIC
 uint16_t de_sm_pdp_addr(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string _U_, int string_len _U_);
 WS_DLL_PUBLIC
 uint16_t de_sm_qos(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string, int string_len);
@@ -845,16 +837,17 @@ uint16_t de_sgsap_ecgi(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint
  * without having to duplicate it. With MSVC and a
  * libwireshark.dll, we need a special declaration.
  */
-extern const value_string gsm_a_bssmap_msg_strings[];
-extern const value_string gsm_a_dtap_msg_mm_strings[];
-extern const value_string gsm_a_dtap_msg_rr_strings[];
-extern const value_string gsm_a_dtap_msg_cc_strings[];
-extern const value_string gsm_a_dtap_msg_gmm_strings[];
-extern const value_string gsm_a_dtap_msg_sms_strings[];
-extern const value_string gsm_a_dtap_msg_sm_strings[];
-extern const value_string gsm_a_dtap_msg_ss_strings[];
-extern const value_string gsm_a_dtap_msg_tp_strings[];
-extern const value_string gsm_a_rr_short_pd_msg_strings[];
+WS_DLL_PUBLIC const value_string gsm_a_bssmap_msg_strings[];
+WS_DLL_PUBLIC const value_string gsm_a_dtap_msg_mm_strings[];
+WS_DLL_PUBLIC const value_string gsm_a_dtap_msg_rr_strings[];
+WS_DLL_PUBLIC const value_string gsm_a_dtap_msg_cc_strings[];
+WS_DLL_PUBLIC const value_string gsm_a_dtap_msg_gmm_strings[];
+WS_DLL_PUBLIC const value_string gsm_a_dtap_msg_sms_strings[];
+WS_DLL_PUBLIC const value_string gsm_a_dtap_msg_sm_strings[];
+WS_DLL_PUBLIC const value_string gsm_a_dtap_msg_ss_strings[];
+WS_DLL_PUBLIC const value_string gsm_a_dtap_msg_tp_strings[];
+WS_DLL_PUBLIC const value_string gsm_a_rr_short_pd_msg_strings[];
+WS_DLL_PUBLIC const char *gsm_a_pd_str[];
 
 extern const value_string gsm_a_sm_qos_del_of_err_sdu_vals[];
 extern const value_string gsm_a_sm_qos_traffic_cls_vals[];
@@ -1184,19 +1177,6 @@ typedef enum
     DE_BMAPLE_PACKET_MEAS_REP,  /* Packet Measurement Report */
     DE_BMAPLE_MEAS_CELL_ID,     /* Measured Cell Identity */
     DE_BMAPLE_IMEI,             /* IMEI */
-    DE_BMAPLE_BSS_MLAT_CAP,     /* 10.34 BSS Multilateration Capability */
-    DE_BMAPLE_CELL_INFO_LIST,   /* 10.35 Cell Information List */
-    DE_BMAPLE_BTS_REC_ACC,      /* 10.36 BTS Reception Accuracy Level */
-    DE_BMAPLE_MLAT_POS_METHOD,  /* 10.37 Multilateration Positioning Method */
-    DE_BMAPLE_MLAT_TIMING_ADV,  /* 10.38 Multilateration Timing Advance */
-    DE_BMAPLE_MS_SYNC_ACC,      /* 10.39 MS Sync Accuracy */
-    DE_BMAPLE_SHORT_ID_SET,     /* 10.40 Short ID Set */
-    DE_BMAPLE_RANDOM_ID_SET,    /* 10.41 Random ID Set */
-    DE_BMAPLE_SHORT_BSS_ID,     /* 10.42 Short BSS ID */
-    DE_BMAPLE_RANDOM_ID,        /* 10.43 Random ID */
-    DE_BMAPLE_SHORT_ID,         /* 10.44 Random ID */
-    DE_BMAPLE_COVERAGE_CLASS,   /* 10.45 Coverage Class */
-    DE_BMAPLE_MTA_ACC_SEC_REQ,  /* 10.46 MTA Access Security Required */
     BMAPLE_NONE                 /* NONE */
 }
 bssmap_le_elem_idx_t;
@@ -1569,7 +1549,7 @@ typedef enum
  * 10.5.2.68 VGCS AMR Configuration
  */
     DE_RR_CARRIER_IND,              /* 10.5.2.69 Carrier Indication */
-    DE_RR_FEATURE_INDICATOR,        /* 10.5.2.76 feature Indicator */
+    DE_RR_FEATURE_INDICATOR,        /* 10.5.2.76 feature Inticator */
     DE_RR_EXTENDED_TSC_SET,         /* 10.5.2.82 Extended TSC Set */
     DE_RR_EC_REQUEST_REFERENCE,     /* 10.5.2.83 EC Request reference */
     DE_RR_EC_PKT_CH_DSC1,           /* 10.5.2.84 EC Packet Channel Description Type 1 */
@@ -1606,7 +1586,6 @@ typedef enum
     DE_EMM_AUTH_FAIL_PAR,       /* 9.9.3.1  Authentication failure parameter (dissected in packet-gsm_a_dtap.c)*/
     DE_EMM_AUTN,                /* 9.9.3.2  Authentication parameter AUTN */
     DE_EMM_AUTH_PAR_RAND,       /* 9.9.3.3  Authentication parameter RAND */
-    DE_EMM_ACCESS_TECH_UTIL_CTRL, /* 9.9.3.3A Access technology utilization control */
     DE_EMM_AUTH_RESP_PAR,       /* 9.9.3.4  Authentication response parameter */
     DE_EMM_SMS_SERVICES_STATUS, /* 9.9.3.4B SMS services status */
     DE_EMM_CSFB_RESP,           /* 9.9.3.5  CSFB response */
@@ -1683,11 +1662,6 @@ typedef enum
     DE_EMM_UNAVAIL_CONFIG,      /* 9.9.3.70 Unavailability configuration */
     DE_EMM_UE_INFO_REQ,         /* 9.9.3.71 UE information request */
     DE_EMM_UE_COARSE_LOC_INFO,  /* 9.9.3.72 UE coarse location information */
-    DE_EMM_SF_SAT_OP_PARAMS,    /* 9.9.3.73 S&F satellite operation parameters */
-    DE_EMM_DATA_CONT,           /* 9.9.3.74 Data container */
-    DE_EMM_REG_WAIT_RANGE,      /* 9.9.3.75 Registration wait range */
-    DE_EMM_PLMNS_LIST_DISASTER_COND, /* 9.9.3.76 List of PLMNs to be used in disaster condition */
-    DE_EMM_PLMN_ID,             /* 9.9.3.77 PLMN identity */
     DE_EMM_NONE                 /* NONE */
 }
 nas_emm_elem_idx_t;
@@ -1902,8 +1876,6 @@ typedef enum
     DE_NAS_5GS_MM_AUN3_DEVICE_SEC_KEY,       /* 9.11.3.107   AUN3 device security key */
     DE_NAS_5GS_MM_ON_DEMAND_NSSAI,           /* 9.11.3.108   On-demand NSSAI */
     DE_NAS_5GS_MM_EXT_5GMM_CAUSE,            /* 9.11.3.109   Extended 5GMM cause */
-    DE_NAS_5GS_MM_LP_WUSPS_ASSIST_INFO,      /* 9.11.3.111   LP-WUSPS assistance information */
-    DE_NAS_5GS_MM_LP_WUS_STATUS,             /* 9.11.3.112   LP-WUS status */
     DE_NAS_5GS_MM_NONE        /* NONE */
 }
 nas_5gs_mm_elem_idx_t;

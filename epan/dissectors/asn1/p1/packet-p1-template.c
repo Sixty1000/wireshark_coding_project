@@ -32,8 +32,9 @@
 
 #include "packet-p1.h"
 
-void proto_reg_handoff_p1(void);
-void proto_register_p1(void);
+#define PNAME  "X.411 Message Transfer Service"
+#define PSNAME "P1"
+#define PFNAME "p1"
 
 /* Initialize the protocol and registered fields */
 static int proto_p1;
@@ -223,12 +224,12 @@ dissect_p1_mts_apdu (tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 static int
 dissect_p1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* data)
 {
-    unsigned offset = 0;
-    unsigned old_offset;
+    int offset = 0;
+    int old_offset;
     proto_item *item;
     proto_tree *tree;
     struct SESSION_DATA_STRUCTURE* session;
-    unsigned (*p1_dissector)(bool implicit_tag _U_, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx _U_, proto_tree *tree, int hf_index _U_) = NULL;
+    int (*p1_dissector)(bool implicit_tag _U_, tvbuff_t *tvb, int offset, asn1_ctx_t *actx _U_, proto_tree *tree, int hf_index _U_) = NULL;
     const char *p1_op_name;
     int hf_p1_index = 0;
     asn1_ctx_t asn1_ctx;
@@ -272,7 +273,7 @@ dissect_p1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* dat
       hf_p1_index = hf_p1_MTS_APDU_PDU;
       break;
     default:
-      proto_tree_add_expert_remaining(tree, pinfo, &ei_p1_unsupported_pdu, tvb, offset);
+      proto_tree_add_expert(tree, pinfo, &ei_p1_unsupported_pdu, tvb, offset, -1);
       return tvb_captured_length(tvb);
     }
 
@@ -282,7 +283,7 @@ dissect_p1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* dat
         old_offset=offset;
         offset=(*p1_dissector)(false, tvb, offset, &asn1_ctx , tree, hf_p1_index);
         if (offset == old_offset) {
-            proto_tree_add_expert_remaining(tree, pinfo, &ei_p1_zero_pdu, tvb, offset);
+            proto_tree_add_expert(tree, pinfo, &ei_p1_zero_pdu, tvb, offset, -1);
             break;
         }
     }
@@ -346,7 +347,7 @@ void proto_register_p1(void) {
   module_t *p1_module;
 
   /* Register protocol */
-  proto_p1 = proto_register_protocol("X.411 Message Transfer Service", "P1", "p1");
+  proto_p1 = proto_register_protocol(PNAME, PSNAME, PFNAME);
   p1_handle = register_dissector("p1", dissect_p1, proto_p1);
 
   proto_p3 = proto_register_protocol("X.411 Message Access Service", "P3", "p3");

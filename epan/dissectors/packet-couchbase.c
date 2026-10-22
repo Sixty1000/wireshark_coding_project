@@ -47,6 +47,10 @@
 
 #include <math.h>
 
+#define PNAME  "Couchbase Protocol"
+#define PSNAME "Couchbase"
+#define PFNAME "couchbase"
+
 #define COUCHBASE_DEFAULT_PORT        "11210"
 #define COUCHBASE_HEADER_LEN   24
 
@@ -261,9 +265,6 @@ static bool is_request_magic(uint8_t magic) {
 #define CLIENT_OPCODE_AUDIT_CONFIG_RELOAD     0x28
 #define CLIENT_OPCODE_SHUTDOWN                0x29
 
-#define CLIENT_OPCODE_SET_ACTIVE_ENCRYPTION_KEYS 0x2d
-#define CLIENT_OPCODE_PRUNE_ENCRYPTION_KEYS   0x2e
-
  /* Range operations.
   * These commands are used for range operations and exist within
   * protocol_binary.h for use in other projects. Range operations are
@@ -301,9 +302,6 @@ static bool is_request_magic(uint8_t magic) {
 
 #define CLIENT_OPCODE_GET_ALL_VB_SEQNOS       0x48
 
-#define CLIENT_OPCODE_GET_EX                  0x49
-#define CLIENT_OPCODE_GET_EX_REPLICA          0x4a
-
 /* DCP commands */
 #define CLIENT_OPCODE_DCP_OPEN_CONNECTION         0x50
 #define CLIENT_OPCODE_DCP_ADD_STREAM              0x51
@@ -327,18 +325,6 @@ static bool is_request_magic(uint8_t magic) {
 #define CLIENT_OPCODE_DCP_ABORT                   0x63
 #define CLIENT_OPCODE_DCP_SEQNO_ADVANCED          0x64
 #define CLIENT_OPCODE_DCP_OSO_SNAPSHOT            0x65
-#define CLIENT_OPCODE_DCP_CACHE_TRANSFER          0x66
-#define CLIENT_OPCODE_DCP_CACHE_TRANSFER_END      0x67
-
-#define CLIENT_OPCODE_GET_FUSION_STORAGE_SNAPSHOT 0x70
-#define CLIENT_OPCODE_RELEASE_FUSION_STORAGE_SNAPSHOT 0x71
-#define CLIENT_OPCODE_MOUNT_FUSION_VB             0x72
-#define CLIENT_OPCODE_UNMOUNT_FUSION_VB           0x73
-#define CLIENT_OPCODE_SYNC_FUSION_LOGSTORE        0x74
-#define CLIENT_OPCODE_START_FUSION_UPLOADER       0x75
-#define CLIENT_OPCODE_STOP_FUSION_UPLOADER        0x76
-#define CLIENT_OPCODE_DELETE_FUSION_NAMESPACE     0x77
-#define CLIENT_OPCODE_GET_FUSION_NAMESPACES       0x78
 
  /* Commands from EP (eventually persistent) and bucket engines */
 #define CLIENT_OPCODE_STOP_PERSISTENCE        0x80
@@ -420,11 +406,6 @@ static bool is_request_magic(uint8_t magic) {
 #define CLIENT_OPCODE_RANGE_SCAN_CREATE       0xda
 #define CLIENT_OPCODE_RANGE_SCAN_CONTINUE     0xdb
 #define CLIENT_OPCODE_RANGE_SCAN_CANCEL       0xdc
-
-#define CLIENT_OPCODE_PREPARE_SNAPSHOT        0xe0
-#define CLIENT_OPCODE_RELEASE_SNAPSHOT        0xe1
-#define CLIENT_OPCODE_DOWNLOAD_SNAPSHOT       0xe2
-#define CLIENT_OPCODE_GET_FILE_FRAGMENT       0xe3
 
 #define CLIENT_OPCODE_SCRUB                   0xf0
 #define CLIENT_OPCODE_ISASL_REFRESH           0xf1
@@ -551,9 +532,6 @@ static int hf_extras_system_event_id;
 static int hf_extras_system_event_version;
 static int hf_extras_pathlen;
 static int hf_extras_dcp_oso_snapshot_flags;
-static int hf_dcp_cache_transfer;
-static int hf_dcp_cache_transfer_keylen;
-static int hf_dcp_cache_transfer_cachehint;
 static int hf_server_extras_cccp_epoch;
 static int hf_server_extras_cccp_revno;
 static int hf_server_clustermap_value;
@@ -649,8 +627,6 @@ static int hf_range_scan_item_limit;
 static int hf_range_scan_time_limit;
 static int hf_range_scan_byte_limit;
 
-static int hf_file_fragment_data;
-
 static expert_field ei_warn_shall_not_have_value;
 static expert_field ei_warn_shall_not_have_extras;
 static expert_field ei_warn_shall_not_have_key;
@@ -686,8 +662,6 @@ static int ett_xattrs;
 static int ett_xattr_pair;
 static int ett_flex_frame_extras;
 static int ett_collection_key;
-static int ett_dcp_cache_transfer;
-static int ett_dcp_cache_transfer_item;
 
 static const value_string magic_vals[] = {
   { MAGIC_CLIENT_REQUEST, "Request" },
@@ -902,8 +876,6 @@ static const value_string client_opcode_vals[] = {
   { CLIENT_OPCODE_AUDIT_PUT,                  "Audit Put"                },
   { CLIENT_OPCODE_AUDIT_CONFIG_RELOAD,        "Audit Config Reload"      },
   { CLIENT_OPCODE_SHUTDOWN,                   "Shutdown"                 },
-  { CLIENT_OPCODE_SET_ACTIVE_ENCRYPTION_KEYS, "Set Active Encryption Keys"},
-  { CLIENT_OPCODE_PRUNE_ENCRYPTION_KEYS,      "Prune Encryption Keys"    },
   { CLIENT_OPCODE_RGET,                       "Range Get"                },
   { CLIENT_OPCODE_RSET,                       "Range Set"                },
   { CLIENT_OPCODE_RSETQ,                      "Range Set Quietly"        },
@@ -929,8 +901,6 @@ static const value_string client_opcode_vals[] = {
   { CLIENT_OPCODE_TAP_CHECKPOINT_START,       "TAP Checkpoint Start"     },
   { CLIENT_OPCODE_TAP_CHECKPOINT_END,         "TAP Checkpoint End"       },
   { CLIENT_OPCODE_GET_ALL_VB_SEQNOS,          "Get All VBucket Seqnos"   },
-  { CLIENT_OPCODE_GET_EX,                     "GetEx"                    },
-  { CLIENT_OPCODE_GET_EX_REPLICA,             "GetEx Replica"            },
   { CLIENT_OPCODE_DCP_OPEN_CONNECTION,        "DCP Open Connection"      },
   { CLIENT_OPCODE_DCP_ADD_STREAM,             "DCP Add Stream"           },
   { CLIENT_OPCODE_DCP_CLOSE_STREAM,           "DCP Close Stream"         },
@@ -953,17 +923,6 @@ static const value_string client_opcode_vals[] = {
   { CLIENT_OPCODE_DCP_ABORT,                  "DCP Abort"                },
   { CLIENT_OPCODE_DCP_SEQNO_ADVANCED,         "DCP Seqno Advanced"       },
   { CLIENT_OPCODE_DCP_OSO_SNAPSHOT,           "DCP Out of Sequence Order Snapshot"},
-  { CLIENT_OPCODE_DCP_CACHE_TRANSFER,         "DCP Cache Transfer"       },
-  { CLIENT_OPCODE_DCP_CACHE_TRANSFER_END,     "DCP Cache Transfer End"   },
-  { CLIENT_OPCODE_GET_FUSION_STORAGE_SNAPSHOT, "Get Fusion Storage Snapshot"},
-  { CLIENT_OPCODE_RELEASE_FUSION_STORAGE_SNAPSHOT, "Release Fusion Storage Snapshot"},
-  { CLIENT_OPCODE_MOUNT_FUSION_VB,            "Mount Fusion VBucket"     },
-  { CLIENT_OPCODE_UNMOUNT_FUSION_VB,          "Unmount Fusion VBucket"   },
-  { CLIENT_OPCODE_SYNC_FUSION_LOGSTORE,       "Sync Fusion Logstore"     },
-  { CLIENT_OPCODE_START_FUSION_UPLOADER,      "Start Fusion Uploader"    },
-  { CLIENT_OPCODE_STOP_FUSION_UPLOADER,       "Stop Fusion Uploader"     },
-  { CLIENT_OPCODE_DELETE_FUSION_NAMESPACE,    "Delete Fusion Namespace"  },
-  { CLIENT_OPCODE_GET_FUSION_NAMESPACES,      "Get Fusion Namespaces"    },
   { CLIENT_OPCODE_STOP_PERSISTENCE,           "Stop Persistence"         },
   { CLIENT_OPCODE_START_PERSISTENCE,          "Start Persistence"        },
   { CLIENT_OPCODE_SET_PARAM,                  "Set Parameter"            },
@@ -1037,10 +996,6 @@ static const value_string client_opcode_vals[] = {
   { CLIENT_OPCODE_RANGE_SCAN_CREATE,          "RangeScan Create"         },
   { CLIENT_OPCODE_RANGE_SCAN_CONTINUE,        "RangeScan Continue"       },
   { CLIENT_OPCODE_RANGE_SCAN_CANCEL,          "RangeScan Cancel"         },
-  { CLIENT_OPCODE_PREPARE_SNAPSHOT,           "Prepare Snapshot"         },
-  { CLIENT_OPCODE_RELEASE_SNAPSHOT,           "Release Snapshot"         },
-  { CLIENT_OPCODE_DOWNLOAD_SNAPSHOT,          "Download Snapshot"        },
-  { CLIENT_OPCODE_GET_FILE_FRAGMENT,          "Get File Fragment"        },
   { CLIENT_OPCODE_SCRUB,                      "Scrub"                    },
   { CLIENT_OPCODE_ISASL_REFRESH,              "isasl Refresh"            },
   { CLIENT_OPCODE_SSL_CERTS_REFRESH,          "SSL Certificates Refresh" },
@@ -1054,6 +1009,7 @@ static const value_string client_opcode_vals[] = {
   { CLIENT_OPCODE_ADJUST_TIMEOFDAY,           "Adjust Timeofday"         },
   { CLIENT_OPCODE_EWOULDBLOCK_CTL,            "EWOULDBLOCK Control"      },
   { CLIENT_OPCODE_GET_ERROR_MAP,              "Get Error Map"            },
+
   /* Internally defined values not valid here */
   { 0, NULL }
 };
@@ -1252,16 +1208,6 @@ has_json_value(bool is_request, uint8_t opcode)
     switch (opcode) {
     case CLIENT_OPCODE_AUDIT_PUT:
     case CLIENT_OPCODE_RANGE_SCAN_CREATE:
-    case CLIENT_OPCODE_DOWNLOAD_SNAPSHOT:
-    case CLIENT_OPCODE_GET_FILE_FRAGMENT:
-    case CLIENT_OPCODE_GET_FUSION_STORAGE_SNAPSHOT:
-    case CLIENT_OPCODE_RELEASE_FUSION_STORAGE_SNAPSHOT:
-    case CLIENT_OPCODE_MOUNT_FUSION_VB:
-    case CLIENT_OPCODE_START_FUSION_UPLOADER:
-    case CLIENT_OPCODE_DELETE_FUSION_NAMESPACE:
-    case CLIENT_OPCODE_GET_FUSION_NAMESPACES:
-    case CLIENT_OPCODE_SET_ACTIVE_ENCRYPTION_KEYS:
-    case CLIENT_OPCODE_PRUNE_ENCRYPTION_KEYS:
       return true;
 
     default:
@@ -1273,9 +1219,6 @@ has_json_value(bool is_request, uint8_t opcode)
     case CLIENT_OPCODE_SUBDOC_GET:
     case CLIENT_OPCODE_COLLECTIONS_GET_MANIFEST:
     case CLIENT_OPCODE_COLLECTIONS_SET_MANIFEST:
-    case CLIENT_OPCODE_PREPARE_SNAPSHOT:
-    case CLIENT_OPCODE_GET_FUSION_STORAGE_SNAPSHOT:
-    case CLIENT_OPCODE_GET_FUSION_NAMESPACES:
       return true;
 
     default:
@@ -1285,10 +1228,10 @@ has_json_value(bool is_request, uint8_t opcode)
 }
 
 static void dissect_dcp_xattrs(tvbuff_t *tvb, proto_tree *tree,
-                               uint32_t value_len, unsigned offset,
+                               uint32_t value_len, int offset,
                                packet_info *pinfo) {
   uint32_t xattr_size, pair_len;
-  unsigned mark;
+  int mark;
   proto_tree *xattr_tree, *pair_tree;
   proto_item *ti;
 
@@ -1306,34 +1249,36 @@ static void dissect_dcp_xattrs(tvbuff_t *tvb, proto_tree *tree,
     offset += 4;
     xattr_size -= 4;
 
-    if (!tvb_find_uint8_length(tvb, offset, pair_len, 0x00, &mark)) {
+    mark = tvb_find_uint8(tvb, offset, pair_len, 0x00);
+    if (mark == -1) {
       expert_add_info_format(pinfo, ti, &ei_separator_not_found, "Null byte not found");
       return;
     }
 
-    ti = proto_tree_add_item(pair_tree, hf_xattr_key, tvb, offset, mark - offset, ENC_ASCII);
+    ti = proto_tree_add_item(pair_tree, hf_xattr_key, tvb, offset, mark - offset, ENC_ASCII | ENC_NA);
     xattr_size -= (mark - offset) + 1;
     pair_len -= (mark - offset) + 1;
     offset = mark + 1;
 
-    if (!tvb_find_uint8_length(tvb, offset, pair_len, 0x00, &mark)) {
+    mark = tvb_find_uint8(tvb, offset, pair_len, 0x00);
+    if (mark == -1) {
       expert_add_info_format(pinfo, ti, &ei_separator_not_found, "Null byte not found");
       return;
     }
 
-    proto_tree_add_item(pair_tree, hf_xattr_value, tvb, offset, mark - offset, ENC_ASCII);
+    proto_tree_add_item(pair_tree, hf_xattr_value, tvb, offset, mark - offset, ENC_ASCII | ENC_NA);
     xattr_size -= (mark - offset) + 1;
     offset = mark + 1;
   }
 
   //The regular value
-  proto_tree_add_item(tree, hf_value, tvb, offset, value_len, ENC_ASCII);
+  proto_tree_add_item(tree, hf_value, tvb, offset, value_len, ENC_ASCII | ENC_NA);
 }
 
 /* Dissects the required extras for subdoc single-path packets */
 static void
 dissect_subdoc_spath_required_extras(tvbuff_t *tvb, proto_tree *extras_tree,
-                                     uint8_t extlen, bool request, unsigned* offset,
+                                     uint8_t extlen, bool request, int* offset,
                                      uint16_t *path_len, bool *illegal)
 {
   if (request) {
@@ -1353,7 +1298,7 @@ dissect_subdoc_spath_required_extras(tvbuff_t *tvb, proto_tree *extras_tree,
   }
 }
 
-static void dissect_server_request_extras(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, uint8_t extlen, uint8_t opcode) {
+static void dissect_server_request_extras(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree, int offset, uint8_t extlen, uint8_t opcode) {
   if (extlen == 0) {
     switch (opcode) {
       case SERVER_OPCODE_CLUSTERMAP_CHANGE_NOTIFICATION:
@@ -1405,7 +1350,7 @@ static void dissect_server_request_extras(tvbuff_t *tvb _U_, packet_info *pinfo 
 
 static void
 dissect_server_response_extras(tvbuff_t *tvb, packet_info *pinfo,
-                               proto_tree *tree, unsigned offset, uint8_t extlen,
+                               proto_tree *tree, int offset, uint8_t extlen,
                                uint8_t opcode _U_) {
   if (extlen == 0) {
     // Success! none of the known commands use extras
@@ -1423,20 +1368,19 @@ dissect_server_response_extras(tvbuff_t *tvb, packet_info *pinfo,
 
 static void
 dissect_client_extras(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
-                      unsigned offset, uint8_t extlen, uint8_t opcode, bool request,
+                      int offset, uint8_t extlen, uint8_t opcode, bool request,
                       uint16_t *path_len)
 {
   proto_tree *extras_tree = NULL;
   proto_item *extras_item = NULL;
-  unsigned    save_offset = offset;
-  unsigned    ii;
+  int         save_offset = offset, ii;
   unsigned    bpos;
   bool        illegal = false;  /* Set when extras shall not be present */
   bool        missing = false;  /* Set when extras is missing */
   bool        first_flag;
   uint32_t    flags;
   proto_item *tf;
-  static const char * const tap_connect_flags[] = {
+  const char    *tap_connect_flags[] = {
     "BACKFILL", "DUMP", "LIST_VBUCKETS", "TAKEOVER_VBUCKETS",
     "SUPPORT_ACK", "REQUEST_KEYS_ONLY", "CHECKPOINT", "REGISTERED_CLIENT"
   };
@@ -1454,8 +1398,6 @@ dissect_client_extras(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
   case CLIENT_OPCODE_GETQ:
   case CLIENT_OPCODE_GETK:
   case CLIENT_OPCODE_GETKQ:
-  case CLIENT_OPCODE_GET_EX:
-  case CLIENT_OPCODE_GET_EX_REPLICA:
     if (extlen) {
       if (request) {
         /* Request shall not have extras */
@@ -1594,7 +1536,7 @@ dissect_client_extras(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
     flags = tvb_get_ntohl(tvb, offset);
     first_flag = true;
-    for (ii = 0; ii < array_length(tap_connect_flags); ii++) {
+    for (ii = 0; ii < 8; ii++) {
       bpos = 1 << ii;
       if (flags & bpos) {
         if (first_flag) {
@@ -2138,47 +2080,6 @@ dissect_client_extras(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
       offset += 16;
     }
     break;
-
-  /* Snapshot management commands never carry extras (request or response) -
-   * any structured data lives in the JSON value instead. */
-  case CLIENT_OPCODE_PREPARE_SNAPSHOT:
-  case CLIENT_OPCODE_RELEASE_SNAPSHOT:
-  case CLIENT_OPCODE_DOWNLOAD_SNAPSHOT:
-  case CLIENT_OPCODE_GET_FILE_FRAGMENT:
-    if (extlen) {
-      illegal = true;
-    }
-    break;
-
-  /* Fusion commands never carry extras (request or response) - any
-   * structured data lives in the JSON value instead. */
-  case CLIENT_OPCODE_GET_FUSION_STORAGE_SNAPSHOT:
-  case CLIENT_OPCODE_RELEASE_FUSION_STORAGE_SNAPSHOT:
-  case CLIENT_OPCODE_MOUNT_FUSION_VB:
-  case CLIENT_OPCODE_UNMOUNT_FUSION_VB:
-  case CLIENT_OPCODE_SYNC_FUSION_LOGSTORE:
-  case CLIENT_OPCODE_START_FUSION_UPLOADER:
-  case CLIENT_OPCODE_STOP_FUSION_UPLOADER:
-  case CLIENT_OPCODE_DELETE_FUSION_NAMESPACE:
-  case CLIENT_OPCODE_GET_FUSION_NAMESPACES:
-    if (extlen) {
-      illegal = true;
-    }
-    break;
-
-  /* Encryption-key management commands never carry extras (request or
-   * response) - any structured data lives in the JSON value instead. */
-  case CLIENT_OPCODE_SET_ACTIVE_ENCRYPTION_KEYS:
-  case CLIENT_OPCODE_PRUNE_ENCRYPTION_KEYS:
-  /* DCP Cache Transfer commands never carry extras - request.extlen must be
-   * 0 (currently reserved as a possible future version indicator). */
-  case CLIENT_OPCODE_DCP_CACHE_TRANSFER:
-  case CLIENT_OPCODE_DCP_CACHE_TRANSFER_END:
-    if (extlen) {
-      illegal = true;
-    }
-    break;
-
   default:
     if (extlen) {
       /* Decode as unknown extras */
@@ -2190,14 +2091,14 @@ dissect_client_extras(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
   if (illegal) {
     proto_tree_add_expert_format(extras_tree, pinfo, &ei_warn_shall_not_have_extras, tvb, offset, 0,
                            "%s %s should not have extras",
-                           val_to_str_ext(pinfo->pool, opcode, &client_opcode_vals_ext, "Opcode 0x%x"),
+                           val_to_str_ext(opcode, &client_opcode_vals_ext, "Opcode 0x%x"),
                            request ? "Request" : "Response");
     offset += extlen;
   } else if (missing) {
 
     proto_tree_add_expert_format(tree, pinfo, &ei_warn_must_have_extras, tvb, offset, 0,
                            "%s %s must have Extras",
-                           val_to_str_ext(pinfo->pool, opcode, &client_opcode_vals_ext, "Opcode Ox%x"),
+                           val_to_str_ext(opcode, &client_opcode_vals_ext, "Opcode Ox%x"),
                            request ? "Request" : "Response");
 }
 
@@ -2240,96 +2141,7 @@ dissect_unsigned_leb128(tvbuff_t *tvb, int start, int end, uint32_t* value) {
     return start + 1;
 }
 
-/*
-  DCP Cache Transfer (opcode 0x66) value is a concatenation of one or more
-  fixed 40-byte DcpCacheTransferPayload headers, each followed by a
-  collection-encoded key and an optional value:
-
-    [DcpCacheTransferPayload][key bytes][value bytes] ... repeats ...
-
-  See docs/dcp/documentation/commands/cache-transfer.md for the full layout.
-*/
-static void
-dissect_dcp_cache_transfer_value(tvbuff_t *tvb, packet_info *pinfo,
-                                 proto_tree *tree, unsigned offset,
-                                 uint32_t value_len)
-{
-  static const unsigned payload_size = 40;
-  unsigned end = offset + value_len;
-  int item_idx = 0;
-
-  while (offset + payload_size <= end) {
-    proto_item *ti, *key_ti;
-    proto_tree *item_tree, *cid_tree;
-    unsigned start_offset = offset;
-    uint32_t item_value_len;
-    uint32_t key_len;
-
-    ti = proto_tree_add_subtree_format(tree, tvb, offset, -1,
-                                       ett_dcp_cache_transfer_item,
-                                       &item_tree, "Item [ %u ]", item_idx);
-
-    proto_tree_add_item(item_tree, hf_cas, tvb, offset, 8, ENC_BIG_ENDIAN);
-    offset += 8;
-    proto_tree_add_item(item_tree, hf_extras_by_seqno, tvb, offset, 8, ENC_BIG_ENDIAN);
-    offset += 8;
-    proto_tree_add_item(item_tree, hf_extras_rev_seqno, tvb, offset, 8, ENC_BIG_ENDIAN);
-    offset += 8;
-    proto_tree_add_item_ret_uint(item_tree, hf_value_length, tvb, offset, 4,
-                                 ENC_BIG_ENDIAN, &item_value_len);
-    offset += 4;
-    /* flags is stored/forwarded as opaque bytes - same as DCP mutation */
-    proto_tree_add_item(item_tree, hf_extras_flags, tvb, offset, 4, ENC_BIG_ENDIAN);
-    offset += 4;
-    proto_tree_add_item(item_tree, hf_extras_expiration, tvb, offset, 4, ENC_BIG_ENDIAN);
-    offset += 4;
-    proto_tree_add_item_ret_uint(item_tree, hf_dcp_cache_transfer_keylen, tvb,
-                                 offset, 2, ENC_BIG_ENDIAN, &key_len);
-    offset += 2;
-    proto_tree_add_bitmask(item_tree, tvb, offset, hf_datatype, ett_datatype,
-                           datatype_vals, ENC_BIG_ENDIAN);
-    offset += 1;
-    proto_tree_add_item(item_tree, hf_dcp_cache_transfer_cachehint, tvb,
-                        offset, 1, ENC_BIG_ENDIAN);
-    offset += 1;
-
-    if (key_len) {
-      uint32_t cid = 0;
-      int ok = dissect_unsigned_leb128(tvb, offset, offset + key_len, &cid);
-
-      key_ti = proto_tree_add_item(item_tree, hf_key, tvb, offset, key_len, ENC_UTF_8);
-      cid_tree = proto_item_add_subtree(key_ti, ett_collection_key);
-
-      if (ok == -1) {
-        proto_tree_add_string_format(cid_tree, hf_collection_key_logical, tvb,
-                                     offset, key_len, NULL,
-                                     "Collection ID didn't decode, maybe no CID.");
-      } else {
-        proto_tree_add_uint(cid_tree, hf_collection_key_id, tvb, offset,
-                            (ok - offset), cid);
-        proto_tree_add_item(cid_tree, hf_collection_key_logical, tvb, ok,
-                            key_len - (ok - offset), ENC_UTF_8);
-      }
-      offset += key_len;
-    }
-
-    if (item_value_len) {
-      proto_tree_add_item(item_tree, hf_value, tvb, offset, item_value_len, ENC_ASCII);
-      offset += item_value_len;
-    }
-
-    proto_item_set_len(ti, offset - start_offset);
-    item_idx++;
-  }
-
-  if (offset != end) {
-    expert_add_info_format(pinfo, tree, &ei_warn_illegal_value_length,
-                           "DCP Cache Transfer: %u trailing byte(s) did not "
-                           "form a complete item", end - offset);
-  }
-}
-
-static void dissect_server_key(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, int keylen, uint8_t opcode, bool request) {
+static void dissect_server_key(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, int keylen, uint8_t opcode, bool request) {
   if (keylen == 0) {
     switch (opcode) {
       case SERVER_OPCODE_GET_AUTHORIZATION:
@@ -2354,7 +2166,7 @@ static void dissect_server_key(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
     }
   }
 
-  proto_item *ti = proto_tree_add_item(tree, hf_key, tvb, offset, keylen, ENC_UTF_8);
+  proto_item *ti = proto_tree_add_item(tree, hf_key, tvb, offset, keylen, ENC_UTF_8 | ENC_STR_HEX);
 
   switch (opcode) {
     case SERVER_OPCODE_CLUSTERMAP_CHANGE_NOTIFICATION:
@@ -2368,7 +2180,7 @@ static void dissect_server_key(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
     case SERVER_OPCODE_ACTIVE_EXTERNAL_USERS:
         expert_add_info_format(pinfo, ti, &ei_warn_shall_not_have_key,
                                "%s %s shall not have Key",
-                               val_to_str_ext(pinfo->pool, opcode,
+                               val_to_str_ext(opcode,
                                               &server_opcode_vals_ext,
                                               "Opcode 0x%x"),
                                request ? "Request" : "Response");
@@ -2387,7 +2199,7 @@ static void dissect_server_key(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 
 static void
 dissect_client_key(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
-                   unsigned offset, int keylen, uint8_t opcode, bool request)
+                   int offset, int keylen, uint8_t opcode, bool request)
 {
   proto_item *ti = NULL;
   bool        illegal = false;  /* Set when key shall not be present */
@@ -2408,17 +2220,13 @@ dissect_client_key(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
       case CLIENT_OPCODE_DELETE_BUCKET:
       case CLIENT_OPCODE_SELECT_BUCKET:
       case CLIENT_OPCODE_IFCONFIG:
-      case CLIENT_OPCODE_RELEASE_SNAPSHOT:
-      case CLIENT_OPCODE_GET_FILE_FRAGMENT:
-      case CLIENT_OPCODE_SET_ACTIVE_ENCRYPTION_KEYS:
-      case CLIENT_OPCODE_PRUNE_ENCRYPTION_KEYS:
         collection_encoded_key = false;
         break;
       default:
         break;
     }
 
-    ti = proto_tree_add_item(tree, hf_key, tvb, offset, keylen, ENC_UTF_8);
+    ti = proto_tree_add_item(tree, hf_key, tvb, offset, keylen, ENC_UTF_8|ENC_STR_HEX);
 
     if (collection_encoded_key) {
       /* assume collections are enabled and add a field for the CID */
@@ -2442,12 +2250,14 @@ dissect_client_key(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         proto_tree_add_uint(cid_tree, hf_collection_key_id, tvb, offset,
                             (ok - offset), cid);
         proto_tree_add_item(cid_tree, hf_collection_key_logical, tvb,
-                            ok, keylen - (ok - offset), ENC_UTF_8);
+                            ok, keylen - (ok - offset), ENC_UTF_8 | ENC_STR_HEX);
       }
     }
     offset += keylen;
+  }
 
-    /* inSanity check */
+  /* inSanity check */
+  if (keylen) {
     switch (opcode) {
     case CLIENT_OPCODE_QUIT:
     case CLIENT_OPCODE_QUITQ:
@@ -2491,35 +2301,6 @@ dissect_client_key(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         illegal = true;
       }
       break;
-
-    case CLIENT_OPCODE_PREPARE_SNAPSHOT:
-    case CLIENT_OPCODE_DOWNLOAD_SNAPSHOT:
-      /* Request and Response must not have key - the vbucket (if any) comes
-       * from the header vbucket field or the JSON value instead */
-      illegal = true;
-      break;
-
-    case CLIENT_OPCODE_GET_FUSION_STORAGE_SNAPSHOT:
-    case CLIENT_OPCODE_RELEASE_FUSION_STORAGE_SNAPSHOT:
-    case CLIENT_OPCODE_MOUNT_FUSION_VB:
-    case CLIENT_OPCODE_UNMOUNT_FUSION_VB:
-    case CLIENT_OPCODE_SYNC_FUSION_LOGSTORE:
-    case CLIENT_OPCODE_START_FUSION_UPLOADER:
-    case CLIENT_OPCODE_STOP_FUSION_UPLOADER:
-    case CLIENT_OPCODE_DELETE_FUSION_NAMESPACE:
-    case CLIENT_OPCODE_GET_FUSION_NAMESPACES:
-      /* Request and Response must not have key - the vbucket (if any) comes
-       * from the header vbucket field or the JSON value instead */
-      illegal = true;
-      break;
-
-    case CLIENT_OPCODE_DCP_CACHE_TRANSFER:
-    case CLIENT_OPCODE_DCP_CACHE_TRANSFER_END:
-      /* Request and Response must not have key - the vbucket comes from the
-       * header vbucket field; per-item keys (Cache Transfer only) are
-       * embedded in the value instead */
-      illegal = true;
-      break;
     }
   } else {
     switch (opcode) {
@@ -2527,9 +2308,6 @@ dissect_client_key(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     case CLIENT_OPCODE_GETQ:
     case CLIENT_OPCODE_GETK:
     case CLIENT_OPCODE_GETKQ:
-    case CLIENT_OPCODE_GET_EX:
-    case CLIENT_OPCODE_GET_EX_REPLICA:
-    case CLIENT_OPCODE_GET_FILE_FRAGMENT:
     case CLIENT_OPCODE_SET:
     case CLIENT_OPCODE_ADD:
     case CLIENT_OPCODE_REPLACE:
@@ -2547,8 +2325,6 @@ dissect_client_key(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     case CLIENT_OPCODE_DCP_DELETION:
     case CLIENT_OPCODE_DCP_EXPIRATION:
     case CLIENT_OPCODE_DCP_SYSTEM_EVENT:
-    case CLIENT_OPCODE_SET_ACTIVE_ENCRYPTION_KEYS:
-    case CLIENT_OPCODE_PRUNE_ENCRYPTION_KEYS:
       /* Request must have key */
       if (request) {
         missing = true;
@@ -2559,21 +2335,21 @@ dissect_client_key(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
   if (illegal) {
     expert_add_info_format(pinfo, ti, &ei_warn_shall_not_have_key, "%s %s shall not have Key",
-                           val_to_str_ext(pinfo->pool, opcode, &client_opcode_vals_ext, "Opcode 0x%x"),
+                           val_to_str_ext(opcode, &client_opcode_vals_ext, "Opcode 0x%x"),
                            request ? "Request" : "Response");
   } else if (missing) {
     proto_tree_add_expert_format(tree, pinfo, &ei_warn_must_have_key, tvb, offset, 0,
                            "%s %s must have Key",
-                           val_to_str_ext(pinfo->pool, opcode, &client_opcode_vals_ext, "Opcode Ox%x"),
+                           val_to_str_ext(opcode, &client_opcode_vals_ext, "Opcode Ox%x"),
                            request ? "Request" : "Response");
   }
 }
 
 static void
 dissect_multipath_lookup_response(tvbuff_t *tvb, packet_info *pinfo,
-                                  proto_tree *tree, unsigned offset, uint32_t value_len)
+                                  proto_tree *tree, int offset, uint32_t value_len)
 {
-  unsigned end = offset + value_len;
+  int end = offset + value_len;
   int spec_idx = 0;
 
   while (offset < end) {
@@ -2581,7 +2357,7 @@ dissect_multipath_lookup_response(tvbuff_t *tvb, packet_info *pinfo,
     proto_tree *multipath_tree;
     tvbuff_t *json_tvb;
     uint32_t result_len;
-    unsigned start_offset = offset;
+    int start_offset = offset;
 
     ti = proto_tree_add_subtree_format(tree, tvb, offset, -1, ett_multipath,
                                        &multipath_tree, "Lookup Result [ %u ]",
@@ -2595,7 +2371,7 @@ dissect_multipath_lookup_response(tvbuff_t *tvb, packet_info *pinfo,
     offset += 4;
 
     proto_tree_add_item(multipath_tree, hf_value, tvb, offset, result_len,
-                        ENC_ASCII);
+                        ENC_ASCII | ENC_NA);
     if (result_len > 0) {
         json_tvb = tvb_new_subset_length(tvb, offset, result_len);
         call_dissector(json_handle, json_tvb, pinfo, multipath_tree);
@@ -2610,9 +2386,9 @@ dissect_multipath_lookup_response(tvbuff_t *tvb, packet_info *pinfo,
 
 static void
 dissect_multipath_mutation_response(tvbuff_t *tvb, packet_info *pinfo,
-                                    proto_tree *tree, unsigned offset, uint32_t value_len)
+                                    proto_tree *tree, int offset, uint32_t value_len)
 {
-  unsigned end = offset + value_len;
+  int end = offset + value_len;
   int spec_idx = 0;
 
   /* Expect a variable number of mutation responses:
@@ -2626,7 +2402,7 @@ dissect_multipath_mutation_response(tvbuff_t *tvb, packet_info *pinfo,
     proto_tree *multipath_tree;
     tvbuff_t *json_tvb;
     uint32_t status;
-    unsigned start_offset = offset;
+    int start_offset = offset;
 
     ti = proto_tree_add_subtree_format(tree, tvb, offset, -1, ett_multipath,
                                        &multipath_tree, "Mutation Result [ %u ]",
@@ -2645,7 +2421,7 @@ dissect_multipath_mutation_response(tvbuff_t *tvb, packet_info *pinfo,
       offset += 4;
 
       proto_tree_add_item(multipath_tree, hf_value, tvb, offset, result_len,
-                          ENC_ASCII);
+                          ENC_ASCII | ENC_NA);
       if (result_len > 0) {
         json_tvb = tvb_new_subset_length(tvb, offset, result_len);
         call_dissector(json_handle, json_tvb, pinfo, multipath_tree);
@@ -2660,10 +2436,10 @@ dissect_multipath_mutation_response(tvbuff_t *tvb, packet_info *pinfo,
 
 static void
 dissect_multipath_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
-                        unsigned offset, uint32_t value_len, bool is_mutation,
+                        int offset, uint32_t value_len, bool is_mutation,
                         bool request)
 {
-  unsigned end = offset + value_len;
+  int end = offset + value_len;
   int spec_idx = 0;
   proto_item *ti;
   proto_tree *multipath_tree;
@@ -2677,7 +2453,7 @@ dissect_multipath_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     while (offset + min_spec_size <= end) {
       uint32_t path_len;
       uint32_t spec_value_len = 0;
-      unsigned start_offset = offset;
+      int start_offset = offset;
 
       ti = proto_tree_add_subtree_format(tree, tvb, offset, -1, ett_multipath,
                                          &multipath_tree,
@@ -2705,13 +2481,13 @@ dissect_multipath_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
       if (path_len) {
         proto_tree_add_item(multipath_tree, hf_multipath_path, tvb, offset, path_len,
-                            ENC_ASCII);
+                            ENC_ASCII | ENC_NA);
         offset += path_len;
       }
 
       if (spec_value_len > 0) {
         proto_tree_add_item(multipath_tree, hf_multipath_value, tvb, offset,
-                            spec_value_len, ENC_ASCII);
+                            spec_value_len, ENC_ASCII | ENC_NA);
         offset += spec_value_len;
       }
 
@@ -2730,7 +2506,7 @@ dissect_multipath_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
 static void
 dissect_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
-              unsigned offset, uint32_t value_len, uint16_t path_len, uint8_t opcode,
+              int offset, uint32_t value_len, uint16_t path_len, uint8_t opcode,
               bool request, uint8_t datatype)
 {
   proto_item *ti = NULL;
@@ -2740,14 +2516,15 @@ dissect_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
   if (value_len > 0) {
     if (opcode == CLIENT_OPCODE_OBSERVE) {
       proto_tree *observe_tree;
-      unsigned oo = offset, end = offset + value_len;
+      int oo = offset, end = offset + value_len;
       ti = proto_tree_add_item(tree, hf_observe, tvb, offset, value_len, ENC_ASCII);
       observe_tree = proto_item_add_subtree(ti, ett_observe);
       while (oo < end) {
         uint16_t kl; /* keylength */
         proto_tree_add_item(observe_tree, hf_observe_vbucket, tvb, oo, 2, ENC_BIG_ENDIAN);
         oo += 2;
-        proto_tree_add_item_ret_uint16(observe_tree, hf_observe_keylength, tvb, oo, 2, ENC_BIG_ENDIAN, &kl);
+        kl = tvb_get_ntohs(tvb, oo);
+        proto_tree_add_item(observe_tree, hf_observe_keylength, tvb, oo, 2, ENC_BIG_ENDIAN);
         oo += 2;
         proto_tree_add_item(observe_tree, hf_observe_key, tvb, oo, kl, ENC_ASCII);
         oo += kl;
@@ -2795,7 +2572,8 @@ dissect_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
          */
         uint8_t failed_over;
 
-        proto_tree_add_item_ret_uint8(tree, hf_observe_failed_over, tvb, offset, 1, ENC_BIG_ENDIAN, &failed_over);
+        proto_tree_add_item(tree, hf_observe_failed_over, tvb, offset, 1, ENC_BIG_ENDIAN);
+        failed_over = tvb_get_uint8(tvb, offset);
         offset++;
         proto_tree_add_item(tree, hf_observe_vbucket, tvb, offset, 2, ENC_BIG_ENDIAN);
         offset += 2;
@@ -2833,7 +2611,7 @@ dissect_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         expert_add_info_format(pinfo, ti, &ei_warn_illegal_value_length, "Response with bad body length");
       } else {
         proto_tree *vbucket_states_tree;
-        unsigned cur = offset, end = offset + value_len;
+        int cur = offset, end = offset + value_len;
         ti = proto_tree_add_item(tree, hf_vbucket_states, tvb, offset, value_len, ENC_ASCII);
         vbucket_states_tree = proto_item_add_subtree(ti, ett_vbucket_states);
         ti = proto_tree_add_uint(vbucket_states_tree, hf_vbucket_states_size, tvb, offset, 0, (end - cur) / 10);
@@ -2852,7 +2630,7 @@ dissect_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
       }
     } else if (has_json_value(request, opcode)) {
       tvbuff_t *json_tvb;
-      ti = proto_tree_add_item(tree, hf_value, tvb, offset, value_len, ENC_ASCII);
+      ti = proto_tree_add_item(tree, hf_value, tvb, offset, value_len, ENC_ASCII | ENC_NA);
       json_tvb = tvb_new_subset_length(tvb, offset, value_len);
       call_dissector(json_handle, json_tvb, pinfo, tree);
 
@@ -2863,9 +2641,9 @@ dissect_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                               request);
 
     } else if (opcode == CLIENT_OPCODE_HELLO) {
-      unsigned curr = offset, end = offset + value_len;
+      int curr = offset, end = offset + value_len;
       proto_tree *hello_features_tree;
-      ti = proto_tree_add_item(tree, hf_hello_features, tvb, offset, value_len, ENC_NA);
+      ti = proto_tree_add_item(tree, hf_hello_features, tvb, offset, value_len, ENC_ASCII);
       hello_features_tree = proto_item_add_subtree(ti, ett_hello_features);
       while (curr < end) {
         proto_tree_add_item(hello_features_tree, hf_hello_features_feature, tvb, curr, 2, ENC_BIG_ENDIAN);
@@ -2874,42 +2652,44 @@ dissect_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     } else if (!request && opcode == CLIENT_OPCODE_RANGE_SCAN_CREATE) {
       proto_tree_add_item(tree, hf_range_scan_uuid, tvb, offset, 16, ENC_BIG_ENDIAN);
     } else if (path_len != 0) {
-        ti = proto_tree_add_item(tree, hf_path, tvb, offset, path_len, ENC_ASCII);
+        ti = proto_tree_add_item(tree, hf_path, tvb, offset, path_len, ENC_ASCII | ENC_NA);
         value_len -= path_len;
         if (value_len > 0) {
             ti = proto_tree_add_item(tree, hf_value, tvb, offset + path_len,
-                                     value_len, ENC_ASCII);
+                                     value_len, ENC_ASCII | ENC_NA);
         }
     } else if (request && opcode == CLIENT_OPCODE_CREATE_BUCKET) {
-      unsigned sep, equals_pos, sep_pos, config_len;
+      int sep, equals_pos, sep_pos, config_len;
       proto_tree *key_tree, *config_tree = NULL;
 
       /* There are 2 main items stored in the value. The bucket type (represented by a path to the engine) and the
        * bucket config. These are separated by a NULL byte with the bucket type coming first.*/
 
-      if (!tvb_find_uint8_length(tvb, offset, value_len, 0x00, &sep)) {
+      sep = tvb_find_uint8(tvb, offset, value_len, 0x00);
+      if (sep == -1) {
         ti = proto_tree_add_item(tree, hf_value, tvb, offset, value_len, ENC_ASCII);
         expert_add_info_format(pinfo, ti, &ei_separator_not_found, "Null byte not found");
       } else {
-        proto_tree_add_item(tree, hf_bucket_type, tvb, offset, sep - offset, ENC_ASCII);
+        proto_tree_add_item(tree, hf_bucket_type, tvb, offset, sep - offset, ENC_ASCII | ENC_NA);
         config_len = value_len - (sep - offset) - 1; //Don't include NULL byte in length
         if(config_len <= 0) {
           expert_add_info_format(pinfo, ti, &ei_separator_not_found, "Separator not found in expected location");
         } else {
           offset = sep + 1;// Ignore NULL byte
 
-          ti = proto_tree_add_item(tree, hf_bucket_config, tvb, offset, config_len, ENC_ASCII);
+          ti = proto_tree_add_item(tree, hf_bucket_config, tvb, offset, config_len, ENC_ASCII | ENC_NA);
           config_tree = proto_item_add_subtree(ti, ett_config);
         }
 
         /* The config is arranged as "key=value;key=value..."*/
         while (config_len > 0) {
           // Get the key
-          if (!tvb_find_uint8_length(tvb, offset, config_len, 0x3d, &equals_pos)) {
+          equals_pos = tvb_find_uint8(tvb, offset, config_len, 0x3d);
+          if (equals_pos == -1) {
             expert_add_info_format(pinfo, ti, &ei_illegal_value, "Each key needs a value");
             break; // Break out the while loop
           }
-          ti = proto_tree_add_item(config_tree, hf_config_key, tvb, offset, equals_pos - offset, ENC_ASCII);
+          ti = proto_tree_add_item(config_tree, hf_config_key, tvb, offset, equals_pos - offset, ENC_ASCII | ENC_NA);
           key_tree = proto_item_add_subtree(ti, ett_config_key);
           config_len -= (equals_pos - offset + 1);
           offset = equals_pos + 1;
@@ -2919,11 +2699,12 @@ dissect_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
           }
 
           // Get the value
-          if (!tvb_find_uint8_length(tvb, offset, config_len, 0x3b, &sep_pos)) {
+          sep_pos = tvb_find_uint8(tvb, offset, config_len, 0x3b);
+          if (sep_pos == -1) {
             expert_add_info_format(pinfo, ti, &ei_separator_not_found, "Each key-value pair must be terminated by semi-colon");
             break; // Break out the while loop
           }
-          proto_tree_add_item(key_tree, hf_config_value, tvb, offset, sep_pos - offset, ENC_ASCII);
+          proto_tree_add_item(key_tree, hf_config_value, tvb, offset, sep_pos - offset, ENC_ASCII | ENC_NA);
           config_len -= (sep_pos - offset + 1);
           offset = sep_pos + 1;
         }
@@ -2933,21 +2714,20 @@ dissect_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
       opcode == CLIENT_OPCODE_DCP_EXPIRATION || opcode == CLIENT_OPCODE_DCP_PREPARE ||
       opcode == CLIENT_OPCODE_DEL_WITH_META || opcode == CLIENT_OPCODE_ADD_WITH_META ||
       opcode == CLIENT_OPCODE_SETQ_WITH_META || opcode == CLIENT_OPCODE_DELQ_WITH_META ||
-      opcode == CLIENT_OPCODE_ADDQ_WITH_META || opcode == CLIENT_OPCODE_GET_EX ||
-      opcode == CLIENT_OPCODE_GET_EX_REPLICA )) {
+      opcode == CLIENT_OPCODE_ADDQ_WITH_META )) {
 
       dissect_dcp_xattrs(tvb, tree, value_len, offset, pinfo);
     } else if (request && opcode == CLIENT_OPCODE_GET_ERROR_MAP) {
       if (value_len != 2) {
         expert_add_info_format(pinfo, ti, &ei_warn_illegal_value_length, "Illegal Value length, should be 2");
-        ti = proto_tree_add_item(tree, hf_value, tvb, offset, value_len, ENC_ASCII);
+        ti = proto_tree_add_item(tree, hf_value, tvb, offset, value_len, ENC_ASCII | ENC_NA);
       } else {
         ti = proto_tree_add_item(tree, hf_get_errmap_version, tvb, offset, value_len, ENC_BIG_ENDIAN);
       }
     } else if (request && opcode == CLIENT_OPCODE_DCP_SNAPSHOT_MARKER) {
         if (value_len < 20) {
             expert_add_info_format(pinfo, ti, &ei_warn_illegal_value_length, "Illegal Value length, should be at least 20");
-            ti = proto_tree_add_item(tree, hf_value, tvb, offset, value_len, ENC_ASCII);
+            ti = proto_tree_add_item(tree, hf_value, tvb, offset, value_len, ENC_ASCII | ENC_NA);
         }
 
         proto_tree_add_item(tree, hf_extras_start_seqno, tvb, offset, 8, ENC_BIG_ENDIAN);
@@ -2960,7 +2740,7 @@ dissect_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         if (value_len > 20) {
             if (value_len < 36) {
                 expert_add_info_format(pinfo, ti, &ei_warn_illegal_value_length, "Illegal Value length, should be at least 36");
-                ti = proto_tree_add_item(tree, hf_value, tvb, offset, value_len, ENC_ASCII);
+                ti = proto_tree_add_item(tree, hf_value, tvb, offset, value_len, ENC_ASCII | ENC_NA);
             }
 
             proto_tree_add_item(tree, hf_extras_max_visible_seqno, tvb, offset, 8, ENC_BIG_ENDIAN);
@@ -2971,24 +2751,14 @@ dissect_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             if (value_len > 36) {
                 if (value_len != 44) {
                     expert_add_info_format(pinfo, ti, &ei_warn_illegal_value_length, "Illegal Value length, should be 44");
-                    ti = proto_tree_add_item(tree, hf_value, tvb, offset, value_len, ENC_ASCII);
+                    ti = proto_tree_add_item(tree, hf_value, tvb, offset, value_len, ENC_ASCII | ENC_NA);
                 }
 
                 proto_tree_add_item(tree, hf_extras_timestamp, tvb, offset, 8, ENC_BIG_ENDIAN);
             }
         }
-    } else if (!request && opcode == CLIENT_OPCODE_GET_FILE_FRAGMENT) {
-      /* Successful response value is a raw chunk of the requested file (not
-       * text), optionally with a 4 byte CRC32C checksum interleaved after
-       * every checksum_length bytes requested by the client. */
-      ti = proto_tree_add_item(tree, hf_file_fragment_data, tvb, offset, value_len, ENC_NA);
-    } else if (request && opcode == CLIENT_OPCODE_DCP_CACHE_TRANSFER) {
-      proto_tree *cache_transfer_tree;
-      ti = proto_tree_add_item(tree, hf_dcp_cache_transfer, tvb, offset, value_len, ENC_NA);
-      cache_transfer_tree = proto_item_add_subtree(ti, ett_dcp_cache_transfer);
-      dissect_dcp_cache_transfer_value(tvb, pinfo, cache_transfer_tree, offset, value_len);
     } else {
-      ti = proto_tree_add_item(tree, hf_value, tvb, offset, value_len, ENC_ASCII);
+      ti = proto_tree_add_item(tree, hf_value, tvb, offset, value_len, ENC_ASCII | ENC_NA);
 #ifdef HAVE_SNAPPY
       if (datatype & DT_SNAPPY) {
         tvbuff_t* decompressed_tvb = tvb_child_uncompress_snappy(tvb, tvb, offset, tvb_captured_length_remaining(tvb, offset));
@@ -3012,10 +2782,6 @@ dissect_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     case CLIENT_OPCODE_GETQ:
     case CLIENT_OPCODE_GETK:
     case CLIENT_OPCODE_GETKQ:
-    case CLIENT_OPCODE_GET_EX:
-    case CLIENT_OPCODE_GET_EX_REPLICA:
-    case CLIENT_OPCODE_PREPARE_SNAPSHOT:
-    case CLIENT_OPCODE_RELEASE_SNAPSHOT:
     case CLIENT_OPCODE_INCREMENT:
     case CLIENT_OPCODE_DECREMENT:
     case CLIENT_OPCODE_VERSION:
@@ -3042,10 +2808,6 @@ dissect_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     case CLIENT_OPCODE_DELETEQ:
     case CLIENT_OPCODE_QUITQ:
     case CLIENT_OPCODE_FLUSHQ:
-    case CLIENT_OPCODE_UNMOUNT_FUSION_VB:
-    case CLIENT_OPCODE_SYNC_FUSION_LOGSTORE:
-    case CLIENT_OPCODE_STOP_FUSION_UPLOADER:
-    case CLIENT_OPCODE_DCP_CACHE_TRANSFER_END:
       /* Request and Response must not have value */
       illegal = true;
       break;
@@ -3073,51 +2835,24 @@ dissect_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         missing = true;
       }
       break;
-    case CLIENT_OPCODE_DOWNLOAD_SNAPSHOT:
-    case CLIENT_OPCODE_GET_FILE_FRAGMENT:
-      /* Request must have value (JSON metadata) */
-      if (request) {
-        missing = true;
-      }
-      break;
-    case CLIENT_OPCODE_GET_FUSION_STORAGE_SNAPSHOT:
-    case CLIENT_OPCODE_RELEASE_FUSION_STORAGE_SNAPSHOT:
-    case CLIENT_OPCODE_MOUNT_FUSION_VB:
-    case CLIENT_OPCODE_START_FUSION_UPLOADER:
-    case CLIENT_OPCODE_DELETE_FUSION_NAMESPACE:
-    case CLIENT_OPCODE_GET_FUSION_NAMESPACES:
-      /* Request must have value (JSON arguments) */
-      if (request) {
-        missing = true;
-      }
-      break;
-    case CLIENT_OPCODE_SET_ACTIVE_ENCRYPTION_KEYS:
-    case CLIENT_OPCODE_PRUNE_ENCRYPTION_KEYS:
-      /* Request must have value (JSON arguments) */
-    case CLIENT_OPCODE_DCP_CACHE_TRANSFER:
-      /* Request must have value (one or more serialized cache items) */
-      if (request) {
-        missing = true;
-      }
-      break;
     }
   }
 
   if (illegal) {
     expert_add_info_format(pinfo, ti, &ei_warn_shall_not_have_value, "%s %s shall not have Value",
-                           val_to_str_ext(pinfo->pool, opcode, &client_opcode_vals_ext, "Opcode 0x%x"),
+                           val_to_str_ext(opcode, &client_opcode_vals_ext, "Opcode 0x%x"),
                            request ? "Request" : "Response");
   } else if (missing) {
     expert_add_info_format(pinfo, ti, &ei_value_missing, "%s %s must have Value",
-                           val_to_str_ext(pinfo->pool, opcode, &client_opcode_vals_ext, "Opcode 0x%x"),
+                           val_to_str_ext(opcode, &client_opcode_vals_ext, "Opcode 0x%x"),
                            request ? "Request" : "Response");
   }
 }
 
 static void flex_frame_duration_dissect(tvbuff_t* tvb,
                                         proto_tree* frame_tree,
-                                        unsigned offset,
-                                        unsigned length) {
+                                        int offset,
+                                        int length) {
 
   if (length != 2) {
     proto_tree_add_expert_format(frame_tree,
@@ -3140,8 +2875,8 @@ static void flex_frame_duration_dissect(tvbuff_t* tvb,
 
 static void flex_frame_ru_usage_dissect(tvbuff_t* tvb,
                                         proto_tree* frame_tree,
-                                        unsigned offset,
-                                        unsigned length) {
+                                        int offset,
+                                        int length) {
 
   if (length != 2) {
     proto_tree_add_expert_format(frame_tree,
@@ -3159,8 +2894,8 @@ static void flex_frame_ru_usage_dissect(tvbuff_t* tvb,
 
 static void flex_frame_wu_usage_dissect(tvbuff_t* tvb,
                                         proto_tree* frame_tree,
-                                        unsigned offset,
-                                        unsigned length) {
+                                        int offset,
+                                        int length) {
 
   if (length != 2) {
     proto_tree_add_expert_format(frame_tree,
@@ -3178,8 +2913,8 @@ static void flex_frame_wu_usage_dissect(tvbuff_t* tvb,
 
 static void flex_frame_reorder_dissect(tvbuff_t* tvb,
                                        proto_tree* frame_tree,
-                                       unsigned offset,
-                                       unsigned length) {
+                                       int offset,
+                                       int length) {
   /* Expects no data, so just check len */
   if (length != 0) {
     proto_tree_add_expert_format(frame_tree,
@@ -3194,8 +2929,8 @@ static void flex_frame_reorder_dissect(tvbuff_t* tvb,
 
 static void flex_frame_durability_dissect(tvbuff_t* tvb,
                                           proto_tree* frame_tree,
-                                          unsigned offset,
-                                          unsigned length) {
+                                          int offset,
+                                          int length) {
   if (!(length == 1 || length == 3)) {
     proto_tree_add_expert_format(frame_tree,
                                  NULL,
@@ -3211,8 +2946,8 @@ static void flex_frame_durability_dissect(tvbuff_t* tvb,
 
 static void flex_frame_dcp_stream_id_dissect(tvbuff_t* tvb,
                                              proto_tree* frame_tree,
-                                             unsigned offset,
-                                             unsigned length) {
+                                             int offset,
+                                             int length) {
   if (length != 2) {
     proto_tree_add_expert_format(frame_tree,
                                  NULL,
@@ -3229,8 +2964,8 @@ static void flex_frame_dcp_stream_id_dissect(tvbuff_t* tvb,
 
 static void flex_frame_impersonate_dissect(tvbuff_t* tvb,
                                            proto_tree* frame_tree,
-                                           unsigned offset,
-                                           unsigned length) {
+                                           int offset,
+                                           int length) {
   proto_tree_add_item(frame_tree,
                       hf_flex_frame_impersonated_user,
                       tvb,
@@ -3241,8 +2976,8 @@ static void flex_frame_impersonate_dissect(tvbuff_t* tvb,
 
 static void flex_frame_preserve_ttl(tvbuff_t* tvb,
                                     proto_tree* frame_tree,
-                                    unsigned offset,
-                                    unsigned length) {
+                                    int offset,
+                                    int length) {
   /* Expects no data, so just check len */
   if (length != 0) {
     proto_tree_add_expert_format(frame_tree,
@@ -3257,8 +2992,8 @@ static void flex_frame_preserve_ttl(tvbuff_t* tvb,
 
 typedef void (*flex_frame_by_id_dissect_fn)(tvbuff_t*,
                                             proto_tree*,
-                                            unsigned,
-                                            unsigned);
+                                            int,
+                                            int);
 
 struct flex_frame_by_id_dissect {
   uint32_t id;
@@ -3288,7 +3023,7 @@ static const struct flex_frame_by_id_dissect flex_frame_request_dissect[] = {
 static void dissect_flexible_framing_extras(tvbuff_t* tvb,
                                             packet_info* pinfo,
                                             proto_tree* tree,
-                                            unsigned offset,
+                                            int offset,
                                             uint8_t flex_frame_extra_len,
                                             bool request) {
 
@@ -3313,7 +3048,7 @@ static void dissect_flexible_framing_extras(tvbuff_t* tvb,
                       flex_frame_extra_len);
 
   /* iterate until we've consumed the flex_frame_extra_len */
-  unsigned bytes_remaining = flex_frame_extra_len;
+  int bytes_remaining = flex_frame_extra_len;
   int frame_index = 0;
 
   while (bytes_remaining > 0) {
@@ -3419,8 +3154,8 @@ is_xerror(uint8_t datatype, uint16_t status)
 static void d_s_o_clustermap_change_notification_req(tvbuff_t *tvb,
                                                      packet_info *pinfo,
                                                      proto_tree *tree,
-                                                     unsigned offset,
-                                                     unsigned size) {
+                                                     int offset,
+                                                     int size) {
   if (size == 0) {
     // this is an error!
     expert_add_info_format(pinfo, tree, &ei_warn_illegal_value_length,
@@ -3429,7 +3164,7 @@ static void d_s_o_clustermap_change_notification_req(tvbuff_t *tvb,
   }
   // The payload is the clustermap in JSON
   proto_tree_add_item(tree, hf_server_clustermap_value, tvb, offset, size,
-                      ENC_ASCII);
+                      ENC_ASCII | ENC_NA);
   tvbuff_t *json_tvb = tvb_new_subset_length(tvb, offset, size);
   call_dissector(json_handle, json_tvb, pinfo, tree);
 }
@@ -3437,8 +3172,8 @@ static void d_s_o_clustermap_change_notification_req(tvbuff_t *tvb,
 static void d_s_o_authenticate_req(tvbuff_t *tvb,
                                    packet_info *pinfo,
                                    proto_tree *tree,
-                                   unsigned offset,
-                                   unsigned size) {
+                                   int offset,
+                                   int size) {
   if (size == 0) {
     // this is an error!
     expert_add_info_format(pinfo, tree, &ei_warn_illegal_value_length,
@@ -3447,7 +3182,7 @@ static void d_s_o_authenticate_req(tvbuff_t *tvb,
   }
   // The payload is an JSON object with the authentication request
   proto_tree_add_item(tree, hf_server_authentication, tvb, offset, size,
-                      ENC_ASCII);
+                      ENC_ASCII | ENC_NA);
   tvbuff_t *json_tvb = tvb_new_subset_length(tvb, offset, size);
   call_dissector(json_handle, json_tvb, pinfo, tree);
 }
@@ -3455,8 +3190,8 @@ static void d_s_o_authenticate_req(tvbuff_t *tvb,
 static void d_s_o_active_external_users_req(tvbuff_t *tvb,
                                             packet_info *pinfo,
                                             proto_tree *tree,
-                                            unsigned offset,
-                                            unsigned size) {
+                                            int offset,
+                                            int size) {
   if (size == 0) {
     // this is an error!
     expert_add_info_format(pinfo, tree, &ei_warn_illegal_value_length,
@@ -3465,7 +3200,7 @@ static void d_s_o_active_external_users_req(tvbuff_t *tvb,
   }
   // The payload is an JSON array with the list of the users
   proto_tree_add_item(tree, hf_server_external_users, tvb, offset, size,
-                      ENC_ASCII);
+                      ENC_ASCII | ENC_NA);
   tvbuff_t *json_tvb = tvb_new_subset_length(tvb, offset, size);
   call_dissector(json_handle, json_tvb, pinfo, tree);
 }
@@ -3473,12 +3208,12 @@ static void d_s_o_active_external_users_req(tvbuff_t *tvb,
 static void d_s_o_get_authorization_req(tvbuff_t *tvb,
                                         packet_info *pinfo,
                                         proto_tree *tree,
-                                        unsigned offset,
-                                        unsigned size) {
+                                        int offset,
+                                        int size) {
   if (size > 0) {
     // this is an error!
     proto_item *ti = proto_tree_add_item(tree, hf_value, tvb, offset, size,
-                                         ENC_ASCII);
+                                         ENC_ASCII | ENC_NA);
     expert_add_info_format(pinfo, ti, &ei_warn_shall_not_have_value,
                            "GetAuthorization shall not have a value");
   }
@@ -3493,13 +3228,13 @@ static void d_s_o_get_authorization_req(tvbuff_t *tvb,
 static void d_s_o_server_ignored_response(tvbuff_t *tvb,
                                           packet_info *pinfo,
                                           proto_tree *tree,
-                                          unsigned offset,
-                                          unsigned size) {
+                                          int offset,
+                                          int size) {
   if (size == 0) {
     return;
   }
   proto_item *ti = proto_tree_add_item(tree, hf_value, tvb, offset, size,
-                                       ENC_ASCII);
+                                       ENC_ASCII | ENC_NA);
   if (get_status(tvb) == STATUS_SUCCESS) {
     expert_add_info_format(pinfo, ti, &ei_warn_shall_not_have_value,
                            "Success should not carry value");
@@ -3512,15 +3247,15 @@ static void d_s_o_server_ignored_response(tvbuff_t *tvb,
 static void d_s_o_authenticate_res(tvbuff_t *tvb ,
                                    packet_info *pinfo ,
                                    proto_tree *tree ,
-                                   unsigned offset ,
-                                   unsigned size ) {
+                                   int offset ,
+                                   int size ) {
   if (size == 0) {
     return;
   }
 
   // Payload is JSON (for success and if there is an error)
   proto_tree_add_item(tree, hf_server_authentication, tvb, offset, size,
-                      ENC_ASCII);
+                      ENC_ASCII | ENC_NA);
   tvbuff_t *json_tvb = tvb_new_subset_length(tvb, offset, size);
   call_dissector(json_handle, json_tvb, pinfo, tree);
 }
@@ -3528,15 +3263,15 @@ static void d_s_o_authenticate_res(tvbuff_t *tvb ,
 static void d_s_o_get_authorization_res(tvbuff_t *tvb,
                                         packet_info *pinfo,
                                         proto_tree *tree,
-                                        unsigned offset,
-                                        unsigned size) {
+                                        int offset,
+                                        int size) {
   if (size == 0) {
     return;
   }
 
   // Payload is JSON (for success and if there is an error)
   proto_tree_add_item(tree, hf_server_get_authorization, tvb, offset, size,
-                      ENC_ASCII);
+                      ENC_ASCII | ENC_NA);
   tvbuff_t *json_tvb = tvb_new_subset_length(tvb, offset, size);
   call_dissector(json_handle, json_tvb, pinfo, tree);
 
@@ -3570,13 +3305,6 @@ static bool opcode_use_vbucket(uint8_t magic _U_, uint8_t opcode) {
     case CLIENT_OPCODE_CREATE_BUCKET:
     case CLIENT_OPCODE_DELETE_BUCKET:
     case CLIENT_OPCODE_SELECT_BUCKET:
-    case CLIENT_OPCODE_GET_FILE_FRAGMENT:
-    case CLIENT_OPCODE_GET_FUSION_STORAGE_SNAPSHOT:
-    case CLIENT_OPCODE_RELEASE_FUSION_STORAGE_SNAPSHOT:
-    case CLIENT_OPCODE_DELETE_FUSION_NAMESPACE:
-    case CLIENT_OPCODE_GET_FUSION_NAMESPACES:
-    case CLIENT_OPCODE_SET_ACTIVE_ENCRYPTION_KEYS:
-    case CLIENT_OPCODE_PRUNE_ENCRYPTION_KEYS:
       return false;
 
     default:
@@ -3594,7 +3322,6 @@ static bool opcode_use_vbucket(uint8_t magic _U_, uint8_t opcode) {
  */
 static void dissect_frame_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *couchbase_tree, proto_item *couchbase_item) {
   uint8_t magic = get_magic(tvb);
-  char* str_magic;
   proto_item *ti = proto_tree_add_item(couchbase_tree, hf_magic, tvb, 0, 1, ENC_BIG_ENDIAN);
   if (try_val_to_str(magic, magic_vals) == NULL) {
     expert_add_info_format(pinfo, ti, &ei_warn_unknown_magic_byte, "Unknown magic byte: 0x%x", magic);
@@ -3615,14 +3342,13 @@ static void dissect_frame_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
     expert_add_info_format(pinfo, ti, &ei_warn_unknown_opcode, "Unknown opcode: 0x%x", opcode);
     opcode_name = "Unknown opcode";
   }
-  str_magic = val_to_str(pinfo->pool, magic, magic_vals, "Unknown magic (0x%x)");
   proto_item_append_text(couchbase_item, ", %s %s, Opcode: 0x%x",
                          opcode_name,
-                         str_magic,
+                         val_to_str(magic, magic_vals, "Unknown magic (0x%x)"),
                          opcode);
   col_append_fstr(pinfo->cinfo, COL_INFO, "%s %s, Opcode: 0x%x",
                   opcode_name,
-                  str_magic,
+                  val_to_str(magic, magic_vals, "Unknown magic (0x%x)"),
                   opcode);
 
   /* Check for flex magic, which changes the header format */
@@ -3656,8 +3382,8 @@ static void dissect_frame_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
     ti = proto_tree_add_item(couchbase_tree, hf_status, tvb, 6, 2, ENC_BIG_ENDIAN);
     if (status != 0) {
       expert_add_info_format(pinfo, ti, &ei_warn_unknown_opcode, "%s: %s",
-                             val_to_str_ext(pinfo->pool, opcode, &client_opcode_vals_ext, "Unknown opcode (0x%x)"),
-                             val_to_str_ext(pinfo->pool, status, &status_vals_ext, "Status: 0x%x"));
+                             val_to_str_ext(opcode, &client_opcode_vals_ext, "Unknown opcode (0x%x)"),
+                             val_to_str_ext(status, &status_vals_ext, "Status: 0x%x"));
     }
   }
 
@@ -3669,11 +3395,10 @@ static void dissect_frame_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
   proto_tree_add_item(couchbase_tree, hf_total_bodylength, tvb, 8, 4, ENC_BIG_ENDIAN);
 
   /*
-   * The opaque field uses network byte order (big-endian) like all other
-   * multi-byte fields in the protocol header. This allows clients to
-   * correlate requests with responses.
+   * use little endian (network) encoding for the opaque as this is an opaque
+   * field the client could use for whatever they want
    */
-  proto_tree_add_item(couchbase_tree, hf_opaque, tvb, 12, 4, ENC_BIG_ENDIAN);
+  proto_tree_add_item(couchbase_tree, hf_opaque, tvb, 12, 4, ENC_LITTLE_ENDIAN);
 
   // Finally we've got the CAS (which observe has a special use for)
   if (opcode == CLIENT_OPCODE_OBSERVE) {
@@ -3690,7 +3415,7 @@ static void dissect_frame_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 static void dissect_frame_flex_info_section(tvbuff_t *tvb,
                                             packet_info *pinfo,
                                             proto_tree *tree,
-                                            unsigned offset,
+                                            int offset,
                                             uint8_t size,
                                             uint8_t magic) {
   if (size == 0) {
@@ -3701,7 +3426,7 @@ static void dissect_frame_flex_info_section(tvbuff_t *tvb,
     case MAGIC_SERVER_RESPONSE:
     case MAGIC_SERVER_REQUEST:
       // None of the server initiated messages use flex frame encoding!
-      proto_tree_add_item(tree, hf_flex_extras, tvb, offset, size, ENC_NA);
+      proto_tree_add_item(tree, hf_flex_extras, tvb, offset, size, ENC_UTF_8|ENC_STR_HEX);
       proto_tree_add_expert_format(tree,
                                    pinfo,
                                    &ei_warn_unknown_flex_unsupported,
@@ -3721,7 +3446,7 @@ static void dissect_frame_flex_info_section(tvbuff_t *tvb,
                                       is_request_magic(magic));
       break;
     default:
-      proto_tree_add_item(tree, hf_flex_extras, tvb, offset, size, ENC_NA);
+      proto_tree_add_item(tree, hf_flex_extras, tvb, offset, size, ENC_UTF_8|ENC_STR_HEX);
       proto_tree_add_expert_format(tree,
                                    pinfo,
                                    &ei_warn_unknown_flex_unsupported,
@@ -3738,7 +3463,7 @@ static void dissect_frame_flex_info_section(tvbuff_t *tvb,
 static void dissect_frame_extras(tvbuff_t *tvb,
                                  packet_info *pinfo,
                                  proto_tree *tree,
-                                 unsigned offset,
+                                 int offset,
                                  uint8_t size,
                                  uint8_t magic,
                                  uint8_t opcode,
@@ -3758,7 +3483,7 @@ static void dissect_frame_extras(tvbuff_t *tvb,
                             opcode, is_request_magic(magic), subdoc_path_len);
       break;
     default:
-      proto_tree_add_item(tree, hf_extras, tvb, offset, size, ENC_NA);
+      proto_tree_add_item(tree, hf_extras, tvb, offset, size, ENC_UTF_8|ENC_STR_HEX);
       proto_tree_add_expert_format(tree,
                                    pinfo,
                                    &ei_warn_unknown_extras,
@@ -3775,7 +3500,7 @@ static void dissect_frame_extras(tvbuff_t *tvb,
 static void dissect_frame_key(tvbuff_t *tvb,
                               packet_info *pinfo,
                               proto_tree *tree,
-                              unsigned offset,
+                              int offset,
                               uint16_t size,
                               uint8_t magic,
                               uint8_t opcode) {
@@ -3791,7 +3516,7 @@ static void dissect_frame_key(tvbuff_t *tvb,
 static void dissect_client_value(tvbuff_t *tvb,
                                  packet_info *pinfo,
                                  proto_tree *tree,
-                                 unsigned offset,
+                                 int offset,
                                  uint32_t size,
                                  uint8_t magic,
                                  uint8_t opcode,
@@ -3804,7 +3529,7 @@ static void dissect_client_value(tvbuff_t *tvb,
     if (status == 0) {
       dissect_value(tvb, pinfo, tree, offset, size, subdoc_path_len, opcode, false, datatype);
     } else if (size) {
-      proto_tree_add_item(tree, hf_value, tvb, offset, size, ENC_ASCII);
+      proto_tree_add_item(tree, hf_value, tvb, offset, size, ENC_ASCII | ENC_NA);
       if (status == STATUS_NOT_MY_VBUCKET || is_xerror(datatype, status)) {
         tvbuff_t *json_tvb;
         json_tvb = tvb_new_subset_length(tvb, offset, size);
@@ -3815,7 +3540,7 @@ static void dissect_client_value(tvbuff_t *tvb,
         dissect_multipath_mutation_response(tvb, pinfo, tree, offset, size);
       }
       col_append_fstr(pinfo->cinfo, COL_INFO, ", %s",
-                      val_to_str_ext(pinfo->pool, status, &status_vals_ext,
+                      val_to_str_ext(status, &status_vals_ext,
                                      "Unknown status: 0x%x"));
     } else {
       /* Newer opcodes do not include a value in non-SUCCESS responses. */
@@ -3838,13 +3563,13 @@ static void dissect_client_value(tvbuff_t *tvb,
 
         default:
           ti = proto_tree_add_item(tree, hf_value, tvb, offset, 0,
-                                   ENC_ASCII);
+                                   ENC_ASCII | ENC_NA);
           expert_add_info_format(pinfo, ti, &ei_value_missing,
                                  "%s with status %s (0x%x) must have Value",
-                                 val_to_str_ext(pinfo->pool, opcode,
+                                 val_to_str_ext(opcode,
                                                 &client_opcode_vals_ext,
                                                 "Opcode 0x%x"),
-                                 val_to_str_ext(pinfo->pool, status,
+                                 val_to_str_ext(status,
                                                 &status_vals_ext,
                                                 "Unknown"),
                                  status);
@@ -3856,8 +3581,8 @@ static void dissect_client_value(tvbuff_t *tvb,
 static void dissect_server_request_value(tvbuff_t *tvb,
                                          packet_info *pinfo,
                                          proto_tree *tree,
-                                         unsigned offset,
-                                         unsigned size) {
+                                         int offset,
+                                         int size) {
   switch (get_opcode(tvb)) {
     case SERVER_OPCODE_CLUSTERMAP_CHANGE_NOTIFICATION:
       d_s_o_clustermap_change_notification_req(tvb, pinfo, tree, offset, size);
@@ -3875,7 +3600,7 @@ static void dissect_server_request_value(tvbuff_t *tvb,
       // Unknown packet type.. just dump the data
       if (size > 0) {
         proto_tree_add_item(tree, hf_value, tvb, offset, size,
-                            ENC_ASCII);
+                            ENC_ASCII | ENC_NA);
       }
       return;
   }
@@ -3884,10 +3609,10 @@ static void dissect_server_request_value(tvbuff_t *tvb,
 static void dissect_server_response_value(tvbuff_t *tvb,
                                          packet_info *pinfo,
                                          proto_tree *tree,
-                                         unsigned offset,
-                                         unsigned size) {
+                                         int offset,
+                                         int size) {
   col_append_fstr(pinfo->cinfo, COL_INFO, ", %s",
-                  val_to_str_ext(pinfo->pool, get_status(tvb), &status_vals_ext,
+                  val_to_str_ext(get_status(tvb), &status_vals_ext,
                                  "Unknown status: 0x%x"));
 
   switch (get_opcode(tvb)) {
@@ -3907,7 +3632,7 @@ static void dissect_server_response_value(tvbuff_t *tvb,
       // Unknown packet type.. just dump the data
       if (size > 0) {
         proto_tree_add_item(tree, hf_value, tvb, offset, size,
-                            ENC_ASCII);
+                            ENC_ASCII | ENC_NA);
       }
       return;
   }
@@ -3919,7 +3644,7 @@ static void dissect_server_response_value(tvbuff_t *tvb,
 static void dissect_frame_value(tvbuff_t *tvb,
                                 packet_info *pinfo,
                                 proto_tree *tree,
-                                unsigned offset,
+                                int offset,
                                 uint32_t size,
                                 uint8_t magic,
                                 uint8_t opcode,
@@ -3944,7 +3669,7 @@ static void dissect_frame_value(tvbuff_t *tvb,
     default:
       // Unknown magic... just dump the data
       if (size > 0) {
-        proto_tree_add_item(tree, hf_value, tvb, offset, (int)size, ENC_ASCII);
+        proto_tree_add_item(tree, hf_value, tvb, offset, (int)size, ENC_ASCII | ENC_NA);
       }
       return;
   }
@@ -3972,7 +3697,7 @@ static void dissect_frame_value(tvbuff_t *tvb,
 static int
 dissect_couchbase(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-  col_set_str(pinfo->cinfo, COL_PROTOCOL, "Couchbase");
+  col_set_str(pinfo->cinfo, COL_PROTOCOL, PSNAME);
   col_clear(pinfo->cinfo, COL_INFO);
 
   proto_item *couchbase_item = proto_tree_add_item(tree, proto_couchbase, tvb, 0, -1, ENC_NA);
@@ -3980,7 +3705,7 @@ dissect_couchbase(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 
   dissect_frame_header(tvb, pinfo, couchbase_tree, couchbase_item);
   uint8_t magic = get_magic(tvb);
-  unsigned offset = 24;
+  int offset = 24;
 
   uint8_t flex_frame_extra_len = get_flex_framing_extras_length(tvb);
   uint8_t opcode = get_opcode(tvb);
@@ -4238,13 +3963,7 @@ proto_register_couchbase(void)
     { &hf_range_scan_uuid, { "Range Scan UUID", "couchbase.range_scan.uuid", FT_GUID, BASE_NONE, NULL, 0x0, NULL, HFILL } },
     { &hf_range_scan_item_limit, { "Range Scan item limit", "couchbase.range_scan.item_limit", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL } },
     { &hf_range_scan_time_limit, { "Range Scan time limit", "couchbase.range_scan.time_limit", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL } },
-    { &hf_range_scan_byte_limit, { "Range Scan byte limit", "couchbase.range_scan.byte_limit", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL } },
-
-    { &hf_file_fragment_data, { "File Fragment Data", "couchbase.file_fragment.data", FT_BYTES, BASE_NONE, NULL, 0x0, "Raw bytes of the requested file fragment (may contain interleaved CRC32C checksums when checksumming was requested)", HFILL } },
-
-    { &hf_dcp_cache_transfer, { "DCP Cache Transfer Items", "couchbase.dcp.cache_transfer", FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL } },
-    { &hf_dcp_cache_transfer_keylen, { "Key Length", "couchbase.dcp.cache_transfer.keylen", FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL } },
-    { &hf_dcp_cache_transfer_cachehint, { "Cache Hint", "couchbase.dcp.cache_transfer.cachehint", FT_UINT8, BASE_HEX, NULL, 0x0, "Opaque eviction hint (frequency-counter / MFU / NRU) to preserve across the transfer", HFILL } }
+    { &hf_range_scan_byte_limit, { "Range Scan byte limit", "couchbase.range_scan.byte_limit", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL } }
   };
 
   static ei_register_info ei[] = {
@@ -4253,7 +3972,7 @@ proto_register_couchbase(void)
     { &ei_warn_shall_not_have_extras, { "couchbase.warn.shall_not_have_extras", PI_UNDECODED, PI_WARN, "Packet shall not have extras", EXPFILL }},
     { &ei_warn_shall_not_have_key, { "couchbase.warn.shall_not_have_key", PI_UNDECODED, PI_WARN, "Packet shall not have key", EXPFILL }},
     { &ei_warn_must_have_extras, { "couchbase.warn.must_have_extras", PI_UNDECODED, PI_WARN, "Packet must have extras", EXPFILL }},
-    { &ei_warn_must_have_key, { "couchbase.warn.must_have_key", PI_UNDECODED, PI_WARN, "Message must have Key", EXPFILL }},
+    { &ei_warn_must_have_key, { "couchbase.warn.must_have_key", PI_UNDECODED, PI_WARN, "%s %s must have Key", EXPFILL }},
     { &ei_warn_illegal_extras_length, { "couchbase.warn.illegal_extras_length", PI_UNDECODED, PI_WARN, "Illegal Extras length", EXPFILL }},
     { &ei_warn_illegal_value_length, { "couchbase.warn.illegal_value_length", PI_UNDECODED, PI_WARN, "Illegal Value length", EXPFILL }},
     { &ei_warn_unknown_magic_byte, { "couchbase.warn.unknown_magic_byte", PI_UNDECODED, PI_WARN, "Unknown magic byte", EXPFILL }},
@@ -4263,9 +3982,9 @@ proto_register_couchbase(void)
     { &ei_separator_not_found, { "couchbase.warn.separator_not_found", PI_UNDECODED, PI_WARN, "Separator not found", EXPFILL }},
     { &ei_illegal_value, { "couchbase.warn.illegal_value", PI_UNDECODED, PI_WARN, "Illegal value for command", EXPFILL }},
     { &ei_compression_error, { "couchbase.error.compression", PI_UNDECODED, PI_WARN, "Compression error", EXPFILL }},
-    { &ei_warn_unknown_flex_unsupported, { "couchbase.warn.unsupported_flexible_frame", PI_UNDECODED, PI_WARN, "Unsupported Flexible encoding", EXPFILL }},
+    { &ei_warn_unknown_flex_unsupported, { "couchbase.warn.unsupported_flexible_frame", PI_UNDECODED, PI_WARN, "Flexible Response ID warning", EXPFILL }},
     { &ei_warn_unknown_flex_id, { "couchbase.warn.unknown_flexible_frame_id", PI_UNDECODED, PI_WARN, "Flexible Response ID warning", EXPFILL }},
-    { &ei_warn_unknown_flex_len, { "couchbase.warn.unknown_flexible_frame_len", PI_UNDECODED, PI_WARN, "Flexible Response Length warning", EXPFILL }}
+    { &ei_warn_unknown_flex_len, { "couchbase.warn.unknown_flexible_frame_len", PI_UNDECODED, PI_WARN, "Flexible Response ID warning", EXPFILL }}
   };
 
   static int *ett[] = {
@@ -4283,15 +4002,13 @@ proto_register_couchbase(void)
     &ett_datatype,
     &ett_xattrs,
     &ett_xattr_pair,
-    &ett_collection_key,
-    &ett_dcp_cache_transfer,
-    &ett_dcp_cache_transfer_item
+    &ett_collection_key
   };
 
   module_t *couchbase_module;
   expert_module_t* expert_couchbase;
 
-  proto_couchbase = proto_register_protocol("Couchbase Protocol", "Couchbase", "couchbase");
+  proto_couchbase = proto_register_protocol(PNAME, PSNAME, PFNAME);
 
   proto_register_field_array(proto_couchbase, hf, array_length(hf));
   proto_register_subtree_array(ett, array_length(ett));

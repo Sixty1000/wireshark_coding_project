@@ -23,8 +23,10 @@
 #include <QDesktopServices>
 #include <QTabWidget>
 
+#include "ringbuffer.h"
 #include "ui/capture_ui_utils.h"
 #include "ui/capture_globals.h"
+#include "ui/iface_lists.h"
 
 #include "ui/ws_ui_util.h"
 #include "ui/util.h"
@@ -43,9 +45,7 @@
 #include <ui/preference_utils.h>
 
 #include <ui/qt/main_application.h>
-#include <ui/qt/main_window.h>
-#include <ui/qt/manager/interface_list_manager.h>
-#include <ui/qt/utils/themes/themed_icon.h>
+#include <ui/qt/utils/stock_icon.h>
 #include <ui/qt/utils/variant_pointer.h>
 
 #include <ui/qt/extcap_argument.h>
@@ -57,8 +57,7 @@ ExtcapOptionsDialog::ExtcapOptionsDialog(bool startCaptureOnClose, QWidget *pare
     ui(new Ui::ExtcapOptionsDialog),
     device_name(""),
     device_idx(0),
-    defaultValueIcon_(ThemedIcon("reset")),
-    ret_args(NULL)
+    defaultValueIcon_(StockIcon("x-reset"))
 {
     ui->setupUi(this);
 
@@ -74,8 +73,7 @@ ExtcapOptionsDialog::ExtcapOptionsDialog(bool startCaptureOnClose, QWidget *pare
     }
 }
 
-ExtcapOptionsDialog * ExtcapOptionsDialog::createForDevice(QString &dev_name, bool startCaptureOnClose, QWidget *parent,
-    QString *option_name, QString *option_value)
+ExtcapOptionsDialog * ExtcapOptionsDialog::createForDevice(QString &dev_name, bool startCaptureOnClose, QWidget *parent)
 {
     interface_t *device;
     ExtcapOptionsDialog * resultDialog = NULL;
@@ -102,32 +100,7 @@ ExtcapOptionsDialog * ExtcapOptionsDialog::createForDevice(QString &dev_name, bo
     resultDialog->device_name = QString(dev_name);
     resultDialog->device_idx = if_idx;
 
-    char *bookmark_name = extcap_get_bookmark_name(qUtf8Printable(dev_name));
-    if (bookmark_name != NULL)
-    {
-        resultDialog->ui->bookmarkLineEdit->setText(gchar_free_to_qstring(bookmark_name));
-    }
-
-    if (option_name != NULL && option_value != NULL)
-    {
-        // Sub argument is specified: this is an extcap popup created from a parent extcap popup,
-        // to configure a specific argument.
-        resultDialog->setWindowTitle(mainApp->windowTitleString(tr("Interface Sub-options") + ": " + (*option_name)));
-        resultDialog->option_name = *option_name;
-        resultDialog->option_value = *option_value;
-        resultDialog->ui->buttonBox->button(QDialogButtonBox::Ok)->setText(tr("Ok"));
-        resultDialog->ui->buttonBox->button(QDialogButtonBox::Save)->hide();
-        resultDialog->ui->buttonBox->button(QDialogButtonBox::Help)->hide();
-        resultDialog->ui->buttonBox->button(QDialogButtonBox::RestoreDefaults)->hide();
-        resultDialog->ui->checkSaveOnStart->setCheckState(Qt::Checked);
-        resultDialog->ui->checkSaveOnStart->hide();
-        resultDialog->ui->bookmarkLabel->hide();
-        resultDialog->ui->bookmarkLineEdit->hide();
-    }
-    else
-    {
-        resultDialog->setWindowTitle(mainApp->windowTitleString(tr("Interface Options") + ": " + device->display_name));
-    }
+    resultDialog->setWindowTitle(mainApp->windowTitleString(tr("Interface Options") + ": " + device->display_name));
 
     resultDialog->updateWidgets();
 
@@ -141,12 +114,6 @@ ExtcapOptionsDialog * ExtcapOptionsDialog::createForDevice(QString &dev_name, bo
 ExtcapOptionsDialog::~ExtcapOptionsDialog()
 {
     delete ui;
-
-    if (ret_args)
-    {
-        g_hash_table_unref(ret_args);
-        this->ret_args = NULL;
-    }
 }
 
 void ExtcapOptionsDialog::anyValueChanged()
@@ -212,7 +179,7 @@ void ExtcapOptionsDialog::anyValueChanged()
 
 void ExtcapOptionsDialog::loadArguments()
 {
-    GList * arguments = Q_NULLPTR, * walker = Q_NULLPTR;
+    GList * arguments = Q_NULLPTR, * walker = Q_NULLPTR, * item = Q_NULLPTR;
     ExtcapArgument * argument = Q_NULLPTR;
 
     if (device_name.length() == 0  )
@@ -220,29 +187,27 @@ void ExtcapOptionsDialog::loadArguments()
 
     extcapArguments.clear();
 
-    if (!option_name.isEmpty())
-    {
-        arguments = g_list_first(extcap_get_if_configuration_option(qUtf8Printable(device_name),
-            qUtf8Printable(option_name), qUtf8Printable(option_value)));
-    }
-    else
-    {
-        arguments = g_list_first(extcap_get_if_configuration(qUtf8Printable(device_name)));
-    }
+    arguments = g_list_first(extcap_get_if_configuration(device_name.toUtf8().constData()));
+
     ExtcapArgumentList required;
     ExtcapArgumentList optional;
 
     walker = arguments;
     while (walker != Q_NULLPTR)
     {
-        argument = ExtcapArgument::create(gxx_list_data(extcap_arg *, walker), this);
-        if (argument != Q_NULLPTR)
+        item = g_list_first(gxx_list_data(GList *, walker));
+        while (item != Q_NULLPTR)
         {
-            if (argument->isRequired())
-                required << argument;
-            else
-                optional << argument;
+            argument = ExtcapArgument::create(gxx_list_data(extcap_arg *, item), this);
+            if (argument != Q_NULLPTR)
+            {
+                if (argument->isRequired())
+                    required << argument;
+                else
+                    optional << argument;
 
+            }
+            item = item->next;
         }
         walker = gxx_list_next(walker);
     }
@@ -262,7 +227,6 @@ void ExtcapOptionsDialog::updateWidgets()
     QWidget * lblWidget = NULL, *editWidget = NULL;
     ExtcapArgument * argument = NULL;
     bool allowStart = true;
-    extcap_argument_sufficient sufficient = EXTCAP_ARGUMENT_SUFFICIENT_NOTSET;
 
     unsigned int counter = 0;
 
@@ -293,6 +257,7 @@ void ExtcapOptionsDialog::updateWidgets()
         ui->buttonBox->button(QDialogButtonBox::Ok)->setEnabled(true);
         return;
     }
+    ui->checkSaveOnStart->setText(tr("Save parameter(s) on capture start", "", static_cast<int>(extcapArguments.count())));
 
     QStringList groupKeys;
     QString defaultKeyName(tr("Default"));
@@ -365,19 +330,12 @@ void ExtcapOptionsDialog::updateWidgets()
                     QPushButton *button = new QPushButton(defaultValueIcon_,"");
                     button->setToolTip(tr("Restore default value of the item"));
                     layout->addWidget(button, counter, 2, Qt::AlignVCenter);
-                    connect(button, &QPushButton::clicked, argument, &ExtcapArgument::setDefaultValue);
+                    connect(button, SIGNAL(clicked()), argument, SLOT(setDefaultValue()));
                 }
             }
 
             if (argument->isRequired() && ! argument->isValid())
                 allowStart = false;
-
-            if (argument->isSufficient() && sufficient != EXTCAP_ARGUMENT_SUFFICIENT_OK)
-            {
-                sufficient = EXTCAP_ARGUMENT_SUFFICIENT_REQUIRED;
-                if (argument->isValid())
-                    sufficient = EXTCAP_ARGUMENT_SUFFICIENT_OK;
-            }
 
             connect(argument, &ExtcapArgument::valueChanged, this, &ExtcapOptionsDialog::anyValueChanged);
 
@@ -385,9 +343,6 @@ void ExtcapOptionsDialog::updateWidgets()
         }
         ++iter;
     }
-
-    if (sufficient == EXTCAP_ARGUMENT_SUFFICIENT_REQUIRED)
-        allowStart = false;
 
     if (counter > 0)
     {
@@ -447,7 +402,7 @@ void ExtcapOptionsDialog::on_buttonBox_helpRequested()
         QFileInfo help_file(local_path);
         if (!help_file.exists()) {
             QMessageBox::warning(this, tr("Extcap Help cannot be found"),
-                tr("The help for the extcap interface %1 cannot be found. Given file: %2")
+                QString(tr("The help for the extcap interface %1 cannot be found. Given file: %2"))
                     .arg(device->name).arg(QDir::toNativeSeparators(local_path)),
                 QMessageBox::Ok);
             return;
@@ -501,16 +456,8 @@ bool ExtcapOptionsDialog::saveOptionToCaptureInfo()
 
     if (device->external_cap_args_settings != NULL)
       g_hash_table_unref(device->external_cap_args_settings);
-
-    device->external_cap_args_settings = g_hash_table_ref(ret_args);
-    this->ret_args = ret_args;
-
+    device->external_cap_args_settings = ret_args;
     return true;
-}
-
-GHashTable* ExtcapOptionsDialog::getExtcapArgumentSettings()
-{
-    return this->ret_args;
 }
 
 void ExtcapOptionsDialog::on_buttonBox_clicked(QAbstractButton *button)
@@ -536,16 +483,7 @@ void ExtcapOptionsDialog::on_buttonBox_clicked(QAbstractButton *button)
              * out a new preference file with its new value, but don't.
              */
             if (ui->buttonBox->standardButton(button) == QDialogButtonBox::Save) {
-                if (storeValues()) {
-                    /* A bookmark is an interface of its own, so make sure that
-                     * we show it. We don't do this when starting a capture,
-                     * since reloading our interfaces would remove the one that
-                     * we're about to capture on. */
-                    MainWindow *mw = mainApp->mainWindow();
-                    if (mw && mw->interfaceListManager()) {
-                        mw->interfaceListManager()->requestRefresh();
-                    }
-                }
+                storeValues();
                 /* Reject the dialog, because we don't want to start a capture. */
                 reject();
             } else {
@@ -676,7 +614,7 @@ GHashTable *ExtcapOptionsDialog::getArgumentSettings(bool useCallsAsKey, bool in
         else
             value = (*iter)->prefValue();
 
-        QString key = argument->prefKey(device_name, option_name, option_value);
+        QString key = argument->prefKey(device_name);
         if (useCallsAsKey)
             key = argument->call();
 
@@ -691,32 +629,8 @@ GHashTable *ExtcapOptionsDialog::getArgumentSettings(bool useCallsAsKey, bool in
     return entries;
 }
 
-// The options dialog should have the following behavior with respect to bookmarks:
-// - If the extcap interface is not a bookmark and the bookmarkLineEdit is not empty, create a new bookmark interface.
-// - If the extcap interface is a bookmark, fill in bookmarkLineEdit with the bookmark name. Furthermore:
-//   - If the user saves extcap options and bookmarkLineEdit has been changed, update its corresponding interface information.
-//   - If the user saves extcap options and bookmarkLineEdit is empty, do not update its corresponding interface information.
-
-bool ExtcapOptionsDialog::storeValues()
+void ExtcapOptionsDialog::storeValues()
 {
-    /* A new bookmark name means that we store our values in a bookmark of
-     * their own, creating or renaming it as needed. An empty name leaves our
-     * interface information alone. */
-    bool bookmarked = false;
-    QString bookmark_name = ui->bookmarkLineEdit->text().trimmed();
-    QString cur_bookmark = gchar_free_to_qstring(extcap_get_bookmark_name(qUtf8Printable(device_name)));
-
-    if (!bookmark_name.isEmpty() && bookmark_name != cur_bookmark)
-    {
-        char *bookmark_ifname = extcap_set_bookmark(qUtf8Printable(device_name), qUtf8Printable(bookmark_name));
-        if (bookmark_ifname != NULL)
-        {
-            /* Our values belong to the bookmark from here on. */
-            device_name = gchar_free_to_qstring(bookmark_ifname);
-            bookmarked = true;
-        }
-    }
-
     GHashTable * entries = getArgumentSettings();
 
     if (g_hash_table_size(entries) > 0)
@@ -727,8 +641,6 @@ bool ExtcapOptionsDialog::storeValues()
     }
 
     g_hash_table_unref(entries);
-
-    return bookmarked;
 }
 
 ExtcapValueList ExtcapOptionsDialog::loadValuesFor(int argNum, QString argumentName, QString parent)

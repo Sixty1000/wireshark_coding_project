@@ -54,7 +54,7 @@ dissect_rgmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* d
     proto_tree *tree;
     proto_item *item;
     uint8_t type;
-    unsigned offset = 0;
+    int offset = 0;
     uint32_t dst = g_htonl(MC_RGMP);
 
     /* Shouldn't be destined for us */
@@ -69,7 +69,7 @@ dissect_rgmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* d
 
     type = tvb_get_uint8(tvb, offset);
     col_add_str(pinfo->cinfo, COL_INFO,
-                val_to_str(pinfo->pool, type, rgmp_types, "Unknown Type: 0x%02x"));
+                val_to_str(type, rgmp_types, "Unknown Type: 0x%02x"));
     proto_tree_add_uint(tree, hf_type, tvb, offset, 1, type);
     offset += 1;
 

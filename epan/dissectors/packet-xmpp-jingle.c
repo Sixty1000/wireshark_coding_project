@@ -1,4 +1,4 @@
-/* packet-xmpp-jingle.c
+/* xmpp-jingle.c
  * Wireshark's XMPP dissector.
  *
  * urn:xmpp:jingle:1

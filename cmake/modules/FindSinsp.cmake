@@ -15,15 +15,9 @@
 #  SINSP_LINK_LIBRARIES - List of libraries when using libsinsp.
 
 # You must manually set the following variables:
-#  FALCO_PLUGIN_DIR     - Path to plugins and dependent DLLs.
-#  FALCO_PLUGINS        - Plugins built from https://github.com/falcosecurity/plugins/.
-#  FALCO_PLUGIN_DLLS    - DLLs that plugins depend on.
-#
-# The Rust std library depends on libunwind; FALCO_PLUGIN_DLLS will have to include
-# it if you have any Rust plugins: https://github.com/rust-lang/rust/issues/144533
+#  FALCO_PLUGINS        - Paths to plugins built from https://github.com/falcosecurity/plugins/.
 
 # To do:
-#  Automatically set FALCO_PLUGIN_DIR, FALCO_PLUGINS, and FALCO_PLUGIN_DLLS.
 #  SINSP_DLL_DIR        - (Windows) Path to the libsinsp and libscap DLLs
 #  SINSP_DLL            - (Windows) Name of the libsinsp and libscap DLLs
 
@@ -74,13 +68,6 @@ if(NOT SINSP_FOUND)
     /usr/local/lib
   )
 
-if(WIN32)
-  find_library(_sinsp_debug_link_libs NO_CACHE
-    NAMES sinsp
-    HINTS "${SINSP_HINTS}/debug/lib"
-  )
-endif()
-
   if (NOT SINSP_VERSION)
     find_file(_sinsp_pkgconfig NO_CACHE
       libsinsp.pc
@@ -99,7 +86,6 @@ endif()
     scap
     scap_engine_nodriver
     scap_engine_noop
-    scap_engine_raw_block
     scap_engine_savefile
     scap_engine_source_plugin
     scap_engine_test_input
@@ -121,22 +107,6 @@ endif()
       unset(_lib)
     endif()
   endforeach()
-
-  if(WIN32)
-    set(_dep_debug_libs jsoncpp re2 tbb12_debug zlibstaticd)
-    foreach(_scap_lib ${_scap_libs} ${_dep_debug_libs})
-      find_library(_lib NO_CACHE
-        NAMES ${_scap_lib}
-        HINTS "${SINSP_HINTS}/debug/lib"
-        PATH_SUFFIXES falcosecurity
-      )
-      if (_lib)
-        list(APPEND _sinsp_debug_link_libs ${_lib})
-        unset(_lib)
-      endif()
-    endforeach()
-  endif()
-
   unset(_scap_libs)
   unset(_scap_lib)
 
@@ -203,12 +173,11 @@ endif()
 
   # This is terrible, but libsinsp/libscap doesn't support dynamic linking on Windows (yet).
   find_path(_zlib_include_dir NO_CACHE
-    NAMES zlib.h
+    NAMES zlib/zlib.h
     HINTS "${SINSP_INCLUDEDIR}" "${SINSP_HINTS}/include"
     PATHS
     /usr/include
     /usr/local/include
-    PATH_SUFFIXES falcosecurity/zlib
   )
   if (_zlib_include_dir)
     list(APPEND _sinsp_include_dirs ${_zlib_include_dir})
@@ -229,17 +198,11 @@ endif()
 
   if(_sinsp_include_dirs AND _sinsp_link_libs)
     list(REMOVE_DUPLICATES _sinsp_include_dirs)
-    set(SINSP_INCLUDE_DIRS ${_sinsp_include_dirs} CACHE PATH "Paths to libsinsp and libscap headers" FORCE)
-    # The Debug libraries link to MSVCRTD.lib on Windows, and so we need to
-    # track them separately there. We don't need to do that elsewhere.
-    if(WIN32)
-      set(SINSP_DEBUG_LINK_LIBRARIES ${_sinsp_debug_link_libs} CACHE PATH "Paths to libsinsp, libscap, etc. debug libs")
-    endif()
+    set(SINSP_INCLUDE_DIRS ${_sinsp_include_dirs} CACHE PATH "Paths to libsinsp and libscap headers")
     set(SINSP_LINK_LIBRARIES ${_sinsp_link_libs} CACHE PATH "Paths to libsinsp, libscap, etc.")
     set(SINSP_FOUND 1)
     unset(_sinsp_include_dirs)
     unset(_sinsp_link_libs)
-    unset(_sinsp_debug_link_libs)
   endif()
 
 endif()
@@ -258,11 +221,6 @@ find_package_handle_standard_args(Sinsp
 )
 
 if(SINSP_FOUND)
-  if (SINSP_VERSION VERSION_EQUAL 0.0.0)
-    # https://github.com/falcosecurity/libs/blob/master/README.md#versioning
-    message(WARNING "libsinsp version is 0.0.0. If you built it outside of git, did you set FALCOSECURITY_LIBS_VERSION?")
-  endif()
-
   string(REGEX MATCH "([0-9]+)\.([0-9]+)\.([0-9]+)" _ ${SINSP_VERSION})
   # Should we cache these?
   set(SINSP_VERSION_MAJOR ${CMAKE_MATCH_1})
@@ -281,37 +239,16 @@ if(SINSP_FOUND)
 #     )
 #     mark_as_advanced( SINSP_DLL_DIR SINSP_DLL )
 #   endif()
-  if (NOT TARGET sinsp::sinsp)
-    add_library(sinsp::sinsp INTERFACE IMPORTED)
-    set_target_properties(sinsp::sinsp PROPERTIES
-        INTERFACE_INCLUDE_DIRECTORIES "${SINSP_INCLUDE_DIRS}"
-    )
-    if (USE_REPOSITORY)
-      target_link_libraries(sinsp::sinsp INTERFACE
-        debug "${SINSP_DEBUG_LINK_LIBRARIES}"
-        optimized "${SINSP_LINK_LIBRARIES}"
-      )
-      # We don't have the PDBs
-      target_link_options(sinsp::sinsp INTERFACE
-        "$<$<BOOL:${MSVC}>:/IGNORE:4099>"
-      )
-    else()
-      target_link_libraries(sinsp::sinsp INTERFACE
-        "${SINSP_LINK_LIBRARIES}"
-      )
-    endif()
-  endif()
 else()
   set(SINSP_INCLUDE_DIRS)
   set(SINSP_LINK_LIBRARIES)
-  set(SINSP_DEBUG_LINK_LIBRARIES)
   set(SINSP_VERSION)
   set(SINSP_VERSION_MAJOR)
   set(SINSP_VERSION_MINOR)
   set(SINSP_VERSION_MICRO)
 endif()
 
-mark_as_advanced(SINSP_INCLUDE_DIRS SINSP_LINK_LIBRARIES SINSP_DEBUG_LINK_LIBRARIES)
+mark_as_advanced(SINSP_INCLUDE_DIRS SINSP_LINK_LIBRARIES)
 
 # Windows plugins
 

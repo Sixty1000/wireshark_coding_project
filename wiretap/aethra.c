@@ -7,15 +7,10 @@
  */
 
 #include "config.h"
-#define WS_LOG_DOMAIN "aethra"
-
 #include "aethra.h"
 
 #include <string.h>
-
-#include <wsutil/pint.h>
-
-#include "wtap_module.h"
+#include "wtap-int.h"
 #include "file_wrappers.h"
 
 /* Magic number in Aethra PC108 files. */
@@ -104,180 +99,29 @@ struct aethrarec_hdr {
 #define AETHRA_ISDN_LINK_ALL_ALARMS_CLEARED	0x30	/* All Alarms Cleared */
 
 typedef struct {
-	time_t	     start;
-	unsigned int packet_number;
+	time_t	start;
 } aethra_t;
+
+static bool aethra_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err,
+    char **err_info, int64_t *data_offset);
+static bool aethra_seek_read(wtap *wth, int64_t seek_off,
+    wtap_rec *rec, Buffer *buf, int *err, char **err_info);
+static bool aethra_read_rec_header(wtap *wth, FILE_T fh, struct aethrarec_hdr *hdr,
+    wtap_rec *rec, int *err, char **err_info);
 
 static int aethra_file_type_subtype = -1;
 
 void register_aethra(void);
 
-static bool
-aethra_read_rec_header(wtap* wth, FILE_T fh, struct aethrarec_hdr* hdr,
-	wtap_rec* rec, int* err, char** err_info)
-{
-	aethra_t* aethra = (aethra_t*)wth->priv;
-	uint32_t rec_size;
-	uint32_t packet_size;
-	uint32_t msecs;
-
-	/* Read record header. */
-	if (!wtap_read_bytes_or_eof(fh, hdr, sizeof * hdr, err, err_info))
-		return false;
-
-	rec_size = pletohu16(hdr->rec_size);
-	if (rec_size < (sizeof * hdr - sizeof hdr->rec_size)) {
-		/* The record is shorter than a record header. */
-		*err = WTAP_ERR_BAD_FILE;
-		*err_info = ws_strdup_printf("aethra: File has %u-byte record, less than minimum of %u",
-			rec_size,
-			(unsigned int)(sizeof * hdr - sizeof hdr->rec_size));
-		return false;
-	}
-	if (rec_size > WTAP_MAX_PACKET_SIZE_STANDARD) {
-		/*
-		 * Probably a corrupt capture file; return an error,
-		 * so that our caller doesn't blow up trying to allocate
-		 * space for an immensely-large packet.
-		 */
-		*err = WTAP_ERR_BAD_FILE;
-		*err_info = ws_strdup_printf("aethra: File has %u-byte packet, bigger than maximum of %u",
-			rec_size, WTAP_MAX_PACKET_SIZE_STANDARD);
-		return false;
-	}
-
-	packet_size = rec_size - (uint32_t)(sizeof * hdr - sizeof hdr->rec_size);
-
-	wtap_setup_packet_rec(rec, wth->file_encap);
-	rec->presence_flags = WTAP_HAS_TS;
-	msecs = pletohu32(hdr->timestamp);
-	rec->ts.secs = aethra->start + (msecs / 1000);
-	rec->ts.nsecs = (msecs % 1000) * 1000000;
-	rec->rec_header.packet_header.caplen = packet_size;
-	rec->rec_header.packet_header.len = packet_size;
-	rec->rec_header.packet_header.pseudo_header.isdn.uton = (hdr->flags & AETHRA_U_TO_N);
-	rec->rec_header.packet_header.pseudo_header.isdn.channel = 0;	/* XXX - D channel */
-
-	return true;
-}
-
-/* Read the next packet */
-static bool aethra_read(wtap *wth, wtap_rec *rec, int *err,
-    char **err_info, int64_t *data_offset)
-{
-	aethra_t* aethra = (aethra_t*)wth->priv;
-	struct aethrarec_hdr hdr;
-
-	/*
-	 * Keep reading until we see an AETHRA_ISDN_LINK with a subtype
-	 * of AETHRA_ISDN_LINK_LAPD record or get an end-of-file.
-	 */
-	for (;;) {
-		*data_offset = file_tell(wth->fh);
-
-		/* Read record header. */
-		if (!aethra_read_rec_header(wth, wth->fh, &hdr, rec, err, err_info))
-			return false;
-
-		/*
-		 * XXX - if this is big, we might waste memory by
-		 * growing the buffer to handle it.
-		 */
-		if (rec->rec_header.packet_header.caplen != 0) {
-			if (!wtap_read_bytes_buffer(wth->fh, &rec->data,
-			    rec->rec_header.packet_header.caplen, err, err_info))
-				return false;	/* Read error */
-		}
-		aethra->packet_number++;
-
-		switch (hdr.rec_type) {
-
-		case AETHRA_ISDN_LINK:
-			ws_noisy("Packet %u: type 0x%02x (AETHRA_ISDN_LINK)\n", aethra->packet_number, hdr.rec_type);
-			switch (hdr.flags & AETHRA_ISDN_LINK_SUBTYPE) {
-
-			case AETHRA_ISDN_LINK_LAPD:
-				/*
-				 * The data is a LAPD frame.
-				 */
-				ws_noisy("    subtype 0x%02x (AETHRA_ISDN_LINK_LAPD)\n", hdr.flags & AETHRA_ISDN_LINK_SUBTYPE);
-				goto found;
-
-			case AETHRA_ISDN_LINK_SA_BITS:
-				/*
-				 * These records have one data byte, which
-				 * has the Sa bits in the lower 5 bits.
-				 *
-				 * XXX - what about stuff other than 2048K
-				 * PRI lines?
-				 */
-				ws_noisy("    subtype 0x%02x (AETHRA_ISDN_LINK_SA_BITS)\n", hdr.flags & AETHRA_ISDN_LINK_SUBTYPE);
-				break;
-
-			case AETHRA_ISDN_LINK_ALL_ALARMS_CLEARED:
-				/*
-				 * No data, just an "all alarms cleared"
-				 * indication.
-				 */
-				ws_noisy("    subtype 0x%02x (AETHRA_ISDN_LINK_ALL_ALARMS_CLEARED)\n", hdr.flags & AETHRA_ISDN_LINK_SUBTYPE);
-				break;
-
-			default:
-				ws_noisy("    subtype 0x%02x, packet_size %u, direction 0x%02x\n",
-						hdr.flags & AETHRA_ISDN_LINK_SUBTYPE, rec->rec_header.packet_header.caplen, hdr.flags & AETHRA_U_TO_N);
-				break;
-			}
-			break;
-
-		default:
-			ws_debug("Packet %u: type 0x%02x, packet_size %u, flags 0x%02x\n", aethra->packet_number, hdr.rec_type, rec->rec_header.packet_header.caplen, hdr.flags);
-			break;
-		}
-		/* Discard the data if the record is being skipped */
-		ws_buffer_clean(&rec->data);
-	}
-
-found:
-	rec->block = wtap_block_create(WTAP_BLOCK_PACKET);
-	return true;
-}
-
-static bool
-aethra_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
-    int *err, char **err_info)
-{
-	struct aethrarec_hdr hdr;
-
-	if (file_seek(wth->random_fh, seek_off, SEEK_SET, err) == -1)
-		return false;
-
-	if (!aethra_read_rec_header(wth, wth->random_fh, &hdr, rec, err,
-	    err_info)) {
-		if (*err == 0)
-			*err = WTAP_ERR_SHORT_READ;
-		return false;
-	}
-
-	/*
-	 * Read the packet data.
-	 */
-	if (!wtap_read_bytes_buffer(wth->random_fh, &rec->data,
-	    rec->rec_header.packet_header.caplen, err, err_info))
-		return false;	/* failed */
-
-	rec->block = wtap_block_create(WTAP_BLOCK_PACKET);
-	return true;
-}
-
-wtap_open_return_val aethra_open(wtap* wth, int* err, char** err_info)
+wtap_open_return_val aethra_open(wtap *wth, int *err, char **err_info)
 {
 	struct aethra_hdr hdr;
 	struct tm tm;
-	aethra_t* aethra;
+	aethra_t *aethra;
 
 	/* Read in the string that should be at the start of a "aethra" file */
 	if (!wtap_read_bytes(wth->fh, hdr.magic, sizeof hdr.magic, err,
-		err_info)) {
+	    err_info)) {
 		if (*err != WTAP_ERR_SHORT_READ)
 			return WTAP_OPEN_ERROR;
 		return WTAP_OPEN_NOT_MINE;
@@ -287,27 +131,26 @@ wtap_open_return_val aethra_open(wtap* wth, int* err, char** err_info)
 		return WTAP_OPEN_NOT_MINE;
 
 	/* Read the rest of the header. */
-	if (!wtap_read_bytes(wth->fh, (char*)&hdr + sizeof hdr.magic,
-		sizeof hdr - sizeof hdr.magic, err, err_info))
+	if (!wtap_read_bytes(wth->fh, (char *)&hdr + sizeof hdr.magic,
+	    sizeof hdr - sizeof hdr.magic, err, err_info))
 		return WTAP_OPEN_ERROR;
 	wth->file_type_subtype = aethra_file_type_subtype;
 	aethra = g_new(aethra_t, 1);
-	wth->priv = (void*)aethra;
+	wth->priv = (void *)aethra;
 	wth->subtype_read = aethra_read;
 	wth->subtype_seek_read = aethra_seek_read;
 
 	/*
 	 * Convert the time stamp to a "time_t".
 	 */
-	tm.tm_year = pletohu16(&hdr.start_year) - 1900;
-	tm.tm_mon = pletohu16(&hdr.start_month) - 1;
-	tm.tm_mday = pletohu16(&hdr.start_day);
+	tm.tm_year = pletoh16(&hdr.start_year) - 1900;
+	tm.tm_mon = pletoh16(&hdr.start_month) - 1;
+	tm.tm_mday = pletoh16(&hdr.start_day);
 	tm.tm_hour = hdr.start_hour;
 	tm.tm_min = hdr.start_min;
 	tm.tm_sec = hdr.start_sec;
 	tm.tm_isdst = -1;
 	aethra->start = mktime(&tm);
-	aethra->packet_number = 0;
 
 	/*
 	 * We've only seen ISDN files, so, for now, we treat all
@@ -326,6 +169,177 @@ wtap_open_return_val aethra_open(wtap* wth, int* err, char** err_info)
 	wtap_add_generated_idb(wth);
 
 	return WTAP_OPEN_MINE;
+}
+
+#if 0
+static unsigned packet;
+#endif
+
+/* Read the next packet */
+static bool aethra_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err,
+    char **err_info, int64_t *data_offset)
+{
+	struct aethrarec_hdr hdr;
+
+	/*
+	 * Keep reading until we see an AETHRA_ISDN_LINK with a subtype
+	 * of AETHRA_ISDN_LINK_LAPD record or get an end-of-file.
+	 */
+	for (;;) {
+		*data_offset = file_tell(wth->fh);
+
+		/* Read record header. */
+		if (!aethra_read_rec_header(wth, wth->fh, &hdr, rec, err, err_info))
+			return false;
+
+		/*
+		 * XXX - if this is big, we might waste memory by
+		 * growing the buffer to handle it.
+		 */
+		if (rec->rec_header.packet_header.caplen != 0) {
+			if (!wtap_read_packet_bytes(wth->fh, buf,
+			    rec->rec_header.packet_header.caplen, err, err_info))
+				return false;	/* Read error */
+		}
+#if 0
+packet++;
+#endif
+		switch (hdr.rec_type) {
+
+		case AETHRA_ISDN_LINK:
+#if 0
+fprintf(stderr, "Packet %u: type 0x%02x (AETHRA_ISDN_LINK)\n",
+packet, hdr.rec_type);
+#endif
+			switch (hdr.flags & AETHRA_ISDN_LINK_SUBTYPE) {
+
+			case AETHRA_ISDN_LINK_LAPD:
+				/*
+				 * The data is a LAPD frame.
+				 */
+#if 0
+fprintf(stderr, "    subtype 0x%02x (AETHRA_ISDN_LINK_LAPD)\n", hdr.flags & AETHRA_ISDN_LINK_SUBTYPE);
+#endif
+				goto found;
+
+			case AETHRA_ISDN_LINK_SA_BITS:
+				/*
+				 * These records have one data byte, which
+				 * has the Sa bits in the lower 5 bits.
+				 *
+				 * XXX - what about stuff other than 2048K
+				 * PRI lines?
+				 */
+#if 0
+fprintf(stderr, "    subtype 0x%02x (AETHRA_ISDN_LINK_SA_BITS)\n", hdr.flags & AETHRA_ISDN_LINK_SUBTYPE);
+#endif
+				break;
+
+			case AETHRA_ISDN_LINK_ALL_ALARMS_CLEARED:
+				/*
+				 * No data, just an "all alarms cleared"
+				 * indication.
+				 */
+#if 0
+fprintf(stderr, "    subtype 0x%02x (AETHRA_ISDN_LINK_ALL_ALARMS_CLEARED)\n", hdr.flags & AETHRA_ISDN_LINK_SUBTYPE);
+#endif
+				break;
+
+			default:
+#if 0
+fprintf(stderr, "    subtype 0x%02x, packet_size %u, direction 0x%02x\n",
+hdr.flags & AETHRA_ISDN_LINK_SUBTYPE, rec->rec_header.packet_header.caplen, hdr.flags & AETHRA_U_TO_N);
+#endif
+				break;
+			}
+			break;
+
+		default:
+#if 0
+fprintf(stderr, "Packet %u: type 0x%02x, packet_size %u, flags 0x%02x\n",
+packet, hdr.rec_type, rec->rec_header.packet_header.caplen, hdr.flags);
+#endif
+			break;
+		}
+	}
+
+found:
+	return true;
+}
+
+static bool
+aethra_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
+    Buffer *buf, int *err, char **err_info)
+{
+	struct aethrarec_hdr hdr;
+
+	if (file_seek(wth->random_fh, seek_off, SEEK_SET, err) == -1)
+		return false;
+
+	if (!aethra_read_rec_header(wth, wth->random_fh, &hdr, rec, err,
+	    err_info)) {
+		if (*err == 0)
+			*err = WTAP_ERR_SHORT_READ;
+		return false;
+	}
+
+	/*
+	 * Read the packet data.
+	 */
+	if (!wtap_read_packet_bytes(wth->random_fh, buf, rec->rec_header.packet_header.caplen, err, err_info))
+		return false;	/* failed */
+
+	return true;
+}
+
+static bool
+aethra_read_rec_header(wtap *wth, FILE_T fh, struct aethrarec_hdr *hdr,
+    wtap_rec *rec, int *err, char **err_info)
+{
+	aethra_t *aethra = (aethra_t *)wth->priv;
+	uint32_t rec_size;
+	uint32_t packet_size;
+	uint32_t msecs;
+
+	/* Read record header. */
+	if (!wtap_read_bytes_or_eof(fh, hdr, sizeof *hdr, err, err_info))
+		return false;
+
+	rec_size = pletoh16(hdr->rec_size);
+	if (rec_size < (sizeof *hdr - sizeof hdr->rec_size)) {
+		/* The record is shorter than a record header. */
+		*err = WTAP_ERR_BAD_FILE;
+		*err_info = ws_strdup_printf("aethra: File has %u-byte record, less than minimum of %u",
+		    rec_size,
+		    (unsigned int)(sizeof *hdr - sizeof hdr->rec_size));
+		return false;
+	}
+	if (rec_size > WTAP_MAX_PACKET_SIZE_STANDARD) {
+		/*
+		 * Probably a corrupt capture file; return an error,
+		 * so that our caller doesn't blow up trying to allocate
+		 * space for an immensely-large packet.
+		 */
+		*err = WTAP_ERR_BAD_FILE;
+		*err_info = ws_strdup_printf("aethra: File has %u-byte packet, bigger than maximum of %u",
+		    rec_size, WTAP_MAX_PACKET_SIZE_STANDARD);
+		return false;
+	}
+
+	packet_size = rec_size - (uint32_t)(sizeof *hdr - sizeof hdr->rec_size);
+
+	msecs = pletoh32(hdr->timestamp);
+	rec->rec_type = REC_TYPE_PACKET;
+	rec->block = wtap_block_create(WTAP_BLOCK_PACKET);
+	rec->presence_flags = WTAP_HAS_TS;
+	rec->ts.secs = aethra->start + (msecs / 1000);
+	rec->ts.nsecs = (msecs % 1000) * 1000000;
+	rec->rec_header.packet_header.caplen = packet_size;
+	rec->rec_header.packet_header.len = packet_size;
+	rec->rec_header.packet_header.pseudo_header.isdn.uton = (hdr->flags & AETHRA_U_TO_N);
+	rec->rec_header.packet_header.pseudo_header.isdn.channel = 0;	/* XXX - D channel */
+
+	return true;
 }
 
 static const struct supported_block_type aethra_blocks_supported[] = {

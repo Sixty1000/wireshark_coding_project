@@ -12,11 +12,9 @@
  */
 
 #include "config.h"
-#define WS_LOG_DOMAIN "packet-nbap"
-#include <wireshark.h>
 
-#include <epan/to_str.h>
 #include <epan/packet.h>
+#include <epan/sctpppids.h>
 #include <epan/asn1.h>
 #include <epan/conversation.h>
 #include <epan/expert.h>
@@ -32,9 +30,27 @@
 #include "packet-rrc.h"
 #include "packet-umts_rlc.h"
 #include "packet-nbap.h"
-#include "packet-sctp.h"
+
+#ifdef _MSC_VER
+/* disable: "warning C4146: unary minus operator applied to unsigned type, result still unsigned" */
+#pragma warning(disable:4146)
+#endif
+
+#define PNAME  "UTRAN Iub interface NBAP signalling"
+#define PSNAME "NBAP"
+#define PFNAME "nbap"
+
 
 #define NBAP_IGNORE_PORT 255
+
+/* Debug */
+#define DEBUG_NBAP 0
+#if DEBUG_NBAP
+#include <epan/to_str.h>
+#define nbap_debug(...) ws_warning(__VA_ARGS__)
+#else
+#define nbap_debug(...)
+#endif
 
 void proto_register_nbap(void);
 void proto_reg_handoff_nbap(void);
@@ -65,7 +81,7 @@ static expert_field ei_nbap_no_find_port_info;
 static expert_field ei_nbap_no_set_comm_context_id;
 static expert_field ei_nbap_hsdsch_entity_not_specified;
 
-static int proto_fp;
+extern int proto_fp;
 
 static dissector_handle_t nbap_handle;
 
@@ -114,12 +130,11 @@ typedef struct
 {
   address crnc_address;
   uint16_t crnc_port;
-  /* fp_edch_channel_info_t */
   int no_ddi_entries;
   uint8_t edch_ddi[MAX_EDCH_DDIS];
   unsigned edch_macd_pdu_size[MAX_EDCH_DDIS];
-  uint8_t lchId[MAX_EDCH_DDIS]; /*Logical channel ids.*/
   uint8_t edch_type;  /* 1 means T2 */
+  uint8_t lchId[MAX_EDCH_DDIS]; /*Logical channel ids.*/
 } nbap_edch_channel_info_t;
 
 
@@ -207,7 +222,7 @@ typedef struct nbap_private_data_t
   uint32_t ul_scrambling_code;
   uint32_t com_context_id;
   int num_dch_in_flow;
-  unsigned hrnti;
+  int hrnti;
   uint32_t protocol_ie_id;
   uint32_t dd_mode;
   uint32_t transaction_id;
@@ -387,9 +402,9 @@ enum ib_sg_enc_type {
 };
 
 static const enum_val_t ib_sg_enc_vals[] = {
-  {"Variant1",
+  {"Encoding Variant 1 (TS 25.433 Annex D.2)",
    "Encoding Variant 1 (TS 25.433 Annex D.2)", IB_SG_DATA_ENC_VAR_1},
-  {"Variant2",
+  {"Encoding Variant 2 (TS 25.433 Annex D.3)",
    "Encoding Variant 2 (TS 25.433 Annex D.3)", IB_SG_DATA_ENC_VAR_2},
   {NULL, NULL, -1}
 };
@@ -424,32 +439,32 @@ static int dissect_ProtocolIEFieldValue(tvbuff_t *tvb, packet_info *pinfo, proto
 {
   uint32_t protocol_ie_id;
   protocol_ie_id = nbap_get_private_data(pinfo)->protocol_ie_id;
-  return (dissector_try_uint_with_data(nbap_ies_dissector_table, protocol_ie_id, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_new(nbap_ies_dissector_table, protocol_ie_id, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_ProtocolExtensionFieldExtensionValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
   uint32_t protocol_ie_id;
   protocol_ie_id = nbap_get_private_data(pinfo)->protocol_ie_id;
-  return (dissector_try_uint_with_data(nbap_extension_dissector_table, protocol_ie_id, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_new(nbap_extension_dissector_table, protocol_ie_id, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_InitiatingMessageValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
   if (!ProcedureID) return 0;
-  return (dissector_try_string_with_data(nbap_proc_imsg_dissector_table, ProcedureID, tvb, pinfo, tree, true, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_string(nbap_proc_imsg_dissector_table, ProcedureID, tvb, pinfo, tree, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_SuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
   if (!ProcedureID) return 0;
-  return (dissector_try_string_with_data(nbap_proc_sout_dissector_table, ProcedureID, tvb, pinfo, tree, true, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_string(nbap_proc_sout_dissector_table, ProcedureID, tvb, pinfo, tree, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_UnsuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
   if (!ProcedureID) return 0;
-  return (dissector_try_string_with_data(nbap_proc_uout_dissector_table, ProcedureID, tvb, pinfo, tree, true, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_string(nbap_proc_uout_dissector_table, ProcedureID, tvb, pinfo, tree, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 static void add_hsdsch_bind(packet_info *pinfo){
   address null_addr;
@@ -538,7 +553,7 @@ static uint32_t calculate_setup_conv_key(const uint32_t transaction_id, const ui
   key = transaction_id << 16;
   key |= (dd_mode & 0x03) << 14;
   key |= (channel_id & 0x3fff);
-  ws_debug("\tCalculating key 0x%04x", key);
+  nbap_debug("\tCalculating key 0x%04x", key);
   return key;
 }
 
@@ -548,7 +563,7 @@ static void add_setup_conv(const packet_info *pinfo _U_, const uint32_t transact
   nbap_setup_conv_t *new_conv = NULL;
   uint32_t key;
 
-  ws_debug("Creating new setup conv\t TransactionID: %u\tddMode: %u\tChannelID: %u\t %s:%u",
+  nbap_debug("Creating new setup conv\t TransactionID: %u\tddMode: %u\tChannelID: %u\t %s:%u",
   transaction_id, dd_mode, channel_id, address_to_str(pinfo->pool, addr), port);
 
   new_conv = wmem_new0(wmem_file_scope(), nbap_setup_conv_t);
@@ -572,16 +587,16 @@ static nbap_setup_conv_t* find_setup_conv(const packet_info *pinfo _U_, const ui
 {
   nbap_setup_conv_t *conv;
   uint32_t key;
-  ws_debug("Looking for Setup Conversation match\t TransactionID: %u\t ddMode: %u\t ChannelID: %u", transaction_id, dd_mode, channel_id);
+  nbap_debug("Looking for Setup Conversation match\t TransactionID: %u\t ddMode: %u\t ChannelID: %u", transaction_id, dd_mode, channel_id);
 
   key = calculate_setup_conv_key(transaction_id, dd_mode, channel_id);
 
   conv = (nbap_setup_conv_t*) wmem_map_lookup(nbap_setup_conv_table, GUINT_TO_POINTER(key));
 
   if(conv == NULL){
-    ws_debug("\tDidn't find Setup Conversation match");
+    nbap_debug("\tDidn't find Setup Conversation match");
   }else{
-    ws_debug("\tFOUND Setup Conversation match\t TransactionID: %u\t ddMode: %u\t ChannelID: %u\t %s:%u",
+    nbap_debug("\tFOUND Setup Conversation match\t TransactionID: %u\t ddMode: %u\t ChannelID: %u\t %s:%u",
          conv->transaction_id, conv->dd_mode, conv->channel_id, address_to_str(pinfo->pool, &(conv->addr)), conv->port);
   }
 
@@ -594,7 +609,7 @@ static void delete_setup_conv(nbap_setup_conv_t *conv)
 
   /* check if conversation exist */
   if(conv == NULL){
-    ws_debug("Trying delete Setup Conversation that does not exist (ptr == NULL)\t");
+    nbap_debug("Trying delete Setup Conversation that does not exist (ptr == NULL)\t");
     return;
   }
   key = calculate_setup_conv_key(conv->transaction_id, conv->dd_mode, conv->channel_id);
@@ -653,8 +668,8 @@ dissect_nbap_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 
   pdu_type = tvb_get_uint8(tvb, PDU_TYPE_OFFSET);
   if (pdu_type & 0x1f) {
-    /* pdu_type is not 0x00 (initiatingMessage), 0x20 (successfulOutcome),
-       0x40 (unsuccessfulOutcome) or 0x60 (outcome), ignore extension bit (0x80) */
+    /* pdu_type is not 0x00 (initiatingMessage), 0x20 (succesfulOutcome),
+       0x40 (unsuccesfulOutcome) or 0x60 (outcome), ignore extension bit (0x80) */
     return false;
   }
 
@@ -752,7 +767,7 @@ void proto_register_nbap(void)
   expert_module_t* expert_nbap;
 
   /* Register protocol */
-  proto_nbap = proto_register_protocol("UTRAN Iub interface NBAP signalling", "NBAP", "nbap");
+  proto_nbap = proto_register_protocol(PNAME, PSNAME, PFNAME);
   /* Register fields and subtrees */
   proto_register_field_array(proto_nbap, hf, array_length(hf));
   proto_register_subtree_array(ett, array_length(ett));
@@ -799,7 +814,6 @@ void proto_register_nbap(void)
 void
 proto_reg_handoff_nbap(void)
 {
-  proto_fp = proto_get_id_by_filter_name("fp");
   fp_handle = find_dissector("fp");
   dissector_add_uint("sctp.ppi", NBAP_PAYLOAD_PROTOCOL_ID, nbap_handle);
 #ifdef EXTRA_PPI

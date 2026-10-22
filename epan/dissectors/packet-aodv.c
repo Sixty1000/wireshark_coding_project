@@ -131,14 +131,14 @@ static expert_field ei_aodv_type;
 /* Code to actually dissect the packets */
 
 static void
-dissect_aodv_ext(tvbuff_t * tvb, packet_info *pinfo, unsigned offset, proto_tree * tree)
+dissect_aodv_ext(tvbuff_t * tvb, packet_info *pinfo, int offset, proto_tree * tree)
 {
     proto_tree *ext_tree;
     proto_item *len_item;
     uint8_t     type, len;
 
 again:
-    if (tvb_reported_length(tvb) <= offset)
+    if ((int) tvb_reported_length(tvb) <= offset)
         return;                 /* No more options left */
 
     type = tvb_get_uint8(tvb, offset);
@@ -627,7 +627,6 @@ dissect_aodv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
     proto_tree *aodv_tree;
     bool        is_ipv6;
     uint8_t     type;
-    char        *str_type;
 
 /* Make entries in Protocol column and Info column on summary display */
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "AODV");
@@ -646,10 +645,13 @@ dissect_aodv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
         return 0;
     }
 
-    str_type = val_to_str(pinfo->pool, type, type_vals, "Unknown AODV Packet Type (%u)");
-    col_add_str(pinfo->cinfo, COL_INFO, str_type);
+
+    col_add_str(pinfo->cinfo, COL_INFO,
+                val_to_str(type, type_vals,
+                           "Unknown AODV Packet Type (%u)"));
         ti = proto_tree_add_protocol_format(tree, proto_aodv, tvb, 0, -1,
-            "Ad hoc On-demand Distance Vector Routing Protocol, %s", str_type);
+            "Ad hoc On-demand Distance Vector Routing Protocol, %s",
+            val_to_str(type, type_vals, "Unknown AODV Packet Type (%u)"));
         aodv_tree = proto_item_add_subtree(ti, ett_aodv);
 
         type_item = proto_tree_add_uint(aodv_tree, hf_aodv_type, tvb, 0, 1, type);

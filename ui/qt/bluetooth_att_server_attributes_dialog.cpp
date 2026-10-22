@@ -11,11 +11,11 @@
 #include <ui_bluetooth_att_server_attributes_dialog.h>
 
 #include <ui/qt/utils/color_utils.h>
-#include <ui/qt/utils/theme_manager.h>
 
 #include "epan/epan.h"
 #include "epan/to_str.h"
 #include "epan/epan_dissect.h"
+#include "epan/prefs.h"
 #include "epan/dissectors/packet-bluetooth.h"
 #include "epan/dissectors/packet-btatt.h"
 
@@ -88,10 +88,7 @@ BluetoothAttServerAttributesDialog::BluetoothAttServerAttributesDialog(QWidget &
 
     ui->tableTreeWidget->sortByColumn(column_number_handle, Qt::AscendingOrder);
 
-    ui->tableTreeWidget->setStyleSheet(ColorUtils::itemHoverStyleSheet(QStringLiteral("QTreeView")));
-    connect(ThemeManager::instance(), &ThemeManager::themeChanged, this, [this]() {
-        ui->tableTreeWidget->setStyleSheet(ColorUtils::itemHoverStyleSheet(QStringLiteral("QTreeView")));
-    });
+    ui->tableTreeWidget->setStyleSheet("QTreeView::item:hover{background-color:lightyellow; color:black;}");
 
     context_menu_.addActions(QList<QAction *>() << ui->actionMark_Unmark_Cell);
     context_menu_.addActions(QList<QAction *>() << ui->actionMark_Unmark_Row);
@@ -152,7 +149,7 @@ void BluetoothAttServerAttributesDialog::keyPressEvent(QKeyEvent *event)
 {
 /* NOTE: Do nothing*, but in real it "takes focus" from button_box so allow user
  * to use Enter button to jump to frame from tree widget */
-/* * - reimplement shortcuts from context menu */
+/* * - reimplement shortcuts from contex menu */
 
    if (event->modifiers() & Qt::ControlModifier && event->key()== Qt::Key_M)
         on_actionMark_Unmark_Row_triggered();
@@ -174,12 +171,12 @@ void BluetoothAttServerAttributesDialog::on_actionMark_Unmark_Cell_triggered()
     QBrush fg;
     QBrush bg;
 
-    if (current_item->background(ui->tableTreeWidget->currentColumn()) == QBrush(ThemeManager::instance()->color(ThemeManager::PacketsMarked))) {
+    if (current_item->background(ui->tableTreeWidget->currentColumn()) == QBrush(ColorUtils::fromColorT(&prefs.gui_marked_bg))) {
         fg = QBrush();
         bg = QBrush();
     } else {
-        fg = QBrush(ThemeManager::instance()->color(ThemeManager::PacketsMarkedText));
-        bg = QBrush(ThemeManager::instance()->color(ThemeManager::PacketsMarked));
+        fg = QBrush(ColorUtils::fromColorT(&prefs.gui_marked_fg));
+        bg = QBrush(ColorUtils::fromColorT(&prefs.gui_marked_bg));
     }
 
     current_item->setForeground(ui->tableTreeWidget->currentColumn(), fg);
@@ -198,7 +195,7 @@ void BluetoothAttServerAttributesDialog::on_actionMark_Unmark_Row_triggered()
     bool   is_marked = true;
 
     for (int i = 0; i < ui->tableTreeWidget->columnCount(); i += 1) {
-        if (current_item->background(i) != QBrush(ThemeManager::instance()->color(ThemeManager::PacketsMarked)))
+        if (current_item->background(i) != QBrush(ColorUtils::fromColorT(&prefs.gui_marked_bg)))
             is_marked = false;
     }
 
@@ -206,8 +203,8 @@ void BluetoothAttServerAttributesDialog::on_actionMark_Unmark_Row_triggered()
         fg = QBrush();
         bg = QBrush();
     } else {
-        fg = QBrush(ThemeManager::instance()->color(ThemeManager::PacketsMarkedText));
-        bg = QBrush(ThemeManager::instance()->color(ThemeManager::PacketsMarked));
+        fg = QBrush(ColorUtils::fromColorT(&prefs.gui_marked_fg));
+        bg = QBrush(ColorUtils::fromColorT(&prefs.gui_marked_bg));
     }
 
     for (int i = 0; i < ui->tableTreeWidget->columnCount(); i += 1) {
@@ -242,7 +239,7 @@ void BluetoothAttServerAttributesDialog::on_actionCopy_Rows_triggered()
     items =  ui->tableTreeWidget->selectedItems();
 
     for (i_item = items.begin(); i_item != items.end(); ++i_item) {
-        copy += QStringLiteral("%1  %2  %3\n")
+        copy += QString("%1  %2  %3\n")
                 .arg((*i_item)->text(column_number_handle), -6)
                 .arg((*i_item)->text(column_number_uuid), -32)
                 .arg((*i_item)->text(column_number_uuid_name));
@@ -307,9 +304,9 @@ tap_packet_status BluetoothAttServerAttributesDialog::tapPacket(void *tapinfo_pt
             return TAP_PACKET_REDRAW;
     }
 
-    handle = QStringLiteral("0x%1").arg(tap_handles->handle, 4, 16, QChar('0'));
-    uuid = QString(tap_handles->numeric_uuid_str);
-    uuid_name = QString(tap_handles->uuid_str);
+    handle = QString("0x%1").arg(tap_handles->handle, 4, 16, QChar('0'));
+    uuid = QString(print_numeric_bluetooth_uuid(pinfo->pool, &tap_handles->uuid));
+    uuid_name = QString(print_bluetooth_uuid(pinfo->pool, &tap_handles->uuid));
 
     if (dialog->ui->removeDuplicatesCheckBox->checkState() == Qt::Checked) {
         QTreeWidgetItem *item = item_with_handle_get(dialog->ui->tableTreeWidget,
@@ -401,14 +398,14 @@ void BluetoothAttServerAttributesDialog::on_actionCopy_All_triggered()
     QString                 copy;
     QTreeWidgetItemIterator i_item(ui->tableTreeWidget);
 
-    copy = QStringLiteral("%1  %2  %3\n")
+    copy = QString("%1  %2  %3\n")
             .arg(ui->tableTreeWidget->headerItem()->text(column_number_handle), -6)
             .arg(ui->tableTreeWidget->headerItem()->text(column_number_uuid), -32)
             .arg(ui->tableTreeWidget->headerItem()->text(column_number_uuid_name));
 
     while (*i_item) {
         QTreeWidgetItem *item = static_cast<QTreeWidgetItem*>(*i_item);
-        copy += QStringLiteral("%1  %2  %3\n")
+        copy += QString("%1  %2  %3\n")
                 .arg(item->text(column_number_handle), -6)
                 .arg(item->text(column_number_uuid), -32)
                 .arg(item->text(column_number_uuid_name));

@@ -53,7 +53,7 @@ dissect_media(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     if (pinfo->match_string &&
         (suffix = strrchr(pinfo->match_string, '+'))) {
 
-        if ((bytes = dissector_try_string_with_data(media_type_suffix_table,
+        if ((bytes = dissector_try_string_new(media_type_suffix_table,
                 suffix + 1, tvb, pinfo, tree, true, data)) > 0) {
             return bytes;
         }
@@ -105,7 +105,11 @@ proto_register_media(void)
         &ett_media
     };
 
-    proto_media = proto_register_protocol ("Media Type", "Media", "media");
+    proto_media = proto_register_protocol (
+        "Media Type",   /* name */
+        "Media",        /* short name */
+        "media"         /* abbrev */
+        );
     register_dissector("media", dissect_media, proto_media);
     heur_subdissector_list = register_heur_dissector_list_with_description("media", "Media type", proto_media);
     proto_register_field_array(proto_media, hf, array_length(hf));

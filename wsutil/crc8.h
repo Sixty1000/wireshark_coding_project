@@ -19,9 +19,8 @@
 extern "C" {
 #endif /* __cplusplus */
 
-/** @brief Calculates a CRC8 checksum for the given buffer with the polynomial
+/** Calculates a CRC8 checksum for the given buffer with the polynom
  *  0x2F using the precompiled CRC table
- *
  * @param buf a pointer to a buffer of the given length
  * @param len the length of the given buffer
  * @param seed The seed to use.
@@ -29,9 +28,8 @@ extern "C" {
  */
 WS_DLL_PUBLIC uint8_t crc8_0x2F(const uint8_t *buf, uint32_t len, uint8_t seed);
 
-/** @brief Calculates a CRC8 checksum for the given buffer with the polynomial
+/** Calculates a CRC8 checksum for the given buffer with the polynom
  *  0x37 using the precompiled CRC table
- *
  * @param buf a pointer to a buffer of the given length
  * @param len the length of the given buffer
  * @param seed The seed to use.
@@ -39,9 +37,8 @@ WS_DLL_PUBLIC uint8_t crc8_0x2F(const uint8_t *buf, uint32_t len, uint8_t seed);
  */
 WS_DLL_PUBLIC uint8_t crc8_0x37(const uint8_t *buf, uint32_t len, uint8_t seed);
 
-/** @brief Calculates a CRC8 checksum for the given buffer with the polynomial
+/** Calculates a CRC8 checksum for the given buffer with the polynom
  *  0x3B using the precompiled CRC table
- *
  * @param buf a pointer to a buffer of the given length
  * @param len the length of the given buffer
  * @param seed The seed to use.

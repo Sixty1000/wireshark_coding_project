@@ -1,4 +1,4 @@
--- 3GPP TS 36.413 V19.1.0 (2025-12)
+-- 3GPP TS 36.413 V18.2.0 (2024-06)
 -- 9.3.4	Information Element Definitions
 -- **************************************************************
 --
@@ -105,8 +105,6 @@ IMPORTS
 	id-TimeBasedHandoverInformation,
 	id-Bearers-SubjectToDLDiscarding-Item,
 	id-Bearers-SubjectToDLDiscardingList,
-	id-TimeRefDistribution,
-	id-RequestedTNLInfo,
 	maxnoofCSGs,
 	maxnoofE-RABs,
 	maxnoofErrors,
@@ -653,13 +651,6 @@ CNType ::= ENUMERATED {
 	...,
 	epc-Forbiddden
 }
-
-CoarseUELocationRequested ::= ENUMERATED {
-	true,
-	...
-}
-
-CoarseUELocation ::= OCTET STRING
 
 ConcurrentWarningMessageIndicator ::= ENUMERATED {
 	true
@@ -2364,16 +2355,6 @@ M1ReportingTrigger ::= ENUMERATED{
 	...,
 	a2eventtriggered-periodic
 }
-RequestedTNLInfo ::= SEQUENCE {
-	pLMNidentity					PLMNidentity,
-	iE-Extensions					ProtocolExtensionContainer { { RequestedTNLInfo-ExtIEs} }	OPTIONAL,
-	...
-}
-
-RequestedTNLInfo-ExtIEs		S1AP-PROTOCOL-EXTENSION ::= {
-	...
-}
-
 
 RequestType	::= SEQUENCE {
 	eventType 				EventType,
@@ -2615,9 +2596,8 @@ SONConfigurationTransfer-ExtIEs S1AP-PROTOCOL-EXTENSION ::= {
 	{ID id-x2TNLConfigurationInfo		CRITICALITY ignore	EXTENSION X2TNLConfigurationInfo				PRESENCE conditional}|
 	-- The above IE shall be present if the SON Information IE contains the SON Information Request IE and the SON Information Request IE is set to the value "X2TNL Configuration Info"
 -- Extension for Release 12 to transfer information concerning the source cell of synchronisation and the aggressor cell --
-	{ID id-Synchronisation-Information	CRITICALITY ignore	EXTENSION SynchronisationInformation			PRESENCE conditional}|
+	{ID id-Synchronisation-Information	CRITICALITY ignore	EXTENSION SynchronisationInformation			PRESENCE conditional},
 	-- The above IE shall be present if the SON Information IE contains the SON Information Request IE set to the value " Activate Muting "
-	{ID id-RequestedTNLInfo				CRITICALITY ignore	EXTENSION RequestedTNLInfo						PRESENCE optional},
 	...
 }
 
@@ -3134,11 +3114,6 @@ TypeOfError ::= ENUMERATED {
 }
 
 TAIListForRestart ::= SEQUENCE (SIZE(1..maxnoofRestartTAIs)) OF TAI
-
-TimeRefDistribution ::= ENUMERATED {
-	true,
-	...
-}
 
 -- U
 

@@ -37,7 +37,7 @@
 #include <QSpacerItem>
 #include <QRegularExpression>
 
-static constexpr const char *pref_prop_ = "pref_ptr";
+const char *pref_prop_ = "pref_ptr";
 
 // Escape our ampersands so that Qt won't try to interpret them as
 // mnemonics.
@@ -47,7 +47,7 @@ static const QString title_to_shortcut(const char *title) {
     return shortcut_str;
 }
 
-typedef struct
+typedef struct 
 {
     QVBoxLayout *layout;
     QString moduleName;
@@ -68,9 +68,9 @@ pref_show(pref_t *pref, void *user_data)
 
     // Convert the pref description from plain text to rich text.
     QString description = html_escape(prefs_get_description(pref));
-    QString name = QStringLiteral("%1.%2").arg(data->moduleName).arg(prefs_get_name(pref));
+    QString name = QString("%1.%2").arg(data->moduleName).arg(prefs_get_name(pref));
     description.replace('\n', "<br/>");
-    QString tooltip = QStringLiteral("<span>%1</span><br/><br/>%2").arg(description).arg(name);
+    QString tooltip = QString("<span>%1</span><br/><br/>%2").arg(description).arg(name);
 
     switch (prefs_get_type(pref)) {
     case PREF_UINT:
@@ -79,7 +79,7 @@ pref_show(pref_t *pref, void *user_data)
         QLabel *label = new QLabel(prefs_get_title(pref));
         label->setToolTip(tooltip);
         hb->addWidget(label);
-        SyntaxLineEdit *uint_le = new SyntaxLineEdit();
+        QLineEdit *uint_le = new QLineEdit();
         uint_le->setToolTip(tooltip);
         uint_le->setProperty(pref_prop_, VariantPointer<pref_t>::asQVariant(pref));
         uint_le->setMinimumWidth(uint_le->fontMetrics().height() * 8);
@@ -87,37 +87,6 @@ pref_show(pref_t *pref, void *user_data)
         hb->addSpacerItem(new QSpacerItem(1, 1, QSizePolicy::Expanding, QSizePolicy::Minimum));
         vb->addLayout(hb);
         break;
-    }
-    case PREF_INT:
-    {
-        QHBoxLayout* hb = new QHBoxLayout();
-        QLabel* label = new QLabel(prefs_get_title(pref));
-        label->setToolTip(tooltip);
-        hb->addWidget(label);
-        SyntaxLineEdit* int_le = new SyntaxLineEdit();
-        int_le->setToolTip(tooltip);
-        int_le->setProperty(pref_prop_, VariantPointer<pref_t>::asQVariant(pref));
-        int_le->setMinimumWidth(int_le->fontMetrics().height() * 8);
-        hb->addWidget(int_le);
-        hb->addSpacerItem(new QSpacerItem(1, 1, QSizePolicy::Expanding, QSizePolicy::Minimum));
-        vb->addLayout(hb);
-        break;
-    }
-    case PREF_FLOAT:
-    {
-        QHBoxLayout* hb = new QHBoxLayout();
-        QLabel* label = new QLabel(prefs_get_title(pref));
-        label->setToolTip(tooltip);
-        hb->addWidget(label);
-        SyntaxLineEdit* float_le = new SyntaxLineEdit();
-        float_le->setToolTip(tooltip);
-        float_le->setProperty(pref_prop_, VariantPointer<pref_t>::asQVariant(pref));
-        float_le->setMinimumWidth(float_le->fontMetrics().height() * 8);
-        hb->addWidget(float_le);
-        hb->addSpacerItem(new QSpacerItem(1, 1, QSizePolicy::Expanding, QSizePolicy::Minimum));
-        vb->addLayout(hb);
-        break;
-
     }
     case PREF_BOOL:
     {
@@ -144,7 +113,7 @@ pref_show(pref_t *pref, void *user_data)
                 enum_rb->setToolTip(tooltip);
                 QStyleOption style_opt;
                 enum_rb->setProperty(pref_prop_, VariantPointer<pref_t>::asQVariant(pref));
-                enum_rb->setStyleSheet(QStringLiteral(
+                enum_rb->setStyleSheet(QString(
                                       "QRadioButton {"
                                       "  margin-left: %1px;"
                                       "}"
@@ -268,7 +237,7 @@ pref_show(pref_t *pref, void *user_data)
         QStyleOption style_opt;
         path_le->setProperty(pref_prop_, VariantPointer<pref_t>::asQVariant(pref));
         path_le->setMinimumWidth(path_le->fontMetrics().height() * 20);
-        path_le->setStyleSheet(QStringLiteral(
+        path_le->setStyleSheet(QString(
                               "QLineEdit {"
                               "  margin-left: %1px;"
                               "}"
@@ -285,7 +254,7 @@ pref_show(pref_t *pref, void *user_data)
     case PREF_COLOR:
     {
         // XXX - Not needed yet. When it is needed we can add a label + QFrame which pops up a
-        // color picker (pattern: a clickable swatch invoking QColorDialog).
+        // color picker similar to the Font and Colors prefs.
         break;
     }
     case PREF_PROTO_TCP_SNDAMB_ENUM:
@@ -305,7 +274,7 @@ pref_show(pref_t *pref, void *user_data)
                 enum_rb->setToolTip(tooltip);
                 QStyleOption style_opt;
                 enum_rb->setProperty(pref_prop_, VariantPointer<pref_t>::asQVariant(pref));
-                enum_rb->setStyleSheet(QStringLiteral(
+                enum_rb->setStyleSheet(QString(
                                       "QRadioButton {"
                                       "  margin-left: %1px;"
                                       "}"
@@ -370,12 +339,6 @@ ModulePreferencesScrollArea::ModulePreferencesScrollArea(module_t *module, QWidg
         switch (prefs_get_type(pref)) {
         case PREF_UINT:
             connect(le, &QLineEdit::textEdited, this, &ModulePreferencesScrollArea::uintLineEditTextEdited);
-            break;
-        case PREF_INT:
-            connect(le, &QLineEdit::textEdited, this, &ModulePreferencesScrollArea::intLineEditTextEdited);
-            break;
-        case PREF_FLOAT:
-            connect(le, &QLineEdit::textEdited, this, &ModulePreferencesScrollArea::floatLineEditTextEdited);
             break;
         case PREF_STRING:
         case PREF_SAVE_FILENAME:
@@ -460,11 +423,6 @@ ModulePreferencesScrollArea::~ModulePreferencesScrollArea()
     delete ui;
 }
 
-const QString ModulePreferencesScrollArea::name() const
-{
-    return QString(module_->name);
-}
-
 void ModulePreferencesScrollArea::showEvent(QShowEvent *)
 {
     updateWidgets();
@@ -532,12 +490,14 @@ void ModulePreferencesScrollArea::updateWidgets()
                  * first selected frame has for its its TCP Sequence Analysis
                  * override.
                  */
-                MainWindow* topWidget = mainApp->mainWindow();
+                MainWindow* topWidget = qobject_cast<MainWindow*>(mainApp->mainWindow());
                 /* Ensure there is one unique or multiple selections. See issue 18642 */
                 if (topWidget->hasSelection() || topWidget->hasUniqueSelection()) {
-                    QList<frame_data *> frames = topWidget->selectedFrames();
-                    enum_cb->setCurrentIndex(enum_cb->findData(frames.at(0)->tcp_snd_manual_analysis));
-                    foreach (frame_data * fdata, frames) {
+                    frame_data * fdata = topWidget->frameDataForRow((topWidget->selectedRows()).at(0));
+                    enum_cb->setCurrentIndex(enum_cb->findData(fdata->tcp_snd_manual_analysis));
+                    QList<int> rows = topWidget->selectedRows();
+                    foreach (int row, rows) {
+                        frame_data * fdata = topWidget->frameDataForRow(row);
                         prefs_add_list_value(pref, fdata, pref_stashed);
                     }
                 }
@@ -552,105 +512,18 @@ void ModulePreferencesScrollArea::updateWidgets()
 
 void ModulePreferencesScrollArea::uintLineEditTextEdited(const QString &new_str)
 {
-    SyntaxLineEdit *uint_le = qobject_cast<SyntaxLineEdit*>(sender());
+    QLineEdit *uint_le = qobject_cast<QLineEdit*>(sender());
     if (!uint_le) return;
 
     pref_t *pref = VariantPointer<pref_t>::asPtr(uint_le->property(pref_prop_));
     if (!pref) return;
 
-    if (new_str.isEmpty()) {
-        /* Reset to default value; that is better than "whatever the last
-         * valid edited input was", and probably better than "empty means 0."
-         */
-        uint_le->setSyntaxState(SyntaxLineEdit::Empty);
-        reset_stashed_pref(pref);
-        return;
-    }
-
     bool ok;
     uint new_uint = new_str.toUInt(&ok, 0);
     if (ok) {
-        uint_le->setSyntaxState(SyntaxLineEdit::Valid);
         prefs_set_uint_value(pref, new_uint, pref_stashed);
-    } else {
-        uint_le->setSyntaxState(SyntaxLineEdit::Invalid);
-        /* Reset stashed value to the current real value, i.e., whatever it
-         * was when the dialog was opened. That's better than "whatever the
-         * last valid edited number was."
-         * XXX - The OK/Apply buttons should be disabled when a pref is invalid.
-         */
-        pref_stash(pref, NULL);
     }
 }
-
-void ModulePreferencesScrollArea::intLineEditTextEdited(const QString& new_str)
-{
-    SyntaxLineEdit* int_le = qobject_cast<SyntaxLineEdit*>(sender());
-    if (!int_le) return;
-
-    pref_t* pref = VariantPointer<pref_t>::asPtr(int_le->property(pref_prop_));
-    if (!pref) return;
-
-    if (new_str.isEmpty()) {
-        /* Reset to default value; that is better than "whatever the last
-         * valid edited input was", and probably better than "empty means 0."
-         */
-        int_le->setSyntaxState(SyntaxLineEdit::Empty);
-        reset_stashed_pref(pref);
-        return;
-    }
-
-    bool ok;
-    int new_int = new_str.toInt(&ok, 0);
-    if (ok) {
-        int_le->setSyntaxState(SyntaxLineEdit::Valid);
-        prefs_set_int_value(pref, new_int, pref_stashed);
-    }
-    else {
-        int_le->setSyntaxState(SyntaxLineEdit::Invalid);
-        /* Reset stashed value to the current real value, i.e., whatever it
-         * was when the dialog was opened. That's better than "whatever the
-         * last valid edited number was."
-         * XXX - The OK/Apply buttons should be disabled when a pref is invalid.
-         */
-        pref_stash(pref, NULL);
-    }
-}
-
-void ModulePreferencesScrollArea::floatLineEditTextEdited(const QString& new_str)
-{
-    SyntaxLineEdit* float_le = qobject_cast<SyntaxLineEdit*>(sender());
-    if (!float_le) return;
-
-    pref_t* pref = VariantPointer<pref_t>::asPtr(float_le->property(pref_prop_));
-    if (!pref) return;
-
-    if (new_str.isEmpty()) {
-        /* Reset to default value; that is better than "whatever the last
-         * valid edited input was", and probably better than "empty means 0."
-         */
-        float_le->setSyntaxState(SyntaxLineEdit::Empty);
-        reset_stashed_pref(pref);
-        return;
-    }
-
-    bool ok;
-    double new_float = new_str.toDouble(&ok);
-    if (ok) {
-        float_le->setSyntaxState(SyntaxLineEdit::Valid);
-        prefs_set_float_value(pref, new_float, pref_stashed);
-    }
-    else {
-        float_le->setSyntaxState(SyntaxLineEdit::Invalid);
-        /* Reset stashed value to the current real value, i.e., whatever it
-         * was when the dialog was opened. That's better than "whatever the
-         * last valid edited number was."
-         * XXX - The OK/Apply buttons should be disabled when a pref is invalid.
-         */
-        pref_stash(pref, NULL);
-    }
-}
-
 
 void ModulePreferencesScrollArea::boolCheckBoxToggled(bool checked)
 {

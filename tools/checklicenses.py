@@ -36,7 +36,6 @@ ALLOWED_LICENSES = [
     'BSD (2 clause)',
     'BSD (2 clause) GPL (v2 or later)',
     'BSD (3 clause)',
-    'BSD (4 clause (University of California-Specific))',
     'GPL (v2 or later)',
     'ISC',
     'ISC GPL (v2 or later)',
@@ -52,14 +51,8 @@ ALLOWED_LICENSES = [
 
 
 PATH_SPECIFIC_ALLOWED_LICENSES = {
-    # Some of the libpcap include files (including pcap.h) have the
-    # 4-clause BSD license with an advertising clause for the Computer
-    # Systems Engineering Group at Lawrence Berkeley Laboratory.
-    # We have always distributed packages including the headers,
-    # so if this is a problem it's one even if these files aren't
-    # copied into our repository.
-    'libpcap/pcap': [
-        'BSD (4 clause)',
+    'caputils/airpcap.h': [
+        'BSD-3-Clause',
     ],
     'wsutil/strnatcmp.c': [
         'Zlib',
@@ -71,9 +64,6 @@ PATH_SPECIFIC_ALLOWED_LICENSES = {
         'UNKNOWN',
     ],
     'resources/protocols/diameter/dictionary.dtd': [
-        'UNKNOWN',
-    ],
-    'resources/protocols/qualcomm': [
         'UNKNOWN',
     ],
     'resources/protocols/wimaxasncp/dictionary.dtd': [
@@ -146,18 +136,8 @@ PATH_SPECIFIC_ALLOWED_LICENSES = {
     '.gitlab/': [
         'UNKNOWN',
     ],
-    'wsutil/dtoa.c': [
-        'dtoa',
-    ],
-    'wsutil/dtoa.h': [
-        'dtoa',
-    ],
     'wsutil/safe-math.h': [ # Public domain (CC0)
         'UNKNOWN',
-    ],
-    # Bachmann M-module file example module
-    'test/captures/mfile_testapplication.m': [
-            'UNKNOWN',
     ],
 }
 
@@ -179,9 +159,9 @@ def check_licenses(options, args):
     PrintUsage()
     return 1
 
-  print(f"Using base directory: {options.base_directory}")
-  print(f"Checking: {start_dir}")
-  print()
+  print("Using base directory: %s" % options.base_directory)
+  print("Checking: %s" % start_dir)
+  print("")
 
   licensecheck_path = os.path.abspath(os.path.join(options.base_directory,
                                                     'tools',
@@ -230,15 +210,15 @@ def check_licenses(options, args):
 
     if not options.ignore_suppressions:
       found_path_specific = False
-      for prefix,allowed in PATH_SPECIFIC_ALLOWED_LICENSES.items():
+      for prefix in PATH_SPECIFIC_ALLOWED_LICENSES:
         if (filename.startswith(prefix) and
-            license in allowed):
+            license in PATH_SPECIFIC_ALLOWED_LICENSES[prefix]):
           found_path_specific = True
           break
       if found_path_specific:
         continue
 
-    reason = f"License '{license}' for '{filename}' is not allowed."
+    reason = "License '%s' for '%s' is not allowed." % (license, filename)
     success = False
     print(reason)
     exit_status = 1

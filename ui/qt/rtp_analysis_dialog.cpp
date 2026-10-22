@@ -11,14 +11,15 @@
 #include <ui_rtp_analysis_dialog.h>
 
 #include "file.h"
+#include "frame_tvbuff.h"
 
 #include "epan/epan_dissect.h"
 #include <epan/addr_resolv.h>
+#include "epan/rtp_pt.h"
 
 #include "epan/dfilter/dfilter.h"
 
 #include "epan/dissectors/packet-rtp.h"
-#include "epan/dissectors/packet-rtp_pt.h"
 
 #include <ui/rtp_media.h>
 
@@ -39,15 +40,11 @@
 #include <QCheckBox>
 
 #include <ui/qt/utils/color_utils.h>
-#include <ui/qt/utils/plot_theme.h>
-#include <ui/qt/utils/theme_manager.h>
 #include <ui/qt/utils/qt_ui_utils.h>
-#include <ui/qt/rtp_player_dialog.h>
+#include "rtp_player_dialog.h"
 #include <ui/qt/utils/stock_icon.h>
-#include <ui/qt/main_application.h>
-#include <ui/qt/packet_list.h>
-#include <ui/qt/wireshark_main_window.h>
-#include <ui/qt/widgets/wireshark_file_dialog.h>
+#include "main_application.h"
+#include "ui/qt/widgets/wireshark_file_dialog.h"
 
 /*
  * @file RTP stream analysis dialog
@@ -111,12 +108,12 @@ public:
             bg_color = color_cn_;
         } else if (statinfo->flags & STAT_FLAG_WRONG_SEQ) {
             status = "Wrong sequence number";
-            bg_color = ThemeManager::instance()->color(ThemeManager::ExpertError);
+            bg_color = ColorUtils::expert_color_error;
         } else if (statinfo->flags & STAT_FLAG_DUP_PKT) {
             status = "Suspected duplicate (MAC address) only delta time calculated";
             bg_color = color_rtp_warn_;
         } else if (statinfo->flags & STAT_FLAG_REG_PT_CHANGE) {
-            status = QStringLiteral("Payload changed to PT=%1").arg(statinfo->pt);
+            status = QString("Payload changed to PT=%1").arg(statinfo->pt);
             if (statinfo->flags & STAT_FLAG_PT_T_EVENT) {
                 status.append(" telephone/event");
             }
@@ -133,7 +130,7 @@ public:
             status = "Marker missing?";
             bg_color = color_rtp_warn_;
         } else if (statinfo->flags & STAT_FLAG_PT_T_EVENT) {
-            status = QStringLiteral("PT=%1 telephone/event").arg(statinfo->pt);
+            status = QString("PT=%1 telephone/event").arg(statinfo->pt);
             /* XXX add color? */
             bg_color = color_pt_event_;
         } else {
@@ -169,7 +166,7 @@ public:
         if (bg_color.isValid()) {
             for (int col = 0; col < columnCount(); col++) {
                 setBackground(col, bg_color);
-                setForeground(col, ThemeManager::instance()->color(ThemeManager::ExpertForeground));
+                setForeground(col, ColorUtils::expert_color_foreground);
             }
         }
     }
@@ -188,7 +185,7 @@ public:
                 << marker_str << status_str;
     }
 
-    bool operator< (const QTreeWidgetItem &other) const override
+    bool operator< (const QTreeWidgetItem &other) const
     {
         if (other.type() != rtp_analysis_type_) return QTreeWidgetItem::operator< (other);
         const RtpAnalysisTreeWidgetItem *other_row = static_cast<const RtpAnalysisTreeWidgetItem *>(&other);
@@ -240,13 +237,14 @@ RtpAnalysisDialog *RtpAnalysisDialog::pinstance_{nullptr};
 std::mutex RtpAnalysisDialog::init_mutex_;
 std::mutex RtpAnalysisDialog::run_mutex_;
 
-RtpAnalysisDialog *RtpAnalysisDialog::openRtpAnalysisDialog(QWidget &parent, CaptureFile &cf, PacketList *packet_list)
+RtpAnalysisDialog *RtpAnalysisDialog::openRtpAnalysisDialog(QWidget &parent, CaptureFile &cf, QObject *packet_list)
 {
     std::lock_guard<std::mutex> lock(init_mutex_);
     if (pinstance_ == nullptr)
     {
         pinstance_ = new RtpAnalysisDialog(parent, cf);
-        connect(pinstance_, &RtpAnalysisDialog::goToPacket, packet_list, [=](int packet) { packet_list->goToPacket(packet); });
+        connect(pinstance_, SIGNAL(goToPacket(int)),
+                packet_list, SLOT(goToPacket(int)));
     }
     return pinstance_;
 }
@@ -267,8 +265,10 @@ RtpAnalysisDialog::RtpAnalysisDialog(QWidget &parent, CaptureFile &cf) :
 
     stream_ctx_menu_.addAction(ui->actionGoToPacket);
     stream_ctx_menu_.addAction(ui->actionNextProblem);
+    set_action_shortcuts_visible_in_context_menu(stream_ctx_menu_.actions());
 
-    connect(ui->streamGraph, &QCustomPlot::mousePress, this, &RtpAnalysisDialog::graphClicked);
+    connect(ui->streamGraph, SIGNAL(mousePress(QMouseEvent*)),
+            this, SLOT(graphClicked(QMouseEvent*)));
 
     graph_ctx_menu_.addAction(ui->actionSaveGraph);
 
@@ -278,7 +278,6 @@ RtpAnalysisDialog::RtpAnalysisDialog(QWidget &parent, CaptureFile &cf) :
 
     ui->streamGraph->xAxis->setLabel("Arrival Time");
     ui->streamGraph->yAxis->setLabel("Value (ms)");
-    PlotTheme::track(ui->streamGraph);
 
     QPushButton *prepare_button = ui->buttonBox->addButton(ui->actionPrepareButton->text(), QDialogButtonBox::ActionRole);
     prepare_button->setToolTip(ui->actionPrepareButton->toolTip());
@@ -296,13 +295,18 @@ RtpAnalysisDialog::RtpAnalysisDialog(QWidget &parent, CaptureFile &cf) :
     save_menu->addAction(ui->actionSaveGraph);
     export_btn->setMenu(save_menu);
 
-    WiresharkMainWindow* ws_main_window = qobject_cast<WiresharkMainWindow*>(&parent);
-    connect(ui->tabWidget, &QTabWidget::currentChanged, this, &RtpAnalysisDialog::updateWidgets);
-    connect(ui->tabWidget->tabBar(), &QTabBar::tabCloseRequested, this, &RtpAnalysisDialog::closeTab);
-    connect(this, &RtpAnalysisDialog::updateFilter, ws_main_window, &WiresharkMainWindow::filterPackets);
-    connect(this, &RtpAnalysisDialog::rtpPlayerDialogReplaceRtpStreams, ws_main_window, &WiresharkMainWindow::rtpPlayerDialogReplaceRtpStreams);
-    connect(this, &RtpAnalysisDialog::rtpPlayerDialogAddRtpStreams, ws_main_window, &WiresharkMainWindow::rtpPlayerDialogAddRtpStreams);
-    connect(this, &RtpAnalysisDialog::rtpPlayerDialogRemoveRtpStreams, ws_main_window, &WiresharkMainWindow::rtpPlayerDialogRemoveRtpStreams);
+    connect(ui->tabWidget, SIGNAL(currentChanged(int)),
+            this, SLOT(updateWidgets()));
+    connect(ui->tabWidget->tabBar(), SIGNAL(tabCloseRequested(int)),
+            this, SLOT(closeTab(int)));
+    connect(this, SIGNAL(updateFilter(QString, bool)),
+            &parent, SLOT(filterPackets(QString, bool)));
+    connect(this, SIGNAL(rtpPlayerDialogReplaceRtpStreams(QVector<rtpstream_id_t *>)),
+            &parent, SLOT(rtpPlayerDialogReplaceRtpStreams(QVector<rtpstream_id_t *>)));
+    connect(this, SIGNAL(rtpPlayerDialogAddRtpStreams(QVector<rtpstream_id_t *>)),
+            &parent, SLOT(rtpPlayerDialogAddRtpStreams(QVector<rtpstream_id_t *>)));
+    connect(this, SIGNAL(rtpPlayerDialogRemoveRtpStreams(QVector<rtpstream_id_t *>)),
+            &parent, SLOT(rtpPlayerDialogRemoveRtpStreams(QVector<rtpstream_id_t *>)));
 
     updateWidgets();
 
@@ -339,10 +343,9 @@ int RtpAnalysisDialog::addTabUI(tab_info_t *new_tab)
     int new_tab_no;
     rtpstream_info_calc_t s_calc;
     rtpstream_info_calculate(&new_tab->stream, &s_calc);
-    new_tab->tab_name = new QString(QStringLiteral("%1:%2 %3\n%4:%5\n(%6)")
+    new_tab->tab_name = new QString(QString("%1:%2 " UTF8_RIGHTWARDS_ARROW "\n%3:%4\n(%5)")
             .arg(s_calc.src_addr_str)
             .arg(s_calc.src_port)
-            .arg(UTF8_RIGHTWARDS_ARROW)
             .arg(s_calc.dst_addr_str)
             .arg(s_calc.dst_port)
             .arg(int_to_qstring(s_calc.ssrc, 8, 16)));
@@ -375,8 +378,10 @@ int RtpAnalysisDialog::addTabUI(tab_info_t *new_tab)
     new_tab->tree_widget->installEventFilter(this);
     new_tab->tree_widget->setContextMenuPolicy(Qt::CustomContextMenu);
     new_tab->tree_widget->header()->setSortIndicator(0, Qt::AscendingOrder);
-    connect(new_tab->tree_widget, &QTreeWidget::customContextMenuRequested, this, &RtpAnalysisDialog::showStreamMenu);
-    connect(new_tab->tree_widget, &QTreeWidget::itemSelectionChanged, this, &RtpAnalysisDialog::updateWidgets);
+    connect(new_tab->tree_widget, SIGNAL(customContextMenuRequested(QPoint)),
+                SLOT(showStreamMenu(QPoint)));
+    connect(new_tab->tree_widget, SIGNAL(itemSelectionChanged()),
+            this, SLOT(updateWidgets()));
 
     QTreeWidgetItem *ti = new_tab->tree_widget->headerItem();
     ti->setText(packet_col_, tr("Packet"));
@@ -388,13 +393,13 @@ int RtpAnalysisDialog::addTabUI(tab_info_t *new_tab)
     ti->setText(marker_col_, tr("Marker"));
     ti->setText(status_col_, tr("Status"));
 
-    QColor color = ThemeManager::instance()->graphColor(tab_seq++);
+    QColor color = ColorUtils::graphColor(tab_seq++);
     ui->tabWidget->setUpdatesEnabled(false);
     horizontalLayout->addWidget(new_tab->tree_widget);
     new_tab_no = ui->tabWidget->count() - 1;
     // Used when tab contains IPs
     //ui->tabWidget->insertTab(new_tab_no, tab, *new_tab->tab_name);
-    ui->tabWidget->insertTab(new_tab_no, tab, tr("Stream %1").arg(tab_seq - 1));
+    ui->tabWidget->insertTab(new_tab_no, tab, QString(tr("Stream %1")).arg(tab_seq - 1));
     ui->tabWidget->tabBar()->setTabTextColor(new_tab_no, color);
     ui->tabWidget->tabBar()->setTabToolTip(new_tab_no, *new_tab->tab_name);
     ui->tabWidget->setUpdatesEnabled(true);
@@ -427,44 +432,32 @@ int RtpAnalysisDialog::addTabUI(tab_info_t *new_tab)
     new_tab->stream_checkbox->setIcon(StockIcon::colorIcon(color.rgb(), QPalette::Text));
     new_tab->graphHorizontalLayout->addWidget(new_tab->stream_checkbox);
     new_tab->graphHorizontalLayout->addItem(new QSpacerItem(10, 5, QSizePolicy::Expanding, QSizePolicy::Minimum));
-#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
-    connect(new_tab->stream_checkbox, &QCheckBox::checkStateChanged, this, &RtpAnalysisDialog::rowCheckboxChanged);
-#else
-    connect(new_tab->stream_checkbox, &QCheckBox::stateChanged, this, &RtpAnalysisDialog::rowCheckboxChanged);
-#endif
+    connect(new_tab->stream_checkbox, SIGNAL(stateChanged(int)),
+            this, SLOT(rowCheckboxChanged(int)));
 
     new_tab->jitter_checkbox = new QCheckBox(tr("Stream %1 Jitter").arg(tab_seq - 1), ui->graphTab);
     new_tab->jitter_checkbox->setChecked(true);
     new_tab->jitter_checkbox->setIcon(StockIcon::colorIconCircle(color.rgb(), QPalette::Text));
     new_tab->graphHorizontalLayout->addWidget(new_tab->jitter_checkbox);
     new_tab->graphHorizontalLayout->addItem(new QSpacerItem(10, 5, QSizePolicy::Expanding, QSizePolicy::Minimum));
-#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
-    connect(new_tab->jitter_checkbox, &QCheckBox::checkStateChanged, this, &RtpAnalysisDialog::singleCheckboxChanged);
-#else
-    connect(new_tab->jitter_checkbox, &QCheckBox::stateChanged, this, &RtpAnalysisDialog::singleCheckboxChanged);
-#endif
+    connect(new_tab->jitter_checkbox, SIGNAL(stateChanged(int)),
+            this, SLOT(singleCheckboxChanged(int)));
 
     new_tab->diff_checkbox = new QCheckBox(tr("Stream %1 Difference").arg(tab_seq - 1), ui->graphTab);
     new_tab->diff_checkbox->setChecked(true);
     new_tab->diff_checkbox->setIcon(StockIcon::colorIconCross(color.rgb(), QPalette::Text));
     new_tab->graphHorizontalLayout->addWidget(new_tab->diff_checkbox);
     new_tab->graphHorizontalLayout->addItem(new QSpacerItem(10, 5, QSizePolicy::Expanding, QSizePolicy::Minimum));
-#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
-    connect(new_tab->diff_checkbox, &QCheckBox::checkStateChanged, this, &RtpAnalysisDialog::singleCheckboxChanged);
-#else
-    connect(new_tab->diff_checkbox, &QCheckBox::stateChanged, this, &RtpAnalysisDialog::singleCheckboxChanged);
-#endif
+    connect(new_tab->diff_checkbox, SIGNAL(stateChanged(int)),
+            this, SLOT(singleCheckboxChanged(int)));
 
     new_tab->delta_checkbox = new QCheckBox(tr("Stream %1 Delta").arg(tab_seq - 1), ui->graphTab);
     new_tab->delta_checkbox->setChecked(true);
     new_tab->delta_checkbox->setIcon(StockIcon::colorIconTriangle(color.rgb(), QPalette::Text));
     new_tab->graphHorizontalLayout->addWidget(new_tab->delta_checkbox);
     new_tab->graphHorizontalLayout->addItem(new QSpacerItem(10, 5, QSizePolicy::Expanding, QSizePolicy::Minimum));
-#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
-    connect(new_tab->delta_checkbox, &QCheckBox::checkStateChanged, this, &RtpAnalysisDialog::singleCheckboxChanged);
-#else
-    connect(new_tab->diff_checkbox, &QCheckBox::stateChanged, this, &RtpAnalysisDialog::singleCheckboxChanged);
-#endif
+    connect(new_tab->delta_checkbox, SIGNAL(stateChanged(int)),
+            this, SLOT(singleCheckboxChanged(int)));
 
     new_tab->graphHorizontalLayout->setStretch(6, 1);
 
@@ -543,7 +536,7 @@ void RtpAnalysisDialog::updateWidgets()
     ui->actionNextProblem->setEnabled(enable_nav);
 
     if (enable_nav) {
-        hint.append(tr(" %Ln stream(s), ", "", static_cast<int>(tabs_.count())));
+        hint.append(tr(" %1 streams, ").arg(tabs_.count() - 1));
         hint.append(tr(" G: Go to packet, N: Next problem packet"));
     }
 
@@ -578,8 +571,7 @@ void RtpAnalysisDialog::on_actionGoToPacket_triggered()
     QTreeWidgetItem *ti = cur_tree->selectedItems()[0];
     if (ti->type() != rtp_analysis_type_) return;
 
-    RtpAnalysisTreeWidgetItem *ra_ti = dynamic_cast<RtpAnalysisTreeWidgetItem *>(ti);
-    if (ra_ti == nullptr) return;
+    RtpAnalysisTreeWidgetItem *ra_ti = dynamic_cast<RtpAnalysisTreeWidgetItem *>((RtpAnalysisTreeWidgetItem *)ti);
     emit goToPacket(ra_ti->frameNum());
 }
 
@@ -601,8 +593,7 @@ void RtpAnalysisDialog::on_actionNextProblem_triggered()
     QTreeWidgetItem *test_ti = cur_tree->itemBelow(sel_ti);
     if (!test_ti) test_ti = cur_tree->topLevelItem(0);
     while (test_ti != sel_ti) {
-        RtpAnalysisTreeWidgetItem *ra_ti = dynamic_cast<RtpAnalysisTreeWidgetItem *>(test_ti);
-        if (ra_ti == nullptr) continue;
+        RtpAnalysisTreeWidgetItem *ra_ti = dynamic_cast<RtpAnalysisTreeWidgetItem *>((RtpAnalysisTreeWidgetItem *)test_ti);
         if (!ra_ti->frameStatus()) {
             cur_tree->setCurrentItem(ra_ti);
             break;
@@ -627,24 +618,22 @@ void RtpAnalysisDialog::on_actionSaveGraph_triggered()
 {
     ui->tabWidget->setCurrentWidget(ui->graphTab);
 
-    QString file_name;
+    QString file_name, extension;
     QDir path(mainApp->openDialogInitialDir());
     QString pdf_filter = tr("Portable Document Format (*.pdf)");
     QString png_filter = tr("Portable Network Graphics (*.png)");
     QString bmp_filter = tr("Windows Bitmap (*.bmp)");
     // Gaze upon my beautiful graph with lossy artifacts!
     QString jpeg_filter = tr("JPEG File Interchange Format (*.jpeg *.jpg)");
-    QString filter = QStringLiteral("%1;;%2;;%3;;%4").arg(
-        pdf_filter,
-        png_filter,
-        bmp_filter,
-        jpeg_filter
-    );
-    QString extension = png_filter;
+    QString filter = QString("%1;;%2;;%3;;%4")
+            .arg(pdf_filter)
+            .arg(png_filter)
+            .arg(bmp_filter)
+            .arg(jpeg_filter);
 
     QString save_file = path.canonicalPath();
     if (!file_closed_) {
-        save_file += QStringLiteral("/%1").arg(cap_file_.fileBaseName());
+        save_file += QString("/%1").arg(cap_file_.fileBaseName());
     }
     file_name = WiresharkFileDialog::getSaveFileName(this, mainApp->windowTitleString(tr("Save Graph As…")),
                                              save_file, filter, &extension);
@@ -760,41 +749,40 @@ void RtpAnalysisDialog::updateStatistics()
 
         QString stats_tables = "<html><head><style>td{vertical-align:bottom;}</style></head><body>\n";
         stats_tables += "<h4>Stream</h4>\n";
-        stats_tables += QStringLiteral("<p>%1:%2 %3")
+        stats_tables += QString("<p>%1:%2 " UTF8_RIGHTWARDS_ARROW)
                 .arg(s_calc.src_addr_str)
-                .arg(s_calc.src_port)
-                .arg(UTF8_RIGHTWARDS_ARROW);
-        stats_tables += QStringLiteral("<br>%1:%2</p>\n")
+                .arg(s_calc.src_port);
+        stats_tables += QString("<br>%1:%2</p>\n")
                 .arg(s_calc.dst_addr_str)
                 .arg(s_calc.dst_port);
         stats_tables += "<p><table>\n";
-        stats_tables += QStringLiteral("<tr><th align=\"left\">SSRC</th><td>%1</td></tr>")
+        stats_tables += QString("<tr><th align=\"left\">SSRC</th><td>%1</td></tr>")
                 .arg(int_to_qstring(s_calc.ssrc, 8, 16));
-        stats_tables += QStringLiteral("<tr><th align=\"left\">Max Delta</th><td>%1 ms @ %2</td></tr>")
+        stats_tables += QString("<tr><th align=\"left\">Max Delta</th><td>%1 ms @ %2</td></tr>")
                 .arg(s_calc.max_delta, 0, 'f', prefs.gui_decimal_places3)
                 .arg(s_calc.last_packet_num);
-        stats_tables += QStringLiteral("<tr><th align=\"left\">Max Jitter</th><td>%1 ms</td></tr>")
+        stats_tables += QString("<tr><th align=\"left\">Max Jitter</th><td>%1 ms</td></tr>")
                 .arg(s_calc.max_jitter, 0, 'f', prefs.gui_decimal_places3);
-        stats_tables += QStringLiteral("<tr><th align=\"left\">Mean Jitter</th><td>%1 ms</td></tr>")
+        stats_tables += QString("<tr><th align=\"left\">Mean Jitter</th><td>%1 ms</td></tr>")
                 .arg(s_calc.mean_jitter, 0, 'f', prefs.gui_decimal_places3);
-        stats_tables += QStringLiteral("<tr><th align=\"left\">Max Skew</th><td>%1 ms</td></tr>")
+        stats_tables += QString("<tr><th align=\"left\">Max Skew</th><td>%1 ms</td></tr>")
                 .arg(s_calc.max_skew, 0, 'f', prefs.gui_decimal_places3);
-        stats_tables += QStringLiteral("<tr><th align=\"left\">RTP Packets</th><td>%1</td></tr>")
+        stats_tables += QString("<tr><th align=\"left\">RTP Packets</th><td>%1</td></tr>")
                 .arg(s_calc.total_nr);
-        stats_tables += QStringLiteral("<tr><th align=\"left\">Expected</th><td>%1</td></tr>")
+        stats_tables += QString("<tr><th align=\"left\">Expected</th><td>%1</td></tr>")
                 .arg(s_calc.packet_expected);
-        stats_tables += QStringLiteral("<tr><th align=\"left\">Lost</th><td>%1 (%2 %)</td></tr>")
+        stats_tables += QString("<tr><th align=\"left\">Lost</th><td>%1 (%2 %)</td></tr>")
                 .arg(s_calc.lost_num).arg(s_calc.lost_perc, 0, 'f', prefs.gui_decimal_places1);
-        stats_tables += QStringLiteral("<tr><th align=\"left\">Seq Errs</th><td>%1</td></tr>")
+        stats_tables += QString("<tr><th align=\"left\">Seq Errs</th><td>%1</td></tr>")
                 .arg(s_calc.sequence_err);
-        stats_tables += QStringLiteral("<tr><th align=\"left\">Start at</th><td>%1 s @ %2</td></tr>")
+        stats_tables += QString("<tr><th align=\"left\">Start at</th><td>%1 s @ %2</td></tr>")
                 .arg(s_calc.start_time_ms, 0, 'f', 6)
                 .arg(s_calc.first_packet_num);
-        stats_tables += QStringLiteral("<tr><th align=\"left\">Duration</th><td>%1 s</td></tr>")
+        stats_tables += QString("<tr><th align=\"left\">Duration</th><td>%1 s</td></tr>")
                 .arg(s_calc.duration_ms, 0, 'f', prefs.gui_decimal_places1);
-        stats_tables += QStringLiteral("<tr><th align=\"left\">Clock Drift</th><td>%1 ms</td></tr>")
+        stats_tables += QString("<tr><th align=\"left\">Clock Drift</th><td>%1 ms</td></tr>")
                 .arg(s_calc.clock_drift_ms, 0, 'f', 0);
-        stats_tables += QStringLiteral("<tr><th align=\"left\">Freq Drift</th><td>%1 Hz (%2 %)</td></tr>") // XXX Terminology?
+        stats_tables += QString("<tr><th align=\"left\">Freq Drift</th><td>%1 Hz (%2 %)</td></tr>") // XXX Terminology?
                 .arg(s_calc.freq_drift_hz, 0, 'f', 0).arg(s_calc.freq_drift_perc, 0, 'f', 2);
         rtpstream_info_calc_free(&s_calc);
         stats_tables += "</table></p>\n";
@@ -868,7 +856,7 @@ void RtpAnalysisDialog::saveCsvHeader(QFile *save_file, QTreeWidget *tree)
         if (!v.isValid()) {
             values << "\"\"";
         } else if (v.userType() == QMetaType::QString) {
-            values << QStringLiteral("\"%1\"").arg(v.toString());
+            values << QString("\"%1\"").arg(v.toString());
         } else {
             values << v.toString();
         }
@@ -882,14 +870,13 @@ void RtpAnalysisDialog::saveCsvData(QFile *save_file, QTreeWidget *tree)
     for (int row = 0; row < tree->topLevelItemCount(); row++) {
         QTreeWidgetItem *ti = tree->topLevelItem(row);
         if (ti->type() != rtp_analysis_type_) continue;
-        RtpAnalysisTreeWidgetItem *ra_ti = dynamic_cast<RtpAnalysisTreeWidgetItem *>(ti);
-        if (ra_ti == nullptr) continue;
+        RtpAnalysisTreeWidgetItem *ra_ti = dynamic_cast<RtpAnalysisTreeWidgetItem *>((RtpAnalysisTreeWidgetItem *)ti);
         QStringList values;
         foreach (QVariant v, ra_ti->rowData()) {
             if (!v.isValid()) {
                 values << "\"\"";
             } else if (v.userType() == QMetaType::QString) {
-                values << QStringLiteral("\"%1\"").arg(v.toString());
+                values << QString("\"%1\"").arg(v.toString());
             } else {
                 values << v.toString();
             }
@@ -921,10 +908,7 @@ void RtpAnalysisDialog::saveCsv(RtpAnalysisDialog::StreamDirection direction)
     if (file_path.isEmpty()) return;
 
     QFile save_file(file_path);
-    if (!save_file.open(QFile::WriteOnly)) {
-        // XXX - Warning dialog on failure?
-        return;
-    }
+    save_file.open(QFile::WriteOnly);
 
     switch (direction) {
     case dir_one_:
@@ -960,7 +944,6 @@ void RtpAnalysisDialog::saveCsv(RtpAnalysisDialog::StreamDirection direction)
         }
         break;
     }
-    // XXX - Check for failure and warn?
 }
 
 bool RtpAnalysisDialog::eventFilter(QObject *, QEvent *event)
@@ -1148,29 +1131,19 @@ tab_info_t *RtpAnalysisDialog::getTabInfoForCurrentTab()
     return tab_data;
 }
 
-
-QToolButton *RtpAnalysisDialog::addAnalyzeButton(QDialogButtonBox *button_box,
-#ifdef QT_MULTIMEDIA_LIB
-    RtpBaseDialog *dialog
-#else
-    RtpBaseDialog *dialog _U_
-#endif // QT_MULTIMEDIA_LIB
-)
+QToolButton *RtpAnalysisDialog::addAnalyzeButton(QDialogButtonBox *button_box, QDialog *dialog)
 {
-    if (!button_box) return nullptr;
+    if (!button_box) return NULL;
 
-    QToolButton *analysis_button = nullptr;
-
-#ifdef QT_MULTIMEDIA_LIB
     QAction *ca;
-    analysis_button = new QToolButton();
+    QToolButton *analysis_button = new QToolButton();
     button_box->addButton(analysis_button, QDialogButtonBox::ActionRole);
     analysis_button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     analysis_button->setPopupMode(QToolButton::MenuButtonPopup);
 
     ca = new QAction(tr("&Analyze"), analysis_button);
     ca->setToolTip(tr("Open the analysis window for the selected stream(s)"));
-    connect(ca, &QAction::triggered, dialog, &RtpBaseDialog::rtpAnalysisReplace);
+    connect(ca, SIGNAL(triggered()), dialog, SLOT(rtpAnalysisReplace()));
     analysis_button->setDefaultAction(ca);
     // Overrides text striping of shortcut undercode in QAction
     analysis_button->setText(ca->text());
@@ -1179,15 +1152,14 @@ QToolButton *RtpAnalysisDialog::addAnalyzeButton(QDialogButtonBox *button_box,
     button_menu->setToolTipsVisible(true);
     ca = button_menu->addAction(tr("&Set List"));
     ca->setToolTip(tr("Replace existing list in RTP Analysis Dialog with new one"));
-    connect(ca, &QAction::triggered, dialog, &RtpBaseDialog::rtpAnalysisReplace);
+    connect(ca, SIGNAL(triggered()), dialog, SLOT(rtpAnalysisReplace()));
     ca = button_menu->addAction(tr("&Add to List"));
     ca->setToolTip(tr("Add new set to existing list in RTP Analysis Dialog"));
-    connect(ca, &QAction::triggered, dialog, &RtpBaseDialog::rtpAnalysisAdd);
+    connect(ca, SIGNAL(triggered()), dialog, SLOT(rtpAnalysisAdd()));
     ca = button_menu->addAction(tr("&Remove from List"));
     ca->setToolTip(tr("Remove selected streams from list in RTP Analysis Dialog"));
-    connect(ca, &QAction::triggered, dialog, &RtpBaseDialog::rtpAnalysisRemove);
+    connect(ca, SIGNAL(triggered()), dialog, SLOT(rtpAnalysisRemove()));
     analysis_button->setMenu(button_menu);
-#endif
 
     return analysis_button;
 }

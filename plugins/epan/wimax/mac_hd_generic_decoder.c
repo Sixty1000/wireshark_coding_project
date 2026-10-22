@@ -33,10 +33,19 @@
 #include "crc.h"
 #include "wimax-int.h"
 #include "wimax_utils.h"
-#include "wimax_prefs.h"
-#include "mac_hd_generic_decoder.h"
 
 void proto_reg_handoff_mac_header_generic(void);
+
+extern int proto_wimax;
+
+extern int seen_a_service_type;
+extern bool first_gmh;			/* defined in wimax_pdu_decoder.c */
+
+extern int8_t arq_enabled;                       /* declared in packet-wmx.c */
+extern int   scheduling_service_type;           /* declared in packet-wmx.c */
+
+extern address bs_address;			/* declared in packet-wmx.c */
+extern unsigned max_logical_bands;			/* declared in wimax_compact_dlmap_ie_decoder.c */
 
 static dissector_handle_t mac_mgmt_msg_decoder_handle;
 static dissector_handle_t mac_ip_handle;
@@ -44,19 +53,17 @@ static dissector_handle_t mac_ip_handle;
 /* global variables */
 bool include_cor2_changes;
 
-unsigned global_cid_max_basic = 320;
 /* Well-known CIDs */
-static unsigned cid_aas_ranging      = 0xFeFF;
-static unsigned cid_normal_multicast = 0xFFFa;
-static unsigned cid_padding          = 0xFFFe;
-#if 0
-static unsigned cid_initial_ranging  = 0x0000;
-static unsigned cid_max_primary      = 640;
-static unsigned cid_sleep_multicast  = 0xFFFb;
-static unsigned cid_idle_multicast   = 0xFFFc;
-static unsigned cid_frag_broadcast   = 0xFFFd;
-static unsigned cid_broadcast        = 0xFFFF;
-#endif
+unsigned cid_initial_ranging  = 0x0000;
+unsigned global_cid_max_basic = 320;
+unsigned cid_max_primary      = 640;
+unsigned cid_aas_ranging      = 0xFeFF;
+unsigned cid_normal_multicast = 0xFFFa;
+unsigned cid_sleep_multicast  = 0xFFFb;
+unsigned cid_idle_multicast   = 0xFFFc;
+unsigned cid_frag_broadcast   = 0xFFFd;
+unsigned cid_padding          = 0xFFFe;
+unsigned cid_broadcast        = 0xFFFF;
 
 /* Maximum number of CID's */
 #define MAX_CID 64
@@ -88,7 +95,7 @@ static unsigned extended_type, arq_fb_payload, seq_number;
 
 static unsigned cid_adjust[MAX_CID];  /* Must not start with 0 */
 static unsigned cid_vernier[MAX_CID];
-static size_t cid_adj_array_size;
+static unsigned cid_adj_array_size;
 static unsigned *cid_adj_array;
 static uint8_t *frag_num_array;
 
@@ -417,8 +424,7 @@ static const value_string sn_rep_msg[] =
 static int hf_mac_header_generic_mesh_subheader;
 
 /* Fragmentation Subheader (table 8) */
-#define FRAGMENTATION_SUBHEADER_FC_MASK         0xC0	/*0x0003*/
-#define FRAGMENTATION_SUBHEADER_FC_EXT_MASK     0xC000	/*0x0003*/
+#define FRAGMENTATION_SUBHEADER_FC_MASK         0xC000	/*0x0003*/
 #define FRAGMENTATION_SUBHEADER_BSN_MASK        0x3FF8	/*0x1FFC*/
 #define FRAGMENTATION_SUBHEADER_RSV_EXT_MASK    0x0007	/*0xE000*/
 #define FRAGMENTATION_SUBHEADER_FSN_MASK        0x38	/*0x1C*/
@@ -451,9 +457,7 @@ static const value_string frag_types[] =
 };
 
 /* Packing Subheader (table 11) */
-#define PACKING_SUBHEADER_FC_MASK           0xC000
-#define PACKING_SUBHEADER_FC_EXT_MASK       0xC00000
-
+#define PACKING_SUBHEADER_FC_MASK           0xC00000
 #define PACKING_SUBHEADER_BSN_MASK          0x3FF800
 #define PACKING_SUBHEADER_FSN_MASK          0x38
 #define PACKING_SUBHEADER_LENGTH_MASK       0x07FF
@@ -1018,18 +1022,14 @@ static int dissect_mac_header_generic_decoder(tvbuff_t *tvb, packet_info *pinfo,
 					break;
 				}
 			}
-			if (i == MAX_CID)
-			{
-				REPORT_DISSECTOR_BUG("WiMAX dissector only supports up to %u CIDs", MAX_CID);
-			}
 			cid_index = i;
-			while (pinfo->num >= cid_adj_array_size)
+			while (pinfo->num > cid_adj_array_size)
 			{
 				cid_adj_array_size += 1024;
-				cid_adj_array = (unsigned *)g_realloc(cid_adj_array, sizeof(unsigned) * cid_adj_array_size);
-				frag_num_array = (uint8_t *)g_realloc(frag_num_array, sizeof(uint8_t) * cid_adj_array_size);
+				cid_adj_array = (unsigned *)g_realloc(cid_adj_array, (int)sizeof(unsigned) * cid_adj_array_size);
+				frag_num_array = (uint8_t *)g_realloc(frag_num_array, (int)sizeof(uint8_t) * cid_adj_array_size);
 				/* Clear the added memory */
-				memset(&cid_adj_array[cid_adj_array_size - 1024], 0, sizeof(unsigned) * 1024U);
+				memset(&cid_adj_array[cid_adj_array_size - 1024], 0, (int)sizeof(unsigned) * 1024);
 			}
 			if (first_gmh)
 			{
@@ -1089,7 +1089,7 @@ static int dissect_mac_header_generic_decoder(tvbuff_t *tvb, packet_info *pinfo,
 				payload_tvb = tvb_new_chain(tvb, payload_frag->tvb_data);
 				/* add the defragmented data to the data source list */
 				add_new_data_source(pinfo, payload_tvb, "Reassembled WiMax MAC payload");
-				/* save the tvb length */
+				/* save the tvb langth */
 				new_payload_len = payload_length;
 			}
 			else /* error or defragment is not complete */
@@ -1854,7 +1854,7 @@ void wimax_proto_register_mac_header_generic(void)
 			&hf_mac_header_generic_frag_subhd_fc_ext,
 			{
 				"Fragment Type", "wmx.genericFragSubhd.FcExt",
-				FT_UINT16, BASE_DEC, VALS(frag_types), FRAGMENTATION_SUBHEADER_FC_EXT_MASK,
+				FT_UINT16, BASE_DEC, VALS(frag_types), FRAGMENTATION_SUBHEADER_FC_MASK,
 				NULL, HFILL
 			}
 		},
@@ -1915,7 +1915,7 @@ void wimax_proto_register_mac_header_generic(void)
 			&hf_mac_header_generic_packing_subhd_fc_ext,
 			{
 				"Fragment Type", "wmx.genericPackSubhd.FcExt",
-				FT_UINT24, BASE_HEX, VALS(frag_types), PACKING_SUBHEADER_FC_EXT_MASK,
+				FT_UINT24, BASE_HEX, VALS(frag_types), PACKING_SUBHEADER_FC_MASK,
 				NULL, HFILL
 			}
 		},
@@ -2242,7 +2242,7 @@ void wimax_proto_register_mac_header_generic(void)
 		};
 
 	static ei_register_info ei[] = {
-		{ &ei_mac_crc_malformed, { "wmx.genericCrc.missing_mal", PI_MALFORMED, PI_ERROR, "CRC missing - the frame is too short", EXPFILL }},
+		{ &ei_mac_crc_malformed, { "wmx.genericCrc.missing", PI_MALFORMED, PI_ERROR, "CRC missing - the frame is too short", EXPFILL }},
 		{ &ei_mac_crc_missing, { "wmx.genericCrc.missing", PI_PROTOCOL, PI_NOTE, "CRC is not included in this frame!", EXPFILL }},
 		{ &ei_mac_header_generic_crc, { "wmx.genericCrc.bad_checksum", PI_CHECKSUM, PI_ERROR, "Bad checksum", EXPFILL }},
 	};

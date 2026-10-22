@@ -16,6 +16,7 @@
 
 #include "ui/text_import_scanner.h"
 #include "ui/util.h"
+#include "ui/alert_box.h"
 #include "ui/help_url.h"
 #include "ui/capture_globals.h"
 
@@ -24,8 +25,6 @@
 #include "wsutil/inet_addr.h"
 #include "wsutil/time_util.h"
 #include "wsutil/filesystem.h"
-#include "app/application_flavor.h"
-#include "wsutil/report_message.h"
 #include <wsutil/array.h>
 
 #include <ui_import_text_dialog.h>
@@ -44,7 +43,7 @@
 #define HTML_GT "&gt;"
 
 static const QString default_regex_hint = ImportTextDialog::tr("Supported fields are data, dir, time, seqno");
-static const QString missing_data_hint = ImportTextDialog::tr("Missing capturing group data (use (?<data>(…)) )");
+static const QString missing_data_hint = ImportTextDialog::tr("Missing capturing group data (use (?<data>(...)) )");
 
 #define SETTINGS_FILE "import_hexdump.json"
 
@@ -84,7 +83,7 @@ ImportTextDialog::ImportTextDialog(QWidget *parent) :
 
     ti_ui_->regexHintLabel->setSmallText(true);
 
-#ifdef Q_OS_MACOS
+#ifdef Q_OS_MAC
     // The grid layout squishes each line edit otherwise.
     int le_height = ti_ui_->textFileLineEdit->sizeHint().height();
     ti_ui_->ethertypeLineEdit->setMinimumHeight(le_height);
@@ -184,7 +183,7 @@ ImportTextDialog::~ImportTextDialog()
 
 void ImportTextDialog::loadSettingsFile()
 {
-    QFileInfo fileInfo(gchar_free_to_qstring(get_profile_dir(application_configuration_environment_prefix(), get_profile_name(), false)), QString(SETTINGS_FILE));
+    QFileInfo fileInfo(gchar_free_to_qstring(get_profile_dir(get_profile_name(), false)), QString(SETTINGS_FILE));
     QFile loadFile(fileInfo.filePath());
 
     if (!fileInfo.exists() || !fileInfo.isFile()) {
@@ -201,7 +200,7 @@ void ImportTextDialog::loadSettingsFile()
 
 void ImportTextDialog::saveSettingsFile()
 {
-    QFileInfo fileInfo(gchar_free_to_qstring(get_profile_dir(application_configuration_environment_prefix(), get_profile_name(), false)), QString(SETTINGS_FILE));
+    QFileInfo fileInfo(gchar_free_to_qstring(get_profile_dir(get_profile_name(), false)), QString(SETTINGS_FILE));
     QFile saveFile(fileInfo.filePath());
 
     if (fileInfo.exists() && !fileInfo.isFile()) {
@@ -233,7 +232,6 @@ void ImportTextDialog::applyDialogSettings()
     }
     ti_ui_->directionIndicationCheckBox->setChecked(settings["hexdump.hasDirection"].toBool());
     ti_ui_->asciiIdentificationCheckBox->setChecked(settings["hexdump.identifyAscii"].toBool());
-    ti_ui_->littleEndianCheckBox->setChecked(settings["hexdump.littleEndian"].toBool());
 
     // Regular Expression
     ti_ui_->regexTextEdit->setText(settings["regex.format"].toString());
@@ -327,7 +325,6 @@ void ImportTextDialog::storeDialogSettings()
     }
     settings["hexdump.hasDirection"] = ti_ui_->directionIndicationCheckBox->isChecked();
     settings["hexdump.identifyAscii"] = ti_ui_->asciiIdentificationCheckBox->isChecked();
-    settings["hexdump.littleEndian"] = ti_ui_->littleEndianCheckBox->isChecked();
 
     // Regular Expression
     settings["regex.format"] = ti_ui_->regexTextEdit->toPlainText();
@@ -441,7 +438,7 @@ int ImportTextDialog::exec() {
       case TEXT_IMPORT_HEXDUMP:
         import_info_.hexdump.import_text_FILE = ws_fopen(import_info_.import_text_filename, "rb");
         if (!import_info_.hexdump.import_text_FILE) {
-            report_open_failure(import_info_.import_text_filename, errno, false);
+            open_failure_alert_box(import_info_.import_text_filename, errno, false);
             setResult(QDialog::Rejected);
             goto cleanup_mode;
         }
@@ -455,7 +452,7 @@ int ImportTextDialog::exec() {
       case TEXT_IMPORT_REGEX:
         import_info_.regex.import_text_GMappedFile = g_mapped_file_new(import_info_.import_text_filename, true, &gerror);
         if (gerror) {
-            report_open_failure(import_info_.import_text_filename, gerror->code, false);
+            open_failure_alert_box(import_info_.import_text_filename, gerror->code, false);
             g_error_free(gerror);
             setResult(QDialog::Rejected);
             goto cleanup_mode;
@@ -514,12 +511,12 @@ int ImportTextDialog::exec() {
     }
     text_import_pre_open(&params, file_type_subtype, import_info_.import_text_filename, interface_name.toUtf8().constData());
     /* Use a random name for the temporary import buffer */
-    import_info_.wdh = wtap_dump_open_tempfile(global_capture_opts.temp_dir, &tmp, "import", file_type_subtype, WS_FILE_UNCOMPRESSED, &params, &err, &err_info);
+    import_info_.wdh = wtap_dump_open_tempfile(global_capture_opts.temp_dir, &tmp, "import", file_type_subtype, WTAP_UNCOMPRESSED, &params, &err, &err_info);
     capfile_name_.append(tmp ? tmp : "temporary file");
     import_info_.output_filename = tmp;
 
     if (import_info_.wdh == NULL) {
-        report_cfile_dump_open_failure(capfile_name_.toUtf8().constData(), err, err_info, file_type_subtype);
+        cfile_dump_open_failure_alert_box(capfile_name_.toUtf8().constData(), err, err_info, file_type_subtype);
         setResult(QDialog::Rejected);
         goto cleanup_wtap;
     }
@@ -527,7 +524,7 @@ int ImportTextDialog::exec() {
     err = text_import(&import_info_);
 
     if (err != 0) {
-        report_failure("Import failed");
+        failure_alert_box("Import failed");
         setResult(QDialog::Rejected);
         goto cleanup;
     }
@@ -535,7 +532,7 @@ int ImportTextDialog::exec() {
   cleanup: /* free in reverse order of allocation */
     if (!wtap_dump_close(import_info_.wdh, NULL, &err, &err_info))
     {
-        report_cfile_close_failure(capfile_name_.toUtf8().constData(), err, err_info);
+        cfile_close_failure_alert_box(capfile_name_.toUtf8().constData(), err, err_info);
     }
   cleanup_wtap:
     /* g_free checks for null */
@@ -651,9 +648,9 @@ void ImportTextDialog::on_timestampFormatLineEdit_textChanged(const QString &tim
             ws_clock_get_realtime(&timenow);
 
             /* On windows strftime/wcsftime does not support %s yet, this works on all OSs */
-            timefmt.replace(QStringLiteral("%s"), QString::number(timenow.tv_sec));
+            timefmt.replace(QString("%s"), QString::number(timenow.tv_sec));
             /* subsecond example as usec */
-            timefmt.replace(QStringLiteral("%f"),  QStringLiteral("%1").arg(timenow.tv_nsec, 6, 10, QChar('0')));
+            timefmt.replace(QString("%f"),  QString("%1").arg(timenow.tv_nsec, 6, 10, QChar('0')));
 
             cur_tm = localtime(&timenow.tv_sec);
             if (cur_tm == NULL) {
@@ -661,7 +658,7 @@ void ImportTextDialog::on_timestampFormatLineEdit_textChanged(const QString &tim
               cur_tm = &fallback;
             }
             strftime(time_str, sizeof time_str, timefmt.toUtf8(), cur_tm);
-            ti_ui_->timestampExampleLabel->setText(tr(HINT_BEGIN "Example: %1" HINT_END).arg(QString(time_str).toHtmlEscaped()));
+            ti_ui_->timestampExampleLabel->setText(QString(tr(HINT_BEGIN "Example: %1" HINT_END)).arg(QString(time_str).toHtmlEscaped()));
             timestamp_format_ok_ = true;
         }
         else {
@@ -685,7 +682,6 @@ void ImportTextDialog::on_modeTabWidget_currentChanged(int index) {
         memset(&import_info_.hexdump, 0, sizeof(import_info_.hexdump));
         on_directionIndicationCheckBox_toggled(ti_ui_->directionIndicationCheckBox->isChecked());
         on_asciiIdentificationCheckBox_toggled(ti_ui_->asciiIdentificationCheckBox->isChecked());
-        on_littleEndianCheckBox_toggled(ti_ui_->littleEndianCheckBox->isChecked());
         enableFieldWidgets(false, true);
         break;
       case 1:
@@ -719,11 +715,6 @@ void ImportTextDialog::on_directionIndicationCheckBox_toggled(bool checked)
 void ImportTextDialog::on_asciiIdentificationCheckBox_toggled(bool checked)
 {
     import_info_.hexdump.identify_ascii = checked;
-}
-
-void ImportTextDialog::on_littleEndianCheckBox_toggled(bool checked)
-{
-    import_info_.hexdump.little_endian = checked;
 }
 
 /*******************************************************************************
@@ -771,24 +762,14 @@ void ImportTextDialog::enableFieldWidgets(bool enable_direction_input, bool enab
 void ImportTextDialog::on_dataEncodingComboBox_currentIndexChanged(int index)
 {
     QVariant val = ti_ui_->dataEncodingComboBox->itemData(index);
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
     if (val.canConvert<int>())
+#else
+    if (val != QVariant::Invalid)
+#endif
     {
         // data_encoding_ok = true;
         import_info_.regex.encoding = (enum data_encoding) val.toUInt();
-        /* The hex decode table ignores ':' as whitespace, so it's in the hint
-         * here. As written, this allows it in all sorts of locations, rather
-         * than a more precise regex. As \s matches vertical whitespace too,
-         * using this hint can wrap onto the next line and match times as bytes,
-         * ignoring any ':'.
-         *
-         * In many situations a user might want to use \h instead. A tradeoff
-         * of the flexibility of regex is determining what hint works for most
-         * users.
-         *
-         * XXX - ':' is also present in the hint for octal below, even though
-         * the octal table doesn't ignore it. Should it be added there? Should
-         * the hex and octal tables ignore other byte separators as well?
-         */
         switch (import_info_.regex.encoding) {
           case ENCODING_PLAIN_HEX:
             ti_ui_->encodingRegexExample->setText(HINT_BEGIN "(?" HTML_LT "data" HTML_GT "[0-9a-fA-F:\\s]+)" HINT_END);
@@ -927,7 +908,11 @@ void ImportTextDialog::enableHeaderWidgets(uint encapsulation) {
 void ImportTextDialog::on_encapComboBox_currentIndexChanged(int index)
 {
     QVariant val = ti_ui_->encapComboBox->itemData(index);
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
     if (val.canConvert<int>())
+#else
+    if (val != QVariant::Invalid)
+#endif
     {
         import_info_.encapsulation = val.toUInt();
     } else {

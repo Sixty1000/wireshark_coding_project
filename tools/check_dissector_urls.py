@@ -6,16 +6,13 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 import argparse
+import aiohttp
 import asyncio
 import os
 import re
 import shutil
 import signal
-import sys
-
-import aiohttp
-
-from check_common import getFilesFromCommits, getFilesFromOpen
+import subprocess
 
 # This utility scans the dissector code for URLs, then attempts to
 # fetch the links.  The results are shown in stdout, but also, at
@@ -46,7 +43,7 @@ def signal_handler(sig, frame):
         tasks = asyncio.all_tasks()
     except (RuntimeError):
         # we haven't yet started the async link checking, we can exit directly
-        sys.exit(1)
+        exit(1)
     # ignore further SIGINTs while we're cancelling the running tasks
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     for t in tasks:
@@ -73,7 +70,7 @@ class FailedLookup:
 cached_lookups = {}
 
 
-class Link:
+class Link(object):
 
     def __init__(self, file, line_number, url):
         self.file = file
@@ -102,6 +99,8 @@ class Link:
         return s
 
     def validate(self):
+        global cached_lookups
+        global should_exit
         if should_exit:
             return
         self.tested = True
@@ -122,9 +121,8 @@ links = []
 files = []
 all_urls = set()
 
-
 def find_links_in_file(filename):
-    if os.path.isdir(filename) or not os.path.exists(filename):
+    if os.path.isdir(filename):
         return
 
     with open(filename, 'r', encoding="utf8") as f:
@@ -141,11 +139,7 @@ def find_links_in_file(filename):
                 # A url must have a period somewhere
                 if '.' not in url:
                     continue
-
-                # Don't fetch this internal link..
-                if 'www.wireshark.org/tools/modelines' in url:
-                    continue
-
+                global links, all_urls
                 links.append(Link(filename, line_number, url))
                 all_urls.add(url)
 
@@ -153,12 +147,12 @@ def find_links_in_file(filename):
 # Scan the given folder for links to test. Recurses.
 def find_links_in_folder(folder):
     files_to_check = []
-    for root, subfolders, files in os.walk(folder):
+    for root,subfolders,files in os.walk(folder):
         for f in files:
             if should_exit:
                 return
             file = os.path.join(root, f)
-            if file.endswith(('.c', '.adoc')):
+            if file.endswith('.c') or file.endswith('.adoc'):
                 files_to_check.append(file)
 
     # Deal with files in sorted order.
@@ -166,7 +160,9 @@ def find_links_in_folder(folder):
         find_links_in_file(file)
 
 
+
 async def populate_cache(sem, session, url):
+    global cached_lookups
     if should_exit:
         return
     async with sem:
@@ -176,12 +172,7 @@ async def populate_cache(sem, session, url):
                 if args.verbose:
                     print('checking ', url, ': success', sep='')
 
-        # N.B., no longer catching Exception to placate 'ruff check', but difficult to know if catching all possible exceptions..
-        except (asyncio.CancelledError, ValueError, ConnectionError, asyncio.TimeoutError,
-                aiohttp.client_exceptions.ClientConnectorDNSError,
-                aiohttp.client_exceptions.ClientConnectorError,
-                aiohttp.client_exceptions.ClientResponseError,
-                aiohttp.client_exceptions.ServerDisconnectedError):
+        except (asyncio.CancelledError, ValueError, ConnectionError, Exception):
             cached_lookups[url] = FailedLookup()
             if args.verbose:
                 print('checking ', url, ': failed', sep='')
@@ -204,93 +195,116 @@ async def check_all_links(links):
         link.validate()
 
 
-if __name__ == '__main__':
-    #################################################################
-    # command-line args.  Controls which dissector files should be scanned.
-    # If no args given, will just scan epan/dissectors folder.
-    parser = argparse.ArgumentParser(description='Check URL links in dissectors')
-    parser.add_argument('--file', action='append',
-                        help='specify individual dissector file to test')
-    parser.add_argument('--commits', action='store',
-                        help='last N commits to check')
-    parser.add_argument('--open', action='store_true',
-                        help='check open files')
-    parser.add_argument('--verbose', action='store_true',
-                        help='when enabled, show more output')
-    parser.add_argument('--docs', action='store_true',
-                        help='when enabled, also check document folders')
+#################################################################
+# Main logic.
 
-    args = parser.parse_args()
-
-
-    # Get files from wherever command-line args indicate.
-    if args.file:
-        # Add specified file(s)
-        for f in args.file:
-            if not os.path.isfile(f) and not f.startswith('epan'):
-                f = os.path.join('epan', 'dissectors', f)
-            if not os.path.isfile(f):
-                print('Chosen file', f, 'does not exist.')
-                sys.exit(1)
-            else:
-                files.append(f)
-                find_links_in_file(f)
-    elif args.commits:
-        # Get files affected by specified number of commits.
-        files = getFilesFromCommits(args.commits)
-        for f in files:
-            find_links_in_file(f)
-    elif args.open:
-        # Unstaged changes.
-        files = getFilesFromOpen()
-        for f in files:
-            find_links_in_file(f)
-    elif args.docs:
-        # Find links from doc folder(s)
-        find_links_in_folder(os.path.join(os.path.dirname(__file__), '..', 'doc'))
-
-    else:
-        # Find links from dissector folder.
-        find_links_in_folder(os.path.join(os.path.dirname(__file__), '..', 'epan', 'dissectors'))
+# command-line args.  Controls which dissector files should be scanned.
+# If no args given, will just scan epan/dissectors folder.
+parser = argparse.ArgumentParser(description='Check URL links in dissectors')
+parser.add_argument('--file', action='append',
+                    help='specify individual dissector file to test')
+parser.add_argument('--commits', action='store',
+                    help='last N commits to check')
+parser.add_argument('--open', action='store_true',
+                    help='check open files')
+parser.add_argument('--verbose', action='store_true',
+                    help='when enabled, show more output')
+parser.add_argument('--docs', action='store_true',
+                    help='when enabled, also check document folders')
 
 
-    # If scanning a subset of files, list them here.
-    print('Examining:')
-    if args.file or args.commits or args.open:
-        if files:
-            print(' '.join(files), '\n')
+args = parser.parse_args()
+
+
+def is_dissector_file(filename):
+    p = re.compile(r'.*(packet|file)-.*\.c')
+    return p.match(filename)
+
+
+# Get files from wherever command-line args indicate.
+if args.file:
+    # Add specified file(s)
+    for f in args.file:
+        if not os.path.isfile(f) and not f.startswith('epan'):
+            f = os.path.join('epan', 'dissectors', f)
+        if not os.path.isfile(f):
+            print('Chosen file', f, 'does not exist.')
+            exit(1)
         else:
-            print('No files to check.\n')
+            files.append(f)
+            find_links_in_file(f)
+elif args.commits:
+    # Get files affected by specified number of commits.
+    command = ['git', 'diff', '--name-only', 'HEAD~' + args.commits]
+    files = [f.decode('utf-8')
+             for f in subprocess.check_output(command).splitlines()]
+    # Fetch links from files (dissectors files only)
+    files = list(filter(is_dissector_file, files))
+    for f in files:
+        find_links_in_file(f)
+elif args.open:
+    # Unstaged changes.
+    command = ['git', 'diff', '--name-only']
+    files = [f.decode('utf-8')
+             for f in subprocess.check_output(command).splitlines()]
+    files = list(filter(is_dissector_file, files))
+    # Staged changes.
+    command = ['git', 'diff', '--staged', '--name-only']
+    files_staged = [f.decode('utf-8')
+                    for f in subprocess.check_output(command).splitlines()]
+    files_staged = list(filter(is_dissector_file, files_staged))
+    for f in files:
+        find_links_in_file(f)
+    for f in files_staged:
+        if f not in files:
+            find_links_in_file(f)
+            files.append(f)
+elif args.docs:
+    # Find links from doc folder(s)
+    find_links_in_folder(os.path.join(os.path.dirname(__file__), '..', 'doc'))
+
+else:
+    # Find links from dissector folder.
+    find_links_in_folder(os.path.join(os.path.dirname(__file__), '..', 'epan', 'dissectors'))
+
+
+# If scanning a subset of files, list them here.
+print('Examining:')
+if args.file or args.commits or args.open:
+    if files:
+        print(' '.join(files), '\n')
     else:
-        if not args.docs:
-            print('All dissector modules\n')
-        else:
-            print('Document sources')
+        print('No files to check.\n')
+else:
+    if not args.docs:
+        print('All dissector modules\n')
+    else:
+        print('Document sources')
 
-    asyncio.run(check_all_links(links))
+asyncio.run(check_all_links(links))
 
-    # Write failures to a file.  Back up any previous first though.
-    if os.path.exists('failures.txt'):
-        shutil.copyfile('failures.txt', 'failures_last_run.txt')
-    with open('failures.txt', 'w') as f_f:
-        for link in links:
-            if link.tested and not link.success:
-                f_f.write(str(link) + '\n')
-    # And successes
-    with open('successes.txt', 'w') as f_s:
-        for link in links:
-            if link.tested and link.success:
-                f_s.write(str(link) + '\n')
-
-
-    # Count and show overall stats.
-    passed, failed = 0, 0
+# Write failures to a file.  Back up any previous first though.
+if os.path.exists('failures.txt'):
+    shutil.copyfile('failures.txt', 'failures_last_run.txt')
+with open('failures.txt', 'w') as f_f:
     for link in links:
-        if link.tested:
-            if link.success:
-                passed += 1
-            else:
-                failed += 1
+        if link.tested and not link.success:
+            f_f.write(str(link) + '\n')
+# And successes
+with open('successes.txt', 'w') as f_s:
+    for link in links:
+        if link.tested and link.success:
+            f_s.write(str(link) + '\n')
 
-    print('--------------------------------------------------------------------------------------------------')
-    print(len(links), 'links checked: ', passed, 'passed,', failed, 'failed')
+
+# Count and show overall stats.
+passed, failed = 0, 0
+for link in links:
+    if link.tested:
+        if link.success:
+            passed += 1
+        else:
+            failed += 1
+
+print('--------------------------------------------------------------------------------------------------')
+print(len(links), 'links checked: ', passed, 'passed,', failed, 'failed')

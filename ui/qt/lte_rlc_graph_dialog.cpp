@@ -17,9 +17,9 @@
 
 #include <epan/tvbuff-int.h>
 #include <epan/tvbuff.h>
+#include <frame_tvbuff.h>
 
-#include <ui/qt/utils/plot_theme.h>
-#include <ui/qt/utils/theme_manager.h>
+#include <ui/qt/utils/tango_colors.h>
 
 #include <QMenu>
 #include <QRubberBand>
@@ -36,6 +36,9 @@
 
 #include <ui/tap-rlc-graph.h>
 
+
+const QRgb graph_color_ack =         tango_sky_blue_4;    // Blue for ACK lines
+const QRgb graph_color_nack =        tango_scarlet_red_3; // Red for NACKs
 
 // Size of selectable packet points in the base graph
 const double pkt_point_size_ = 3.0;
@@ -92,6 +95,7 @@ LteRlcGraphDialog::LteRlcGraphDialog(QWidget &parent, CaptureFile &cf, bool chan
     ctx_menu_->addAction(ui->actionCrosshairs);
     ctx_menu_->addSeparator();
     ctx_menu_->addAction(ui->actionSwitchDirection);
+    set_action_shortcuts_visible_in_context_menu(ctx_menu_->actions());
 
     rp->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(rp, &QCustomPlot::customContextMenuRequested, this, &LteRlcGraphDialog::showContextMenu);
@@ -153,19 +157,16 @@ void LteRlcGraphDialog::completeGraph(bool may_be_empty)
     // Set colours/styles for each of the traces on the graph.
     QCustomPlot *sp = ui->rlcPlot;
     base_graph_ = sp->addGraph(); // All: Selectable segments
-    reseg_graph_ = sp->addGraph();
-    acks_graph_ = sp->addGraph();
-    nacks_graph_ = sp->addGraph();
+    base_graph_->setPen(QPen(QBrush(Qt::black), 0.25));
 
-    // Series colors come from the theme and are reapplied when it changes.
-    auto apply_series_colors = [this]() {
-        ThemeManager *tm = ThemeManager::instance();
-        base_graph_->setPen(QPen(QBrush(PlotTheme::textColor()), 0.25));
-        reseg_graph_->setPen(QPen(QBrush(tm->color(ThemeManager::MutedText)), 0.25));
-        acks_graph_->setPen(QPen(QBrush(tm->color(ThemeManager::AccentInfo)), 1.0));
-        nacks_graph_->setPen(QPen(QBrush(tm->color(ThemeManager::AccentError)), 0.25));
-    };
-    PlotTheme::track(sp, apply_series_colors);
+    reseg_graph_ = sp->addGraph();
+    reseg_graph_->setPen(QPen(QBrush(Qt::lightGray), 0.25));
+
+    acks_graph_ = sp->addGraph();
+    acks_graph_->setPen(QPen(QBrush(graph_color_ack), 1.0));
+
+    nacks_graph_ = sp->addGraph();
+    nacks_graph_->setPen(QPen(QBrush(graph_color_nack), 0.25));
 
     // Create tracer
     tracer_ = new QCPItemTracer(sp);
@@ -252,7 +253,7 @@ void LteRlcGraphDialog::fillGraph()
 
     // N.B. ssDisc is really too slow. TODO: work out how to turn off aliasing, or experiment
     // with ssCustom.  Other styles tried didn't look right.
-    // GTK version was speeded up noticeably by turning down aliasing level...
+    // GTK version was speeded up noticibly by turning down aliasing level...
     base_graph_->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssDisc, pkt_point_size_));
     reseg_graph_->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssDisc, pkt_point_size_));
     acks_graph_->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssDisc, pkt_point_size_));
@@ -265,7 +266,7 @@ void LteRlcGraphDialog::fillGraph()
         if (!compareHeaders(seg)) {
             continue;
         }
-        double ts = nstime_to_sec(&seg->rel_ts);
+        double ts = seg->rel_secs + seg->rel_usecs / 1000000.0;
         time_stamp_map_.insert(ts, seg);
     }
 
@@ -285,7 +286,7 @@ void LteRlcGraphDialog::fillGraph()
 
     // Run through the segments to get data
     for (struct rlc_segment *seg = graph_.segments; seg != NULL; seg = seg->next) {
-        double ts = nstime_to_sec(&seg->rel_ts);
+        double ts = seg->rel_secs + (seg->rel_usecs / 1000000.0);
         if (compareHeaders(seg)) {
             if (!seg->isControlPDU) {
                 // Data PDUs
@@ -640,7 +641,7 @@ void LteRlcGraphDialog::mouseMoved(QMouseEvent *event)
         hint += tr("%1 %2 (%3s seq %4 len %5)")
                 .arg(cap_file_.capFile() ? tr("Click to select packet") : tr("Packet"))
                 .arg(packet_num_)
-                .arg(QString::number(nstime_to_sec(&packet_seg->rel_ts), 'g', 4))
+                .arg(QString::number(packet_seg->rel_secs + (packet_seg->rel_usecs / 1000000.0), 'g', 4))
                 .arg(packet_seg->SN)
                 .arg(packet_seg->pduLength);
         tracer_->setGraphKey(ui->rlcPlot->xAxis->pixelToCoord(event->pos().x()));
@@ -872,20 +873,18 @@ void LteRlcGraphDialog::on_otherDirectionButton_clicked()
 // N.B. Copied from tcp_stream_dialog.cpp
 void LteRlcGraphDialog::on_buttonBox_accepted()
 {
-    QString file_name;
+    QString file_name, extension;
     QDir path(mainApp->openDialogInitialDir());
     QString pdf_filter = tr("Portable Document Format (*.pdf)");
     QString png_filter = tr("Portable Network Graphics (*.png)");
     QString bmp_filter = tr("Windows Bitmap (*.bmp)");
     // Gaze upon my beautiful graph with lossy artifacts!
     QString jpeg_filter = tr("JPEG File Interchange Format (*.jpeg *.jpg)");
-    QString filter = QStringLiteral("%1;;%2;;%3;;%4").arg(
-        pdf_filter,
-        png_filter,
-        bmp_filter,
-        jpeg_filter
-    );
-    QString extension = png_filter;
+    QString filter = QString("%1;;%2;;%3;;%4")
+            .arg(pdf_filter)
+            .arg(png_filter)
+            .arg(bmp_filter)
+            .arg(jpeg_filter);
 
     file_name = WiresharkFileDialog::getSaveFileName(this, mainApp->windowTitleString(tr("Save Graph As…")),
                                              path.canonicalPath(), filter, &extension);

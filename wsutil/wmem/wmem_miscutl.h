@@ -28,8 +28,7 @@ extern "C" {
  *    @{
  */
 
-/**
- * @brief Copies a block of memory.
+/** Copies a block of memory.
  *
  * @param allocator The allocator object to use to allocate memory to copy into.
  * @param source The pointer to the memory block to copy.
@@ -41,32 +40,12 @@ void *
 wmem_memdup(wmem_allocator_t *allocator, const void *source, const size_t size)
 G_GNUC_ALLOC_SIZE(3);
 
-/**
- * @brief Generic GCompareFunc to compare two signed integers.
- *
- * Casts both `a` and `b` to `const int*` and returns the result of their comparison.
- * This function is suitable for use with sorting or searching routines that accept
- * a `GCompareFunc`.
- *
- * @param a Pointer to the first signed integer.
- * @param b Pointer to the second signed integer.
- * @return Negative if *a < *b, zero if *a == *b, positive if *a > *b.
+/** Generic GCompareFunc implementations to compare signed/unsigned integer
  */
 WS_DLL_PUBLIC
 int
 wmem_compare_int(const void *a, const void *b);
 
-/**
- * @brief Generic GCompareFunc to compare two unsigned integers.
- *
- * Casts both `a` and `b` to `const unsigned*` and returns the result of their comparison.
- * This function is suitable for use with sorting or searching routines that accept
- * a `GCompareFunc`.
- *
- * @param a Pointer to the first unsigned integer.
- * @param b Pointer to the second unsigned integer.
- * @return Negative if *a < *b, zero if *a == *b, positive if *a > *b.
- */
 WS_DLL_PUBLIC
 int
 wmem_compare_uint(const void *a, const void *b);

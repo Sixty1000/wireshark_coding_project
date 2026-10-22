@@ -27,6 +27,11 @@
 void proto_register_h248_annex_c(void);
 void proto_reg_handoff_h248_annex_c(void);
 
+
+#define PNAME  "H.248 Annex C"
+#define PSNAME "H248C"
+#define PFNAME "h248.annexc"
+
 /* H.248 Annex C */
 static int proto_h248_pkg_annexc;
 
@@ -778,7 +783,7 @@ static void dissect_h248_annexc_NSAP(proto_tree* tree,
 	asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
 	dissect_ber_octet_string(implicit_p ? *((bool*)implicit_p) : false, &asn1_ctx, tree, tvb, 0, hfid, &new_tvb);
 	if (new_tvb) {
-		dissect_nsap(new_tvb, pinfo, 0,tvb_reported_length(new_tvb), tree);
+		dissect_nsap(new_tvb, 0,tvb_reported_length(new_tvb), tree);
 		if ( h248_info->term && ! h248_info->term->nsap) {
 			h248_info->term->nsap = tvb_bytes_to_str(wmem_file_scope(), new_tvb,0,tvb_reported_length(new_tvb));
 		}
@@ -831,7 +836,7 @@ static void dissect_h248_annexc_SDP_M(proto_tree* tree, tvbuff_t* tvb, packet_in
 	asn1_ctx_t asn1_ctx;
 	tvbuff_t *param_tvb = NULL;
 	proto_item *ti;
-	unsigned offset, next_offset, tokenlen;
+	int offset, next_offset, tokenlen;
 	char *port_str;
 
 	asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
@@ -840,11 +845,13 @@ static void dissect_h248_annexc_SDP_M(proto_tree* tree, tvbuff_t* tvb, packet_in
 		&param_tvb);
 
 	if (param_tvb){
-		if (tvb_find_uint8_remaining(param_tvb, 0, ' ', &offset)) {
+		offset = tvb_find_uint8(param_tvb, 0, -1, ' ');
+		if (offset != -1){
 			offset++;
-			if (tvb_find_uint8_remaining(param_tvb, offset, ' ', &next_offset)) {
+			next_offset = tvb_find_uint8(param_tvb, offset, -1, ' ');
+			if (next_offset > 0){
 				tokenlen = next_offset - offset;
-				port_str = (char*)tvb_get_string_enc(pinfo->pool, param_tvb, offset, tokenlen, ENC_UTF_8 | ENC_NA);
+				port_str = tvb_get_string_enc(pinfo->pool, param_tvb, offset, tokenlen, ENC_UTF_8 | ENC_NA);
 				if (g_ascii_isdigit(port_str[0])) {
 					int32_t port = -1;
 					bool port_valid;
@@ -862,7 +869,7 @@ static void dissect_h248_annexc_SDP_M(proto_tree* tree, tvbuff_t* tvb, packet_in
 
 static bool h248_c_implicit = true;
 
-static const h248_pkg_param_t h248_annexc_package_properties[] = {
+static h248_pkg_param_t h248_annexc_package_properties[] = {
 	{ 0x1001, &hf_h248_pkg_annexc_media, h248_param_ber_integer, NULL },
 	{ 0x1002, &hf_h248_pkg_annexc_transmission_mode, h248_param_ber_integer, NULL },
 	{ 0x1003, &hf_h248_pkg_annexc_num_of_channels, h248_param_ber_integer, NULL },
@@ -1559,7 +1566,7 @@ void proto_register_h248_annex_c(void) {
 			"Invalid SDP media port", EXPFILL }}
 	};
 
-	proto_h248_pkg_annexc = proto_register_protocol("H.248 Annex C", "H248C", "h248.annexc");
+	proto_h248_pkg_annexc = proto_register_protocol(PNAME, PSNAME, PFNAME);
 
 	proto_register_field_array(proto_h248_pkg_annexc, hf, array_length(hf));
 

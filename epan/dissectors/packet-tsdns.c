@@ -1,4 +1,4 @@
-/* packet-tsdns.c
+/* packet-dns.c
  * Routines for TSDNS (TeamSpeak3 DNS) packet disassembly
  * Copyright 2018, Maciej Krueger <mkg20001@gmail.com>
  *
@@ -39,12 +39,6 @@ static int ett_tsdns;
 static int dissect_tsdns(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 
-  int pLen = tvb_reported_length(tvb);
-
-  if (pLen < 5) {
-    return 0;
-  }
-
   int         offset    = 0;
   bool        request   = false;
 
@@ -54,9 +48,11 @@ static int dissect_tsdns(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 
   col_set_str(pinfo->cinfo, COL_PROTOCOL, "TSDNS");
 
+  int pLen = tvb_reported_length(tvb);
+
   if (request) {
     col_set_str(pinfo->cinfo, COL_INFO, "Request");
-      col_append_fstr(pinfo->cinfo, COL_INFO, " %s", tvb_get_string_enc(pinfo->pool, tvb, 0, pLen - 5, ENC_ASCII));
+    col_append_fstr(pinfo->cinfo, COL_INFO, " %s", tvb_get_string_enc(pinfo->pool, tvb, 0, pLen - 5, ENC_ASCII));
   } else {
     col_set_str(pinfo->cinfo, COL_INFO, "Response");
     col_append_fstr(pinfo->cinfo, COL_INFO, " %s", tvb_get_string_enc(pinfo->pool, tvb, 0, pLen, ENC_ASCII));
@@ -73,9 +69,7 @@ static int dissect_tsdns(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 
   if (request) { // request is DOMAIN\n\r\r\r\n
     hidden_item = proto_tree_add_boolean(tsdns_tree, hf_tsdns_request, tvb, 0, 0, 1); // using pLen - 5 as the last chars are \n\r\r\r\n which are just indicating the end of the request
-    if (pLen >= 5) {
-      proto_tree_add_item(tsdns_tree, hf_tsdns_request_domain, tvb, offset, pLen - 5, ENC_ASCII);
-    }
+    proto_tree_add_item(tsdns_tree, hf_tsdns_request_domain, tvb, offset, pLen - 5, ENC_ASCII);
   } else { // response is IP:PORT
     hidden_item = proto_tree_add_boolean(tsdns_tree, hf_tsdns_response, tvb, 0, 0, 1);
     address_item = proto_tree_add_item(tsdns_tree, hf_tsdns_response_address, tvb, offset, pLen, ENC_ASCII);

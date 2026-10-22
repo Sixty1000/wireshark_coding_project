@@ -13,6 +13,7 @@
  */
 
 #include "config.h"
+
 #define WS_LOG_DOMAIN LOG_DOMAIN_WIRETAP
 #include "merge.h"
 
@@ -33,7 +34,6 @@
 
 #include <string.h>
 #include "wtap_opttypes.h"
-#include "wtap_module.h"
 #include "wtap-int.h"
 
 #include <wsutil/filesystem.h>
@@ -43,7 +43,7 @@
 #include <wsutil/ws_assert.h>
 
 
-static const char* const idb_merge_mode_strings[] = {
+static const char* idb_merge_mode_strings[] = {
     /* IDB_MERGE_MODE_NONE */
     "none",
     /* IDB_MERGE_MODE_ALL_SAME */
@@ -88,6 +88,7 @@ cleanup_in_file(merge_in_file_t *in_file)
     in_file->idb_index_map = NULL;
 
     wtap_rec_cleanup(&in_file->rec);
+    ws_buffer_free(&in_file->frame_buffer);
 }
 
 static void
@@ -175,7 +176,7 @@ raise_limit(int resource, unsigned add)
  */
 static unsigned
 merge_open_in_files(unsigned in_file_count, const char *const *in_file_names,
-                    merge_in_file_t **out_files, merge_progress_callback_t* cb, const char* app_env_var_prefix,
+                    merge_in_file_t **out_files, merge_progress_callback_t* cb,
                     int *err, char **err_info, unsigned *err_fileno)
 {
     unsigned i = 0;
@@ -192,7 +193,7 @@ merge_open_in_files(unsigned in_file_count, const char *const *in_file_names,
 
     while (i < in_file_count) {
         files[i].filename    = in_file_names[i];
-        files[i].wth         = wtap_open_offline(in_file_names[i], WTAP_TYPE_AUTO, err, err_info, false, app_env_var_prefix);
+        files[i].wth         = wtap_open_offline(in_file_names[i], WTAP_TYPE_AUTO, err, err_info, false);
         files[i].state       = RECORD_NOT_PRESENT;
         files[i].packet_num  = 0;
 
@@ -236,7 +237,8 @@ merge_open_in_files(unsigned in_file_count, const char *const *in_file_names,
             *err_fileno = i;
             return 0;
         }
-        wtap_rec_init(&files[i].rec, DEFAULT_INIT_BUFFER_SIZE_2048);
+        wtap_rec_init(&files[i].rec);
+        ws_buffer_init(&files[i].frame_buffer, 1514);
         files[i].size = size;
         files[i].idb_index_map = g_array_new(false, false, sizeof(unsigned));
 
@@ -365,7 +367,8 @@ merge_read_packet(int in_file_count, merge_in_file_t in_files[],
              * No packet available, and we haven't seen an error or EOF yet,
              * so try to read the next packet.
              */
-            if (!wtap_read(in_files[i].wth, &in_files[i].rec, err, err_info,
+            if (!wtap_read(in_files[i].wth, &in_files[i].rec,
+                           &in_files[i].frame_buffer, err, err_info,
                            &data_offset)) {
                 if (*err != 0) {
                     in_files[i].state = GOT_ERROR;
@@ -450,7 +453,8 @@ merge_append_read_packet(int in_file_count, merge_in_file_t in_files[],
     for (i = 0; i < in_file_count; i++) {
         if (in_files[i].state == AT_EOF)
             continue; /* This file is already at EOF */
-        if (wtap_read(in_files[i].wth, &in_files[i].rec, err, err_info,
+        if (wtap_read(in_files[i].wth, &in_files[i].rec,
+                      &in_files[i].frame_buffer, err, err_info,
                       &data_offset))
             break; /* We have a packet */
         if (*err != 0) {
@@ -479,7 +483,7 @@ merge_append_read_packet(int in_file_count, merge_in_file_t in_files[],
 /* creates a section header block for the new output file */
 static GArray*
 create_shb_header(const merge_in_file_t *in_files, const unsigned in_file_count,
-                  const char *app_name, const bool add_merging_comment)
+                  const char *app_name)
 {
     GArray  *shb_hdrs;
     wtap_block_t shb_hdr;
@@ -502,12 +506,10 @@ create_shb_header(const merge_in_file_t *in_files, const unsigned in_file_count,
      * descriptions, IDBs, etc.? came from which files?
      */
 
-    if(add_merging_comment) {
-        g_string_append_printf(comment_gstr, "File created by merging: \n");
+    g_string_append_printf(comment_gstr, "File created by merging: \n");
 
-        for (i = 0; i < in_file_count; i++) {
-            g_string_append_printf(comment_gstr, "File%d: %s \n", i+1, in_files[i].filename);
-        }
+    for (i = 0; i < in_file_count; i++) {
+        g_string_append_printf(comment_gstr, "File%d: %s \n",i+1,in_files[i].filename);
     }
 
     os_info_str = g_string_new("");
@@ -523,9 +525,7 @@ create_shb_header(const merge_in_file_t *in_files, const unsigned in_file_count,
      */
     opt_str = g_string_free(comment_gstr, FALSE);
     /* XXX: We probably want to prepend (insert at index 0) instead? */
-    if (wtap_block_add_string_option_owned(shb_hdr, OPT_COMMENT, opt_str) != WTAP_OPTTYPE_SUCCESS) {
-        g_free(opt_str);
-    }
+    wtap_block_add_string_option_owned(shb_hdr, OPT_COMMENT, opt_str);
     /*
      * XXX - and how do we preserve all the OPT_SHB_HARDWARE, OPT_SHB_OS,
      * and OPT_SHB_USERAPPL values from all the previous files?
@@ -618,27 +618,16 @@ is_duplicate_idb(const wtap_block_t idb1, const wtap_block_t idb2)
         }
     }
 
-    /* if_tsresol not present is treated as 6. Presumably if two IDBs are
-     * otherwise the same but one has an explicit if_tsresol of 6 and one
-     * has no if_tsresol, those are the same. (Wiretap or some other library
-     * might remove a TSRESOL option with value 6 when exporting packets as
-     * it's unnecessary.)
-     */
-    if (wtap_block_get_uint8_option_value(idb1, OPT_IDB_TSRESOL, &idb1_if_tsresol) != WTAP_OPTTYPE_SUCCESS) {
-        idb1_if_tsresol = 6;
-    }
-    if (wtap_block_get_uint8_option_value(idb2, OPT_IDB_TSRESOL, &idb2_if_tsresol) != WTAP_OPTTYPE_SUCCESS) {
-        idb2_if_tsresol = 6;
-    }
-    ws_debug("idb1_if_tsresol == idb2_if_tsresol: %s",
-                 (idb1_if_tsresol == idb2_if_tsresol) ? "true":"false");
-    if (idb1_if_tsresol != idb2_if_tsresol) {
-        /*
-         * Probably not the same interface, and we can't combine them
-         * in any case.
-         */
-        ws_debug("returning false");
-        return false;
+    /* XXX - what do to if we have only one value? */
+    have_idb1_value = (wtap_block_get_uint8_option_value(idb1, OPT_IDB_TSRESOL, &idb1_if_tsresol) == WTAP_OPTTYPE_SUCCESS);
+    have_idb2_value = (wtap_block_get_uint8_option_value(idb2, OPT_IDB_TSRESOL, &idb2_if_tsresol) == WTAP_OPTTYPE_SUCCESS);
+    if (have_idb1_value && have_idb2_value) {
+        ws_debug("idb1_if_tsresol == idb2_if_tsresol: %s",
+                     (idb1_if_tsresol == idb2_if_tsresol) ? "true":"false");
+        if (idb1_if_tsresol != idb2_if_tsresol) {
+            ws_debug("returning false");
+            return false;
+        }
     }
 
     /* XXX - what do to if we have only one value? */
@@ -1045,6 +1034,7 @@ merge_process_packets(wtap_dumper *pdh, const int file_type,
     merge_in_file_t    *in_file;
     int                 count = 0;
     bool                stop_flag = false;
+    wtap_rec *rec,      snap_rec;
 
     for (;;) {
         *err = 0;
@@ -1095,6 +1085,8 @@ merge_process_packets(wtap_dumper *pdh, const int file_type,
             break;
         }
 
+        rec = &in_file->rec;
+
         if (wtap_file_type_subtype_supports_block(file_type,
                                                   WTAP_BLOCK_IF_ID_AND_INFO) != BLOCK_NOT_SUPPORTED) {
             if (!process_new_idbs(pdh, in_files, in_file_count, mode, idb_inf, err, err_info)) {
@@ -1103,12 +1095,25 @@ merge_process_packets(wtap_dumper *pdh, const int file_type,
             }
         }
 
-        /*
-         * Do we have a snapshot length?
-         */
-        if (snaplen != 0) {
-            /* Yes - apply it. */
-            wtap_rec_apply_snapshot(&in_file->rec, snaplen);
+        switch (rec->rec_type) {
+
+        case REC_TYPE_PACKET:
+            if (rec->presence_flags & WTAP_HAS_CAP_LEN) {
+                if (snaplen != 0 &&
+                    rec->rec_header.packet_header.caplen > snaplen) {
+                    /*
+                     * The dumper will only write up to caplen bytes out,
+                     * so we only need to change that value, instead of
+                     * cloning the whole packet with fewer bytes.
+                     *
+                     * XXX: but do we need to change the IDBs' snap_len?
+                     */
+                    snap_rec = *rec;
+                    snap_rec.rec_header.packet_header.caplen = snaplen;
+                    rec = &snap_rec;
+                }
+            }
+            break;
         }
 
         /*
@@ -1126,8 +1131,8 @@ merge_process_packets(wtap_dumper *pdh, const int file_type,
              * now, we hardcode that, but we need to figure
              * out a more general way to handle this.
              */
-            if (in_file->rec.rec_type == REC_TYPE_PACKET) {
-                if (!map_rec_interface_id(&in_file->rec, in_file)) {
+            if (rec->rec_type == REC_TYPE_PACKET) {
+                if (!map_rec_interface_id(rec, in_file)) {
                     status = MERGE_ERR_BAD_PHDR_INTERFACE_ID;
                     break;
                 }
@@ -1154,10 +1159,12 @@ merge_process_packets(wtap_dumper *pdh, const int file_type,
             }
         }
 
-        if (!wtap_dump(pdh, &in_file->rec, err, err_info)) {
+        if (!wtap_dump(pdh, rec, ws_buffer_start_ptr(&in_file->frame_buffer),
+                       err, err_info)) {
             status = MERGE_ERR_CANT_WRITE_OUTFILE;
             break;
         }
+        wtap_rec_reset(rec);
     }
 
     if (cb)
@@ -1245,9 +1252,9 @@ merge_files_common(const char* out_filename, /* filename in normal output mode,
                    optional tempdir in tempfile mode (NULL for OS default) */
                    char **out_filenamep, const char *pfx, /* tempfile mode  */
                    const int file_type, const char *const *in_filenames,
-                   const unsigned in_file_count, const bool add_merging_comment, const bool do_append,
+                   const unsigned in_file_count, const bool do_append,
                    idb_merge_mode mode, unsigned snaplen,
-                   const char *app_name, const char* app_env_var_prefix, merge_progress_callback_t* cb, ws_compression_type compression_type)
+                   const char *app_name, merge_progress_callback_t* cb, wtap_compression_type compression_type)
 {
     merge_in_file_t    *in_files = NULL;
     int                 frame_type = WTAP_ENCAP_PER_PACKET;
@@ -1289,7 +1296,7 @@ merge_files_common(const char* out_filename, /* filename in normal output mode,
         }
 
         /* open the input files */
-        open_file_count = merge_open_in_files(in_file_count - total_file_count, &in_filenames[total_file_count], &in_files, cb, app_env_var_prefix, &err, &err_info, &err_fileno);
+        open_file_count = merge_open_in_files(in_file_count - total_file_count, &in_filenames[total_file_count], &in_files, cb, &err, &err_info, &err_fileno);
         if (open_file_count == 0) {
             ws_debug("merge_open_in_files() failed with err=%d", err);
             report_cfile_open_failure(in_filenames[err_fileno], err, err_info);
@@ -1331,7 +1338,7 @@ merge_files_common(const char* out_filename, /* filename in normal output mode,
          */
         if (wtap_file_type_subtype_supports_block(file_type,
                                                   WTAP_BLOCK_IF_ID_AND_INFO) != BLOCK_NOT_SUPPORTED) {
-            shb_hdrs = create_shb_header(in_files, open_file_count, app_name, add_merging_comment);
+            shb_hdrs = create_shb_header(in_files, open_file_count, app_name);
             ws_debug("SHB created");
 
             idb_inf = generate_merged_idbs(in_files, open_file_count, &mode);
@@ -1476,7 +1483,7 @@ merge_files_common(const char* out_filename, /* filename in normal output mode,
         // We recurse here, but we're limited by MAX_MERGE_FILES
         status = merge_files_common(out_filename, out_filenamep, pfx,
                     file_type, (const char**)temp_files->pdata,
-                    temp_files->len, add_merging_comment, do_append, mode, snaplen, app_name, app_env_var_prefix, cb, compression_type);
+                    temp_files->len, do_append, mode, snaplen, app_name, cb, compression_type);
         /* If that failed, it has already reported an error */
         g_ptr_array_free(temp_files, true);
     }
@@ -1492,9 +1499,8 @@ merge_files_common(const char* out_filename, /* filename in normal output mode,
 bool
 merge_files(const char* out_filename, const int file_type,
             const char *const *in_filenames, const unsigned in_file_count,
-            const bool add_merging_comment, const bool do_append, const idb_merge_mode mode,
-            unsigned snaplen, const char *app_name, const char* app_env_var_prefix,
-            merge_progress_callback_t* cb, const  ws_compression_type compression_type)
+            const bool do_append, const idb_merge_mode mode,
+            unsigned snaplen, const char *app_name, merge_progress_callback_t* cb, const  wtap_compression_type compression_type)
 {
     ws_assert(out_filename != NULL);
     ws_assert(in_file_count > 0);
@@ -1514,8 +1520,8 @@ merge_files(const char* out_filename, const int file_type,
     }
 
     return merge_files_common(out_filename, NULL, NULL,
-                              file_type, in_filenames, in_file_count, add_merging_comment,
-                              do_append, mode, snaplen, app_name, app_env_var_prefix, cb, compression_type);
+                              file_type, in_filenames, in_file_count,
+                              do_append, mode, snaplen, app_name, cb, compression_type);
 }
 
 /*
@@ -1526,9 +1532,9 @@ merge_files(const char* out_filename, const int file_type,
 bool
 merge_files_to_tempfile(const char *tmpdir, char **out_filenamep, const char *pfx,
                         const int file_type, const char *const *in_filenames,
-                        const unsigned in_file_count, const bool add_merging_comment,
-                        const bool do_append, const idb_merge_mode mode, unsigned snaplen,
-                        const char *app_name, const char* app_env_var_prefix, merge_progress_callback_t* cb)
+                        const unsigned in_file_count, const bool do_append,
+                        const idb_merge_mode mode, unsigned snaplen,
+                        const char *app_name, merge_progress_callback_t* cb)
 {
     ws_assert(out_filenamep != NULL);
 
@@ -1536,8 +1542,8 @@ merge_files_to_tempfile(const char *tmpdir, char **out_filenamep, const char *pf
     *out_filenamep = NULL;
 
     return merge_files_common(tmpdir, out_filenamep, pfx,
-                              file_type, in_filenames, in_file_count, add_merging_comment,
-                              do_append, mode, snaplen, app_name, app_env_var_prefix, cb, WS_FILE_UNCOMPRESSED);
+                              file_type, in_filenames, in_file_count,
+                              do_append, mode, snaplen, app_name, cb, WTAP_UNCOMPRESSED);
 }
 
 /*
@@ -1547,14 +1553,14 @@ merge_files_to_tempfile(const char *tmpdir, char **out_filenamep, const char *pf
  */
 bool
 merge_files_to_stdout(const int file_type, const char *const *in_filenames,
-                      const unsigned in_file_count, const bool add_merging_comment,
-                      const bool do_append, const idb_merge_mode mode, unsigned snaplen,
-                      const char *app_name, const char* app_env_var_prefix, merge_progress_callback_t* cb,
-                      ws_compression_type compression_type)
+                      const unsigned in_file_count, const bool do_append,
+                      const idb_merge_mode mode, unsigned snaplen,
+                      const char *app_name, merge_progress_callback_t* cb,
+                      wtap_compression_type compression_type)
 {
     return merge_files_common(NULL, NULL, NULL,
-                              file_type, in_filenames, in_file_count, add_merging_comment,
-                              do_append, mode, snaplen, app_name, app_env_var_prefix, cb, compression_type);
+                              file_type, in_filenames, in_file_count,
+                              do_append, mode, snaplen, app_name, cb, compression_type);
 }
 
 /*

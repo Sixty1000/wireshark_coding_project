@@ -77,8 +77,8 @@ is_client(packet_info *pinfo) {
 #define MAX_DIR_LINE_LEN (70 + 1 + 255 + 1 + 255 + 1 + 5)
 #define MIN_DIR_LINE_LEN (0 + 1 + 0 + 1 + 1 + 1 + 1)
 static bool
-find_dir_tokens(tvbuff_t *tvb, unsigned name_start, unsigned *sel_start, unsigned *host_start, unsigned *port_start, unsigned *line_len, unsigned *next_offset) {
-    unsigned remain;
+find_dir_tokens(tvbuff_t *tvb, int name_start, int *sel_start, int *host_start, int *port_start, int *line_len, int *next_offset) {
+    int remain;
 
     if (tvb_captured_length_remaining(tvb, name_start) < MIN_DIR_LINE_LEN)
         return false;
@@ -86,25 +86,22 @@ find_dir_tokens(tvbuff_t *tvb, unsigned name_start, unsigned *sel_start, unsigne
     if (! (sel_start && host_start && port_start && line_len && next_offset) )
         return false;
 
-    tvb_find_line_end_length(tvb, name_start, MAX_DIR_LINE_LEN, line_len, next_offset);
+    *line_len = tvb_find_line_end(tvb, name_start, MAX_DIR_LINE_LEN, next_offset, false);
     if (*line_len < MIN_DIR_LINE_LEN)
         return false;
 
     remain = *line_len;
-    tvb_find_uint8_length(tvb, name_start, remain, '\t', sel_start);
-    *sel_start = *sel_start + 1;
+    *sel_start = tvb_find_uint8(tvb, name_start, remain, '\t') + 1;
     if (*sel_start < name_start + 1)
         return false;
 
     remain -= *sel_start - name_start;
-    tvb_find_uint8_length(tvb, *sel_start, remain, '\t', host_start);
-    *host_start = *host_start + 1;
+    *host_start = tvb_find_uint8(tvb, *sel_start, remain, '\t') + 1;
     if (*host_start < *sel_start + 1)
         return false;
 
     remain -= *host_start - *sel_start;
-    tvb_find_uint8_length(tvb, *host_start, remain, '\t', port_start);
-    *port_start = *port_start + 1;
+    *port_start = tvb_find_uint8(tvb, *host_start, remain, '\t') + 1;
     if (*port_start < *host_start + 1)
         return false;
 
@@ -118,22 +115,22 @@ dissect_gopher(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
     proto_item *ti;
     proto_tree *gopher_tree, *dir_tree = NULL;
     bool client = is_client(pinfo);
-    unsigned line_len;
+    int line_len;
     const char *request = "[Invalid request]";
     bool is_dir = false;
-    unsigned offset = 0, next_offset;
-    unsigned sel_start, host_start, port_start;
+    int offset = 0, next_offset;
+    int sel_start, host_start, port_start;
     char *name;
 
     /* Fill in our protocol and info columns */
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "Gopher");
 
     if (client) {
-        tvb_find_line_end_remaining(tvb, 0, &line_len, NULL);
+        line_len = tvb_find_line_end(tvb, 0, -1, NULL, false);
         if (line_len == 0) {
             request = "[Directory list]";
-        } else {
-            request = (char*)tvb_get_string_enc(pinfo->pool, tvb, 0, line_len, ENC_ASCII);
+        } else if (line_len > 0) {
+            request = tvb_get_string_enc(pinfo->pool, tvb, 0, line_len, ENC_ASCII);
         }
         col_add_fstr(pinfo->cinfo, COL_INFO, "Request: %s", request);
     } else {
@@ -158,11 +155,11 @@ dissect_gopher(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
                     col_append_str(pinfo->cinfo, COL_INFO, ": [Directory list]");
                 }
 
-                name = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset + 1, sel_start - offset - 2, ENC_ASCII);
+                name = tvb_get_string_enc(pinfo->pool, tvb, offset + 1, sel_start - offset - 2, ENC_ASCII);
                 ti = proto_tree_add_string(gopher_tree, hf_gopher_dir_item, tvb,
                                 offset, line_len + 1, name);
                 dir_tree = proto_item_add_subtree(ti, ett_dir_item);
-                proto_tree_add_item(dir_tree, hf_gopher_di_type, tvb, offset, 1, ENC_ASCII);
+                proto_tree_add_item(dir_tree, hf_gopher_di_type, tvb, offset, 1, ENC_ASCII|ENC_NA);
                 proto_tree_add_item(dir_tree, hf_gopher_di_name, tvb, offset + 1,
                                     sel_start - offset - 2, ENC_ASCII);
                 proto_tree_add_item(dir_tree, hf_gopher_di_selector, tvb, sel_start,

@@ -4,7 +4,7 @@
  *     RFC 9174: https://www.rfc-editor.org/rfc/rfc9174.html
  *
  * TCPCLv4 portions copyright 2019-2021, Brian Sipos <brian.sipos@gmail.com>
- * TCPCLv3 portions copyright 2006-2007 The MITRE Corporation.
+ * Copyright 2006-2007 The MITRE Corporation.
  * All Rights Reserved.
  * Approved for Public Release; Distribution Unlimited.
  * Tracking Number 07-0090.
@@ -119,17 +119,14 @@ typedef enum {
     TCPCLV4_EXTENSION_FLAG_CRITICAL = 0x01,
 } Tcpclv4ExtensionFlag;
 
-/** Finer grained locating than just the frame number.
- * The fields #ds_idx and #raw_offset are compared for uniqueness but not total ordering.
- */
+/// Finer grained locating than just the frame number
 typedef struct {
     /// Index of the frame
     uint32_t frame_num;
-
-    /// Data source index within the frame
-    int32_t ds_idx;
+    /// Source index within the frame
+    int src_ix;
     /// Offset within the source TVB
-    unsigned raw_offset;
+    int raw_offset;
 } tcpcl_frame_loc_t;
 
 typedef struct {

@@ -21,6 +21,10 @@
 #include "packet-pres.h"
 #include "packet-ros.h"
 
+#define PNAME  "X.880 OSI Remote Operations Service"
+#define PSNAME "ROS"
+#define PFNAME "ros"
+
 void proto_register_ros(void);
 void proto_reg_handoff_ros(void);
 
@@ -172,7 +176,7 @@ ros_try_string(const char *oid, tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
 
 		if(opdissector) {
 
-			opname = val_to_str(pinfo->pool, opcode_lcl, lookup, "Unknown opcode (%d)");
+			opname = val_to_str(opcode_lcl, lookup, "Unknown opcode (%d)");
 
 			col_set_str(pinfo->cinfo, COL_INFO, opname);
 			if(suffix)
@@ -194,7 +198,7 @@ call_ros_oid_callback(const char *oid, tvbuff_t *tvb, int offset, packet_info *p
 	next_tvb = tvb_new_subset_remaining(tvb, offset);
 
 	if(((len = ros_try_string(oid, next_tvb, pinfo, tree, session)) == 0) &&
-	   ((len = dissector_try_string_with_data(ros_oid_dissector_table, oid, next_tvb, pinfo, tree, true, session)) == 0)) {
+	   ((len = dissector_try_string(ros_oid_dissector_table, oid, next_tvb, pinfo, tree, session)) == 0)) {
 		proto_item *item;
 		proto_tree *next_tree;
 
@@ -364,8 +368,8 @@ ros_match_call_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uns
 static int
 dissect_ros(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* data)
 {
-	unsigned offset = 0;
-	unsigned old_offset;
+	int offset = 0;
+	int old_offset;
 	proto_item *item;
 	proto_tree *tree;
 	proto_tree *next_tree=NULL;
@@ -428,11 +432,11 @@ void proto_register_ros(void) {
   {
     { &hf_ros_response_in,
       { "Response In", "ros.response_in",
-	FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_RESPONSE), 0x0,
+	FT_FRAMENUM, BASE_NONE, NULL, 0x0,
 	"The response to this remote operation invocation is in this frame", HFILL }},
     { &hf_ros_response_to,
       { "Response To", "ros.response_to",
-	FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_REQUEST), 0x0,
+	FT_FRAMENUM, BASE_NONE, NULL, 0x0,
 	"This is a response to the remote operation invocation in this frame", HFILL }},
     { &hf_ros_time,
       { "Time", "ros.time",
@@ -466,7 +470,7 @@ void proto_register_ros(void) {
   expert_module_t* expert_ros;
 
   /* Register protocol */
-  proto_ros = proto_register_protocol("X.880 OSI Remote Operations Service", "ROS", "ros");
+  proto_ros = proto_register_protocol(PNAME, PSNAME, PFNAME);
   ros_handle = register_dissector("ros", dissect_ros, proto_ros);
   /* Register fields and subtrees */
   proto_register_field_array(proto_ros, hf, array_length(hf));

@@ -1,6 +1,6 @@
 /* packet-f1ap.c
  * Routines for E-UTRAN F1 Application Protocol (F1AP) packet dissection
- * Copyright 2018-2026, Pascal Quantin <pascal@wireshark.org>
+ * Copyright 2018-2024, Pascal Quantin <pascal@wireshark.org>
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
@@ -8,7 +8,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * References: 3GPP TS 38.473 V19.4.0 (2026-09)
+ * References: 3GPP TS 38.473 V18.2.0 (2024-06)
  */
 
 #include "config.h"
@@ -16,6 +16,7 @@
 #include <epan/packet.h>
 
 #include <epan/asn1.h>
+#include <epan/sctpppids.h>
 #include <epan/proto_data.h>
 #include <epan/stats_tree.h>
 #include <epan/tfs.h>
@@ -31,7 +32,10 @@
 #include "packet-lte-rrc.h"
 #include "packet-nrppa.h"
 #include "packet-lpp.h"
-#include "packet-sctp.h"
+
+#define PNAME  "F1 Application Protocol"
+#define PSNAME "F1AP"
+#define PFNAME "f1ap"
 
 #define SCTP_PORT_F1AP 38472
 
@@ -123,7 +127,6 @@ static int ett_f1ap_SIB13_message;
 static int ett_f1ap_SIB14_message;
 static int ett_f1ap_SIB15_message;
 static int ett_f1ap_SIB17_message;
-static int ett_f1ap_SIB17bis_message;
 static int ett_f1ap_SIB20_message;
 static int ett_f1ap_SIB22_message;
 static int ett_f1ap_SIB23_message;
@@ -172,23 +175,6 @@ static int ett_f1ap_NeedForInterruptionInfoNR;
 static int ett_f1ap_RACHConfiguration;
 static int ett_f1ap_SRSPosRRCInactiveValidityAreaConfig;
 static int ett_f1ap_TCIStatesConfigurationsList;
-static int ett_f1ap_executionCondition;
-static int ett_f1ap_noSecurityChangeID;
-static int ett_f1ap_servingCellNoSecurityChangeID;
-static int ett_f1ap_nZP_CSI_RS_ResourceSet;
-static int ett_f1ap_nZP_CSI_RS_Resource;
-static int ett_f1ap_cSI_RSResourceToAddModList;
-static int ett_f1ap_cSI_RSResourceToReleaseList;
-static int ett_f1ap_cSI_RSResourceSetToAddModList;
-static int ett_f1ap_cSI_IMResourceToAddModList;
-static int ett_f1ap_cSI_IMResourceSetToAddModList;
-static int ett_f1ap_OndemandSIB1Config;
-static int ett_f1ap_SBFD_Frequency_Configuration;
-static int ett_f1ap_SSB_resource_config;
-static int ett_f1ap_sRS_Resource;
-static int ett_f1ap_CSI_RSResourceSetToReleaseList;
-static int ett_f1ap_CSI_IMResourceToReleaseList;
-static int ett_f1ap_CSI_IMResourceSetToReleaseList;
 #include "packet-f1ap-ett.c"
 
 enum{
@@ -201,8 +187,8 @@ enum{
 
 static void set_stats_message_type(packet_info *pinfo, int type);
 
-static const char *st_str_packets        = "Total Packets";
-static const char *st_str_packet_types   = "F1AP Packet Types";
+static const uint8_t *st_str_packets        = "Total Packets";
+static const uint8_t *st_str_packet_types   = "F1AP Packet Types";
 
 static int st_node_packets = -1;
 static int st_node_packet_types = -1;
@@ -369,12 +355,6 @@ struct f1ap_tap_t {
 #define MTYPE_BROADCAST_TRANSPORT_RESOURCE_REQUEST         155
 #define MTYPE_DU_CU_ACCESS_AND_MOBILITY_INDICATION         156
 #define MTYPE_SRS_INFORMATION_RESERVATION_NOTIFICATION     157
-#define MTYPE_CU_DU_MOBILITY_INITIATION_REQUEST            158
-#define MTYPE_CLI_INDICATION                               159
-#define MTYPE_DU_CU_CSI_RS_COORDINATION_REQUEST            160
-#define MTYPE_DU_CU_CSI_RS_COORDINATION_RESPONSE           161
-#define MTYPE_CU_DU_CSI_RS_COORDINATION_REQUEST            162
-#define MTYPE_CU_DU_CSI_RS_COORDINATION_RESPONSE           163
 
 static const value_string mtype_names[] = {
     { MTYPE_RESET,     "Reset" },
@@ -534,12 +514,6 @@ static const value_string mtype_names[] = {
     { MTYPE_BROADCAST_TRANSPORT_RESOURCE_REQUEST, "BroadcastTransportResourceRequest" },
     { MTYPE_DU_CU_ACCESS_AND_MOBILITY_INDICATION, "DUCUAccessAndMobilityIndication" },
     { MTYPE_SRS_INFORMATION_RESERVATION_NOTIFICATION, "SRSInformationReservationNotification" },
-    { MTYPE_CU_DU_MOBILITY_INITIATION_REQUEST, "CUDUMobilityInitiationRequest" },
-    { MTYPE_CLI_INDICATION, "CLI-Indication" },
-    { MTYPE_DU_CU_CSI_RS_COORDINATION_REQUEST, "DUCUCSIRSCoordinationRequest" },
-    { MTYPE_DU_CU_CSI_RS_COORDINATION_RESPONSE, "DUCUCSIRSCoordinationResponse" },
-    { MTYPE_CU_DU_CSI_RS_COORDINATION_REQUEST, "CUDUCSIRSCoordinationRequest" },
-    { MTYPE_CU_DU_CSI_RS_COORDINATION_RESPONSE, "CUDUCSIRSCoordinationResponse" },
     { 0,  NULL }
 };
 static value_string_ext mtype_names_ext = VALUE_STRING_EXT_INIT(mtype_names);
@@ -556,9 +530,6 @@ typedef struct {
   uint32_t gdb_cu_ue_f1ap_id;
   e212_number_type_t number_type;
   struct f1ap_tap_t  *stats_tap;
-  proto_tree *top_tree;
-  proto_tree *rrc_tree;
-  tvbuff_t *rrc_tvb;
 } f1ap_private_data_t;
 
 typedef struct {
@@ -591,26 +562,16 @@ static int dissect_SuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, pro
 static int dissect_UnsuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *);
 
 
-static f1ap_private_data_t*
-f1ap_get_private_data(packet_info *pinfo)
-{
-  f1ap_private_data_t *f1ap_data = (f1ap_private_data_t*)p_get_proto_data(pinfo->pool, pinfo, proto_f1ap, 0);
-  if (!f1ap_data) {
-    f1ap_data = wmem_new0(pinfo->pool, f1ap_private_data_t);
-    f1ap_data->srb_id = -1;
-    f1ap_data->gdb_cu_ue_f1ap_id = 1;
-    p_add_proto_data(pinfo->pool, pinfo, proto_f1ap, 0, f1ap_data);
-  }
-  return f1ap_data;
-}
+static proto_tree *top_tree;
 
 static void set_message_label(asn1_ctx_t *actx, int type)
 {
   const char *label = val_to_str_ext_const(type, &mtype_names_ext, "Unknown");
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, label);
-  f1ap_private_data_t *priv_data = f1ap_get_private_data(actx->pinfo);
-  proto_item_append_text(priv_data->top_tree, " (%s)", label);
+  /* N.B. would like to be able to use actx->subTree.top_tree, but not easy to set.. */
+  proto_item_append_text(top_tree, " (%s)", label);
 }
+
 
 
 static void
@@ -635,6 +596,19 @@ static void
 f1ap_N6Jitter_fmt(char *s, uint32_t v)
 {
   snprintf(s, ITEM_LABEL_LENGTH, "%.1fms (%d)", (float)v/2, (int32_t)v);
+}
+
+static f1ap_private_data_t*
+f1ap_get_private_data(packet_info *pinfo)
+{
+  f1ap_private_data_t *f1ap_data = (f1ap_private_data_t*)p_get_proto_data(wmem_file_scope(), pinfo, proto_f1ap, 0);
+  if (!f1ap_data) {
+    f1ap_data = wmem_new0(wmem_file_scope(), f1ap_private_data_t);
+    f1ap_data->srb_id = -1;
+    f1ap_data->gdb_cu_ue_f1ap_id = 1;
+    p_add_proto_data(wmem_file_scope(), pinfo, proto_f1ap, 0, f1ap_data);
+  }
+  return f1ap_data;
 }
 
 static void
@@ -672,7 +646,7 @@ static int dissect_ProtocolIEFieldValue(tvbuff_t *tvb, packet_info *pinfo, proto
   f1ap_ctx.ProtocolIE_ID       = f1ap_data->protocol_ie_id;
   f1ap_ctx.ProtocolExtensionID = f1ap_data->protocol_extension_id;
 
-  return (dissector_try_uint_with_data(f1ap_ies_dissector_table, f1ap_data->protocol_ie_id, tvb, pinfo, tree, false, &f1ap_ctx)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_new(f1ap_ies_dissector_table, f1ap_data->protocol_ie_id, tvb, pinfo, tree, false, &f1ap_ctx)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_ProtocolExtensionFieldExtensionValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
@@ -685,28 +659,28 @@ static int dissect_ProtocolExtensionFieldExtensionValue(tvbuff_t *tvb, packet_in
   f1ap_ctx.ProtocolIE_ID       = f1ap_data->protocol_ie_id;
   f1ap_ctx.ProtocolExtensionID = f1ap_data->protocol_extension_id;
 
-  return (dissector_try_uint_with_data(f1ap_extension_dissector_table, f1ap_data->protocol_extension_id, tvb, pinfo, tree, false, &f1ap_ctx)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_new(f1ap_extension_dissector_table, f1ap_data->protocol_extension_id, tvb, pinfo, tree, false, &f1ap_ctx)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_InitiatingMessageValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
   f1ap_private_data_t *f1ap_data = f1ap_get_private_data(pinfo);
 
-  return (dissector_try_uint_with_data(f1ap_proc_imsg_dissector_table, f1ap_data->procedure_code, tvb, pinfo, tree, false, data)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_new(f1ap_proc_imsg_dissector_table, f1ap_data->procedure_code, tvb, pinfo, tree, false, data)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_SuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
   f1ap_private_data_t *f1ap_data = f1ap_get_private_data(pinfo);
 
-  return (dissector_try_uint_with_data(f1ap_proc_sout_dissector_table, f1ap_data->procedure_code, tvb, pinfo, tree, false, data)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_new(f1ap_proc_sout_dissector_table, f1ap_data->procedure_code, tvb, pinfo, tree, false, data)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_UnsuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
   f1ap_private_data_t *f1ap_data = f1ap_get_private_data(pinfo);
 
-  return (dissector_try_uint_with_data(f1ap_proc_uout_dissector_table, f1ap_data->procedure_code, tvb, pinfo, tree, false, data)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_new(f1ap_proc_uout_dissector_table, f1ap_data->procedure_code, tvb, pinfo, tree, false, data)) ? tvb_captured_length(tvb) : 0;
 }
 
 
@@ -718,14 +692,14 @@ f1ap_stats_tree_init(stats_tree *st)
 }
 
 static tap_packet_status
-f1ap_stats_tree_packet(stats_tree* st, packet_info* pinfo,
+f1ap_stats_tree_packet(stats_tree* st, packet_info* pinfo _U_,
                        epan_dissect_t* edt _U_ , const void* p, tap_flags_t flags _U_)
 {
     const struct f1ap_tap_t *pi = (const struct f1ap_tap_t *) p;
 
     tick_stat_node(st, st_str_packets, 0, false);
     stats_tree_tick_pivot(st, st_node_packet_types,
-                          val_to_str_ext(pinfo->pool, pi->f1ap_mtype, &mtype_names_ext,
+                          val_to_str_ext(pi->f1ap_mtype, &mtype_names_ext,
                                          "Unknown packet type (%d)"));
     return TAP_PACKET_REDRAW;
 }
@@ -755,13 +729,13 @@ dissect_f1ap(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
   f1ap_item = proto_tree_add_item(tree, proto_f1ap, tvb, 0, -1, ENC_NA);
   f1ap_tree = proto_item_add_subtree(f1ap_item, ett_f1ap);
 
+  /* Store top-level tree */
+  top_tree = f1ap_tree;
 
   /* Add stats tap to private struct */
   f1ap_private_data_t *priv_data = f1ap_get_private_data(pinfo);
   priv_data->stats_tap = f1ap_info;
 
-  /* Store top-level tree */
-  priv_data->top_tree = f1ap_tree;
 
   dissect_F1AP_PDU_PDU(tvb, pinfo, f1ap_tree, NULL);
 
@@ -928,7 +902,6 @@ void proto_register_f1ap(void) {
     &ett_f1ap_SIB14_message,
     &ett_f1ap_SIB15_message,
     &ett_f1ap_SIB17_message,
-    &ett_f1ap_SIB17bis_message,
     &ett_f1ap_SIB20_message,
     &ett_f1ap_SIB22_message,
     &ett_f1ap_SIB23_message,
@@ -977,28 +950,11 @@ void proto_register_f1ap(void) {
     &ett_f1ap_RACHConfiguration,
     &ett_f1ap_SRSPosRRCInactiveValidityAreaConfig,
     &ett_f1ap_TCIStatesConfigurationsList,
-    &ett_f1ap_executionCondition,
-    &ett_f1ap_noSecurityChangeID,
-    &ett_f1ap_servingCellNoSecurityChangeID,
-    &ett_f1ap_nZP_CSI_RS_ResourceSet,
-    &ett_f1ap_nZP_CSI_RS_Resource,
-    &ett_f1ap_cSI_RSResourceToAddModList,
-    &ett_f1ap_cSI_RSResourceToReleaseList,
-    &ett_f1ap_cSI_RSResourceSetToAddModList,
-    &ett_f1ap_cSI_IMResourceToAddModList,
-    &ett_f1ap_cSI_IMResourceSetToAddModList,
-    &ett_f1ap_OndemandSIB1Config,
-    &ett_f1ap_SBFD_Frequency_Configuration,
-    &ett_f1ap_SSB_resource_config,
-    &ett_f1ap_sRS_Resource,
-    &ett_f1ap_CSI_RSResourceSetToReleaseList,
-    &ett_f1ap_CSI_IMResourceToReleaseList,
-    &ett_f1ap_CSI_IMResourceSetToReleaseList,
 #include "packet-f1ap-ettarr.c"
   };
 
   /* Register protocol */
-  proto_f1ap = proto_register_protocol("F1 Application Protocol", "F1AP", "f1ap");
+  proto_f1ap = proto_register_protocol(PNAME, PSNAME, PFNAME);
   /* Register fields and subtrees */
   proto_register_field_array(proto_f1ap, hf, array_length(hf));
   proto_register_subtree_array(ett, array_length(ett));

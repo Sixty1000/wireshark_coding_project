@@ -20,7 +20,6 @@
 #include <epan/conversation.h>
 #include "epan/column-utils.h"
 
-#include "opcua.h"
 #include "opcua_security_layer.h"
 #include "opcua_application_layer.h"
 #include "opcua_simpletypes.h"
@@ -45,6 +44,11 @@ static int hf_opcua_transport_scert;
 static int hf_opcua_transport_rcthumb;
 static int hf_opcua_transport_seq;
 static int hf_opcua_transport_rqid;
+
+/** subtree types */
+extern int ett_opcua_nodeid;
+extern int ett_opcua_extensionobject;
+extern int proto_opcua;
 
 /** Defined security policy URL from Part 7 OPC UA Specification. */
 #define UA_SECURITY_POLICY_NONE_STRING "http://opcfoundation.org/UA/SecurityPolicy#None"
@@ -90,8 +94,8 @@ void registerTransportLayerTypes(int proto)
 
 void parseMessageHeader(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo _U_, int *pOffset, struct ua_metadata *data _U_)
 {
-    proto_tree_add_item(tree, hf_opcua_transport_type, tvb, *pOffset, 3, ENC_ASCII); *pOffset+=3;
-    proto_tree_add_item(tree, hf_opcua_transport_chunk, tvb, *pOffset, 1, ENC_ASCII); *pOffset+=1;
+    proto_tree_add_item(tree, hf_opcua_transport_type, tvb, *pOffset, 3, ENC_ASCII|ENC_NA); *pOffset+=3;
+    proto_tree_add_item(tree, hf_opcua_transport_chunk, tvb, *pOffset, 1, ENC_ASCII|ENC_NA); *pOffset+=1;
     proto_tree_add_item(tree, hf_opcua_transport_size, tvb, *pOffset, 4, ENC_LITTLE_ENDIAN); *pOffset+=4;
 }
 
@@ -145,9 +149,7 @@ int parseMessage(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo _U_, int *p
 
 int parseAbort(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo _U_, int *pOffset, struct ua_metadata *data _U_)
 {
-    /* Called from dissect_opcua_message, when parseMessage was already called.
-     * So we only parse the abort message payload here.
-     */
+    parseMessageHeader(tree, tvb, pinfo, pOffset, data);
     parseStatusCode(tree, tvb, pinfo, pOffset, hf_opcua_transport_error);
     parseString(tree, tvb, pinfo, pOffset, hf_opcua_transport_reason);
 
@@ -186,8 +188,8 @@ void store_encryption_info(packet_info *pinfo, enum ua_message_mode mode, uint8_
 {
     conversation_t *conv = find_conversation_pinfo(pinfo, 0);
     if (conv) {
-        uintptr_t data;
-        data = construct_encryption_info(mode, sig_len);
+        uintptr_t data = (uintptr_t)mode;
+        data |= ((uintptr_t)sig_len << 8);
         conversation_add_proto_data(conv, proto_opcua, (void *)data);
     }
 }
@@ -202,8 +204,8 @@ void get_encryption_info(packet_info *pinfo, enum ua_message_mode *mode, uint8_t
             *mode = g_opcua_default_sig_len ? UA_MessageMode_MaybeEncrypted : UA_MessageMode_None;
             *sig_len = g_opcua_default_sig_len;
         } else {
-            *mode = extract_message_mode(data);
-            *sig_len = extract_signature_length(data);
+            *mode = (enum ua_message_mode)(data & 0xff);
+            *sig_len = (uintptr_t)(data >> 8);
         }
     }
 }
@@ -217,7 +219,7 @@ void get_encryption_info(packet_info *pinfo, enum ua_message_mode *mode, uint8_t
  *
  * @return 0 if equal, -1 if not.
  */
-static int opcua_string_compare(const uint8_t *text, int text_len, const char *ref_text)
+static int opcua_string_compare(const char *text, int text_len, const char *ref_text)
 {
     int len = (int)strlen(ref_text);
     if (text_len == len && memcmp(text, ref_text, len) == 0) return 0;
@@ -233,8 +235,8 @@ int parseOpenSecureChannel(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, 
     bool encrypted = false;
 
     // Message Header
-    proto_tree_add_item(tree, hf_opcua_transport_type, tvb, *pOffset, 3, ENC_ASCII); *pOffset+=3;
-    proto_tree_add_item(tree, hf_opcua_transport_chunk, tvb, *pOffset, 1, ENC_ASCII); *pOffset+=1;
+    proto_tree_add_item(tree, hf_opcua_transport_type, tvb, *pOffset, 3, ENC_ASCII|ENC_NA); *pOffset+=3;
+    proto_tree_add_item(tree, hf_opcua_transport_chunk, tvb, *pOffset, 1, ENC_ASCII|ENC_NA); *pOffset+=1;
     proto_tree_add_item(tree, hf_opcua_transport_size, tvb, *pOffset, 4, ENC_LITTLE_ENDIAN); *pOffset+=4;
     proto_tree_add_item(tree, hf_opcua_transport_scid, tvb, *pOffset, 4, ENC_LITTLE_ENDIAN); *pOffset+=4;
     // Asym Security Header

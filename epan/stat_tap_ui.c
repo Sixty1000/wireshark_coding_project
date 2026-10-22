@@ -25,13 +25,11 @@
 typedef struct _stat_cmd_arg {
     stat_tap_ui *ui;
     const char *cmd;
-    bool (*init)(const char *arg, void* userdata);
+    void (*func)(const char *arg, void* userdata);
     void* userdata;
 } stat_cmd_arg;
 
 static wmem_list_t *stat_cmd_arg_list;
-static wmem_tree_t* registered_stat_tables;
-
 
 /* structure to keep track of what stats have been specified on the
    command line.
@@ -58,16 +56,13 @@ sort_by_name(const void *a, const void *b)
     return strcmp(((const stat_cmd_arg *)a)->cmd, ((const stat_cmd_arg *)b)->cmd);
 }
 
-void stat_tap_init(void)
-{
-    stat_cmd_arg_list = wmem_list_new(wmem_epan_scope());
-    registered_stat_tables = wmem_tree_new(wmem_epan_scope());
-}
-
 void
 register_stat_tap_ui(stat_tap_ui *ui, void *userdata)
 {
     stat_cmd_arg *newsca;
+
+    if (stat_cmd_arg_list == NULL)
+        stat_cmd_arg_list = wmem_list_new(wmem_epan_scope());
 
     /* Key is already present */
     if (wmem_list_find_custom(stat_cmd_arg_list, ui->cli_string, search_duplicate))
@@ -75,7 +70,7 @@ register_stat_tap_ui(stat_tap_ui *ui, void *userdata)
 
     newsca = wmem_new(wmem_epan_scope(), stat_cmd_arg);
     newsca->cmd= wmem_strdup(wmem_epan_scope(), ui->cli_string);
-    newsca->init=ui->tap_init_cb;
+    newsca->func=ui->tap_init_cb;
     newsca->userdata=userdata;
 
     wmem_list_insert_sorted(stat_cmd_arg_list, newsca, sort_by_name);
@@ -132,25 +127,27 @@ list_stat_cmd_args(void)
 /* **********************************************************************
  * Function to process stats requested with command-line arguments
  * ********************************************************************** */
-bool
+void
 start_requested_stats(void)
 {
     stat_requested *sr;
-    bool success = true;
 
     while(stats_requested){
         sr=(stat_requested *)stats_requested->data;
-        success &= (*sr->sca->init)(sr->arg,sr->sca->userdata);
+        (*sr->sca->func)(sr->arg,sr->sca->userdata);
         stats_requested=g_slist_remove(stats_requested, sr);
         g_free(sr->arg);
         g_free(sr);
     }
-
-    return success;
 }
+
+static wmem_tree_t *registered_stat_tables;
 
 void register_stat_tap_table_ui(stat_tap_table_ui *ui)
 {
+    if (registered_stat_tables == NULL)
+        registered_stat_tables = wmem_tree_new(wmem_epan_scope());
+
     wmem_tree_insert_string(registered_stat_tables, ui->cli_string, ui, 0);
 }
 

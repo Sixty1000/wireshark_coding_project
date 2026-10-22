@@ -51,7 +51,5 @@ if(MINGW)
 		${MINGW_BINDIR}/libxml2-2.dll
 		${MINGW_BINDIR}/libzstd.dll
 		${MINGW_BINDIR}/zlib1.dll
-
-		$<TARGET_FILE_DIR:wireshark>/qt.conf
 	)
 endif()

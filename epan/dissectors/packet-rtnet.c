@@ -18,8 +18,7 @@
 #include <epan/packet.h>
 #include <epan/addr_resolv.h>
 #include <epan/etypes.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
+
 /*
  * See
  *
@@ -385,23 +384,26 @@ dissect_rtnet_tdma_v1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *root) {
   uint32_t msg;
   proto_tree *tree;
   proto_item *ti;
-  char* str_msg;
+
+  msg = tvb_get_ntohl(tvb, offset);
 
   /* Set the protocol column */
   col_set_str(pinfo->cinfo, COL_PROTOCOL, "TDMA-V1");
 
+  /* set the info column */
+  col_add_str(pinfo->cinfo, COL_INFO,
+      val_to_str(msg, tdma_v1_msg_vals, "Unknown (0x%04x)"));
+
+  if (root) {
     ti = proto_tree_add_item(root, proto_tdma, tvb, 0, -1, ENC_NA);
     tree = proto_item_add_subtree(ti, ett_tdma);
 
-    proto_tree_add_item_ret_uint(tree, hf_tdma_v1_msg, tvb,
-                        offset, 4, ENC_BIG_ENDIAN, &msg);
+    proto_item_append_text(ti, ", Version 1, %s",
+      val_to_str(msg, tdma_v1_msg_vals, "Unknown (0x%04x)"));
+
+    proto_tree_add_item(tree, hf_tdma_v1_msg, tvb,
+                        offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
-
-    str_msg = val_to_str(pinfo->pool, msg, tdma_v1_msg_vals, "Unknown (0x%04x)");
-    proto_item_append_text(ti, ", Version 1, %s", str_msg);
-
-    /* set the info column */
-    col_add_str(pinfo->cinfo, COL_INFO, str_msg);
 
     switch( msg ) {
       case TDMA_V1_MSG_NOTIFY_MASTER:
@@ -443,6 +445,7 @@ dissect_rtnet_tdma_v1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *root) {
       default:
         break;
     }
+  }
 }
 
 static void
@@ -493,43 +496,47 @@ dissect_tdma_reply_cal(tvbuff_t *tvb, unsigned offset, proto_tree *tree) {
 static void
 dissect_rtnet_tdma(tvbuff_t *tvb, packet_info *pinfo, proto_tree *root) {
   unsigned offset = 0;
-  uint32_t msg;
+  uint16_t msg;
   proto_item *ti;
   proto_tree *tree;
-  char* str_msg;
+
+  msg = tvb_get_ntohs(tvb, 2);
 
   /* Set the protocol column */
   col_set_str(pinfo->cinfo, COL_PROTOCOL, "TDMA");
 
-  ti = proto_tree_add_item(root, proto_tdma, tvb, 0, -1, ENC_NA);
-  tree = proto_item_add_subtree(ti, ett_tdma);
-
-  proto_tree_add_item(tree, hf_tdma_ver, tvb, offset, 2, ENC_BIG_ENDIAN);
-  offset += 2;
-
-  proto_tree_add_item_ret_uint(tree, hf_tdma_id, tvb, offset, 2, ENC_BIG_ENDIAN, &msg);
-  str_msg = val_to_str(pinfo->pool, msg, tdma_msg_vals, "Unknown (0x%04x)");
-  offset += 2;
-
-  proto_item_append_text(ti, ", %s", str_msg);
   /* Set the info column */
-  col_add_str(pinfo->cinfo, COL_INFO, str_msg);
+  col_add_str(pinfo->cinfo, COL_INFO,
+                 val_to_str(msg, tdma_msg_vals, "Unknown (0x%04x)"));
 
-  switch (msg) {
-    case TDMA_MSG_SYNC:
-      dissect_tdma_sync(tvb, offset, tree);
-      break;
+  if (root) {
+    ti = proto_tree_add_item(root, proto_tdma, tvb, 0, -1, ENC_NA);
+    tree = proto_item_add_subtree(ti, ett_tdma);
 
-    case TDMA_MSG_CAL_REQUEST:
-      dissect_tdma_request_cal(tvb, offset, tree);
-      break;
+    proto_item_append_text(ti, ", %s", val_to_str(msg, tdma_msg_vals, "Unknown (0x%04x)"));
 
-    case TDMA_MSG_CAL_REPLY:
-      dissect_tdma_reply_cal(tvb, offset, tree);
-      break;
+    proto_tree_add_item(tree, hf_tdma_ver, tvb, offset, 2, ENC_BIG_ENDIAN);
+    offset += 2;
 
-    default:
-      break;
+    proto_tree_add_item(tree, hf_tdma_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+    offset += 2;
+
+    switch (msg) {
+      case TDMA_MSG_SYNC:
+        dissect_tdma_sync(tvb, offset, tree);
+        break;
+
+      case TDMA_MSG_CAL_REQUEST:
+        dissect_tdma_request_cal(tvb, offset, tree);
+        break;
+
+      case TDMA_MSG_CAL_REPLY:
+        dissect_tdma_reply_cal(tvb, offset, tree);
+        break;
+
+      default:
+        break;
+    }
   }
 }
 
@@ -647,11 +654,10 @@ static int
 dissect_rtcfg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_) {
   int offset = 0;
   proto_tree *vers_id_tree, *vers_id_item, *flags_tree, *flags_item;
-  uint32_t vers_id;
+  uint8_t vers_id;
   uint8_t addr_type;
   uint32_t config_length,len;
   proto_tree *ti=NULL,*rtcfg_tree=NULL;
-  char* str_vers_id;
 
   /* Set the protocol column */
   col_set_str(pinfo->cinfo, COL_PROTOCOL, "RTcfg");
@@ -664,18 +670,24 @@ dissect_rtcfg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
     rtcfg_tree = proto_item_add_subtree(ti, ett_rtcfg);
   }
 
-    vers_id_item = proto_tree_add_item_ret_uint(rtcfg_tree, hf_rtcfg_vers_id, tvb,
-                                       offset, 1, ENC_NA, &vers_id);
+  vers_id = tvb_get_uint8(tvb, offset);
+
+  col_add_str(pinfo->cinfo, COL_INFO,
+           val_to_str(vers_id, rtcfg_msg_vals, "Unknown (0x%04x)"));
+
+  if( rtcfg_tree )
+  {
+    vers_id_item = proto_tree_add_uint(rtcfg_tree, hf_rtcfg_vers_id, tvb,
+                                       offset, 1, vers_id);
 
     vers_id_tree=proto_item_add_subtree(vers_id_item, ett_rtcfg);
     proto_tree_add_item(vers_id_tree, hf_rtcfg_vers, tvb, offset, 1, ENC_BIG_ENDIAN);
     proto_tree_add_item(vers_id_tree, hf_rtcfg_id, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
 
-    str_vers_id = val_to_str(pinfo->pool, vers_id, rtcfg_msg_vals, "Unknown (0x%04x)");
-    proto_item_append_text(ti, ", Version %d, %s", (vers_id >> 5), str_vers_id);
-
-    col_add_str(pinfo->cinfo, COL_INFO, str_vers_id);
+    proto_item_append_text(ti, ", Version %d, %s",
+             (vers_id >> 5),
+             val_to_str(vers_id, rtcfg_msg_vals, "Unknown (0x%04x)"));
 
     switch( vers_id & 0x1f )
     {
@@ -863,7 +875,7 @@ dissect_rtcfg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
          break;
 
     }
-
+  }
   return tvb_captured_length(tvb);
 }
 

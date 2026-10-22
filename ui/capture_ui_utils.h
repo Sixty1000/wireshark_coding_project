@@ -12,7 +12,7 @@
 #ifndef __CAPTURE_UI_UTILS_H__
 #define __CAPTURE_UI_UTILS_H__
 
-#include "ui/capture_opts.h"
+#include "capture_opts.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,7 +23,7 @@ extern "C" {
  */
 
 /**
- * @brief Find user-specified capture device description that matches interface
+ * Find user-specified capture device description that matches interface
  * name, if any.
  *
  * @param if_name The name of the interface.
@@ -34,7 +34,7 @@ extern "C" {
 char *capture_dev_user_descr_find(const char *if_name);
 
 /**
- * @brief Find user-specified link-layer header type that matches interface
+ * Find user-specified link-layer header type that matches interface
  * name, if any.
  *
  * @param if_name The name of the interface.
@@ -43,8 +43,9 @@ char *capture_dev_user_descr_find(const char *if_name);
  */
 int capture_dev_user_linktype_find(const char *if_name);
 
+#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
 /**
- * @brief Find user-specified buffer size that matches interface
+ * Find user-specified buffer size that matches interface
  * name, if any.
  *
  * @param if_name The name of the interface.
@@ -52,9 +53,10 @@ int capture_dev_user_linktype_find(const char *if_name);
  * @return The buffer size or -1 if not found.
  */
 int capture_dev_user_buffersize_find(const char *if_name);
+#endif
 
 /**
- * @brief Find user-specified snap length that matches interface
+ * Find user-specified snap length that matches interface
  * name, if any.
  *
  * @param if_name The name of the interface.
@@ -70,7 +72,7 @@ int capture_dev_user_buffersize_find(const char *if_name);
 bool capture_dev_user_snaplen_find(const char *if_name, bool *hassnap, int *snaplen);
 
 /**
- * @brief Find user-specified promiscuous mode that matches interface
+ * Find user-specified promiscuous mode that matches interface
  * name, if any.
  *
  * @param if_name The name of the interface.
@@ -82,7 +84,7 @@ bool capture_dev_user_snaplen_find(const char *if_name, bool *hassnap, int *snap
 bool capture_dev_user_pmode_find(const char *if_name, bool *pmode);
 
 /**
- * @brief Find user-specified capture filter that matches interface
+ * Find user-specified capture filter that matches interface
  * name, if any.
  *
  * This is deprecated and should not be used in new code.
@@ -93,9 +95,7 @@ bool capture_dev_user_pmode_find(const char *if_name, bool *pmode);
  */
 char* capture_dev_user_cfilter_find(const char *if_name);
 
-/**
- * @brief Return as descriptive a name for an interface as we can get.
- *
+/** Return as descriptive a name for an interface as we can get.
  * If the user has specified a comment, use that.  Otherwise,
  * if the get_iface_list() method of capture_opts supplies a
  * description, use that, otherwise use the interface name.
@@ -107,8 +107,7 @@ char* capture_dev_user_cfilter_find(const char *if_name);
  */
 char *get_interface_descriptive_name(const capture_options *capture_opts, const char *if_name);
 
-/**
- * @brief Build the GList of available capture interfaces.
+/** Build the GList of available capture interfaces.
  *
  * @param if_list An interface list from capture_interface_list().
  * @param do_hide Hide the "hidden" interfaces.
@@ -117,16 +116,14 @@ char *get_interface_descriptive_name(const capture_options *capture_opts, const 
  */
 GList *build_capture_combo_list(GList *if_list, bool do_hide);
 
-/**
- * @brief Free the GList from build_capture_combo_list().
+/** Free the GList from build_capture_combo_list().
  *
  * @param combo_list the interface list from build_capture_combo_list()
  */
 void free_capture_combo_list(GList *combo_list);
 
 
-/**
- * @brief Given text that contains an interface name possibly prefixed by an
+/** Given text that contains an interface name possibly prefixed by an
  * interface description, extract the interface name.
  *
  * @param if_text A string containing the interface description + name.
@@ -137,16 +134,14 @@ void free_capture_combo_list(GList *combo_list);
  */
 const char *get_if_name(const char *if_text);
 
-/**
- * @brief Set the active DLT for a device appropriately.
+/** Set the active DLT for a device appropriately.
  *
  * @param device the device on which to set the active DLT
  * @param global_default_dlt the global default DLT
  */
 extern void set_active_dlt(interface_t *device, int global_default_dlt);
 
-/**
- * @brief Get a descriptive string for a list of interfaces.
+/** Get a descriptive string for a list of interfaces.
  *
  * @param capture_opts The capture_options structure that contains the interfaces
  * @param style flags to indicate the style of string to use:
@@ -161,13 +156,6 @@ extern void set_active_dlt(interface_t *device, int global_default_dlt);
 #define IFLIST_QUOTE_IF_DESCRIPTION 0x00000001
 #define IFLIST_SHOW_FILTER          0x00000002
 
-/**
- * @brief Get a string containing a list of available capture interfaces.
- *
- * @param capture_opts Capture options structure.
- * @param style Style of the interface list string.
- * @return A GString containing the formatted interface list.
- */
 extern GString *get_iface_list_string(capture_options *capture_opts, uint32_t style);
 
 #ifdef __cplusplus

@@ -57,9 +57,7 @@ void dbg_print(const int* which, int how, FILE* where, const char* fmt, ... ) {
  ***************************************************************************
  * Strings repeat more often than don't. In order to save memory
  * we'll keep only one copy of each as key to a hash with a count of
- * subscribers as value. Each string is truncated to be no more than
- * SCS_HUGE_SIZE.
- * XXX - GLib 2.58 adds reference counted strings, use that?
+ * subscribers as value.
  ***************************************************************************/
 
 /**
@@ -72,45 +70,21 @@ struct _scs_collection {
 	GHashTable* hash;	/* key: a string value: unsigned number of subscribers */
 };
 
-/*
- * XXX: AFAICT destroy_scs_collection() might be called only when reading a
- *      mate config file. Since reading a new config file can apparently currently
- *      only be done once after starting Wireshark, in theory this fcn
- *      currently should never be called since there will never be an existing
- *      scs_collection to be destroyed.
+/* ToDo? free any string,ctr entries pointed to by the hash table ??
+ *       XXX: AFAIKT destroy_scs_collection() might be called only when reading a
+ *         mate config file. Since reading a new config file can apparently currently
+ *         only be done once after starting Wireshark, in theory this fcn
+ *         currently should never be called since there will never be an existing
+ *         scs_collection to be destroyed.
  */
 static void destroy_scs_collection(SCS_collection* c) {
 	if (c->hash) g_hash_table_destroy(c->hash);
 }
 
-/* The same djb2 hash used in g_str_hash, except that it stops after
- * SCS_HUGE_SIZE bytes. */
-static unsigned scs_hash(const void *v)
-{
-	const signed char *p;
-	uint32_t h = 5381;
-	size_t i = 0;
-
-	for (p = v; *p != '\0' && i++ < SCS_HUGE_SIZE; p++) {
-		h = (h << 5) + h + *p;
-	}
-
-	return h;
-}
-
-/* Compare the first SCS_HUGE_SIZE bytes for equality. */
-static gboolean scs_equal(const void *a, const void *b)
-{
-	const char *str1 = a;
-	const char *str2 = b;
-
-	return strncmp(str1, str2, SCS_HUGE_SIZE) == 0;
-}
-
 static SCS_collection* scs_init(void) {
 	SCS_collection* c = g_new(SCS_collection, 1);
 
-	c->hash = g_hash_table_new_full(scs_hash, scs_equal, g_free, g_free);
+	c->hash =  g_hash_table_new(g_str_hash,g_str_equal);
 
 	return c;
 }
@@ -122,8 +96,8 @@ static SCS_collection* scs_init(void) {
  * @param s a string
  *
  * Checks if the given string exists already and if so it increases the count of
- * subscribers and returns a pointer to the stored string. If not it will copy
- * the given string, store it in the hash, and return the pointer to the copy.
+ * subsscribers and returns a pointer to the stored string. If not It will copy
+ * the given string store it in the hash and return the pointer to the copy.
  * Remember, containment is handled internally, take care of your own strings.
  *
  * Return value: a pointer to the subscribed string.
@@ -133,21 +107,33 @@ char* scs_subscribe(SCS_collection* c, const char* s) {
 	unsigned* ip = NULL;
 	size_t len = 0;
 
-	if (g_hash_table_lookup_extended(c->hash,(const void *)s,(void * *)&orig,(void * *)&ip)) {
+	g_hash_table_lookup_extended(c->hash,(const void *)s,(void * *)&orig,(void * *)&ip);
+
+	if (ip) {
 		(*ip)++;
 	} else {
-		ip = g_new0(unsigned, 1);
+		ip = g_slice_new(unsigned);
+		*ip = 0;
 
-		len = strlen(s);
+		len = strlen(s) + 1;
 
-		if(G_LIKELY(len <= SCS_HUGE_SIZE)) {
-			orig = g_strdup(s);
+		if (len <= SCS_SMALL_SIZE) {
+			len = SCS_SMALL_SIZE;
+		} else if (len <= SCS_MEDIUM_SIZE) {
+			len = SCS_MEDIUM_SIZE;
+		} else if (len <= SCS_LARGE_SIZE) {
+			len = SCS_LARGE_SIZE;
+		} else if (len < SCS_HUGE_SIZE) {
+			len = SCS_HUGE_SIZE;
 		} else {
+			len = SCS_HUGE_SIZE;
 			ws_warning("mate SCS: string truncated due to huge size");
-			orig = g_strndup(s, SCS_HUGE_SIZE);
 		}
 
-		g_hash_table_insert(c->hash, orig, ip);
+		orig = (char *)g_slice_alloc(len);
+		(void) g_strlcpy(orig,s,len);
+
+		g_hash_table_insert(c->hash,orig,ip);
 	}
 
 	return orig;
@@ -164,16 +150,34 @@ char* scs_subscribe(SCS_collection* c, const char* s) {
 void scs_unsubscribe(SCS_collection* c, char* s) {
 	char* orig = NULL;
 	unsigned* ip = NULL;
+	size_t len = 0xffff;
 
-	if (g_hash_table_lookup_extended(c->hash,(const void *)s,(void **)&orig,(void **)&ip)) {
+	g_hash_table_lookup_extended(c->hash,(const void *)s,(void * *)&orig,(void * *)&ip);
+
+	if (ip) {
 		if (*ip == 0) {
 			g_hash_table_remove(c->hash,orig);
+
+			len = strlen(orig);
+
+			if (len < SCS_SMALL_SIZE) {
+				len = SCS_SMALL_SIZE;
+			} else if (len < SCS_MEDIUM_SIZE) {
+				len = SCS_MEDIUM_SIZE;
+			} else if (len < SCS_LARGE_SIZE) {
+				len = SCS_LARGE_SIZE;
+			} else {
+				len = SCS_HUGE_SIZE;
+			}
+
+			g_slice_free1(len, orig);
+			g_slice_free(unsigned,ip);
 		}
 		else {
 			(*ip)--;
 		}
 	} else {
-		ws_warning("mate SCS: not subscribed");
+		ws_warning("unsubscribe: not subscribed");
 	}
 }
 
@@ -183,21 +187,18 @@ void scs_unsubscribe(SCS_collection* c, char* s) {
  *
  * Formats the input and subscribes it.
  *
- * Return value: the stored copy of the formatted string.
+ * Return value: the stored copy of the formated string.
  *
  **/
 char* scs_subscribe_printf(SCS_collection* c, char* fmt, ...) {
 	va_list list;
-	char *buf, *ret;
+	static char buf[SCS_HUGE_SIZE];
 
 	va_start( list, fmt );
-	buf = g_strdup_vprintf(fmt, list);
+	vsnprintf(buf, SCS_HUGE_SIZE, fmt, list);
 	va_end( list );
 
-	ret = scs_subscribe(c, buf);
-	g_free(buf);
-
-	return ret;
+	return scs_subscribe(c,buf);
 }
 
 /***************************************************************************
@@ -597,7 +598,7 @@ extern AVP* extract_avp_by_name(AVPL* avpl, char* name) {
  * extract_first_avp:
  * @param avpl the avpl from which to try to extract the avp.
  *
- * Extracts the first avp from the avpl.
+ * Extracts the fisrt avp from the avpl.
  *
  * Return value: a pointer to extracted avp if there's one, else NULL.
  *
@@ -751,7 +752,7 @@ char* avpl_to_str(AVPL* avpl) {
 		g_free(avp_s);
 	}
 
-	r = g_string_free(s, FALSE);
+	r = g_string_free(s,FALSE);
 
 	/* g_strchug(r); ? */
 	return r;
@@ -769,7 +770,7 @@ extern char* avpl_to_dotstr(AVPL* avpl) {
 		g_free(avp_s);
 	}
 
-	r = g_string_free(s, FALSE);
+	r = g_string_free(s,FALSE);
 
 	/* g_strchug(r); ? */
 	return r;
@@ -847,7 +848,7 @@ extern void merge_avpl(AVPL* dst, AVPL* src, bool copy_avps) {
  * @param copy_avps whether avps should be copied instead of referenced.
  *
  * Creates a new avpl containing the same avps as the given avpl
- * It will either reference or copy the avps.
+ * It will either reference or copie the avps.
  *
  * Return value: a pointer to the newly allocated string.
  *
@@ -1220,9 +1221,6 @@ extern void avpl_transform(AVPL* src, AVPL_Transf* op) {
 
 							cs->prev->next = cs->next;
 							cs->next->prev = cs->prev;
-
-							if (cs->avp)
-								delete_avp(cs->avp);
 							g_slice_free(any_avp_type,(any_avp_type*)cs);
 
 							cs = n;
@@ -1402,7 +1400,7 @@ extern AVPL* get_next_avpl(LoAL* loal,void** cookie) {
  * @param avpls_too whether avpls contained by the loal should be deleted as well
  * @param avps_too whether avps contained by the avpls should be also deleted
  *
- * Destroys a loal and eventually destroys avpls and avps.
+ * Destroys a loal and eventually desstroys avpls and avps.
  *
  **/
 extern void delete_loal(LoAL* loal, bool avpls_too, bool avps_too) {
@@ -1490,7 +1488,7 @@ extern LoAL* loal_from_file(char* filename) {
 	char c;
 	int i = 0;
 	uint32_t linenum = 1;
-	GString *linenum_buf;
+	char *linenum_buf;
 	char *name;
 	char *value;
 	char op = '?';
@@ -1506,7 +1504,7 @@ extern LoAL* loal_from_file(char* filename) {
 		MY_IGNORE
 	} state;
 
-	linenum_buf = g_string_new(NULL);
+	linenum_buf = (char*)g_malloc(MAX_ITEM_LEN);
 	name = (char*)g_malloc(MAX_ITEM_LEN);
 	value = (char*)g_malloc(MAX_ITEM_LEN);
 #ifndef _WIN32
@@ -1563,9 +1561,8 @@ extern LoAL* loal_from_file(char* filename) {
 							i = 0;
 							name[i++] = c;
 							name[i] = '\0';
-							g_string_append_printf(linenum_buf, "%s:%u", filename, linenum);
-							curr = new_avpl(linenum_buf->str);
-							g_string_set_size(linenum_buf, 0);
+							snprintf(linenum_buf,MAX_ITEM_LEN,"%s:%u",filename,linenum);
+							curr = new_avpl(linenum_buf);
 							continue;
 						case '#':
 							state = MY_IGNORE;
@@ -1593,7 +1590,6 @@ extern LoAL* loal_from_file(char* filename) {
 							continue;
 						case '\n':
 							loal_append(loal,curr);
-							curr = NULL;
 							state = START;
 							continue;
 						default:
@@ -1661,14 +1657,7 @@ extern LoAL* loal_from_file(char* filename) {
 		}
 		fclose (fp);
 
-		if (curr) {
-			// Premature EOF? It could just be a file that doesn't
-			// end in a newline, but hard to say without checking
-			// state. Error, discard, add to existing loal?
-			delete_avpl(curr,true);
-		}
-
-		g_string_free(linenum_buf, TRUE);
+		g_free(linenum_buf);
 		g_free(name);
 		g_free(value);
 
@@ -1680,9 +1669,22 @@ extern LoAL* loal_from_file(char* filename) {
 	}
 
 error:
-	g_string_free(linenum_buf, TRUE);
+	g_free(linenum_buf);
 	g_free(name);
 	g_free(value);
 
 	return loal_error;
 }
+
+/*
+ * Editor modelines  -  https://www.wireshark.org/tools/modelines.html
+ *
+ * Local variables:
+ * c-basic-offset: 8
+ * tab-width: 8
+ * indent-tabs-mode: t
+ * End:
+ *
+ * vi: set shiftwidth=8 tabstop=8 noexpandtab:
+ * :indentSize=8:tabSize=8:noTabs=false:
+ */

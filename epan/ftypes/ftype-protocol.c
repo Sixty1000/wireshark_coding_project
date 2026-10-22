@@ -22,7 +22,7 @@ value_new(fvalue_t *fv)
 	fv->value.protocol.tvb = NULL;
 	fv->value.protocol.proto_string = NULL;
 	fv->value.protocol.tvb_is_private = false;
-	fv->value.protocol.length = 0;
+	fv->value.protocol.length = -1;
 }
 
 static void
@@ -44,7 +44,7 @@ value_free(fvalue_t *fv)
 }
 
 static void
-value_set(fvalue_t *fv, tvbuff_t *value, const char *name, unsigned length)
+value_set(fvalue_t *fv, tvbuff_t *value, const char *name, int length)
 {
 	/* Free up the old value, if we have one */
 	value_free(fv);
@@ -71,7 +71,7 @@ val_from_string(fvalue_t *fv, const char *s, size_t len, char **err_msg _U_)
 	 * terminating NUL. */
 	private_data = (uint8_t *)g_memdup2(s, (unsigned)len);
 	new_tvb = tvb_new_real_data(private_data,
-			(unsigned)len, (unsigned)len);
+			(unsigned)len, (int)len);
 
 	/* Let the tvbuff know how to delete the data. */
 	tvb_set_free_cb(new_tvb, g_free);
@@ -83,7 +83,7 @@ val_from_string(fvalue_t *fv, const char *s, size_t len, char **err_msg _U_)
 	 * (e.g., proto_expert) */
 	fv->value.protocol.tvb = new_tvb;
 	fv->value.protocol.proto_string = g_strdup("");
-	fv->value.protocol.length = (unsigned)len;
+	fv->value.protocol.length = -1;
 	return true;
 }
 
@@ -97,7 +97,7 @@ val_from_literal(fvalue_t *fv, const char *s, bool allow_partial_value _U_, char
 	value_free(fv);
 	fv->value.protocol.tvb = NULL;
 	fv->value.protocol.proto_string = NULL;
-	fv->value.protocol.length = 0;
+	fv->value.protocol.length = -1;
 
 	/* Does this look like a byte string? */
 	bytes = byte_array_from_literal(s, err_msg);
@@ -108,13 +108,12 @@ val_from_literal(fvalue_t *fv, const char *s, bool allow_partial_value _U_, char
 		/* Let the tvbuff know how to delete the data. */
 		tvb_set_free_cb(new_tvb, g_free);
 
+		/* Free GByteArray, but keep data. */
+		g_byte_array_free(bytes, false);
+
 		/* And let us know that we need to free the tvbuff */
 		fv->value.protocol.tvb_is_private = true;
 		fv->value.protocol.tvb = new_tvb;
-		fv->value.protocol.length = bytes->len;
-
-		/* Free GByteArray, but keep data. */
-		g_byte_array_free(bytes, false);
 
 		/* This "field" is a value, it has no protocol description, but
 		 * we might compare it to a protocol with NULL tvb.
@@ -137,7 +136,7 @@ val_from_charconst(fvalue_t *fv, unsigned long num, char **err_msg)
 	value_free(fv);
 	fv->value.protocol.tvb = NULL;
 	fv->value.protocol.proto_string = NULL;
-	fv->value.protocol.length = 0;
+	fv->value.protocol.length = -1;
 
 	/* Does this look like a byte string? */
 	bytes = byte_array_from_charconst(num, err_msg);
@@ -148,13 +147,12 @@ val_from_charconst(fvalue_t *fv, unsigned long num, char **err_msg)
 		/* Let the tvbuff know how to delete the data. */
 		tvb_set_free_cb(new_tvb, g_free);
 
+		/* Free GByteArray, but keep data. */
+		g_byte_array_free(bytes, false);
+
 		/* And let us know that we need to free the tvbuff */
 		fv->value.protocol.tvb_is_private = true;
 		fv->value.protocol.tvb = new_tvb;
-		fv->value.protocol.length = bytes->len;
-
-		/* Free GByteArray, but keep data. */
-		g_byte_array_free(bytes, false);
 
 		/* This "field" is a value, it has no protocol description, but
 		 * we might compare it to a protocol with NULL tvb.
@@ -177,7 +175,10 @@ val_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype, int fie
 		return NULL;
 
 	TRY {
-		length = fv->value.protocol.length;
+		if (fv->value.protocol.length >= 0)
+			length = fv->value.protocol.length;
+		else
+			length = tvb_captured_length(fv->value.protocol.tvb);
 
 		if (length) {
 			if (rtype == FTREPR_DFILTER)
@@ -198,7 +199,9 @@ value_get(fvalue_t *fv)
 {
 	if (fv->value.protocol.tvb == NULL)
 		return NULL;
-	return tvb_new_subset_length(fv->value.protocol.tvb, 0, fv->value.protocol.length);
+	if (fv->value.protocol.length < 0)
+		return fv->value.protocol.tvb;
+	return tvb_new_subset_length_caplen(fv->value.protocol.tvb, 0, fv->value.protocol.length, fv->value.protocol.length);
 }
 
 static unsigned
@@ -208,7 +211,11 @@ len(fvalue_t *fv)
 
 	TRY {
 		if (fv->value.protocol.tvb) {
-			length = fv->value.protocol.length;
+			if (fv->value.protocol.length >= 0)
+				length = fv->value.protocol.length;
+			else
+				length = tvb_captured_length(fv->value.protocol.tvb);
+
 		}
 	}
 	CATCH_ALL {
@@ -226,7 +233,7 @@ slice(fvalue_t *fv, GByteArray *bytes, unsigned offset, unsigned length)
 	volatile unsigned len = length;
 
 	if (fv->value.protocol.tvb) {
-		if (fv->value.protocol.length < len) {
+		if (fv->value.protocol.length >= 0 && (unsigned)fv->value.protocol.length < len) {
 			len = fv->value.protocol.length;
 		}
 
@@ -245,8 +252,18 @@ slice(fvalue_t *fv, GByteArray *bytes, unsigned offset, unsigned length)
 static int
 _tvbcmp(const protocol_value_t *a, const protocol_value_t *b)
 {
-	unsigned	a_len = a->length;
-	unsigned	b_len = b->length;
+	unsigned	a_len;
+	unsigned	b_len;
+
+	if (a->length < 0)
+		a_len = tvb_captured_length(a->tvb);
+	else
+		a_len = a->length;
+
+	if (b->length < 0)
+		b_len = tvb_captured_length(b->tvb);
+	else
+		b_len = b->length;
 
 	if (a_len != b_len)
 		return a_len < b_len ? -1 : 1;
@@ -284,7 +301,7 @@ cmp_contains(const fvalue_t *fv_a, const fvalue_t *fv_b, bool *contains)
 	TRY {
 		/* First see if tvb exists for both sides */
 		if ((fv_a->value.protocol.tvb != NULL) && (fv_b->value.protocol.tvb != NULL)) {
-			if (tvb_find_tvb_remaining(fv_a->value.protocol.tvb, fv_b->value.protocol.tvb, 0, NULL)) {
+			if (tvb_find_tvb(fv_a->value.protocol.tvb, fv_b->value.protocol.tvb, 0) > -1) {
 				yes = true;
 			}
 		} else {
@@ -378,7 +395,6 @@ ftype_register_tvbuff(void)
 
 		val_hash,
 		is_zero,
-		NULL,
 		NULL,
 		len,
 		(FvalueSlice)slice,

@@ -8,7 +8,6 @@
  */
 
 #include <ui/qt/utils/stock_icon.h>
-#include <ui/qt/utils/themes/themed_icon.h>
 
 // Stock icons. Based on gtk/stock_icons.h
 
@@ -50,21 +49,110 @@
 #include <QStyle>
 #include <QStyleOption>
 
+static const QString path_pfx_ = ":/stock_icons/";
 
-StockIcon::StockIcon(const char *icon_name) :
+// Map FreeDesktop icon names to Qt standard pixmaps.
+static QMap<QString, QStyle::StandardPixmap> icon_name_to_standard_pixmap_;
+
+StockIcon::StockIcon(const QString icon_name) :
     QIcon()
 {
-    ThemedIcon themed_icon(icon_name);
-    swap(themed_icon);
+    if (icon_name_to_standard_pixmap_.isEmpty()) {
+        fillIconNameMap();
+    }
+
+    // Does our theme contain this icon?
+    // As of Qt 6.7 QIcon has theme icons on Windows and macOS - but it
+    // doesn't have all of them. It looks particularly bad to mix and
+    // match theme icons with our icons next to each other (e.g.
+    // themed "go-previous" and "go-next" but our "go-jump", "go-first",
+    // and "go-last". We could maybe pick and choose certain ones to
+    // use. Note that the QIcon::ThemeIcon enum has a list of "commonly
+    // available" icons on most of the platforms.
+#if !defined(Q_OS_MAC) && !defined(Q_OS_WIN)
+    if (hasThemeIcon(icon_name)) {
+        QIcon theme_icon = fromTheme(icon_name);
+        swap(theme_icon);
+        return;
+    }
+#endif
+
+    // Is this is an icon we've manually mapped to a standard pixmap below?
+    if (icon_name_to_standard_pixmap_.contains(icon_name)) {
+        QIcon standard_icon = qApp->style()->standardIcon(icon_name_to_standard_pixmap_[icon_name]);
+        swap(standard_icon);
+        return;
+    }
+
+    // Is this one of our locally sourced, cage-free, organic icons?
+    QStringList types = QStringList() << "24x24" << "24x14" << "16x16" << "14x14" << "8x8";
+    QList<QIcon::Mode> icon_modes = QList<QIcon::Mode>()
+            << QIcon::Disabled
+            << QIcon::Active
+            << QIcon::Selected;
+    foreach (QString type, types) {
+        // First, check for a template (mask) icon
+        // Templates should be monochrome as described at
+        // https://developer.apple.com/design/human-interface-guidelines/macos/icons-and-images/custom-icons/
+        // Transparency is supported.
+        QString icon_path_template = path_pfx_ + QString("%1/%2.template.png").arg(type).arg(icon_name);
+        if (QFile::exists(icon_path_template)) {
+            QIcon mask_icon = QIcon();
+            mask_icon.addFile(icon_path_template);
+
+            foreach(QSize sz, mask_icon.availableSizes()) {
+                QPixmap mask_pm = mask_icon.pixmap(sz);
+                QImage normal_img(sz, QImage::Format_ARGB32);
+                QPainter painter(&normal_img);
+                QBrush br(qApp->palette().color(QPalette::Active, QPalette::WindowText));
+                painter.fillRect(0, 0, sz.width(), sz.height(), br);
+                painter.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+                painter.drawPixmap(0, 0, mask_pm);
+
+                QPixmap normal_pm = QPixmap::fromImage(normal_img);
+                addPixmap(normal_pm, QIcon::Normal, QIcon::On);
+                addPixmap(normal_pm, QIcon::Normal, QIcon::Off);
+
+                QStyleOption opt = {};
+                opt.palette = qApp->palette();
+                foreach (QIcon::Mode icon_mode, icon_modes) {
+                    QPixmap mode_pm = qApp->style()->generatedIconPixmap(icon_mode, normal_pm, &opt);
+                    addPixmap(mode_pm, icon_mode, QIcon::On);
+                    addPixmap(mode_pm, icon_mode, QIcon::Off);
+                }
+            }
+            continue;
+        }
+
+        // Regular full-color icons
+        QString icon_path = path_pfx_ + QString("%1/%2.png").arg(type).arg(icon_name);
+        if (QFile::exists(icon_path)) {
+            addFile(icon_path);
+        }
+
+        // Along with each name check for "<name>.active" and
+        // "<name>.selected" for the Active and Selected modes, and
+        // "<name>.on" to use for the on (checked) state.
+        // XXX Allow more (or all) combinations.
+        QString icon_path_active = path_pfx_ + QString("%1/%2.active.png").arg(type).arg(icon_name);
+        if (QFile::exists(icon_path_active)) {
+            addFile(icon_path_active, QSize(), QIcon::Active, QIcon::On);
+        }
+
+        QString icon_path_selected = path_pfx_ + QString("%1/%2.selected.png").arg(type).arg(icon_name);
+        if (QFile::exists(icon_path_selected)) {
+            addFile(icon_path_selected, QSize(), QIcon::Selected, QIcon::On);
+        }
+
+        QString icon_path_on = path_pfx_ + QString("%1/%2.on.png").arg(type).arg(icon_name);
+        if (QFile::exists(icon_path_on)) {
+            addFile(icon_path_on, QSize(), QIcon::Normal, QIcon::On);
+        }
+    }
 }
 
 // Create a square icon filled with the specified color.
 QIcon StockIcon::colorIcon(const QRgb bg_color, const QRgb fg_color, const QString glyph)
-{
-    return colorIcon(QColor(bg_color), fg_color, glyph);
-}
-
-QIcon StockIcon::colorIcon(const QColor bg_color, const QRgb fg_color, const QString glyph)
 {
     QList<int> sizes = QList<int>() << 48 << 32 << 24 << 16 << 12;
     QIcon color_icon;
@@ -160,4 +248,14 @@ QIcon StockIcon::colorIconCircle(const QRgb bg_color, const QRgb fg_color)
         color_icon.addPixmap(pm);
     }
     return color_icon;
+}
+
+void StockIcon::fillIconNameMap()
+{
+    // Note that some of Qt's standard pixmaps are awful. We shouldn't add an
+    // entry just because a match can be made.
+    icon_name_to_standard_pixmap_["document-open"] = QStyle::SP_DirIcon;
+    icon_name_to_standard_pixmap_["media-playback-pause"] = QStyle::SP_MediaPause;
+    icon_name_to_standard_pixmap_["media-playback-start"] = QStyle::SP_MediaPlay;
+    icon_name_to_standard_pixmap_["media-playback-stop"] = QStyle::SP_MediaStop;
 }

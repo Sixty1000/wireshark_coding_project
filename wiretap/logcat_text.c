@@ -11,7 +11,7 @@
 
 #include <string.h>
 
-#include "wtap_module.h"
+#include "wtap-int.h"
 #include "file_wrappers.h"
 
 #include "logcat.h"
@@ -32,7 +32,7 @@ void register_logcat_text(void);
 
 /* Returns '?' for invalid priorities */
 static char get_priority(const uint8_t priority) {
-    static const char priorities[] = "??VDIWEFS";
+    static char priorities[] = "??VDIWEFS";
 
     if (priority >= (uint8_t) sizeof(priorities))
         return '?';
@@ -181,8 +181,9 @@ static void get_time(char *string, wtap_rec *rec) {
     }
 }
 
-static bool logcat_text_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
-        int file_type) {
+static bool logcat_text_read_packet(FILE_T fh, wtap_rec *rec,
+        Buffer *buf, int file_type) {
+    int8_t *pd;
     char *cbuff;
     char *ret = NULL;
 
@@ -218,19 +219,17 @@ static bool logcat_text_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
             return false;
         }
 
-        if (file_seek(fh, file_off, SEEK_SET, &err) == -1) {
-            g_free(cbuff);
-            g_free(lbuff);
-            return false;
-        }
+        file_seek(fh,file_off,SEEK_SET,&err);
         g_free(lbuff);
     }
 
-    wtap_setup_packet_rec(rec, wth->file_encap);
+    rec->rec_type = REC_TYPE_PACKET;
     rec->block = wtap_block_create(WTAP_BLOCK_PACKET);
     rec->rec_header.packet_header.caplen = (uint32_t)strlen(cbuff);
     rec->rec_header.packet_header.len = rec->rec_header.packet_header.caplen;
 
+    ws_buffer_assure_space(buf, rec->rec_header.packet_header.caplen + 1);
+    pd = ws_buffer_start_ptr(buf);
     if ((logcat_text_time_file_type_subtype == file_type
             || logcat_text_threadtime_file_type_subtype == file_type
             || logcat_text_long_file_type_subtype == file_type)
@@ -245,24 +244,25 @@ static bool logcat_text_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
         rec->ts.secs = (time_t) 0;
         rec->ts.nsecs = 0;
     }
-    ws_buffer_append(&rec->data, (uint8_t*)cbuff, rec->rec_header.packet_header.caplen + 1);
+    memcpy(pd, cbuff, rec->rec_header.packet_header.caplen + 1);
     g_free(cbuff);
     return true;
 }
 
 static bool logcat_text_read(wtap *wth, wtap_rec *rec,
-        int *err _U_ , char **err_info _U_, int64_t *data_offset) {
+        Buffer *buf, int *err _U_ , char **err_info _U_, int64_t *data_offset) {
     *data_offset = file_tell(wth->fh);
 
-    return logcat_text_read_packet(wth, wth->fh, rec, wth->file_type_subtype);
+    return logcat_text_read_packet(wth->fh, rec, buf, wth->file_type_subtype);
 }
 
 static bool logcat_text_seek_read(wtap *wth, int64_t seek_off,
-        wtap_rec *rec, int *err, char **err_info _U_) {
+        wtap_rec *rec, Buffer *buf, int *err, char **err_info _U_) {
     if (file_seek(wth->random_fh, seek_off, SEEK_SET, err) == -1)
         return false;
 
-    if (!logcat_text_read_packet(wth, wth->random_fh, rec, wth->file_type_subtype)) {
+    if (!logcat_text_read_packet(wth->random_fh, rec, buf,
+            wth->file_type_subtype)) {
         if (*err == 0)
             *err = WTAP_ERR_SHORT_READ;
         return false;
@@ -270,7 +270,7 @@ static bool logcat_text_seek_read(wtap *wth, int64_t seek_off,
     return true;
 }
 
-wtap_open_return_val logcat_text_open(wtap *wth, int *err, char **err_info) {
+wtap_open_return_val logcat_text_open(wtap *wth, int *err, char **err_info _U_) {
     char *cbuff;
     char *ret = NULL;
 
@@ -284,19 +284,6 @@ wtap_open_return_val logcat_text_open(wtap *wth, int *err, char **err_info) {
             && ((3 > strlen(cbuff))
                     || g_regex_match_simple(SPECIAL_STRING, cbuff, (GRegexCompileFlags)(G_REGEX_ANCHORED | G_REGEX_RAW),
                             G_REGEX_MATCH_NOTEMPTY)));
-
-    /*
-     * If no line was read, cbuff may never have been written. (If an
-     * earlier line was read, it was too short or a special line, which
-     * doesn't match any of the formats anyway.)
-     */
-    if (ret == NULL) {
-        g_free(cbuff);
-        *err = file_error(wth->fh, err_info);
-        if (*err != 0)
-            return WTAP_OPEN_ERROR;
-        return WTAP_OPEN_NOT_MINE;
-    }
 
     if (g_regex_match_simple(BRIEF_STRING, cbuff, (GRegexCompileFlags)(G_REGEX_ANCHORED | G_REGEX_RAW),
             G_REGEX_MATCH_NOTEMPTY)) {
@@ -442,18 +429,17 @@ static int logcat_text_long_dump_can_write_encap(int encap) {
     }
 }
 
-static bool logcat_text_dump_text(wtap_dumper *wdh, const wtap_rec *rec,
-    int *err, char **err_info)
+static bool logcat_text_dump_text(wtap_dumper *wdh,
+    const wtap_rec *rec,
+    const uint8_t *pd, int *err, char **err_info)
 {
     char                           *buf;
-    unsigned                        length;
+    int                             length;
     char                            priority;
     const struct logger_entry      *log_entry;
     const struct logger_entry_v2   *log_entry_v2;
-    unsigned                        hdr_size;
-    unsigned                        payload_length;
+    int                             payload_length;
     const char                     *tag;
-    const uint8_t                  *tag_end;
     int32_t                         pid;
     int32_t                         tid;
     int32_t                         seconds;
@@ -470,7 +456,6 @@ static bool logcat_text_dump_text(wtap_dumper *wdh, const wtap_rec *rec,
     /* We can only write packet records. */
     if (rec->rec_type != REC_TYPE_PACKET) {
         *err = WTAP_ERR_UNWRITABLE_REC_TYPE;
-        *err_info = wtap_unwritable_rec_type_err_string(rec);
         return false;
     }
 
@@ -483,37 +468,25 @@ static bool logcat_text_dump_text(wtap_dumper *wdh, const wtap_rec *rec,
         return false;
     }
 
-    const uint8_t *pd = ws_buffer_start_ptr(&rec->data);
-
     switch (wdh->file_encap) {
     case WTAP_ENCAP_WIRESHARK_UPPER_PDU:
         {
-            unsigned skipped_length;
+            int skipped_length;
 
-            length = rec->rec_header.packet_header.caplen;
-            if (!logcat_exported_pdu_length(pd, length, &skipped_length) ||
-                ckd_sub(&length, length, skipped_length)) {
-                *err = WTAP_ERR_BAD_FILE;
-                return false;
-            }
+            skipped_length = logcat_exported_pdu_length(pd);
             pd += skipped_length;
 
-            if (!wtap_dump_file_write(wdh, (const char*) pd, length, err)) {
+            if (!wtap_dump_file_write(wdh, (const char*) pd, rec->rec_header.packet_header.caplen - skipped_length, err)) {
                 return false;
             }
         }
         break;
     case WTAP_ENCAP_LOGCAT:
-        length = rec->rec_header.packet_header.caplen;
+        /* Skip EXPORTED_PDU*/
         if (wdh->file_encap == WTAP_ENCAP_WIRESHARK_UPPER_PDU) {
-            /* Skip EXPORTED_PDU - XXX - This is unreachable. */
-            unsigned skipped_length;
+            int skipped_length;
 
-            if (!logcat_exported_pdu_length(pd, length, &skipped_length) ||
-                ckd_sub(&length, length, skipped_length)) {
-                *err = WTAP_ERR_BAD_FILE;
-                return false;
-            }
+            skipped_length = logcat_exported_pdu_length(pd);
             pd += skipped_length;
 
             logcat_version = buffered_detect_version(pd);
@@ -526,12 +499,27 @@ static bool logcat_text_dump_text(wtap_dumper *wdh, const wtap_rec *rec,
         log_entry    = (const struct logger_entry *)(const void *) pd;
         log_entry_v2 = (const struct logger_entry_v2 *)(const void *) pd;
 
+        payload_length = GINT32_FROM_LE(log_entry->len);
+        pid = GINT32_FROM_LE(log_entry->pid);
+        tid = GINT32_FROM_LE(log_entry->tid);
+        seconds = GINT32_FROM_LE(log_entry->sec);
+        milliseconds = GINT32_FROM_LE(log_entry->nsec) / 1000000;
+
+        /* msg: <prio:1><tag:N>\0<msg:N>\0 with N >= 0, last \0 can be missing */
         if (logcat_version == 1) {
-            hdr_size = sizeof(*log_entry);
             msg_payload = (const uint8_t *) (log_entry + 1);
+
+            priority = get_priority(msg_payload[0]);
+            tag = msg_payload + 1;
+            msg_pre_skip = 1 + (int) strlen(tag) + 1;
+            msg_begin = msg_payload + msg_pre_skip;
         } else if (logcat_version == 2) {
-            hdr_size = sizeof(*log_entry_v2);
             msg_payload = (const uint8_t *) (log_entry_v2 + 1);
+
+            priority = get_priority(msg_payload[0]);
+            tag = msg_payload + 1;
+            msg_pre_skip = 1 + (int) strlen(tag) + 1;
+            msg_begin = msg_payload + msg_pre_skip;
         } else {
             *err = WTAP_ERR_UNWRITABLE_REC_DATA;
             *err_info = ws_strdup_printf("logcat: version %d isn't supported",
@@ -539,40 +527,8 @@ static bool logcat_text_dump_text(wtap_dumper *wdh, const wtap_rec *rec,
             return false;
         }
 
-        /* The record must contain the header and the whole payload */
-        if (length < hdr_size) {
-            *err = WTAP_ERR_UNWRITABLE_REC_DATA;
-            *err_info = ws_strdup_printf("logcat: record length %u is shorter than the %u byte header",
-                                        length, hdr_size);
-            return false;
-        }
-        payload_length = GUINT16_FROM_LE(log_entry->len);
-        if (payload_length > length - hdr_size) {
-            *err = WTAP_ERR_UNWRITABLE_REC_DATA;
-            *err_info = ws_strdup_printf("logcat: payload length %u is longer than the %u bytes remaining in the record",
-                                        payload_length, length - hdr_size);
-            return false;
-        }
-
-        pid = GINT32_FROM_LE(log_entry->pid);
-        tid = GINT32_FROM_LE(log_entry->tid);
-        seconds = GINT32_FROM_LE(log_entry->sec);
-        milliseconds = GINT32_FROM_LE(log_entry->nsec) / 1000000;
-
-        /* msg: <prio:1><tag:N>\0<msg:N>\0 with N >= 0, last \0 can be missing */
-        tag_end = (payload_length > 1) ? memchr(msg_payload + 1, '\0', payload_length - 1) : NULL;
-        if (tag_end == NULL) {
-            *err = WTAP_ERR_UNWRITABLE_REC_DATA;
-            *err_info = g_strdup("logcat: payload doesn't contain a priority and a terminated tag");
-            return false;
-        }
-        priority = get_priority(msg_payload[0]);
-        tag = (const char*)(msg_payload + 1);
-        msg_pre_skip = (int)(tag_end - msg_payload) + 1;
-        msg_begin = (const char*)(msg_payload + msg_pre_skip);
-
         /* copy the message part. If a nul byte was missing, it will be added. */
-        log = g_strndup(msg_begin, payload_length - (unsigned)msg_pre_skip);
+        log = g_strndup(msg_begin, payload_length - msg_pre_skip);
 
         /* long format: display one header followed by the whole message (which may
          * contain new lines). Other formats: include tag, etc. with each line */

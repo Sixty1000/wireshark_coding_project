@@ -7,7 +7,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-#pragma once
+
+#ifndef __SRT_TABLE_H__
+#define __SRT_TABLE_H__
+
 #include "tap.h"
 #include "timestats.h"
 #include <epan/wmem_scopes.h>
@@ -50,10 +53,6 @@ typedef struct _srt_data_t {
 
 /** Structure for information about a registered service response table */
 typedef struct register_srt register_srt_t;
-
-/** Initialize the service response time system.
- */
-extern void srt_table_init(void);
 
 /** Register the service response time table for the srt windows.
  *
@@ -168,13 +167,6 @@ WS_DLL_PUBLIC void srt_table_dissector_init(register_srt_t* srt, GArray* srt_arr
  */
 WS_DLL_PUBLIC char* srt_table_get_tap_string(register_srt_t* srt);
 
-/** Helper function to get handler of parameter
- *
- * @param srt Registered SRT
- * @return Parameter function handler for the table
- */
-WS_DLL_PUBLIC srt_param_handler_cb srt_table_get_param_handler_cb(register_srt_t* srt);
-
 /** Init an srt table data structure.
  *
  * @param name the table name
@@ -209,6 +201,8 @@ WS_DLL_PUBLIC void add_srt_table_data(srt_stat_table *rst, int proc_index, const
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
+
+#endif /* __SRT_TABLE_H__ */
 
 /*
  * Editor modelines

@@ -11,7 +11,6 @@
 #include <ui/qt/models/atap_data_model.h>
 
 #include <ui/qt/utils/color_utils.h>
-#include <ui/qt/utils/theme_styler.h>
 
 #include <QApplication>
 #include <QPainter>
@@ -23,7 +22,7 @@
 // PercentBarDelegate uses a stronger blend value, but its bars are also
 // more of a prominent feature. Make the blend weaker here so that we don't
 // obscure our text.
-static const double bar_blend_ = 0.16;
+static const double bar_blend_ = 0.08;
 
 TimelineDelegate::TimelineDelegate(QWidget *parent) :
     QStyledItemDelegate(parent)
@@ -43,21 +42,14 @@ void TimelineDelegate::paint(QPainter *painter, const QStyleOptionViewItem &opti
     QStyledItemDelegate::initStyleOption(&option_vi, index);
 
     bool drawBar = false;
-#if WS_IS_AT_LEAST_GNUC_VERSION(14,2)
-DIAG_OFF(array-bounds=)
-#endif
     struct timeline_span span_px = index.data(_dataRole).value<struct timeline_span>();
-#if WS_IS_AT_LEAST_GNUC_VERSION(14,2)
-DIAG_ON(array-bounds=)
-#endif
     if (_dataRole == ATapDataModel::TIMELINE_DATA) {
         double span_s = span_px.maxRelTime - span_px.minRelTime;
         QTreeView * tree = qobject_cast<QTreeView *>(parent());
         if (tree) {
             QAbstractProxyModel * proxy = qobject_cast<QAbstractProxyModel *>(tree->model());
             if (proxy && proxy->sourceModel()) {
-                QModelIndex sourceIndex = proxy->mapToSource(index);
-                QModelIndex indexStart = proxy->mapFromSource(sourceIndex.siblingAtColumn(span_px.colStart));
+                QModelIndex indexStart = proxy->mapFromSource(proxy->sourceModel()->index(0, span_px.colStart));
                 int colStart = -1;
                 int start_px = 0;
                 if (indexStart.isValid()) {
@@ -66,7 +58,7 @@ DIAG_ON(array-bounds=)
                 }
                 int colDuration = -1;
                 int column_px = start_px;
-                QModelIndex indexDuration = proxy->mapFromSource(sourceIndex.siblingAtColumn(span_px.colDuration));
+                QModelIndex indexDuration = proxy->mapFromSource(proxy->sourceModel()->index(0, span_px.colDuration));
                 if (indexDuration.isValid()) {
                     colDuration = indexDuration.column();
                     column_px += tree->columnWidth(colDuration);
@@ -96,7 +88,7 @@ DIAG_ON(array-bounds=)
     QStyle *style = option_vi.widget ? option_vi.widget->style() : QApplication::style();
     style->drawControl(QStyle::CE_ItemViewItem, &option_vi, painter, option_vi.widget);
 
-    if (ThemeStyler::baseStyleName().startsWith("windows")) { // windows11, windowsvista
+    if (QApplication::style()->objectName().contains("vista")) {
         // QWindowsVistaStyle::drawControl does this internally. Unfortunately there
         // doesn't appear to be a more general way to do this.
         option_vi.palette.setColor(QPalette::All, QPalette::HighlightedText,
@@ -106,16 +98,14 @@ DIAG_ON(array-bounds=)
     QPalette::ColorGroup cg = option_vi.state & QStyle::State_Enabled
                               ? QPalette::Normal : QPalette::Disabled;
     QColor text_color = option_vi.palette.color(cg, QPalette::Text);
-    QColor bar_color = option_vi.features.testFlag(QStyleOptionViewItem::Alternate) ?
-                       option_vi.palette.color(cg, QPalette::AlternateBase) :
-                       option_vi.palette.color(cg, QPalette::Base);
-    bar_color = ColorUtils::alphaBlend(text_color, bar_color, bar_blend_);
+    QColor bar_color = ColorUtils::alphaBlend(option_vi.palette.windowText(),
+                                              option_vi.palette.window(), bar_blend_);
 
     if (cg == QPalette::Normal && !(option_vi.state & QStyle::State_Active))
         cg = QPalette::Inactive;
     if (option_vi.state & QStyle::State_Selected) {
         text_color = option_vi.palette.color(cg, QPalette::HighlightedText);
-        bar_color = ColorUtils::alphaBlend(text_color,
+        bar_color = ColorUtils::alphaBlend(option_vi.palette.color(cg, QPalette::Window),
                                            option_vi.palette.color(cg, QPalette::Highlight),
                                            bar_blend_);
     }

@@ -1,4 +1,4 @@
-Mergecap (Wireshark) 5.1.0 (v5.1.0rc0-58-g5bd0fb4087a1)
+Mergecap (Wireshark) 4.4.10 (v4.4.10rc0-6-g07bf4ac58999)
 Merge two or more capture files into one.
 See https://www.wireshark.org for more information.
 
@@ -15,8 +15,6 @@ Output:
   -I <IDB merge mode> set the merge mode for Interface Description Blocks; default is 'all'.
                     an empty "-I" option will list the merge modes.
   --compress <type> compress the output file using the type compression format.
-  --no-merging-comment
-                    do not add "File created by merging:" comment.
 
 Miscellaneous:
   -h, --help        display this help and exit.

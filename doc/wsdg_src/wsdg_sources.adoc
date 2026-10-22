@@ -51,29 +51,25 @@ Using Wireshark’s GitLab project you can:
 * Browse and search the source code using a web interface.
 * See which person changed a specific piece of code.
 
-[#ChSrcGitNamingConventions]
+[#ChSrcWebInterface]
 
 ==== Git Naming Conventions
 
 Like most revision control systems, Git uses
 https://en.wikipedia.org/wiki/Branching_%28revision_control%29[branching]
 to manage different copies of the source code and allow parallel development.
-Wireshark releases use the following branch naming conventions:
+Wireshark uses the following branch naming conventions:
 
 .master.
 Main feature development and odd-numbered development releases.
 
-.release-x.y.
-Stable release maintenance. For example, release-4.6 is used to manage the 4.6.x official releases.
+.release-x.y, master-x.y.
+Stable release maintenance. For example, release-3.4 is used to manage the 3.4.x official releases.
 
-Tags for major Wireshark releases and release candidates consist of a “v” followed by a version number such as “v4.6.1” or “v4.6.3rc0”.
-Prior to October 2025, major releases additionally had a tag prefixed with “wireshark-” followed by a version number, such as “wireshark-4.4.0”.
+Tags for major releases and release candidates consist of a “v” followed by a version number such as “v3.2.1” or “v3.2.3rc0”.
+Major releases additionally have a tag prefixed with “wireshark-” followed by a version number, such as “wireshark-3.2.0”.
 
-Tags for major Stratoshark releases and release candidates consist of an “ssv” followed by a version number such as “ssv1.2.3” or “ssv1.3.4rc0”.
-
-Tags created after August 1, 2024 are signed using SSH. This includes the tags for versions 4.4.0rc1, 4.4.0, 4.2.7, and 4.0.17. If you wish to verify these tags, you must have
-https://git-scm.com/docs/git-config#Documentation/git-config.txt-gpgsshallowedSignersFile[gpg.ssh.allowedSignersFile]
-configured and have the following entry in your “allowed signers” file:
+Tags created after August 1, 2024 are signed using SSH. This includes the tags for versions 4.4.0rc1, 4.4.0, 4.2.7, and 4.0.17. If you wish to verify these tags, you must have the following entry in __~/.ssh/allowed_signers__:
 
     gerald@wireshark.org namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBHe1qOxwBietT54lZ3qawTc8B9unWP+T3JVR9l2rQaP
 
@@ -209,9 +205,8 @@ $ git pull --rebase upstream master
 
 The sources contain several documentation files. It’s a good idea to read these
 files first. After obtaining the sources, tools and libraries, the first place
-to look at is wsrepofile:doc/README.developer[]. Inside
-you will find the latest information for Wireshark development for all
-supported platforms.
+to look at is _doc/README.developer_. Inside you will find the latest
+information for Wireshark development for all supported platforms.
 
 .Build Wireshark before changing anything
 [TIP]
@@ -283,11 +278,8 @@ or on Windows,
 
 [source,cmd]
 ----
-> msbuild /m /p:Configuration=Debug Wireshark.slnx
+> msbuild /m /p:Configuration=Debug Wireshark.sln
 ----
-
-MSBuild uses one CPU and generates verbose output by default.
-You can make it faster and less noisy by using the `-maxCpuCount` and `-verbosity` https://learn.microsoft.com/en-us/visualstudio/msbuild/msbuild-command-line-reference[flags], either on the command line or by placing them in a _Directory.Build.rsp_ https://learn.microsoft.com/en-us/visualstudio/msbuild/msbuild-response-files[response file].
 
 [#ChSrcRunFirstTime]
 === Run Your Version Of Wireshark
@@ -341,7 +333,7 @@ execution order of statements. To disable optimization, set the
 <<ChSrcBuildType,build type>> to `Debug`.
 
 Full debug logs can be invaluable to investigate any issues with the code.
-By default full debug level logs are only enabled with `Debug` build type. You
+By default debug level logs are only enabled with `Debug` build type. You
 can enable full debug logs and extra debugging code by configuring the
 ENABLE_DEBUG CMake option. This in turn will define the macro symbol
 `WS_DEBUG` and enable the full range of debugging code in Wireshark.
@@ -353,7 +345,7 @@ and can be somewhat expensive to check during normal usage.
 
 Conversely, the `Release` or `MinSizeRel` build types can be used to optimize
 further for speed or size, but do not include debug symbols for use with
-debuggers, inhibits part of the debug code
+debuggers, and completely disable <<ChSrcLoggingLevels,lower level logging>>
 and asserts, optimizing away the code path. Ensure that you have not built with
 one of those types before attempting debugging.
 
@@ -391,14 +383,13 @@ The following logging levels are defined from highest to lowest:
 
 By default logging output is generated for logging level "message" and above. If the logging level is lowered or raised
 all log output generated at or above this level is sent to the log output.
-
 Note that if the <<ChSrcBuildType,build type>> is not set to `Debug`
 then by default all log output for the logging levels "debug" and
 "noisy" will be optimized away by the compiler and cannot be emitted to the log
 output, regardless of the logging settings. To enable debug logging for all build
 types, set the CMake variable `-DENABLE_DEBUG=ON`.
 
-The always-on "echo" logging level is used exclusively for temporary debugging print outs (usually
+There is also a special "echo" logging level used exclusively for temporary debugging print outs (usually
 via the `WS_DEBUG_HERE` macro).
 
 [#ChSrcLoggingOutput]
@@ -425,13 +416,7 @@ These domain(s) will generate debug level log messages regardless of the log lev
 WIRESHARK_LOG_NOISY, or --log_noisy::
 These domain(s) will generate noisy level log messages regardless of the log level and log domains configured.
 
-[NOTE]
-====
 Multiple domains can be concatenated using commas or semicolons. The match can be inverted by prefixing the domain(s) list with an exclamation mark.
-====
-
-The log output is normally send to stderr. The log output can also be saved in a file using the `--log-file=<path>`
-command line option.
 
 [#ChSrcTrapsLogging]
 ==== Traps Set By Logging
@@ -440,11 +425,8 @@ Sometimes it can be helpful to abort the program right after a log message of a 
 
 The following environment variables are used to configure a trap by the logging system:
 
-WIRESHARK_LOG_FATAL, or --log-fatal::
+WIRESHARK_LOG_FATAL, or --log_fatal::
 This is the level for which log messages are fatal. This can either be "critical" or "warning" level.
-
-WIRESHARK_LOG_FATAL_COUNT, or --log-fatal-count::
-This is the amount of fatal log messages which may pass before the program is trapped.
 
 WIRESHARK_LOG_FATAL_DOMAIN, WIRESHARK_LOG_FATAL_DOMAINS, or --log-fatal-domain, --log-fatal-domains::
 These are the domain(s) where output of a log message is fatal. This is less commonly used than the fatal log level setting above.
@@ -479,10 +461,6 @@ Populate your code with the applicable function calls to generate log messages w
 
 All these take `printf()` style parameters. There is also a `WS_DEBUG_HERE` macro that is always active and outputs to a special "echo"
 domain for temporary debug print outs. `WS_DEBUG_HERE` should be used for development purposes only and not appear in final delivery of the code.
-
-To get more direct access to the logging system various `ws_log()` type function are available, providing more fine grained control
-over the logging functionality. Note these are exempt from the build time optimization, and will be built in regardless of build type.
-
 
 [#ChSrcUnixDebug]
 ==== Unix-Like Platforms
@@ -527,7 +505,7 @@ $ export WIRESHARK_DEBUG_WMEM_OVERRIDE=simple
 
 Wireshark uses GLib's GSlice memory allocator, either indirectly via wmem or via various GLib API calls.
 GLib provides a `G_SLICE` environment variable that can be set to `always-malloc` (similar to `simple`) or `debug-blocks` (similar to `strict`).
-See https://docs.gtk.org/glib/running.html for details.
+See https://developer-old.gnome.org/glib/stable/glib-running.html for details.
 The C libraries on FreeBSD, Linux, and macOS also support memory allocation debugging via various environment variables.
 You can enable many of them by running `source tools/debug-alloc.env` in a POSIX shell.
 
@@ -640,10 +618,11 @@ Only a few people are authorised to actually make changes to the source code (ch
 If you want to submit your changes, you should upload them to the code review system at {wireshark-code-review-url}.
 This requires you to set up git as described at <<ChSrcGit>>.
 
-[#ChSrcForkingWorkflow]
-==== Workflow for Contributions
+[#ChSrcCreatingMergeRequests]
+==== Creating Merge Requests
 
 // To do:
+// - Note that you can mirror your fork: https://about.gitlab.com/blog/2016/12/01/how-to-keep-your-fork-up-to-date-with-its-origin/
 // - Mention CLI utilities.
 
 GitLab uses a https://docs.gitlab.com/ee/user/project/repository/forking_workflow.html[forking workflow], which looks like this:
@@ -651,21 +630,12 @@ GitLab uses a https://docs.gitlab.com/ee/user/project/repository/forking_workflo
 .GitLab Workflow
 image::images/git-triangular-workflow.svg[]
 
-The major steps of the diagram above are:
-
-* *Fork:* Create your own repository to work on.
+In the diagram above, your fork can created by pressing the “Fork” button at {wireshark-gitlab-project-url}.
+Your local repository can be created as described in <<ChSrcGit>>.
 You only need to do this once.
-
-* *Pull:* You should pull from the main repository on a regular basis in order to ensure that your sources are current.
-
-* *Push:* You should push any time you want to make a merge request or otherwise make your code public.
-
-* *Merge Request:* submit your change to be included in the Wireshark project.
-
-Let’s look at these steps in more detail.
-
-[#ChSrcForkingTree]
-==== Forking the Source Tree
+You should pull from the main repository on a regular basis in order to ensure that your sources are current.
+You should push any time you want to make a merge request or otherwise make your code public.
+The “Pull”, “Push”, and “Merge Request” parts of the workflow are important, so let’s look at them in more detail.
 
 First, you need to set up your environment.
 For the steps below we’ll pretend that your username is “henry.perry”.
@@ -683,7 +653,7 @@ WARNING: If you want to make merge requests you must keep your fork public.
 Making it private will disassociate it from the main Wireshark repository.
 --
 
-. Add a remote for your personal repository in your source code checkout.
+. Add a remote for your personal repository.
 The main repository remote is named “upstream”, so we'll name this one “downstream”.
 +
 --
@@ -699,56 +669,38 @@ $ git remote add downstream git@gitlab.com:henry.perry/wireshark.git
 [source,sh]
 ----
 $ git remote -v
-downstream	git@gitlab.com:henry.perry/wireshark.git (fetch)
-downstream	git@gitlab.com:henry.perry/wireshark.git (push)
-upstream	git@gitlab.com:wireshark/wireshark.git (fetch)
-upstream	git@gitlab.com:wireshark/wireshark.git (push)
+$ downstream	git@gitlab.com:henry.perry/wireshark.git (fetch)
+$ downstream	git@gitlab.com:henry.perry/wireshark.git (push)
+$ upstream	git@gitlab.com:wireshark/wireshark.git (fetch)
+$ upstream	git@gitlab.com:wireshark/wireshark.git (push)
 ----
 --
 
-[#ChSrcPullingUpstream]
-==== Pulling from Upstream
-
 Before you begin it’s a good idea to synchronize your local repository with the main repository.
 This is the *Pull* part of the workflow.
-Simply re-run the command in <<ChSrcGitUpdate>>.
 You should do this periodically in order to stay up to date and avoid merge conflicts later on.
 
-////
-// Is this unneeded extra confusion?
-You can also tell GitLab to keep your fork up-to-date with the latest changes to the project:
-
-. Visit your fork's home page at `\https://gitlab.com/henry.perry/wireshark`.
-. In the left sidebar, under *Settings*, select *Repository* settings.
-. Expand the section labelled *Mirroring repositories* and click btn:[Add new].
-. For the URL, enter `\https://gitlab.com/wireshark/wireshark.git` ; leave the other settings at their defaults.
-. Click btn:[Mirror repository].
-
+. Fetch and optionally apply the latest changes.
++
 --
-NOTE: If you do this, GitLab will automatically update your fork with changes that are made upstream.
-However, you will still need to update your local repository manually.
+[source,sh]
+----
+# Fetch changes from upstream and apply them to the current branch...
+$ git pull --rebase upstream master
+# ...or fetch changes and leave the current branch alone
+$ git fetch upstream
+----
 --
-
-For more information about this GitLab feature, see https://docs.gitlab.com/ee/user/project/repository/mirror/index.html[their documentation].
-////
-
-[#ChSrcCreatingMergeRequests]
-==== Creating Merge Requests
 
 Now you’re ready to create a merge request (the *Push* and *Merge Request* parts of the workflow above).
 
-. Create a branch for your change:
+. First, create a branch for your change:
 +
 --
 [source,sh]
 ----
 $ git checkout -b my-glorious-new-feature upstream/master
 ----
---
-+
---
-NOTE: Always work from branches; never work directly on `master`.
-It will be _much_ easier to keep abreast of upstream changes this way.
 --
 
 . Write some code!
@@ -777,9 +729,7 @@ $ git push downstream HEAD
 You should see a https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html#create-merge-request-button[“Create merge request”] button.
 Press it.
 
-.. In the merge request page, make sure “Allow commits from members who can merge to the target branch” is selected so that core developers can rebase your change.
-.. You might want to select “Delete source branch when merge request is accepted” as well.
-.. Click the “Submit merge request” button.
+. In the merge request page, make sure “Allow commits from members who can merge to the target branch” is selected so that core developers can rebase your change. You might want to select “Delete source branch when merge request is accepted” as well. Click the “Submit merge request” button.
 
 // XXX Add command line instructions for one or more of the following:
 // https://docs.gitlab.com/ee/user/project/push_options.html
@@ -794,7 +744,7 @@ Press it.
 At this point various automated tests will be run and someone will review your change.
 If you need to make changes you can do so by force-pushing it to the same branch in your personal repository.
 
-. Make changes in your local repository.
+. Push your changes to your personal repository.
 +
 --
 [source,sh]
@@ -806,8 +756,6 @@ On branch my-glorious-new-feature
 --
 
 . Update your code.
-
-. Rebuild and test your work to be sure it still does what it should.
 
 . Push your changes to your personal repository.
 +
@@ -823,61 +771,6 @@ $ git push downstream HEAD
 ----
 The `+` sign is shorthand for forcing the push (`-f`).
 --
-
-[#ChSrcRebasingMergeRequests]
-===== Rebasing Merge Requests
-
-The Wireshark upstream source code is likely to see other changes while you're doing your work.
-Git allows you to adapt your in-progress work to these upstream updates, in a process known as _rebasing_.
-
-Although GitLab provides a btn:[Rebase] button, you have more control over the process if you do it from the command line:
-
-. Synchronize your local repository with the command from <<ChSrcGitUpdate>>.
-
-. Switch back to your working branch: `git checkout my-glorious-new-feature`
-
-. Rebase your working branch: `git rebase master`
-+
---
-TIP: At this stage you may experience a _merge conflict,_ which is when you've changed code which has also changed upstream.
-The rebase will pause to allow you to resolve the conflict.
-Once you've edited the code and reconciled the changes, resume the rebase with the command `git rebase --continue` .
---
-
-. Rebuild and test your work to ensure it hasn't been adversely affected by the upstream changes.
-(This is especially important if there were any merge conflicts.)
-
-. Push your changes to your personal repository as described above.
-
-[#ChSrcSquashingMergeRequests]
-===== Squashing Merge Requests
-
-When the Wireshark developer team is ready to accept your merge request, they may first ask you to _squash_ your changes.
-This means taking all of the commits you've made on your working branch, and combining them into one commit.
-Here's how to do it from the command line:
-
-. Check out your working branch, if you aren't already on it.
-
-. Run this command:
-+
---
-[source,sh]
-----
-# Perform an "interactive rebase"
-$ git rebase -i master
-----
---
-
-. A text editor will appear, listing all of the commits that are in your branch.
-Each commit will have the word “pick” at the start of the line.
-
-. *Leave the first “pick” alone.* In every _following_ line replace “pick” with “squash”.
-
-. Save your changes and exit your editor.
-
-. A new editor will appear for you to tailor the commit message of the squashed commit.
-
-. Once you're done, push your changes to your personal repository as described above.
 
 [#ChSrcGoodPatch]
 ==== Some Tips For A Good Patch
@@ -931,21 +824,8 @@ This is required by various formatting tools and helpful to humans.
 Break paragraphs where needed.
 Limit each line to 80 characters.
 
-Keep in mind that the commit's diffs will show precisely _what_ was changed.  The most useful commit messages provide a concise _overview_, explain _why_ the change was made (if it is not obvious), and give more in-depth explanation _where needed_.
-
-You can also reference and close issues in a commit message by prefixing the issue number with a https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically[number sign].
+You can also reference and close issues in a commit message by prefixing the issue number with a https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically[number sign].
 For example, “closes #5” will close issue number 5.
-
-Other https://docs.gitlab.com/user/markdown/#gitlab-specific-references[GitLab-specific references] are `!` for a merge request and the short (8 character) hash for a commit.
-
-We also ask contributors to disclose whether AI tools were used when authoring the change.
-If you use an AI tool, add a trailer such as
-[source,sh]
-----
-Assisted-by: Claude
-----
-to your commit message(s) and mention the same in merge requests.
-The trailer should be omitted if no AI tools were used.
 
 Putting all that together, we get the following example:
 
@@ -955,8 +835,6 @@ MIPv6: Fix dissection of Service Selection Identifier
 
 APN field is not encoded as a dotted string so the first character is not a
 length. Closes #10323.
-
-Assisted-by: Claude
 ----
 
 [#ChSrcCodeRequirements]
@@ -983,29 +861,18 @@ Others are split across multiple source files and are often more suitable to be 
 In your local repository directory, there will be a __.git/hooks/__ directory, with sample git hooks for running automatic actions before and after git commands.
 You can also optionally install other hooks that you find useful.
 
-Enable the shipped Wireshark hooks without copying them by running:
---
-[source,sh]
-----
-$ git config core.hooksPath tools/git_hooks
-----
---
-This uses the dedicated `tools/git_hooks/` directory, so other scripts in `tools/` remain untouched.
+In particular, the _pre-commit_ hook will run every time you commit a change and can be used to automatically check for various errors in your code.
+The sample git pre-commit hook simply detects whitespace errors such as mixed tabs and spaces.
+To install it just remove the .sample suffix from the existing _pre-commit.sample_ file.
 
-To include the "Assisted-by" trailer automatically, set the commit template with:
---
-[source,sh]
-----
-$ git config commit.template .gitmessage
-----
---
-
-The Wireshark pre-commit hook (in `tools/git_hooks/`) runs Wireshark-specific API and formatting checks and might return false positives.
-The commit-msg hook and the CI checks run `tools/validate-commit.py`, which warns if a commit message credits an AI tool in another way, such as a "Co-authored-by" trailer naming the tool, but has no "Assisted-by" trailer.
-The wrappers in `tools/` remain for compatibility; if you prefer the classic layout you can still copy or symlink from `tools/git_hooks/` into `.git/hooks/`.
+Wireshark provides a custom pre-commit hook which does additional Wireshark-specific API and formatting checks, but it might return false positives.
+If you want to install it, copy the pre-commit file from the tools directory (`cp ./tools/pre-commit .git/hooks/`) and make sure it is executable or it will not be run.
 
 If the pre-commit hook is preventing you from committing what you believe is a valid change, you can run `git commit --no-verify` to skip running the hooks.
 Warning: using --no-verify avoids the commit-msg hook, and thus if you have setup this hook it will not run.
+
+Additionally, if your system supports symbolic links, as all UNIX-like platforms do, you can use them instead of copying files.
+Running `ln -s ../../tools/pre-commit .git/hooks` creates a symbolic link that will make the hook to be up-to-date with the current master.
 
 .Choose a compatible license.
 Wireshark is released under the {spdx-license-url}GPL-2.0-or-later.html[GPL version 2 or later], and it is strongly recommended that incoming code use that license.
@@ -1077,7 +944,7 @@ all of us do this in our spare time.
 [#ChSrcBackport]
 ==== Backporting A Change
 
-:example-branch: release-4.6
+:example-branch: master-3.2
 When a bug is fixed in the master branch it’s sometimes desirable or necessary to backport the fix to a release branch.
 You can do this in Git by cherry-picking the change from one branch to another.
 Suppose you want to backport change 1ab2c3d4 from the master branch to {example-branch}.
@@ -1088,7 +955,7 @@ You can do so as follows:
 # Create a new topic branch for the backport.
 $ git checkout -b backport-1ab2c3d4 upstream/{example-branch}
 
-# Cherry-pick the change. "-x" adds the "cherry picked from..." line to the commit message.
+# Cherry-pick the change. Include a "cherry picked from..." line.
 $ git cherry-pick -x 1ab2c3d4
 
 # If there are conflicts, fix them.
@@ -1097,18 +964,15 @@ $ git cherry-pick -x 1ab2c3d4
 $ ninja
 $ ...
 
-# OPTIONAL: Add entries to doc/Wireshark_Release_Notes.adoc.
-$EDITOR "doc/Wireshark_Release_Notes.adoc"
+# OPTIONAL: Add entries to doc/release-notes.adoc.
+$EDITOR doc/release-notes.adoc
 
 # If you made any changes, update your commit.
 git commit --amend -a
 
 # Push the change to your working repository.
-git push downstream +HEAD
+git push downstream HEAD
 ----
-The `+` sign is shorthand for forcing the push (`-f`).
-
-In the GitLab web UI for creating the Merge Request, use the *Change branches* control near the top of the page to ensure that your MR is targeted at the intended release branch.  Confirm by verifying under *Commits* that only the one cherry-picked commit is selected for the merge.
 
 You can also cherry-pick changes in the https://docs.gitlab.com/ee/user/project/merge_requests/cherry_pick_changes.html[GitLab web UI].
 
@@ -1229,20 +1093,15 @@ https://1.na.dl.wireshark.org/download/src/wireshark-{wireshark-version}.tar.xz
 ===== Staying Current
 
 Wireshark releases are announced on the link:{wireshark-mailing-lists-url}[wireshark-announce] mailing list.
-
-If you want to automatically check for the latest version, you can use one of the {wireshark-code-file-url}/ui/software_update.h[automatic update URLs] for our Windows or macOS packages, such as
-
-https://www.wireshark.org/update/0/Wireshark/0.0.0/Windows/x86-64/en-US/stable.xml
-
-On Linux, update notifications are enabled automatically when Wireshark is built with the Qt DBus module.
+A https://appvisor.com/pad/[PAD] file is also published at https://www.wireshark.org/wireshark-pad.xml which contains the current stable version and release date.
 
 [discrete]
 ===== Artwork
 
-Logo and icon artwork can be found in the _resources_ directory in the
+Logo and icon artwork can be found in the _image_ directory in the
 distribution. This is available online at
 
-{wireshark-code-browse-url}/resources
+{wireshark-code-browse-url}/image
 
 [discrete]
 ===== Licensing
@@ -1253,16 +1112,16 @@ later. Make sure you and your package comply with this license.
 [discrete]
 ===== Trademarks
 
-Wireshark, Stratoshark, and their respective “fin” logos are trademarks of the link:{wireshark-foundation-url}[Wireshark Foundation].
-If you have any questions about the use of these trademarks, please contact the foundation.
+Wireshark and the “fin” logo are registered trademarks of the Wireshark
+Foundation. Make sure you and your package comply with trademark law.
 
 [discrete]
 ===== Privileges
 
 All function calls that require elevated privileges are in dumpcap.
 
-WIRESHARK CONTAINS MILLIONS AND MILLIONS OF LINES OF SOURCE CODE.
-DO NOT RUN THEM AS ROOT.
+WIRESHARK CONTAINS OVER THREE MILLION LINES OF SOURCE CODE. DO NOT RUN
+THEM AS ROOT.
 
 Warnings are displayed when Wireshark and TShark are run as root.
 
@@ -1408,7 +1267,7 @@ your `~/.rpmmacros` file to enable parallel builds:
 Building the RPM package requires quite a few packages and libraries
 including GLib, `gcc`, `flex`, Asciidoctor, and Qt development
 tools such as `uic` and `moc`. The required Qt packages can usually be
-obtained by installing the _qt6-qt*-devel_ packages. For a complete list of
+obtained by installing the _qt5-devel_ package. For a complete list of
 build requirements, look for the “BuildRequires” lines in
 _packaging/rpm/wireshark.spec.in_.
 
@@ -1423,9 +1282,9 @@ In your build directory, type:
 
 [source,sh]
 ----
-ninja wireshark_dmg stratoshark_dmg # (Modify as needed)
+ninja wireshark_dmg logray_dmg # (Modify as needed)
 # ...or, if you're using GNU make...
-make wireshark_dmg stratoshark_dmg # (Modify as needed)
+make wireshark_dmg logray_dmg # (Modify as needed)
 ----
 
 to build the macOS Packages.

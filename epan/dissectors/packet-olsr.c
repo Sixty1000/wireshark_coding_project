@@ -288,7 +288,7 @@ static int dissect_olsr_hello(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ols
 
   offset += 2;
 
-  /*---------------------Dissect Hello Emission Interval-------------------*/
+  /*---------------------Dissect Hello Emission Inverval-------------------*/
   hTime = getOlsrTime(tvb_get_uint8(tvb, offset));
   proto_tree_add_double_format_value(olsr_tree, hf_olsr_htime, tvb, offset, 1, hTime,
       "%.3f (in seconds)", hTime);
@@ -312,7 +312,8 @@ static int dissect_olsr_hello(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ols
     offset += 1;
 
     /*----------------------Dissect Link Message Size--------------------------*/
-    ti = proto_tree_add_item_ret_uint16(link_type_tree, hf_olsr_link_message_size, tvb, offset, 2, ENC_BIG_ENDIAN, &message_size);
+    message_size = tvb_get_ntohs(tvb, offset);
+    ti = proto_tree_add_item(link_type_tree, hf_olsr_link_message_size, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
     if (message_size < 4) {
@@ -455,9 +456,11 @@ static int dissect_olsrorg_nameservice(tvbuff_t *tvb, packet_info *pinfo, proto_
     return message_end;
   }
 
-  ti = proto_tree_add_item_ret_uint16(olsr_tree, hf_olsrorg_ns_version, tvb, offset, 2, ENC_BIG_ENDIAN, &version);
+  version = tvb_get_ntohs(tvb, offset);
+  ti = proto_tree_add_item(olsr_tree, hf_olsrorg_ns_version, tvb, offset, 2, ENC_BIG_ENDIAN);
 
-  proto_tree_add_item_ret_uint16(olsr_tree, hf_olsrorg_ns_count, tvb, offset + 2, 2, ENC_BIG_ENDIAN, &count);
+  count = tvb_get_ntohs(tvb, offset + 2);
+  proto_tree_add_item(olsr_tree, hf_olsrorg_ns_count, tvb, offset + 2, 2, ENC_BIG_ENDIAN);
 
   offset += 4;
 

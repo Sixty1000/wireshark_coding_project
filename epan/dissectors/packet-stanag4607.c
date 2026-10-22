@@ -819,7 +819,8 @@ dissect_dwell(tvbuff_t *tvb, proto_tree *seg_tree, int offset)
 	offset += 1;
 
 	/* count of target reports */
-	proto_tree_add_item_ret_uint(seg_tree, hf_4607_dwell_count, tvb, offset, 2, ENC_BIG_ENDIAN, &count);
+	count = tvb_get_ntohs(tvb, offset);
+	proto_tree_add_item(seg_tree, hf_4607_dwell_count, tvb, offset, 2, ENC_BIG_ENDIAN);
 	offset += 2;
 
 	proto_tree_add_item(seg_tree, hf_4607_dwell_time, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -909,7 +910,6 @@ dissect_dwell(tvbuff_t *tvb, proto_tree *seg_tree, int offset)
 	/* Optional or conditional fields, in accordance to presence mask */
 	if (SET(mask, D28)) {
 		proto_tree_add_item(seg_tree, hf_4607_dwell_sensor_heading, tvb, offset, 2, ENC_BIG_ENDIAN);
-		offset += 2;
 	}
 	if (SET(mask, D29)) {
 		proto_tree_add_item(seg_tree, hf_4607_dwell_sensor_pitch, tvb, offset, 2, ENC_BIG_ENDIAN);
@@ -1054,7 +1054,7 @@ dissect_stanag4607(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 	/* Put type of first segment in the info column */
 	first_segment = tvb_get_uint8(tvb, 32);
 	col_add_str(pinfo->cinfo, COL_INFO,
-			val_to_str(pinfo->pool, first_segment, stanag4607_segment_vals, "Unknown (0x%02x)"));
+			val_to_str(first_segment, stanag4607_segment_vals, "Unknown (0x%02x)"));
 
 	/* Put the timestamp, if available in the time column */
 	if (PLATFORM_LOCATION_SEGMENT == first_segment) {
@@ -1099,7 +1099,8 @@ dissect_stanag4607(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 	proto_tree_add_item(hdr_tree, hf_4607_exercise_indicator, tvb, 13, 1, ENC_BIG_ENDIAN);
 	proto_tree_add_item(hdr_tree, hf_4607_platform_id, tvb, 14, 10, ENC_ASCII);
 	proto_tree_add_item(hdr_tree, hf_4607_mission_id, tvb, 24, 4, ENC_BIG_ENDIAN);
-	proto_tree_add_item_ret_uint(hdr_tree, hf_4607_job_id, tvb, 28, 4, ENC_BIG_ENDIAN, &job_id);
+	proto_tree_add_item(hdr_tree, hf_4607_job_id, tvb, 28, 4, ENC_BIG_ENDIAN);
+	job_id = tvb_get_uint32(tvb, 28, ENC_BIG_ENDIAN);
 	offset = 32;
 
 	pkt_size = tvb_get_ntohl(tvb, 2);
@@ -2167,7 +2168,11 @@ proto_register_stanag4607(void)
 
 	expert_module_t* expert_4607;
 
-	proto_stanag4607 = proto_register_protocol ("STANAG 4607 (GMTI Format)", "STANAG 4607", "s4607");
+	proto_stanag4607 = proto_register_protocol (
+	    "STANAG 4607 (GMTI Format)", /* name       */
+	    "STANAG 4607",      /* short name */
+	    "s4607"       /* abbrev     */
+	);
 
 	proto_register_field_array(proto_stanag4607, hf, array_length(hf));
 	proto_register_subtree_array(ett, array_length(ett));

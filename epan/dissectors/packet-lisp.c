@@ -15,11 +15,10 @@
 #include "packet-lisp.h"
 
 #include <epan/to_str.h>
+#include <epan/afn.h>
 #include <epan/oui.h>
 #include <epan/expert.h>
-#include <epan/tfs.h>
-#include <epan/iana-info.h>
-#include <wsutil/array.h>
+
 #include <wsutil/utf8_entities.h>
 
 void proto_register_lisp(void);
@@ -526,20 +525,20 @@ get_addr_str(tvbuff_t *tvb, packet_info *pinfo, int offset, uint16_t afi, uint16
     uint16_t           cur_len;
 
     switch (afi) {
-        case AFNUM_RESERVED_0:
+        case AFNUM_RESERVED:
             *addr_len  = 0;
             return notset_str;
-        case AFNUM_IP:
+        case AFNUM_INET:
             *addr_len  = INET_ADDRLEN;
             addr_str   = tvb_ip_to_str(pinfo->pool, tvb, offset);
             return addr_str;
-        case AFNUM_IP6:
+        case AFNUM_INET6:
             *addr_len  = INET6_ADDRLEN;
             addr_str   = tvb_ip6_to_str(pinfo->pool, tvb, offset);
             return addr_str;
-        case AFNUM_LISP_CANONICAL_ADDRESS_FORMAT:
+        case AFNUM_LCAF:
             get_lcaf_data(tvb, offset, &lcaf_type, addr_len);
-            addr_str = val_to_str(pinfo->pool, lcaf_type, lcaf_typevals, "Unknown LCAF Type (%d)");
+            addr_str = val_to_str(lcaf_type, lcaf_typevals, "Unknown LCAF Type (%d)");
             if (lcaf_type == LCAF_IID) {
                 iid = tvb_get_ntohl(tvb, offset + LCAF_HEADER_LEN);
                 afi = tvb_get_ntohs(tvb, offset + LCAF_HEADER_LEN + 4);
@@ -558,13 +557,13 @@ get_addr_str(tvbuff_t *tvb, packet_info *pinfo, int offset, uint16_t afi, uint16
             }
             return addr_str;
         case AFNUM_802:
-        case AFNUM_48_BIT_MAC:
+        case AFNUM_EUI48:
             *addr_len = EUI48_ADDRLEN;
             addr_str  = tvb_ether_to_str(pinfo->pool, tvb, offset);
             return addr_str;
-        case AFNUM_DISTINGUISHED_NAME:
+        case AFNUM_DISTNAME:
             *addr_len = tvb_strsize(tvb, offset);
-            addr_str  = (char*)tvb_get_stringz_enc(pinfo->pool, tvb, offset, NULL, ENC_ASCII);
+            addr_str  = tvb_get_stringz_enc(pinfo->pool, tvb, offset, NULL, ENC_ASCII);
             return addr_str;
         default:
             return NULL;
@@ -586,24 +585,25 @@ dissect_lcaf_natt_rloc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     rloc_tree = proto_item_add_subtree(ti, ett_lisp_lcaf_natt_rloc);
 
     /* AFI (2 bytes) */
-    proto_tree_add_item_ret_uint16(rloc_tree, hf_lisp_lcaf_natt_rloc_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &rloc_afi);
+    proto_tree_add_item(rloc_tree, hf_lisp_lcaf_natt_rloc_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
+    rloc_afi = tvb_get_ntohs(tvb, offset);
     offset += 2;
 
     /* Reencap hop */
     rloc_str = get_addr_str(tvb, pinfo, offset, rloc_afi, &addr_len);
 
     switch (rloc_afi) {
-        case AFNUM_RESERVED_0:
+        case AFNUM_RESERVED:
             break;
-        case AFNUM_IP:
+        case AFNUM_INET:
             proto_tree_add_item(rloc_tree, hf_lisp_lcaf_natt_rloc_ipv4,
                     tvb, offset, INET_ADDRLEN, ENC_BIG_ENDIAN);
             break;
-        case AFNUM_IP6:
+        case AFNUM_INET6:
             proto_tree_add_item(rloc_tree, hf_lisp_lcaf_natt_rloc_ipv6,
                     tvb, offset, INET6_ADDRLEN, ENC_NA);
             break;
-        case AFNUM_LISP_CANONICAL_ADDRESS_FORMAT:
+        case AFNUM_LCAF:
             dissect_lcaf(tvb, pinfo, rloc_tree, offset, NULL);
             break;
         default:
@@ -648,22 +648,23 @@ dissect_lcaf_elp_hop(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     offset += 2;
 
     /* AFI (2 bytes) */
-    proto_tree_add_item_ret_uint16(hop_tree, hf_lisp_lcaf_elp_hop_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &hop_afi);
+    proto_tree_add_item(hop_tree, hf_lisp_lcaf_elp_hop_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
+    hop_afi = tvb_get_ntohs(tvb, offset);
     offset += 2;
 
     /* Reencap hop */
     hop_str = get_addr_str(tvb, pinfo, offset, hop_afi, &addr_len);
 
     switch (hop_afi) {
-        case AFNUM_IP:
+        case AFNUM_INET:
             proto_tree_add_item(hop_tree, hf_lisp_lcaf_elp_hop_ipv4,
                     tvb, offset, INET_ADDRLEN, ENC_BIG_ENDIAN);
             break;
-        case AFNUM_IP6:
+        case AFNUM_INET6:
             proto_tree_add_item(hop_tree, hf_lisp_lcaf_elp_hop_ipv6,
                     tvb, offset, INET6_ADDRLEN, ENC_NA);
             break;
-        case AFNUM_LISP_CANONICAL_ADDRESS_FORMAT:
+        case AFNUM_LCAF:
             dissect_lcaf(tvb, pinfo, hop_tree, offset, NULL);
             break;
         default:
@@ -713,26 +714,28 @@ dissect_lcaf_rle_entry(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     offset += 3;
 
     /* Level Value (1 byte) */
-    proto_tree_add_item_ret_uint8(entry_tree, hf_lisp_lcaf_rle_entry_level, tvb, offset, 1, ENC_BIG_ENDIAN, &level);
+    proto_tree_add_item(entry_tree, hf_lisp_lcaf_rle_entry_level, tvb, offset, 1, ENC_BIG_ENDIAN);
+    level = tvb_get_uint8(tvb, offset);
     offset += 1;
 
     /* AFI (2 bytes) */
-    proto_tree_add_item_ret_uint16(entry_tree, hf_lisp_lcaf_rle_entry_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &entry_afi);
+    proto_tree_add_item(entry_tree, hf_lisp_lcaf_rle_entry_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
+    entry_afi = tvb_get_ntohs(tvb, offset);
     offset += 2;
 
     /* RTR/ETR entry */
     entry_str = get_addr_str(tvb, pinfo, offset, entry_afi, &addr_len);
 
     switch (entry_afi) {
-        case AFNUM_IP:
+        case AFNUM_INET:
             proto_tree_add_item(entry_tree, hf_lisp_lcaf_rle_entry_ipv4,
                     tvb, offset, INET_ADDRLEN, ENC_BIG_ENDIAN);
             break;
-        case AFNUM_IP6:
+        case AFNUM_INET6:
             proto_tree_add_item(entry_tree, hf_lisp_lcaf_rle_entry_ipv6,
                     tvb, offset, INET6_ADDRLEN, ENC_NA);
             break;
-        case AFNUM_LISP_CANONICAL_ADDRESS_FORMAT:
+        case AFNUM_LCAF:
             dissect_lcaf(tvb, pinfo, entry_tree, offset, NULL);
             break;
         default:
@@ -786,21 +789,21 @@ dissect_lcaf_afi_list(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         remaining -= 2;
 
         switch (afi) {
-            case AFNUM_IP:
+            case AFNUM_INET:
                 proto_tree_add_item(lisp_afi_list_tree, hf_lisp_lcaf_afi_list_ipv4, tvb, offset, INET_ADDRLEN, ENC_BIG_ENDIAN);
                 proto_item_append_text(tir, " %d. IPv4 Address: %s", i, tvb_ip_to_str(pinfo->pool, tvb, offset));
                 proto_item_set_len(tir, 2 + INET_ADDRLEN);
                 offset    += INET_ADDRLEN;
                 remaining -= INET_ADDRLEN;
                 break;
-            case AFNUM_IP6:
+            case AFNUM_INET6:
                 proto_tree_add_item(lisp_afi_list_tree, hf_lisp_lcaf_afi_list_ipv6, tvb, offset, INET6_ADDRLEN, ENC_NA);
                 proto_item_append_text(tir, " %d. IPv6 Address: %s", i, tvb_ip6_to_str(pinfo->pool, tvb, offset));
                 proto_item_set_len(tir, 2 + INET6_ADDRLEN);
                 offset    += INET6_ADDRLEN;
                 remaining -= INET6_ADDRLEN;
                 break;
-            case AFNUM_LISP_CANONICAL_ADDRESS_FORMAT:
+            case AFNUM_LCAF:
                 old_offset = offset;
                 lcaf_str = get_addr_str(tvb, pinfo, offset, afi, &addr_len);
                 proto_item_append_text(tir, " %d. %s", i, lcaf_str);
@@ -809,14 +812,14 @@ dissect_lcaf_afi_list(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                 remaining -= (offset - old_offset);
                 break;
             case AFNUM_802:
-            case AFNUM_48_BIT_MAC:
+            case AFNUM_EUI48:
                 proto_tree_add_item(lisp_afi_list_tree, hf_lisp_lcaf_afi_list_mac, tvb, offset, EUI48_ADDRLEN, ENC_NA);
                 proto_item_append_text(tir, " %d. MAC Address: %s", i, tvb_ether_to_str(pinfo->pool, tvb, offset));
                 proto_item_set_len(tir, 2 + EUI48_ADDRLEN);
                 offset    += EUI48_ADDRLEN;
                 remaining -= EUI48_ADDRLEN;
                 break;
-            case AFNUM_DISTINGUISHED_NAME:
+            case AFNUM_DISTNAME:
                 str_len = tvb_strsize(tvb, offset);
                 proto_tree_add_item_ret_display_string(lisp_afi_list_tree, hf_lisp_lcaf_afi_list_dn, tvb, offset, str_len, ENC_ASCII,
                                                         pinfo->pool, &disp_str);
@@ -867,7 +870,8 @@ dissect_lcaf_iid(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset
     offset += 4;
 
     /* AFI (2 bytes) */
-    proto_tree_add_item_ret_uint16(tree, hf_lisp_lcaf_iid_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &afi);
+    afi = tvb_get_ntohs(tvb, offset);
+    proto_tree_add_item(tree, hf_lisp_lcaf_iid_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
     /* Address */
@@ -876,28 +880,28 @@ dissect_lcaf_iid(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset
         proto_item_append_text(tip, ", Address: %s", ip_address);
 
     switch (afi) {
-        case AFNUM_RESERVED_0:
+        case AFNUM_RESERVED:
             break;
-        case AFNUM_IP:
+        case AFNUM_INET:
             proto_tree_add_item(tree, hf_lisp_lcaf_iid_ipv4,
                     tvb, offset, INET_ADDRLEN, ENC_BIG_ENDIAN);
             offset += INET_ADDRLEN;
             break;
-        case AFNUM_IP6:
+        case AFNUM_INET6:
             proto_tree_add_item(tree, hf_lisp_lcaf_iid_ipv6,
                     tvb, offset, INET6_ADDRLEN, ENC_NA);
             offset += INET6_ADDRLEN;
             break;
-        case AFNUM_LISP_CANONICAL_ADDRESS_FORMAT:
+        case AFNUM_LCAF:
             offset = dissect_lcaf(tvb, pinfo, tree, offset, NULL);
             break;
         case AFNUM_802:
-        case AFNUM_48_BIT_MAC:
+        case AFNUM_EUI48:
             proto_tree_add_item(tree, hf_lisp_lcaf_iid_mac,
                     tvb, offset, EUI48_ADDRLEN, ENC_NA);
             offset += EUI48_ADDRLEN;
             break;
-        case AFNUM_DISTINGUISHED_NAME:
+        case AFNUM_DISTNAME:
             str_len = tvb_strsize(tvb, offset);
             proto_tree_add_item(tree, hf_lisp_lcaf_iid_dn, tvb, offset, str_len, ENC_ASCII);
             offset += str_len;
@@ -941,7 +945,8 @@ dissect_lcaf_asn(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset
     offset += 4;
 
     /* AFI (2 bytes) */
-    proto_tree_add_item_ret_uint16(tree, hf_lisp_lcaf_asn_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &afi);
+    afi = tvb_get_ntohs(tvb, offset);
+    proto_tree_add_item(tree, hf_lisp_lcaf_asn_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
     /* Address */
@@ -950,28 +955,28 @@ dissect_lcaf_asn(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset
         proto_item_append_text(tip, ", Address: %s", addr);
 
     switch (afi) {
-        case AFNUM_RESERVED_0:
+        case AFNUM_RESERVED:
             break;
-        case AFNUM_IP:
+        case AFNUM_INET:
             proto_tree_add_item(tree, hf_lisp_lcaf_asn_ipv4,
                     tvb, offset, INET_ADDRLEN, ENC_BIG_ENDIAN);
             offset += INET_ADDRLEN;
             break;
-        case AFNUM_IP6:
+        case AFNUM_INET6:
             proto_tree_add_item(tree, hf_lisp_lcaf_asn_ipv6,
                     tvb, offset, INET6_ADDRLEN, ENC_NA);
             offset += INET6_ADDRLEN;
             break;
-        case AFNUM_LISP_CANONICAL_ADDRESS_FORMAT:
+        case AFNUM_LCAF:
             offset = dissect_lcaf(tvb, pinfo, tree, offset, NULL);
             break;
         case AFNUM_802:
-        case AFNUM_48_BIT_MAC:
+        case AFNUM_EUI48:
             proto_tree_add_item(tree, hf_lisp_lcaf_asn_mac,
                     tvb, offset, EUI48_ADDRLEN, ENC_NA);
             offset += EUI48_ADDRLEN;
             break;
-        case AFNUM_DISTINGUISHED_NAME:
+        case AFNUM_DISTNAME:
             str_len = tvb_strsize(tvb, offset);
             proto_tree_add_item(tree, hf_lisp_lcaf_asn_dn, tvb, offset, str_len, ENC_ASCII);
             offset += str_len;
@@ -1011,12 +1016,13 @@ dissect_lcaf_geo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset
 {
     uint16_t addr_len = 0;
     bool north, east;
-    uint16_t deg, hemisphere;
+    uint16_t deg;
     uint8_t min, sec;
     uint32_t alt;
     uint16_t afi;
     int str_len;
     const char *ip_address;
+    const uint16_t mask = 0x7FFF;   /* prepare mask for N or E bit */
     proto_item *ti_lat, *ti_lon, *ti_alt;
     proto_tree *lat_tree, *lon_tree;
 
@@ -1026,23 +1032,27 @@ dissect_lcaf_geo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset
     lat_tree = proto_item_add_subtree(ti_lat, ett_lisp_lcaf_geo_lat);
 
     /* Hemisphere and degrees (2 bytes) */
-    proto_tree_add_item_ret_uint16(lat_tree, hf_lisp_lcaf_geo_lat_hemisphere, tvb, offset, 2, ENC_BIG_ENDIAN, &hemisphere);
-    proto_tree_add_item_ret_uint16(lat_tree, hf_lisp_lcaf_geo_lat_deg, tvb, offset, 2, ENC_BIG_ENDIAN, &deg);
-    north = (bool)hemisphere;
+    proto_tree_add_item(lat_tree, hf_lisp_lcaf_geo_lat_hemisphere, tvb, offset, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item(lat_tree, hf_lisp_lcaf_geo_lat_deg, tvb, offset, 2, ENC_BIG_ENDIAN);
+    deg = tvb_get_ntohs(tvb, offset);
+    north = deg >> 15;
+    deg &= mask;
     if (deg > 90)
         expert_add_info_format(pinfo, tree, &ei_lisp_invalid_field,
                 "Invalid latitude degrees value (%d)", deg);
     offset += 2;
 
     /* Minutes (1 byte) */
-    proto_tree_add_item_ret_uint8(lat_tree, hf_lisp_lcaf_geo_lat_min, tvb, offset, 1, ENC_BIG_ENDIAN, &min);
+    proto_tree_add_item(lat_tree, hf_lisp_lcaf_geo_lat_min, tvb, offset, 1, ENC_BIG_ENDIAN);
+    min = tvb_get_uint8(tvb, offset);
     if (min > 60)
         expert_add_info_format(pinfo, tree, &ei_lisp_invalid_field,
                 "Invalid latitude minutes value (%d)", min);
     offset += 1;
 
     /* Seconds (1 byte) */
-    proto_tree_add_item_ret_uint8(lat_tree, hf_lisp_lcaf_geo_lat_sec, tvb, offset, 1, ENC_BIG_ENDIAN, &sec);
+    proto_tree_add_item(lat_tree, hf_lisp_lcaf_geo_lat_sec, tvb, offset, 1, ENC_BIG_ENDIAN);
+    sec = tvb_get_uint8(tvb, offset);
     if (sec > 60)
         expert_add_info_format(pinfo, tree, &ei_lisp_invalid_field,
                 "Invalid latitude seconds value (%d)", min);
@@ -1059,23 +1069,27 @@ dissect_lcaf_geo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset
     lon_tree = proto_item_add_subtree(ti_lon, ett_lisp_lcaf_geo_lon);
 
     /* Hemisphere and degrees (2 bytes) */
-    proto_tree_add_item_ret_uint16(lon_tree, hf_lisp_lcaf_geo_lon_hemisphere, tvb, offset, 2, ENC_BIG_ENDIAN, &hemisphere);
-    proto_tree_add_item_ret_uint16(lon_tree, hf_lisp_lcaf_geo_lon_deg, tvb, offset, 2, ENC_BIG_ENDIAN, &deg);
-    east = (bool)hemisphere;
+    proto_tree_add_item(lon_tree, hf_lisp_lcaf_geo_lon_hemisphere, tvb, offset, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item(lon_tree, hf_lisp_lcaf_geo_lon_deg, tvb, offset, 2, ENC_BIG_ENDIAN);
+    deg = tvb_get_ntohs(tvb, offset);
+    east = deg >> 15;
+    deg &= mask;
     if (deg > 180)
         expert_add_info_format(pinfo, tree, &ei_lisp_invalid_field,
                 "Invalid longitude degrees value (%d)", deg);
     offset += 2;
 
     /* Minutes (1 byte) */
-    proto_tree_add_item_ret_uint8(lon_tree, hf_lisp_lcaf_geo_lon_min, tvb, offset, 1, ENC_BIG_ENDIAN, &min);
+    proto_tree_add_item(lon_tree, hf_lisp_lcaf_geo_lon_min, tvb, offset, 1, ENC_BIG_ENDIAN);
+    min = tvb_get_uint8(tvb, offset);
     if (min > 60)
         expert_add_info_format(pinfo, tree, &ei_lisp_invalid_field,
                 "Invalid longitude minutes value (%d)", min);
     offset += 1;
 
     /* Seconds (1 byte) */
-    proto_tree_add_item_ret_uint8(lon_tree, hf_lisp_lcaf_geo_lon_sec, tvb, offset, 1, ENC_BIG_ENDIAN, &sec);
+    proto_tree_add_item(lon_tree, hf_lisp_lcaf_geo_lon_sec, tvb, offset, 1, ENC_BIG_ENDIAN);
+    sec = tvb_get_uint8(tvb, offset);
     if (sec > 60)
         expert_add_info_format(pinfo, tree, &ei_lisp_invalid_field,
                 "Invalid longitude seconds value (%d)", min);
@@ -1087,8 +1101,9 @@ dissect_lcaf_geo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset
             val_to_str_const(east, lon_typevals, ""), deg, min, sec);
 
     /* PROCESS ALTITUDE */
-    alt = tvb_get_ntohl(tvb, offset);
+
     ti_alt = proto_tree_add_item(tree, hf_lisp_lcaf_geo_alt, tvb, offset, 4, ENC_NA);
+    alt = tvb_get_ntohl(tvb, offset);
     /* if altitude equals 0x7fffffff then no altitude information encoded */
     if (alt == 0x7fffffff) {
         proto_item_append_text(ti_alt, ": no value encoded");
@@ -1101,7 +1116,8 @@ dissect_lcaf_geo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset
     /* PROCESS ADDRESS */
 
     /* AFI (2 bytes) */
-    proto_tree_add_item_ret_uint16(tree, hf_lisp_lcaf_geo_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &afi);
+    afi = tvb_get_ntohs(tvb, offset);
+    proto_tree_add_item(tree, hf_lisp_lcaf_geo_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
     ip_address = get_addr_str(tvb, pinfo, offset, afi, &addr_len);
@@ -1109,28 +1125,28 @@ dissect_lcaf_geo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset
         proto_item_append_text(tir, ", Address: %s", ip_address);
 
     switch (afi) {
-        case AFNUM_RESERVED_0:
+        case AFNUM_RESERVED:
             break;
-        case AFNUM_IP:
+        case AFNUM_INET:
             proto_tree_add_item(tree, hf_lisp_lcaf_geo_ipv4,
                     tvb, offset, INET_ADDRLEN, ENC_BIG_ENDIAN);
             offset += INET_ADDRLEN;
             break;
-        case AFNUM_IP6:
+        case AFNUM_INET6:
             proto_tree_add_item(tree, hf_lisp_lcaf_geo_ipv6,
                     tvb, offset, INET6_ADDRLEN, ENC_NA);
             offset += INET6_ADDRLEN;
             break;
-        case AFNUM_LISP_CANONICAL_ADDRESS_FORMAT:
+        case AFNUM_LCAF:
             offset = dissect_lcaf(tvb, pinfo, tree, offset, NULL);
             break;
         case AFNUM_802:
-        case AFNUM_48_BIT_MAC:
+        case AFNUM_EUI48:
             proto_tree_add_item(tree, hf_lisp_lcaf_geo_mac,
                     tvb, offset, EUI48_ADDRLEN, ENC_NA);
             offset += EUI48_ADDRLEN;
             break;
-        case AFNUM_DISTINGUISHED_NAME:
+        case AFNUM_DISTNAME:
             str_len = tvb_strsize(tvb, offset);
             proto_tree_add_item(tree, hf_lisp_lcaf_geo_dn, tvb, offset, str_len, ENC_ASCII);
             offset += str_len;
@@ -1250,7 +1266,8 @@ dissect_lcaf_nonce_loc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int 
     offset += 3;
 
     /* AFI (2 bytes) */
-    proto_tree_add_item_ret_uint16(tree, hf_lisp_lcaf_nonce_loc_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &afi);
+    afi = tvb_get_ntohs(tvb, offset);
+    proto_tree_add_item(tree, hf_lisp_lcaf_nonce_loc_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
     /* Address */
@@ -1259,28 +1276,28 @@ dissect_lcaf_nonce_loc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int 
         proto_item_append_text(tip, ", Address: %s", addr);
 
     switch (afi) {
-        case AFNUM_RESERVED_0:
+        case AFNUM_RESERVED:
             break;
-        case AFNUM_IP:
+        case AFNUM_INET:
             proto_tree_add_item(tree, hf_lisp_lcaf_nonce_loc_ipv4,
                     tvb, offset, INET_ADDRLEN, ENC_BIG_ENDIAN);
             offset += INET_ADDRLEN;
             break;
-        case AFNUM_IP6:
+        case AFNUM_INET6:
             proto_tree_add_item(tree, hf_lisp_lcaf_nonce_loc_ipv6,
                     tvb, offset, INET6_ADDRLEN, ENC_NA);
             offset += INET6_ADDRLEN;
             break;
-        case AFNUM_LISP_CANONICAL_ADDRESS_FORMAT:
+        case AFNUM_LCAF:
             offset = dissect_lcaf(tvb, pinfo, tree, offset, NULL);
             break;
         case AFNUM_802:
-        case AFNUM_48_BIT_MAC:
+        case AFNUM_EUI48:
             proto_tree_add_item(tree, hf_lisp_lcaf_nonce_loc_mac,
                     tvb, offset, EUI48_ADDRLEN, ENC_NA);
             offset += EUI48_ADDRLEN;
             break;
-        case AFNUM_DISTINGUISHED_NAME:
+        case AFNUM_DISTNAME:
             str_len = tvb_strsize(tvb, offset);
             proto_tree_add_item(tree, hf_lisp_lcaf_nonce_loc_dn, tvb, offset, str_len, ENC_ASCII);
             offset += str_len;
@@ -1327,7 +1344,8 @@ dissect_lcaf_mcast_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     proto_tree  *src_tree, *grp_tree;
 
     /* Instance ID (4 bytes) */
-    proto_tree_add_item_ret_uint(tree, hf_lisp_lcaf_mcinfo_iid, tvb, offset, 4, ENC_BIG_ENDIAN, &iid);
+    proto_tree_add_item(tree, hf_lisp_lcaf_mcinfo_iid, tvb, offset, 4, ENC_BIG_ENDIAN);
+    iid = tvb_get_ntohl(tvb, offset);
     offset += 4;
 
     /* Reserved (2 bytes) */
@@ -1335,35 +1353,38 @@ dissect_lcaf_mcast_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     offset += 2;
 
     /* Source Mask Length (1 byte) */
-    proto_tree_add_item_ret_uint8(tree, hf_lisp_lcaf_mcinfo_src_masklen, tvb, offset, 1, ENC_BIG_ENDIAN, &src_masklen);
+    proto_tree_add_item(tree, hf_lisp_lcaf_mcinfo_src_masklen, tvb, offset, 1, ENC_BIG_ENDIAN);
+    src_masklen = tvb_get_uint8(tvb, offset);
     offset += 1;
 
     /* Group Mask Length (1 byte) */
-    proto_tree_add_item_ret_uint8(tree, hf_lisp_lcaf_mcinfo_grp_masklen, tvb, offset, 1, ENC_BIG_ENDIAN, &grp_masklen);
+    proto_tree_add_item(tree, hf_lisp_lcaf_mcinfo_grp_masklen, tvb, offset, 1, ENC_BIG_ENDIAN);
+    grp_masklen = tvb_get_uint8(tvb, offset);
     offset += 1;
 
     ti_src   = proto_tree_add_item(tree, hf_lisp_lcaf_mcinfo_src, tvb, offset, 2, ENC_NA);
     src_tree = proto_item_add_subtree(ti_src, ett_lisp_lcaf_mcinfo_src);
 
     /* Source/Subnet AFI (2 bytes) */
-    proto_tree_add_item_ret_uint16(src_tree, hf_lisp_lcaf_mcinfo_src_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &afi);
+    proto_tree_add_item(src_tree, hf_lisp_lcaf_mcinfo_src_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
+    afi = tvb_get_ntohs(tvb, offset);
     offset += 2;
 
     /* Source/Subnet Address */
     src_str = get_addr_str(tvb, pinfo, offset, afi, &addr_len);
 
     switch (afi) {
-        case AFNUM_IP:
+        case AFNUM_INET:
             proto_tree_add_item(src_tree, hf_lisp_lcaf_mcinfo_src_ipv4,
                     tvb, offset, INET_ADDRLEN, ENC_BIG_ENDIAN);
             offset += INET_ADDRLEN;
             break;
-        case AFNUM_IP6:
+        case AFNUM_INET6:
             proto_tree_add_item(src_tree, hf_lisp_lcaf_mcinfo_src_ipv6,
                     tvb, offset, INET6_ADDRLEN, ENC_NA);
             offset += INET6_ADDRLEN;
             break;
-        case AFNUM_LISP_CANONICAL_ADDRESS_FORMAT:
+        case AFNUM_LCAF:
             offset = dissect_lcaf(tvb, pinfo, src_tree, offset, NULL);
             break;
         default:
@@ -1378,24 +1399,25 @@ dissect_lcaf_mcast_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     grp_tree = proto_item_add_subtree(ti_grp, ett_lisp_lcaf_mcinfo_grp);
 
     /* Group AFI (2 bytes) */
-    proto_tree_add_item_ret_uint16(grp_tree, hf_lisp_lcaf_mcinfo_grp_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &afi);
+    proto_tree_add_item(grp_tree, hf_lisp_lcaf_mcinfo_grp_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
+    afi = tvb_get_ntohs(tvb, offset);
     offset += 2;
 
     /* Group Address */
     grp_str = get_addr_str(tvb, pinfo, offset, afi, &addr_len);
 
     switch (afi) {
-        case AFNUM_IP:
+        case AFNUM_INET:
             proto_tree_add_item(grp_tree, hf_lisp_lcaf_mcinfo_grp_ipv4,
                     tvb, offset, INET_ADDRLEN, ENC_BIG_ENDIAN);
             offset += INET_ADDRLEN;
             break;
-        case AFNUM_IP6:
+        case AFNUM_INET6:
             proto_tree_add_item(grp_tree, hf_lisp_lcaf_mcinfo_grp_ipv6,
                     tvb, offset, INET6_ADDRLEN, ENC_NA);
             offset += INET6_ADDRLEN;
             break;
-        case AFNUM_LISP_CANONICAL_ADDRESS_FORMAT:
+        case AFNUM_LCAF:
             offset = dissect_lcaf(tvb, pinfo, grp_tree, offset, NULL);
             break;
         default:
@@ -1488,39 +1510,42 @@ dissect_lcaf_src_dst_key(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     offset += 2;
 
     /* Source Prefix Mask Length (1 byte) */
-    proto_tree_add_item_ret_uint8(tree, hf_lisp_lcaf_srcdst_src_masklen, tvb, offset, 1, ENC_BIG_ENDIAN, &src_masklen);
+    proto_tree_add_item(tree, hf_lisp_lcaf_srcdst_src_masklen, tvb, offset, 1, ENC_BIG_ENDIAN);
+    src_masklen = tvb_get_uint8(tvb, offset);
     offset += 1;
 
     /* Destination Prefix Mask Length (1 byte) */
-    proto_tree_add_item_ret_uint8(tree, hf_lisp_lcaf_srcdst_dst_masklen, tvb, offset, 1, ENC_BIG_ENDIAN, &dst_masklen);
+    proto_tree_add_item(tree, hf_lisp_lcaf_srcdst_dst_masklen, tvb, offset, 1, ENC_BIG_ENDIAN);
+    dst_masklen = tvb_get_uint8(tvb, offset);
     offset += 1;
 
     ti_src   = proto_tree_add_item(tree, hf_lisp_lcaf_srcdst_src, tvb, offset, 2, ENC_NA);
     src_tree = proto_item_add_subtree(ti_src, ett_lisp_lcaf_srcdst_src);
 
     /* Source Prefix AFI (2 bytes) */
-    proto_tree_add_item_ret_uint16(src_tree, hf_lisp_lcaf_srcdst_src_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &afi);
+    proto_tree_add_item(src_tree, hf_lisp_lcaf_srcdst_src_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
+    afi = tvb_get_ntohs(tvb, offset);
     offset += 2;
 
     /* Source Prefix */
     src_str = get_addr_str(tvb, pinfo, offset, afi, &addr_len);
 
     switch (afi) {
-        case AFNUM_IP:
+        case AFNUM_INET:
             proto_tree_add_item(src_tree, hf_lisp_lcaf_srcdst_src_ipv4,
                     tvb, offset, INET_ADDRLEN, ENC_BIG_ENDIAN);
             offset += INET_ADDRLEN;
             break;
-        case AFNUM_IP6:
+        case AFNUM_INET6:
             proto_tree_add_item(src_tree, hf_lisp_lcaf_srcdst_src_ipv6,
                     tvb, offset, INET6_ADDRLEN, ENC_NA);
             offset += INET6_ADDRLEN;
             break;
-        case AFNUM_LISP_CANONICAL_ADDRESS_FORMAT:
+        case AFNUM_LCAF:
             offset = dissect_lcaf(tvb, pinfo, src_tree, offset, NULL);
             break;
         case AFNUM_802:
-        case AFNUM_48_BIT_MAC:
+        case AFNUM_EUI48:
             proto_tree_add_item(src_tree, hf_lisp_lcaf_srcdst_src_mac,
                     tvb, offset, EUI48_ADDRLEN, ENC_NA);
             offset += EUI48_ADDRLEN;
@@ -1537,28 +1562,29 @@ dissect_lcaf_src_dst_key(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     dst_tree = proto_item_add_subtree(ti_dst, ett_lisp_lcaf_srcdst_dst);
 
     /* Destination Prefix AFI (2 bytes) */
-    proto_tree_add_item_ret_uint16(dst_tree, hf_lisp_lcaf_srcdst_dst_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &afi);
+    proto_tree_add_item(dst_tree, hf_lisp_lcaf_srcdst_dst_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
+    afi = tvb_get_ntohs(tvb, offset);
     offset += 2;
 
     /* Destination Prefix */
     dst_str = get_addr_str(tvb, pinfo, offset, afi, &addr_len);
 
     switch (afi) {
-        case AFNUM_IP:
+        case AFNUM_INET:
             proto_tree_add_item(dst_tree, hf_lisp_lcaf_srcdst_dst_ipv4,
                     tvb, offset, INET_ADDRLEN, ENC_BIG_ENDIAN);
             offset += INET_ADDRLEN;
             break;
-        case AFNUM_IP6:
+        case AFNUM_INET6:
             proto_tree_add_item(dst_tree, hf_lisp_lcaf_srcdst_dst_ipv6,
                     tvb, offset, INET6_ADDRLEN, ENC_NA);
             offset += INET6_ADDRLEN;
             break;
-        case AFNUM_LISP_CANONICAL_ADDRESS_FORMAT:
+        case AFNUM_LCAF:
             offset = dissect_lcaf(tvb, pinfo, dst_tree, offset, NULL);
             break;
         case AFNUM_802:
-        case AFNUM_48_BIT_MAC:
+        case AFNUM_EUI48:
             proto_tree_add_item(dst_tree, hf_lisp_lcaf_srcdst_dst_mac,
                     tvb, offset, EUI48_ADDRLEN, ENC_NA);
             offset += EUI48_ADDRLEN;
@@ -1649,33 +1675,34 @@ dissect_lcaf_kv_addr_pair(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     key_tree = proto_item_add_subtree(ti_key, ett_lisp_lcaf_kv_key);
 
     /* Key AFI (2 bytes) */
-    proto_tree_add_item_ret_uint16(key_tree, hf_lisp_lcaf_kv_key_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &afi);
+    proto_tree_add_item(key_tree, hf_lisp_lcaf_kv_key_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
+    afi = tvb_get_ntohs(tvb, offset);
     offset += 2;
 
     /* Key */
     key_str = get_addr_str(tvb, pinfo, offset, afi, &addr_len);
 
     switch (afi) {
-        case AFNUM_IP:
+        case AFNUM_INET:
             proto_tree_add_item(key_tree, hf_lisp_lcaf_kv_key_ipv4,
                     tvb, offset, INET_ADDRLEN, ENC_BIG_ENDIAN);
             offset += INET_ADDRLEN;
             break;
-        case AFNUM_IP6:
+        case AFNUM_INET6:
             proto_tree_add_item(key_tree, hf_lisp_lcaf_kv_key_ipv6,
                     tvb, offset, INET6_ADDRLEN, ENC_NA);
             offset += INET6_ADDRLEN;
             break;
-        case AFNUM_LISP_CANONICAL_ADDRESS_FORMAT:
+        case AFNUM_LCAF:
             offset = dissect_lcaf(tvb, pinfo, key_tree, offset, NULL);
             break;
         case AFNUM_802:
-        case AFNUM_48_BIT_MAC:
+        case AFNUM_EUI48:
             proto_tree_add_item(key_tree, hf_lisp_lcaf_kv_key_mac,
                     tvb, offset, EUI48_ADDRLEN, ENC_NA);
             offset += EUI48_ADDRLEN;
             break;
-        case AFNUM_DISTINGUISHED_NAME:
+        case AFNUM_DISTNAME:
             str_len = tvb_strsize(tvb, offset);
             proto_tree_add_item(key_tree, hf_lisp_lcaf_kv_key_dn, tvb, offset, str_len, ENC_ASCII);
             offset += str_len;
@@ -1692,33 +1719,34 @@ dissect_lcaf_kv_addr_pair(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     value_tree = proto_item_add_subtree(ti_value, ett_lisp_lcaf_kv_value);
 
     /* Value AFI (2 bytes) */
-    proto_tree_add_item_ret_uint16(value_tree, hf_lisp_lcaf_kv_value_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &afi);
+    proto_tree_add_item(value_tree, hf_lisp_lcaf_kv_value_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
+    afi = tvb_get_ntohs(tvb, offset);
     offset += 2;
 
     /* Value */
     value_str = get_addr_str(tvb, pinfo, offset, afi, &addr_len);
 
     switch (afi) {
-        case AFNUM_IP:
+        case AFNUM_INET:
             proto_tree_add_item(value_tree, hf_lisp_lcaf_kv_value_ipv4,
                     tvb, offset, INET_ADDRLEN, ENC_BIG_ENDIAN);
             offset += INET_ADDRLEN;
             break;
-        case AFNUM_IP6:
+        case AFNUM_INET6:
             proto_tree_add_item(value_tree, hf_lisp_lcaf_kv_value_ipv6,
                     tvb, offset, INET6_ADDRLEN, ENC_NA);
             offset += INET6_ADDRLEN;
             break;
-        case AFNUM_LISP_CANONICAL_ADDRESS_FORMAT:
+        case AFNUM_LCAF:
             offset = dissect_lcaf(tvb, pinfo, value_tree, offset, NULL);
             break;
         case AFNUM_802:
-        case AFNUM_48_BIT_MAC:
+        case AFNUM_EUI48:
             proto_tree_add_item(value_tree, hf_lisp_lcaf_kv_value_mac,
                     tvb, offset, EUI48_ADDRLEN, ENC_NA);
             offset += EUI48_ADDRLEN;
             break;
-        case AFNUM_DISTINGUISHED_NAME:
+        case AFNUM_DISTNAME:
             str_len = tvb_strsize(tvb, offset);
             proto_tree_add_item(value_tree, hf_lisp_lcaf_kv_value_dn, tvb, offset, str_len, ENC_ASCII);
             offset += str_len;
@@ -1838,8 +1866,9 @@ dissect_lcaf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, pr
     offset += 1;
 
     /* Type (8 bits) */
-    proto_tree_add_item_ret_uint8(lcaf_header_tree, hf_lisp_lcaf_type, tvb, offset, 1, ENC_BIG_ENDIAN, &lcaf_type);
-    proto_item_append_text(tir, ": %s", val_to_str(pinfo->pool, lcaf_type, lcaf_typevals, "Unknown (%d)"));
+    proto_tree_add_item(lcaf_header_tree, hf_lisp_lcaf_type, tvb, offset, 1, ENC_BIG_ENDIAN);
+    lcaf_type = tvb_get_uint8(tvb, offset);
+    proto_item_append_text(tir, ": %s", val_to_str(lcaf_type, lcaf_typevals, "Unknown (%d)"));
     offset += 1;
 
     if (lcaf_type == LCAF_MCAST_INFO) {
@@ -1953,7 +1982,8 @@ dissect_lisp_locator(tvbuff_t *tvb, packet_info *pinfo, proto_tree *lisp_mapping
     prio = tvb_get_uint8(tvb, offset);
     offset += 1;
 
-    proto_tree_add_item_ret_uint8(lisp_loc_tree, hf_lisp_loc_weight, tvb, offset, 1, ENC_BIG_ENDIAN, &weight);
+    proto_tree_add_item(lisp_loc_tree, hf_lisp_loc_weight, tvb, offset, 1, ENC_BIG_ENDIAN);
+    weight = tvb_get_uint8(tvb, offset);
     offset += 1;
 
     proto_tree_add_item(lisp_loc_tree, hf_lisp_loc_mpriority, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -1973,7 +2003,8 @@ dissect_lisp_locator(tvbuff_t *tvb, packet_info *pinfo, proto_tree *lisp_mapping
     flags = tvb_get_ntohs(tvb, offset);
     offset += 2;
 
-    proto_tree_add_item_ret_uint16(lisp_loc_tree, hf_lisp_loc_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &loc_afi);
+    proto_tree_add_item(lisp_loc_tree, hf_lisp_loc_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
+    loc_afi  = tvb_get_ntohs(tvb, offset);
     offset += 2;
 
     locator = get_addr_str(tvb, pinfo, offset, loc_afi, &addr_len);
@@ -1984,7 +2015,7 @@ dissect_lisp_locator(tvbuff_t *tvb, packet_info *pinfo, proto_tree *lisp_mapping
         return offset;
     }
 
-    if (loc_afi == AFNUM_LISP_CANONICAL_ADDRESS_FORMAT) {
+    if (loc_afi == AFNUM_LCAF) {
         /* Create a sub-tree for the mapping */
         lisp_lcaf_tree = proto_item_add_subtree(tir, ett_lisp_lcaf);
         offset = dissect_lcaf(tvb, pinfo, lisp_lcaf_tree, offset, NULL);
@@ -2088,7 +2119,7 @@ dissect_lisp_mapping(tvbuff_t *tvb, packet_info *pinfo, proto_tree *lisp_tree,
     proto_tree_add_item(lisp_mapping_tree, hf_lisp_mapping_act, tvb, offset, 2, ENC_BIG_ENDIAN);
     proto_item_append_text(tir, ", %s%s%s",
             (referral) ? "" : "Action: ",
-            val_to_str(pinfo->pool, act, (referral) ? referral_actions : mapping_actions, "Invalid action code (%d)"),
+            val_to_str(act, (referral) ? referral_actions : mapping_actions, "Invalid action code (%d)"),
             (referral&&(flags&REFERRAL_INCOMPLETE)) ? " (Incomplete)" : "");
 
     /* Authoritative bit */
@@ -2120,30 +2151,31 @@ dissect_lisp_mapping(tvbuff_t *tvb, packet_info *pinfo, proto_tree *lisp_tree,
     offset += 2;
 
     /* EID prefix AFI (16 bits) */
-    proto_tree_add_item_ret_uint16(lisp_mapping_tree, hf_lisp_mapping_eid_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &eid_afi);
+    eid_afi = tvb_get_ntohs(tvb, offset);
+    proto_tree_add_item(lisp_mapping_tree, hf_lisp_mapping_eid_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
     /* EID */
     switch (eid_afi) {
-        case AFNUM_IP:
+        case AFNUM_INET:
             proto_tree_add_item(lisp_mapping_tree, hf_lisp_mapping_eid_ipv4, tvb, offset, INET_ADDRLEN, ENC_BIG_ENDIAN);
             offset += INET_ADDRLEN;
             break;
-        case AFNUM_IP6:
+        case AFNUM_INET6:
             proto_tree_add_item(lisp_mapping_tree, hf_lisp_mapping_eid_ipv6, tvb, offset, INET6_ADDRLEN, ENC_NA);
             offset += INET6_ADDRLEN;
             break;
-        case AFNUM_LISP_CANONICAL_ADDRESS_FORMAT:
+        case AFNUM_LCAF:
             lcaf_prefix_tree = proto_tree_add_subtree_format(lisp_mapping_tree, tvb, offset, addr_len, ett_lisp_lcaf, NULL, "EID Prefix: %s", prefix);
             dissect_lcaf(tvb, pinfo, lcaf_prefix_tree, offset, NULL);
             offset += addr_len;
             break;
         case AFNUM_802:
-        case AFNUM_48_BIT_MAC:
+        case AFNUM_EUI48:
             proto_tree_add_item(lisp_mapping_tree, hf_lisp_mapping_eid_mac, tvb, offset, EUI48_ADDRLEN, ENC_NA);
             offset += EUI48_ADDRLEN;
             break;
-        case AFNUM_DISTINGUISHED_NAME:
+        case AFNUM_DISTNAME:
             str_len = tvb_strsize(tvb, offset);
             proto_tree_add_item(lisp_mapping_tree, hf_lisp_mapping_eid_dn, tvb, offset, str_len, ENC_ASCII);
             offset += str_len;
@@ -2266,27 +2298,27 @@ dissect_lisp_map_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree *lisp_tre
 
     /* Source EID */
     switch (src_eid_afi) {
-        case AFNUM_RESERVED_0:
+        case AFNUM_RESERVED:
             proto_tree_add_string(lisp_tree, hf_lisp_mreq_srceid_string, tvb, offset, 0, "not set");
             break;
-        case AFNUM_IP:
+        case AFNUM_INET:
             proto_tree_add_item(lisp_tree,
                     hf_lisp_mreq_srceid_ipv4, tvb, offset, INET_ADDRLEN, ENC_BIG_ENDIAN);
             offset += INET_ADDRLEN;
             break;
-        case AFNUM_IP6:
+        case AFNUM_INET6:
             proto_tree_add_item(lisp_tree,
                     hf_lisp_mreq_srceid_ipv6, tvb, offset, INET6_ADDRLEN, ENC_NA);
             offset += INET6_ADDRLEN;
             break;
-        case AFNUM_LISP_CANONICAL_ADDRESS_FORMAT:
+        case AFNUM_LCAF:
             src_eid = get_addr_str(tvb, pinfo, offset, src_eid_afi, &addr_len);
             lcaf_src_eid_tree = proto_tree_add_subtree_format(lisp_tree, tvb, offset, addr_len, ett_lisp_lcaf, NULL, "Source EID: %s", src_eid);
             dissect_lcaf(tvb, pinfo, lcaf_src_eid_tree, offset, NULL);
             offset += addr_len;
             break;
         case AFNUM_802:
-        case AFNUM_48_BIT_MAC:
+        case AFNUM_EUI48:
             proto_tree_add_item(lisp_tree,
                     hf_lisp_mreq_srceid_mac, tvb, offset, EUI48_ADDRLEN, ENC_NA);
             offset += EUI48_ADDRLEN;
@@ -2312,13 +2344,13 @@ dissect_lisp_map_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree *lisp_tre
         offset += 2;
 
         switch (itr_afi) {
-            case AFNUM_IP:
+            case AFNUM_INET:
                 proto_tree_add_item(lisp_itr_tree, hf_lisp_mreq_itr_rloc_ipv4, tvb, offset, 4, ENC_BIG_ENDIAN);
                 proto_item_append_text(tir, " %d: %s", i + 1, tvb_ip_to_str(pinfo->pool, tvb, offset));
                 proto_item_set_len(tir, 2 + INET_ADDRLEN);
                 offset += INET_ADDRLEN;
                 break;
-            case AFNUM_IP6:
+            case AFNUM_INET6:
                 proto_tree_add_item(lisp_itr_tree, hf_lisp_mreq_itr_rloc_ipv6, tvb, offset, 16, ENC_NA);
                 proto_item_append_text(tir, " %d: %s", i + 1, tvb_ip6_to_str(pinfo->pool, tvb, offset));
                 proto_item_set_len(tir, 2 + INET6_ADDRLEN);
@@ -2372,25 +2404,25 @@ dissect_lisp_map_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree *lisp_tre
         offset += 2;
 
         switch (prefix_afi) {
-            case AFNUM_IP:
-                proto_tree_add_item(lisp_record_tree, hf_lisp_mreq_record_prefix_ipv4, tvb, offset, INET_ADDRLEN, ENC_BIG_ENDIAN);
+            case AFNUM_INET:
+                proto_tree_add_item(lisp_record_tree, hf_lisp_mreq_record_prefix_ipv4, tvb, offset, INET_ADDRLEN, ENC_NA);
                 offset += INET_ADDRLEN;
                 break;
-            case AFNUM_IP6:
+            case AFNUM_INET6:
                 proto_tree_add_item(lisp_record_tree, hf_lisp_mreq_record_prefix_ipv6, tvb, offset, INET6_ADDRLEN, ENC_NA);
                 offset += INET6_ADDRLEN;
                 break;
-            case AFNUM_LISP_CANONICAL_ADDRESS_FORMAT:
+            case AFNUM_LCAF:
                 lcaf_prefix_tree = proto_tree_add_subtree_format(lisp_record_tree, tvb, offset, addr_len, ett_lisp_lcaf, NULL, "Prefix: %s", prefix);
                 dissect_lcaf(tvb, pinfo, lcaf_prefix_tree, offset, NULL);
                 offset += addr_len;
                 break;
             case AFNUM_802:
-            case AFNUM_48_BIT_MAC:
+            case AFNUM_EUI48:
                 proto_tree_add_item(lisp_record_tree, hf_lisp_mreq_record_prefix_mac, tvb, offset, EUI48_ADDRLEN, ENC_NA);
                 offset += EUI48_ADDRLEN;
                 break;
-            case AFNUM_DISTINGUISHED_NAME:
+            case AFNUM_DISTNAME:
                 str_len = tvb_strsize(tvb, offset);
                 proto_tree_add_item(lisp_record_tree, hf_lisp_mreq_record_prefix_dn, tvb, offset, str_len, ENC_ASCII);
                 offset += str_len;
@@ -2572,7 +2604,8 @@ dissect_lisp_map_register(tvbuff_t *tvb, packet_info *pinfo, proto_tree *lisp_tr
     offset += 2;
 
     /* Authentication Data Length (16 bits) */
-    proto_tree_add_item_ret_uint16(lisp_tree, hf_lisp_authlen, tvb, offset, 2, ENC_BIG_ENDIAN, &authlen);
+    authlen = tvb_get_ntohs(tvb, offset);
+    proto_tree_add_item(lisp_tree, hf_lisp_authlen, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
     /* Authentication Data */
@@ -2676,7 +2709,8 @@ dissect_lisp_map_notify(tvbuff_t *tvb, packet_info *pinfo, proto_tree *lisp_tree
     offset += 2;
 
     /* Authentication Data Length (16 bits) */
-    proto_tree_add_item_ret_uint16(lisp_tree, hf_lisp_authlen, tvb, offset, 2, ENC_BIG_ENDIAN, &authlen);
+    authlen = tvb_get_ntohs(tvb, offset);
+    proto_tree_add_item(lisp_tree, hf_lisp_authlen, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
     /* Authentication Data */
@@ -2702,7 +2736,8 @@ dissect_lisp_map_notify(tvbuff_t *tvb, packet_info *pinfo, proto_tree *lisp_tree
         offset += 2;
 
         /* MS-RTR Authentication Data Length (16 bits) */
-        proto_tree_add_item_ret_uint16(lisp_tree, hf_lisp_msrtr_authlen, tvb, offset, 2, ENC_BIG_ENDIAN, &authlen);
+        authlen = tvb_get_ntohs(tvb, offset);
+        proto_tree_add_item(lisp_tree, hf_lisp_msrtr_authlen, tvb, offset, 2, ENC_BIG_ENDIAN);
         offset += 2;
 
         /* MS-RTR Authentication Data */
@@ -2841,7 +2876,8 @@ dissect_lisp_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *lisp_tree)
     offset += 2;
 
     /* Authentication Data Length (16 bits) */
-    proto_tree_add_item_ret_uint16(lisp_tree, hf_lisp_authlen, tvb, offset, 2, ENC_BIG_ENDIAN, &authlen);
+    authlen = tvb_get_ntohs(tvb, offset);
+    proto_tree_add_item(lisp_tree, hf_lisp_authlen, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
     /* Authentication Data */
@@ -2862,8 +2898,8 @@ dissect_lisp_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *lisp_tree)
     proto_tree_add_item(prefix_tree, hf_lisp_info_prefix_masklen, tvb, offset, 1, ENC_BIG_ENDIAN);
     prefix_mask = tvb_get_uint8(tvb, offset); offset += 1;
 
-    proto_tree_add_item_ret_uint16(prefix_tree, hf_lisp_info_prefix_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &prefix_afi);
-    offset += 2;
+    proto_tree_add_item(prefix_tree, hf_lisp_info_prefix_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
+    prefix_afi = tvb_get_ntohs(tvb, offset);  offset += 2;
 
     prefix = get_addr_str(tvb, pinfo, offset, prefix_afi, &addr_len);
 
@@ -2876,10 +2912,10 @@ dissect_lisp_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *lisp_tree)
     }
 
     switch (prefix_afi) {
-        case AFNUM_IP:
+        case AFNUM_INET:
             proto_tree_add_item(prefix_tree, hf_lisp_info_prefix_ipv4, tvb, offset, INET_ADDRLEN, ENC_BIG_ENDIAN);
             break;
-        case AFNUM_IP6:
+        case AFNUM_INET6:
             proto_tree_add_item(prefix_tree, hf_lisp_info_prefix_ipv6, tvb, offset, INET6_ADDRLEN, ENC_NA);
             break;
     }
@@ -2891,8 +2927,8 @@ dissect_lisp_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *lisp_tree)
     /* Update the INFO column */
     col_append_fstr(pinfo->cinfo, COL_INFO, " for %s/%d", prefix, prefix_mask);
 
-    tir = proto_tree_add_item_ret_uint16(lisp_tree, hf_lisp_info_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &afi);
-    offset += 2;
+    tir = proto_tree_add_item(lisp_tree, hf_lisp_info_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
+    afi  = tvb_get_ntohs(tvb, offset); offset += 2;
 
     if (!reply) {
         if (afi != 0) {
@@ -2900,10 +2936,10 @@ dissect_lisp_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *lisp_tree)
                     "Expecting NULL AFI (0), found %d, incorrect packet!", afi);
         }
     } else {
-        if (afi != AFNUM_LISP_CANONICAL_ADDRESS_FORMAT) {
+        if (afi != AFNUM_LCAF) {
             expert_add_info_format(pinfo, tir, &ei_lisp_expected_field,
                     "Expecting LCAF AFI (%d), found %d, incorrect packet!",
-                    AFNUM_LISP_CANONICAL_ADDRESS_FORMAT, afi);
+                    AFNUM_LCAF, afi);
         } else {
             offset = dissect_lcaf(tvb, pinfo, lisp_tree, offset, NULL);
         }
@@ -2980,10 +3016,10 @@ dissect_lisp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "LISP");
 
     if (encapsulated) {
-        col_add_fstr(pinfo->cinfo, COL_INFO, "Encapsulated %s", val_to_str(pinfo->pool, type, lisp_typevals,
+        col_add_fstr(pinfo->cinfo, COL_INFO, "Encapsulated %s", val_to_str(type, lisp_typevals,
                     "Unknown LISP Control Packet (%d)"));
     } else {
-        col_add_str(pinfo->cinfo, COL_INFO, val_to_str(pinfo->pool, type, lisp_typevals,
+        col_add_str(pinfo->cinfo, COL_INFO, val_to_str(type, lisp_typevals,
                     "Unknown LISP Control Packet (%d)"));
     }
 
@@ -3655,10 +3691,10 @@ proto_register_lisp(void)
             FT_IPv6, BASE_NONE, NULL, 0x0, NULL, HFILL }},
         { &hf_lisp_lcaf_natt_msport,
             { "MS UDP Port Number", "lisp.lcaf.natt.msport",
-            FT_UINT16, BASE_PT_UDP, NULL, 0x0, NULL, HFILL }},
+            FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL }},
         { &hf_lisp_lcaf_natt_etrport,
             { "ETR UDP Port Number", "lisp.lcaf.natt.etrport",
-            FT_UINT16, BASE_PT_UDP, NULL, 0x0, NULL, HFILL }},
+            FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL }},
         { &hf_lisp_lcaf_vendor_res,
             { "Reserved", "lisp.lcaf.vendor.res",
             FT_UINT8, BASE_HEX, NULL, 0x0, "Must be zero", HFILL }},

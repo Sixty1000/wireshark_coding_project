@@ -11,6 +11,7 @@
  */
 
 #include "config.h"
+
 #define WS_LOG_DOMAIN  LOG_DOMAIN_MMDB
 
 #include <glib.h>
@@ -34,7 +35,6 @@ static mmdb_lookup_t mmdb_not_found;
 #include <epan/addr_resolv.h>
 #include <epan/uat.h>
 #include <epan/prefs.h>
-#include <epan/prefs-int.h>
 
 #include <wsutil/report_message.h>
 #include <wsutil/file_util.h>
@@ -55,7 +55,7 @@ static char mmdbr_stop_sentinel[] = "\x04"; // ASCII EOT. Could be anything.
 
 // The GLib documentation says that g_rw_lock_reader_lock can be called
 // recursively:
-//   https://docs.gtk.org/glib/method.RWLock.reader_lock.html
+//   https://developer-old.gnome.org/glib/stable/glib-Threads.html#g-rw-lock-reader-lock
 // However, g_rw_lock_reader_lock calls AcquireSRWLockShared
 //   https://gitlab.gnome.org/GNOME/glib/blob/master/glib/gthread-win32.c#L206
 // and SRW locks "cannot be acquired recursively"
@@ -514,12 +514,8 @@ static void mmdb_resolve_start(void) {
     /* Make sure that these close if we spawn a dumpcap process
      * (capturing or capture stats/sparklines.)
      */
-    if (-1 == fcntl(g_io_channel_unix_get_fd(mmdbr_pipe.stdin_io), F_SETFD, FD_CLOEXEC)) {
-        ws_info("Failure setting CLOEXEC on mmdbr_pipe stdin: %s", g_strerror(errno));
-    }
-    if (-1 == fcntl(g_io_channel_unix_get_fd(mmdbr_pipe.stdout_io), F_SETFD, FD_CLOEXEC)) {
-        ws_info("Failure setting CLOEXEC on mmdbr_pipe stdout: %s", g_strerror(errno));
-    };
+    fcntl(g_io_channel_unix_get_fd(mmdbr_pipe.stdin_io), F_SETFD, FD_CLOEXEC);
+    fcntl(g_io_channel_unix_get_fd(mmdbr_pipe.stdout_io), F_SETFD, FD_CLOEXEC);
 #endif
 
     write_mmdbr_stdin_thread = g_thread_new("write_mmdbr_stdin_worker", write_mmdbr_stdin_worker, NULL);
@@ -607,20 +603,9 @@ static void maxmind_db_post_update_cb(void) {
         }
     }
 
-    /* The first time this is called on startup gbl_resolv_flags.maxmind_geoip
-     * doesn't yet reflect the configuration profile settings or the command
-     * line settings. We want to start the process (which is moderately
-     * expensive) iff the preference is set when prefs_apply_all() is called.
-     *
-     * XXX - There might be other UATs that want slightly different behavior
-     * when first called on startup versus later. Is there a more general way
-     * to handle this?
-     */
-    static bool maxmind_db_init = false;
-    if (maxmind_db_init && gbl_resolv_flags.maxmind_geoip) {
+    if (gbl_resolv_flags.maxmind_geoip) {
         mmdb_resolve_start();
     }
-    maxmind_db_init = true;
 }
 
 /**
@@ -662,30 +647,6 @@ maxmind_db_pref_init(module_t *nameres)
             " Wireshark will look in each directory for files ending"
             " with \".mmdb\".",
             maxmind_db_paths_uat);
-
-    if (!mmdb_ipv4_map) {
-        mmdb_ipv4_map = wmem_map_new(wmem_epan_scope(), g_direct_hash, g_direct_equal);
-    }
-
-    if (!mmdb_ipv6_map) {
-        mmdb_ipv6_map = wmem_map_new(wmem_epan_scope(), ipv6_oat_hash, ipv6_equal);
-    }
-
-    if (!mmdb_str_chunk) {
-        mmdb_str_chunk = wmem_map_new(wmem_epan_scope(), wmem_str_hash, g_str_equal);
-    }
-
-    if (!mmdb_ipv6_chunk) {
-        mmdb_ipv6_chunk = wmem_map_new(wmem_epan_scope(), ipv6_oat_hash, ipv6_equal);
-    }
-
-    /* This ensures that prefs_apply_all calls maxmind_db_pref_apply() even
-     * if the configuration profile and command line don't change the
-     * maxmind_geoip preference (or any other nameres preference) from its
-     * default. The default is true, so we need to call mmdb_resolve_start
-     * in that case.
-     */
-    nameres->prefs_changed_flags |= PREF_EFFECT_DISSECTION;
 }
 
 void maxmind_db_pref_cleanup(void)

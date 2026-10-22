@@ -64,6 +64,7 @@
 				  /* also disk quota exceeded? */
 
 extern value_string_ext asp_error_vals_ext;
+extern value_string_ext afp_server_addr_type_vals_ext;
 
 /* server flags */
 #define AFPSRVRINFO_COPY         (1<<0)  /* supports copyfile */
@@ -105,6 +106,11 @@ struct atp_asp_dsi_info {
 	uint16_t	tid;			/* request/transaction ID */
 	int32_t code;			/* error code/ offset NU */
 };
+
+/*
+ * value_string table for AFP command codes.
+ */
+WS_DLL_PUBLIC value_string_ext CommandCode_vals_ext;
 
 /*
  * Value from table matching requests and responses; also passed to AFP

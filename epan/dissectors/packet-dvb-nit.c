@@ -87,13 +87,15 @@ dissect_dvb_nit(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
     offset += 1;
 
     proto_tree_add_item(dvb_nit_tree, hf_dvb_nit_reserved2,                  tvb, offset, 2, ENC_BIG_ENDIAN);
-    proto_tree_add_item_ret_uint(dvb_nit_tree, hf_dvb_nit_network_descriptors_length, tvb, offset, 2, ENC_BIG_ENDIAN, &desc_loop_len);
+    proto_tree_add_item(dvb_nit_tree, hf_dvb_nit_network_descriptors_length, tvb, offset, 2, ENC_BIG_ENDIAN);
+    desc_loop_len = tvb_get_ntohs(tvb, offset) & DVB_NIT_NETWORK_DESCRIPTORS_LENGTH_MASK;
     offset += 2;
 
-    offset += proto_mpeg_descriptor_loop_dissect(tvb, pinfo, offset, desc_loop_len, dvb_nit_tree);
+    offset += proto_mpeg_descriptor_loop_dissect(tvb, offset, desc_loop_len, dvb_nit_tree);
 
     proto_tree_add_item(dvb_nit_tree, hf_dvb_nit_reserved3,                    tvb, offset, 2, ENC_BIG_ENDIAN);
-    proto_tree_add_item_ret_uint(dvb_nit_tree, hf_dvb_nit_transport_stream_loop_length, tvb, offset, 2, ENC_BIG_ENDIAN, &ts_end);
+    proto_tree_add_item(dvb_nit_tree, hf_dvb_nit_transport_stream_loop_length, tvb, offset, 2, ENC_BIG_ENDIAN);
+    ts_end = offset + (tvb_get_ntohs(tvb, offset) & DVB_NIT_TRANSPORT_STREAM_LOOP_LENGTH_MASK);
     offset += 2;
 
     while (offset < ts_end) {
@@ -110,10 +112,11 @@ dissect_dvb_nit(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
         offset += 2;
 
         proto_tree_add_item(dvb_nit_ts_tree, hf_dvb_nit_reserved4,                    tvb, offset, 2, ENC_BIG_ENDIAN);
-        proto_tree_add_item_ret_uint(dvb_nit_ts_tree, hf_dvb_nit_transport_descriptors_length, tvb, offset, 2, ENC_BIG_ENDIAN, &desc_loop_len);
+        proto_tree_add_item(dvb_nit_ts_tree, hf_dvb_nit_transport_descriptors_length, tvb, offset, 2, ENC_BIG_ENDIAN);
+        desc_loop_len = tvb_get_ntohs(tvb, offset) & DVB_NIT_TRANSPORT_DESCRIPTORS_LENGTH_MASK;
         offset += 2;
 
-        offset += proto_mpeg_descriptor_loop_dissect(tvb, pinfo, offset, desc_loop_len, dvb_nit_ts_tree);
+        offset += proto_mpeg_descriptor_loop_dissect(tvb, offset, desc_loop_len, dvb_nit_ts_tree);
     }
 
     offset += packet_mpeg_sect_crc(tvb, pinfo, dvb_nit_tree, 0, offset);

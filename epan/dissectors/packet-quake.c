@@ -17,8 +17,6 @@
 
 #include <epan/packet.h>
 #include <epan/conversation.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 
 void proto_register_quake(void);
 
@@ -138,8 +136,8 @@ static void
 dissect_quake_CCREQ_CONNECT
 (tvbuff_t *tvb, proto_tree *tree)
 {
-	unsigned offset = 0;
-	unsigned item_len;
+	int offset = 0;
+	int item_len;
 
 	proto_tree_add_item_ret_length(tree, hf_quake_CCREQ_CONNECT_game,
 			tvb, offset, -1, ENC_ASCII|ENC_NA, &item_len);
@@ -154,8 +152,8 @@ static void
 dissect_quake_CCREQ_SERVER_INFO
 (tvbuff_t *tvb, proto_tree *tree)
 {
-	unsigned offset = 0;
-	unsigned item_len;
+	int offset = 0;
+	int item_len;
 
 	proto_tree_add_item_ret_length(tree, hf_quake_CCREQ_SERVER_INFO_game,
 			tvb, offset, -1, ENC_ASCII|ENC_NA, &item_len);
@@ -212,8 +210,8 @@ static void
 dissect_quake_CCREP_SERVER_INFO
 (tvbuff_t *tvb, proto_tree *tree)
 {
-	unsigned offset = 0;
-	unsigned item_len;
+	int offset = 0;
+	int item_len;
 
 	proto_tree_add_item_ret_length(tree,
 			hf_quake_CCREP_SERVER_INFO_address, tvb, offset, -1,
@@ -245,13 +243,13 @@ static void
 dissect_quake_CCREP_PLAYER_INFO
 (tvbuff_t *tvb, proto_tree *tree)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	uint32_t colors;
 	uint32_t color_shirt;
 	uint32_t color_pants;
 	proto_item *colors_item;
 	proto_tree *colors_tree;
-	unsigned item_len;
+	int item_len;
 
 	proto_tree_add_item(tree, hf_quake_CCREQ_PLAYER_INFO_player,
 			tvb, offset, 1, ENC_LITTLE_ENDIAN);
@@ -293,8 +291,8 @@ static void
 dissect_quake_CCREP_RULE_INFO
 (tvbuff_t *tvb, proto_tree *tree)
 {
-	unsigned offset = 0;
-	unsigned item_len;
+	int offset = 0;
+	int item_len;
 
 	if (tvb_reported_length(tvb) == 0) return;
 
@@ -319,13 +317,13 @@ dissect_quake_control(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 	direction = (command & 0x80) ? CCREP : CCREQ;
 
 	col_add_fstr(pinfo->cinfo, COL_INFO, "%s %s",
-			val_to_str(pinfo->pool, command,names_control_command, "%u"),
-			val_to_str(pinfo->pool, direction,names_control_direction,"%u"));
+			val_to_str(command,names_control_command, "%u"),
+			val_to_str(direction,names_control_direction,"%u"));
 
 	control_tree = proto_tree_add_subtree_format(tree, tvb,
 			0, -1, ett_quake_control, NULL, "Control %s: %s",
-			val_to_str(pinfo->pool, direction, names_control_direction, "%u"),
-			val_to_str(pinfo->pool, command, names_control_command, "%u"));
+			val_to_str(direction, names_control_direction, "%u"),
+			val_to_str(command, names_control_command, "%u"));
 	proto_tree_add_uint(control_tree, hf_quake_control_command,
 			tvb, 0, 1, command);
 

@@ -11,13 +11,14 @@
 #include <ui_iax2_analysis_dialog.h>
 
 #include "file.h"
+#include "frame_tvbuff.h"
 
 #include <epan/epan_dissect.h>
+#include <epan/rtp_pt.h>
 
 #include <epan/dfilter/dfilter.h>
 
 #include <epan/dissectors/packet-iax2.h>
-#include <epan/dissectors/packet-rtp_pt.h>
 
 #include "ui/help_url.h"
 #ifdef IAX2_RTP_STREAM_CHECK
@@ -33,10 +34,8 @@
 #include <QTemporaryFile>
 
 #include <ui/qt/utils/color_utils.h>
-#include <ui/qt/utils/plot_theme.h>
 #include <ui/qt/utils/qt_ui_utils.h>
 #include <ui/qt/utils/stock_icon.h>
-#include <ui/qt/utils/theme_manager.h>
 #include "main_application.h"
 #include "ui/qt/widgets/wireshark_file_dialog.h"
 
@@ -88,7 +87,7 @@ public:
 
         if (statinfo->flags & STAT_FLAG_WRONG_SEQ) {
             status = QObject::tr("Wrong sequence number");
-            bg_color = ThemeManager::instance()->color(ThemeManager::ExpertError);
+            bg_color = ColorUtils::expert_color_error;
         } else if (statinfo->flags & STAT_FLAG_REG_PT_CHANGE) {
             status = QObject::tr("Payload changed to PT=%1").arg(statinfo->pt);
             bg_color = color_rtp_warn_;
@@ -130,7 +129,7 @@ public:
         if (bg_color.isValid()) {
             for (int col = 0; col < columnCount(); col++) {
                 setBackground(col, bg_color);
-                setForeground(col, ThemeManager::instance()->color(ThemeManager::ExpertForeground));
+                setForeground(col, ColorUtils::expert_color_foreground);
             }
         }
     }
@@ -146,7 +145,7 @@ public:
                 << status_str << pkt_len_;
     }
 
-    bool operator< (const QTreeWidgetItem &other) const override
+    bool operator< (const QTreeWidgetItem &other) const
     {
         if (other.type() != iax2_analysis_type_) return QTreeWidgetItem::operator< (other);
         const Iax2AnalysisTreeWidgetItem *other_row = static_cast<const Iax2AnalysisTreeWidgetItem *>(&other);
@@ -210,6 +209,7 @@ Iax2AnalysisDialog::Iax2AnalysisDialog(QWidget &parent, CaptureFile &cf) :
     stream_ctx_menu_.addAction(ui->actionSaveReverseCsv);
     stream_ctx_menu_.addSeparator();
     stream_ctx_menu_.addAction(ui->actionSaveGraph);
+    set_action_shortcuts_visible_in_context_menu(stream_ctx_menu_.actions());
 
     ui->forwardTreeWidget->installEventFilter(this);
     ui->forwardTreeWidget->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -226,7 +226,6 @@ Iax2AnalysisDialog::Iax2AnalysisDialog(QWidget &parent, CaptureFile &cf) :
     ui->streamGraph->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(ui->streamGraph, &QCustomPlot::customContextMenuRequested, this,
                 &Iax2AnalysisDialog::showGraphMenu);
-    PlotTheme::track(ui->streamGraph);
 
     QStringList header_labels;
     for (int i = 0; i < ui->forwardTreeWidget->columnCount(); i++) {
@@ -243,24 +242,25 @@ Iax2AnalysisDialog::Iax2AnalysisDialog(QWidget &parent, CaptureFile &cf) :
 
     for (int i = 0; i < num_graphs_; i++) {
         QCPGraph *graph = ui->streamGraph->addGraph();
-        QColor graphColor = ThemeManager::instance()->graphColor(i);
-        graph->setPen(QPen(graphColor));
+        graph->setPen(QPen(ColorUtils::graphColor(i)));
         graph->setName(graph_cbs[i]->text());
         graphs_ << graph;
         graph_cbs[i]->setChecked(true);
-        graph_cbs[i]->setIcon(StockIcon::colorIcon(ThemeManager::instance()->graphColor(i), QPalette::Text));
+        graph_cbs[i]->setIcon(StockIcon::colorIcon(ColorUtils::graphColor(i), QPalette::Text));
     }
     ui->streamGraph->xAxis->setLabel("Arrival Time");
     ui->streamGraph->yAxis->setLabel("Value (ms)");
 
     // We keep our temp files open for the lifetime of the dialog. The GTK+
     // UI opens and closes at various points.
-    QString tempname = QStringLiteral("%1/wireshark_iax2_f").arg(tempPath());
+    QString tempname = QString("%1/wireshark_iax2_f").arg(QDir::tempPath());
     fwd_tempfile_ = new QTemporaryFile(tempname, this);
-    tempname = QStringLiteral("%1/wireshark_iax2_r").arg(tempPath());
+    fwd_tempfile_->open();
+    tempname = QString("%1/wireshark_iax2_r").arg(QDir::tempPath());
     rev_tempfile_ = new QTemporaryFile(tempname, this);
+    rev_tempfile_->open();
 
-    if (!fwd_tempfile_->open() || fwd_tempfile_->error() != QFile::NoError || !rev_tempfile_->open() || rev_tempfile_->error() != QFile::NoError) {
+    if (fwd_tempfile_->error() != QFile::NoError || rev_tempfile_->error() != QFile::NoError) {
         err_str_ = tr("Unable to save RTP data.");
         ui->actionSaveAudio->setEnabled(false);
         ui->actionSaveForwardAudio->setEnabled(false);
@@ -319,6 +319,7 @@ Iax2AnalysisDialog::Iax2AnalysisDialog(QWidget &parent, CaptureFile &cf) :
     epan_dissect_init(&edt, cap_file_.capFile()->epan, true, false);
     epan_dissect_prime_with_dfilter(&edt, sfcode);
     epan_dissect_run(&edt, cap_file_.capFile()->cd_t, &cap_file_.capFile()->rec,
+                     frame_tvbuff_new_buffer(&cap_file_.capFile()->provider, fdata, &cap_file_.capFile()->buf),
                      fdata, NULL);
 
     // This shouldn't happen (the menu item should be disabled) but check anyway
@@ -461,8 +462,7 @@ void Iax2AnalysisDialog::on_actionGoToPacket_triggered()
     QTreeWidgetItem *ti = cur_tree->selectedItems()[0];
     if (ti->type() != iax2_analysis_type_) return;
 
-    Iax2AnalysisTreeWidgetItem *ra_ti = dynamic_cast<Iax2AnalysisTreeWidgetItem *>(ti);
-    if (ra_ti == nullptr) return;
+    Iax2AnalysisTreeWidgetItem *ra_ti = dynamic_cast<Iax2AnalysisTreeWidgetItem *>((Iax2AnalysisTreeWidgetItem *)ti);
     emit goToPacket(ra_ti->frameNum());
 }
 
@@ -481,8 +481,7 @@ void Iax2AnalysisDialog::on_actionNextProblem_triggered()
     QTreeWidgetItem *test_ti = cur_tree->itemBelow(sel_ti);
     while (test_ti != sel_ti) {
         if (!test_ti) test_ti = cur_tree->topLevelItem(0);
-        Iax2AnalysisTreeWidgetItem *ra_ti = dynamic_cast<Iax2AnalysisTreeWidgetItem *>(test_ti);
-        if (ra_ti == nullptr) continue;
+        Iax2AnalysisTreeWidgetItem *ra_ti = dynamic_cast<Iax2AnalysisTreeWidgetItem *>((Iax2AnalysisTreeWidgetItem *)test_ti);
         if (!ra_ti->frameStatus()) {
             cur_tree->setCurrentItem(ra_ti);
             break;
@@ -550,24 +549,22 @@ void Iax2AnalysisDialog::on_actionSaveGraph_triggered()
 {
     ui->tabWidget->setCurrentWidget(ui->graphTab);
 
-    QString file_name;
+    QString file_name, extension;
     QDir path(mainApp->openDialogInitialDir());
     QString pdf_filter = tr("Portable Document Format (*.pdf)");
     QString png_filter = tr("Portable Network Graphics (*.png)");
     QString bmp_filter = tr("Windows Bitmap (*.bmp)");
     // Gaze upon my beautiful graph with lossy artifacts!
     QString jpeg_filter = tr("JPEG File Interchange Format (*.jpeg *.jpg)");
-    QString filter = QStringLiteral("%1;;%2;;%3;;%4").arg(
-        pdf_filter,
-        png_filter,
-        bmp_filter,
-        jpeg_filter
-    );
-    QString extension = png_filter;
+    QString filter = QString("%1;;%2;;%3;;%4")
+            .arg(pdf_filter)
+            .arg(png_filter)
+            .arg(bmp_filter)
+            .arg(jpeg_filter);
 
     QString save_file = path.canonicalPath();
     if (!file_closed_) {
-        save_file += QStringLiteral("/%1").arg(cap_file_.fileBaseName());
+        save_file += QString("/%1").arg(cap_file_.fileBaseName());
     }
     file_name = WiresharkFileDialog::getSaveFileName(this, mainApp->windowTitleString(tr("Save Graph As…")),
                                              save_file, filter, &extension);
@@ -773,56 +770,55 @@ void Iax2AnalysisDialog::updateStatistics()
 #endif
 
     QString stats_tables = "<html><head></head><body>\n";
-    stats_tables += QStringLiteral("<p>%1:%2 %3")
+    stats_tables += QString("<p>%1:%2 " UTF8_LEFT_RIGHT_ARROW)
             .arg(address_to_qstring(&fwd_id_.src_addr, true))
-            .arg(fwd_id_.src_port)
-            .arg(UTF8_LEFT_RIGHT_ARROW);
-    stats_tables += QStringLiteral("<br>%1:%2</p>\n")
+            .arg(fwd_id_.src_port);
+    stats_tables += QString("<br>%1:%2</p>\n")
             .arg(address_to_qstring(&fwd_id_.dst_addr, true))
             .arg(fwd_id_.dst_port);
     stats_tables += "<h4>Forward</h4>\n";
     stats_tables += "<p><table>\n";
-    stats_tables += QStringLiteral("<tr><th align=\"left\">Max Delta</th><td>%1 ms @ %2</td></tr>")
+    stats_tables += QString("<tr><th align=\"left\">Max Delta</th><td>%1 ms @ %2</td></tr>")
             .arg(fwd_statinfo_.max_delta, 0, 'f', 2)
             .arg(fwd_statinfo_.max_nr);
-    stats_tables += QStringLiteral("<tr><th align=\"left\">Max Jitter</th><td>%1 ms</tr>")
+    stats_tables += QString("<tr><th align=\"left\">Max Jitter</th><td>%1 ms</tr>")
             .arg(fwd_statinfo_.max_jitter, 0, 'f', 2);
-    stats_tables += QStringLiteral("<tr><th align=\"left\">Mean Jitter</th><td>%1 ms</tr>")
+    stats_tables += QString("<tr><th align=\"left\">Mean Jitter</th><td>%1 ms</tr>")
             .arg(fwd_statinfo_.mean_jitter, 0, 'f', 2);
-    stats_tables += QStringLiteral("<tr><th align=\"left\">IAX2 Packets</th><td>%1</tr>")
+    stats_tables += QString("<tr><th align=\"left\">IAX2 Packets</th><td>%1</tr>")
             .arg(fwd_statinfo_.total_nr);
 #if 0
-    stats_tables += QStringLiteral("<tr><th align=\"left\">Expected</th><td>%1</tr>")
+    stats_tables += QString("<tr><th align=\"left\">Expected</th><td>%1</tr>")
             .arg(f_expected);
-    stats_tables += QStringLiteral("<tr><th align=\"left\">Lost</th><td>%1 (%2 %)</tr>")
+    stats_tables += QString("<tr><th align=\"left\">Lost</th><td>%1 (%2 %)</tr>")
             .arg(f_lost).arg(f_perc, 0, 'f', 2);
-    stats_tables += QStringLiteral("<tr><th align=\"left\">Seq Errs</th><td>%1</tr>")
+    stats_tables += QString("<tr><th align=\"left\">Seq Errs</th><td>%1</tr>")
             .arg(fwd_statinfo_.sequence);
 #endif
-    stats_tables += QStringLiteral("<tr><th align=\"left\">Duration</th><td>%1 s</tr>")
+    stats_tables += QString("<tr><th align=\"left\">Duration</th><td>%1 s</tr>")
             .arg(f_duration, 0, 'f', 2);
     stats_tables += "</table></p>\n";
 
     stats_tables += "<h4>Reverse</h4>\n";
     stats_tables += "<p><table>\n";
-    stats_tables += QStringLiteral("<tr><th align=\"left\">Max Delta</th><td>%1 ms @ %2</td></tr>")
+    stats_tables += QString("<tr><th align=\"left\">Max Delta</th><td>%1 ms @ %2</td></tr>")
             .arg(rev_statinfo_.max_delta, 0, 'f', 2)
             .arg(rev_statinfo_.max_nr);
-    stats_tables += QStringLiteral("<tr><th align=\"left\">Max Jitter</th><td>%1 ms</tr>")
+    stats_tables += QString("<tr><th align=\"left\">Max Jitter</th><td>%1 ms</tr>")
             .arg(rev_statinfo_.max_jitter, 0, 'f', 2);
-    stats_tables += QStringLiteral("<tr><th align=\"left\">Mean Jitter</th><td>%1 ms</tr>")
+    stats_tables += QString("<tr><th align=\"left\">Mean Jitter</th><td>%1 ms</tr>")
             .arg(rev_statinfo_.mean_jitter, 0, 'f', 2);
-    stats_tables += QStringLiteral("<tr><th align=\"left\">IAX2 Packets</th><td>%1</tr>")
+    stats_tables += QString("<tr><th align=\"left\">IAX2 Packets</th><td>%1</tr>")
             .arg(rev_statinfo_.total_nr);
 #if 0
-    stats_tables += QStringLiteral("<tr><th align=\"left\">Expected</th><td>%1</tr>")
+    stats_tables += QString("<tr><th align=\"left\">Expected</th><td>%1</tr>")
             .arg(r_expected);
-    stats_tables += QStringLiteral("<tr><th align=\"left\">Lost</th><td>%1 (%2 %)</tr>")
+    stats_tables += QString("<tr><th align=\"left\">Lost</th><td>%1 (%2 %)</tr>")
             .arg(r_lost).arg(r_perc, 0, 'f', 2);
-    stats_tables += QStringLiteral("<tr><th align=\"left\">Seq Errs</th><td>%1</tr>")
+    stats_tables += QString("<tr><th align=\"left\">Seq Errs</th><td>%1</tr>")
             .arg(rev_statinfo_.sequence);
 #endif
-    stats_tables += QStringLiteral("<tr><th align=\"left\">Duration</th><td>%1 s</tr>")
+    stats_tables += QString("<tr><th align=\"left\">Duration</th><td>%1 s</tr>")
             .arg(r_duration, 0, 'f', 2);
     stats_tables += "</table></p></body>\n";
 
@@ -903,10 +899,11 @@ void Iax2AnalysisDialog::saveAudio(Iax2AnalysisDialog::StreamDirection direction
     bool       stop_flag = false;
     qint64     nchars;
 
+    save_file.open(QIODevice::WriteOnly);
     fwd_tempfile_->seek(0);
     rev_tempfile_->seek(0);
 
-    if (!save_file.open(QIODevice::WriteOnly) || save_file.error() != QFile::NoError) {
+    if (save_file.error() != QFile::NoError) {
         QMessageBox::warning(this, tr("Warning"), tr("Unable to save %1").arg(save_file.fileName()));
         return;
     }
@@ -916,37 +913,37 @@ void Iax2AnalysisDialog::saveAudio(Iax2AnalysisDialog::StreamDirection direction
 
     if	(save_format == save_audio_au_) { /* au format; https://pubs.opengroup.org/external/auformat.html */
         /* First we write the .au header.  All values in the header are
-         * 4-byte big-endian values, so we use pntohu32() to copy them
+         * 4-byte big-endian values, so we use pntoh32() to copy them
          * to a 4-byte buffer, in big-endian order, and then write out
          * the buffer. */
 
         /* the magic word 0x2e736e64 == .snd */
-        phtonu32(pd, 0x2e736e64);
+        phton32(pd, 0x2e736e64);
         nchars = save_file.write((const char *)pd, 4);
         if (nchars != 4)
             goto copy_file_err;
         /* header offset == 24 bytes */
-        phtonu32(pd, 24);
+        phton32(pd, 24);
         nchars = save_file.write((const char *)pd, 4);
         if (nchars != 4)
             goto copy_file_err;
         /* total length; it is permitted to set this to 0xffffffff */
-        phtonu32(pd, 0xffffffff);
+        phton32(pd, 0xffffffff);
         nchars = save_file.write((const char *)pd, 4);
         if (nchars != 4)
             goto copy_file_err;
         /* encoding format == 16-bit linear PCM */
-        phtonu32(pd, 3);
+        phton32(pd, 3);
         nchars = save_file.write((const char *)pd, 4);
         if (nchars != 4)
             goto copy_file_err;
         /* sample rate == 8000 Hz */
-        phtonu32(pd, 8000);
+        phton32(pd, 8000);
         nchars = save_file.write((const char *)pd, 4);
         if (nchars != 4)
             goto copy_file_err;
         /* channels == 1 */
-        phtonu32(pd, 1);
+        phton32(pd, 1);
         nchars = save_file.write((const char *)pd, 4);
         if (nchars != 4)
             goto copy_file_err;
@@ -964,10 +961,10 @@ void Iax2AnalysisDialog::saveAudio(Iax2AnalysisDialog::StreamDirection direction
 
                 if (fwd_statinfo_.pt == PT_PCMU) {
                     sample = ulaw2linear((unsigned char)f_rawvalue);
-                    phtonu16(pd, sample);
+                    phton16(pd, sample);
                 } else if (fwd_statinfo_.pt == PT_PCMA) {
                     sample = alaw2linear((unsigned char)f_rawvalue);
-                    phtonu16(pd, sample);
+                    phton16(pd, sample);
                 } else {
                     goto copy_file_err;
                 }
@@ -991,10 +988,10 @@ void Iax2AnalysisDialog::saveAudio(Iax2AnalysisDialog::StreamDirection direction
 
                 if (rev_statinfo_.pt == PT_PCMU) {
                     sample = ulaw2linear((unsigned char)r_rawvalue);
-                    phtonu16(pd, sample);
+                    phton16(pd, sample);
                 } else if (rev_statinfo_.pt == PT_PCMA) {
                     sample = alaw2linear((unsigned char)r_rawvalue);
-                    phtonu16(pd, sample);
+                    phton16(pd, sample);
                 } else {
                     goto copy_file_err;
                 }
@@ -1069,13 +1066,13 @@ void Iax2AnalysisDialog::saveAudio(Iax2AnalysisDialog::StreamDirection direction
                         && (rev_statinfo_.pt == PT_PCMU)) {
                     sample = (ulaw2linear((unsigned char)r_rawvalue)
                               + ulaw2linear((unsigned char)f_rawvalue)) / 2;
-                    phtonu16(pd, sample);
+                    phton16(pd, sample);
                 }
                 else if ((fwd_statinfo_.pt == PT_PCMA)
                          && (rev_statinfo_.pt == PT_PCMA)) {
                     sample = (alaw2linear((unsigned char)r_rawvalue)
                               + alaw2linear((unsigned char)f_rawvalue)) / 2;
-                    phtonu16(pd, sample);
+                    phton16(pd, sample);
                 } else {
                     goto copy_file_err;
                 }
@@ -1155,10 +1152,7 @@ void Iax2AnalysisDialog::saveCsv(Iax2AnalysisDialog::StreamDirection direction)
     if (file_path.isEmpty()) return;
 
     QFile save_file(file_path);
-    if (!save_file.open(QFile::WriteOnly)) {
-        // XXX - Warning dialog?
-        return;
-    }
+    save_file.open(QFile::WriteOnly);
 
     if (direction == dir_forward_ || direction == dir_both_) {
         save_file.write("Forward\n");
@@ -1166,14 +1160,13 @@ void Iax2AnalysisDialog::saveCsv(Iax2AnalysisDialog::StreamDirection direction)
         for (int row = 0; row < ui->forwardTreeWidget->topLevelItemCount(); row++) {
             QTreeWidgetItem *ti = ui->forwardTreeWidget->topLevelItem(row);
             if (ti->type() != iax2_analysis_type_) continue;
-            Iax2AnalysisTreeWidgetItem *ra_ti = dynamic_cast<Iax2AnalysisTreeWidgetItem *>(ti);
-            if (ra_ti == nullptr) continue;
+            Iax2AnalysisTreeWidgetItem *ra_ti = dynamic_cast<Iax2AnalysisTreeWidgetItem *>((Iax2AnalysisTreeWidgetItem *)ti);
             QStringList values;
             foreach (QVariant v, ra_ti->rowData()) {
                 if (!v.isValid()) {
                     values << "\"\"";
                 } else if (v.userType() == QMetaType::QString) {
-                    values << QStringLiteral("\"%1\"").arg(v.toString());
+                    values << QString("\"%1\"").arg(v.toString());
                 } else {
                     values << v.toString();
                 }
@@ -1191,14 +1184,13 @@ void Iax2AnalysisDialog::saveCsv(Iax2AnalysisDialog::StreamDirection direction)
         for (int row = 0; row < ui->reverseTreeWidget->topLevelItemCount(); row++) {
             QTreeWidgetItem *ti = ui->reverseTreeWidget->topLevelItem(row);
             if (ti->type() != iax2_analysis_type_) continue;
-            Iax2AnalysisTreeWidgetItem *ra_ti = dynamic_cast<Iax2AnalysisTreeWidgetItem *>(ti);
-            if (ra_ti == nullptr) continue;
+            Iax2AnalysisTreeWidgetItem *ra_ti = dynamic_cast<Iax2AnalysisTreeWidgetItem *>((Iax2AnalysisTreeWidgetItem *)ti);
             QStringList values;
             foreach (QVariant v, ra_ti->rowData()) {
                 if (!v.isValid()) {
                     values << "\"\"";
                 } else if (v.userType() == QMetaType::QString) {
-                    values << QStringLiteral("\"%1\"").arg(v.toString());
+                    values << QString("\"%1\"").arg(v.toString());
                 } else {
                     values << v.toString();
                 }
@@ -1207,7 +1199,6 @@ void Iax2AnalysisDialog::saveCsv(Iax2AnalysisDialog::StreamDirection direction)
             save_file.write("\n");
         }
     }
-    // XXX - Check for failure and warn?
 }
 
 bool Iax2AnalysisDialog::eventFilter(QObject *, QEvent *event)

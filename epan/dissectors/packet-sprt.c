@@ -25,8 +25,6 @@
 #include <epan/prefs.h>
 #include <epan/conversation.h>
 #include <epan/expert.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 #include "packet-sprt.h"
 
 void proto_register_sprt(void);
@@ -738,7 +736,7 @@ static struct _sprt_conversation_info* find_sprt_conversation_data(packet_info *
     conversation_t *p_conv = NULL;
     struct _sprt_conversation_info *p_conv_data = NULL;
     /* Use existing packet info if available */
-    p_conv = find_conversation_pinfo_strat(pinfo, NO_ADDR_B|NO_PORT_B);
+    p_conv = find_conversation_pinfo(pinfo, NO_ADDR_B|NO_PORT_B);
     if (p_conv)
     {
         p_conv_data = (struct _sprt_conversation_info*)conversation_get_proto_data(p_conv, proto_sprt);
@@ -1078,7 +1076,8 @@ dissect_sprt_data(tvbuff_t *tvb,
             /* No additional content */
             break;
         case SPRT_MODEM_RELAY_MSG_ID_MR_EVENT:
-            proto_tree_add_item_ret_uint8(sprt_payload_tree, hf_sprt_payload_msg_mr_event_id, tvb, offset, 1, ENC_BIG_ENDIAN, &mr_event_id);
+            mr_event_id = tvb_get_uint8(tvb, offset);
+            proto_tree_add_item(sprt_payload_tree, hf_sprt_payload_msg_mr_event_id, tvb, offset, 1, ENC_BIG_ENDIAN);
             offset++;
             proto_tree_add_item(sprt_payload_tree, hf_sprt_payload_msg_mr_evt_reason_code, tvb, offset, 1, ENC_BIG_ENDIAN);
             offset++;

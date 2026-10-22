@@ -27,6 +27,15 @@
 #include "packet-per.h"
 #include "packet-sccp.h"
 
+#ifdef _MSC_VER
+/* disable: "warning C4146: unary minus operator applied to unsigned type, result still unsigned" */
+#pragma warning(disable:4146)
+#endif
+
+#define PNAME  "UTRAN Iupc interface Positioning Calculation Application Part (PCAP)"
+#define PSNAME "PCAP"
+#define PFNAME "pcap"
+
 #define MAX_SSN 254
 
 void proto_register_pcap(void);
@@ -144,7 +153,7 @@ void proto_register_pcap(void) {
   /* module_t *pcap_module; */
 
   /* Register protocol */
-  proto_pcap = proto_register_protocol("UTRAN Iupc interface Positioning Calculation Application Part (PCAP)", "PCAP", "pcap");
+  proto_pcap = proto_register_protocol(PNAME, PSNAME, PFNAME);
   /* Register fields and subtrees */
   proto_register_field_array(proto_pcap, hf, array_length(hf));
   proto_register_subtree_array(ett, array_length(ett));

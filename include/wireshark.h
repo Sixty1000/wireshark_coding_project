@@ -48,8 +48,6 @@
 #include <ws_posix_compat.h>
 #include <ws_symbol_export.h>
 
-#include <jtckdint.h> /* C23/C++26 stdckint.h checked arithmetic */
-
 #include <wsutil/ws_assert.h>
 #include <wsutil/wslog.h>
 #include <wsutil/glib-compat.h>

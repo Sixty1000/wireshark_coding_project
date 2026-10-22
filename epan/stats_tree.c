@@ -50,7 +50,7 @@ static GHashTable *registry;
 
 /* a text representation of a node
 if buffer is NULL returns a newly allocated string */
-char*
+extern char*
 stats_tree_node_to_str(const stat_node *node, char *buffer, unsigned len)
 {
     if (buffer) {
@@ -61,7 +61,7 @@ stats_tree_node_to_str(const stat_node *node, char *buffer, unsigned len)
     }
 }
 
-unsigned
+extern unsigned
 // NOLINTNEXTLINE(misc-no-recursion)
 stats_tree_branch_max_namelen(const stat_node *node, unsigned indent)
 {
@@ -124,7 +124,7 @@ free_stat_node(stat_node *node)
 }
 
 /* destroys the whole tree instance */
-void
+extern void
 stats_tree_free(stats_tree *st)
 {
     stat_node *child;
@@ -137,17 +137,11 @@ stats_tree_free(stats_tree *st)
     g_ptr_array_free(st->parents,true);
     g_free(st->display_name);
 
-    /* st->root is not allocated with malloc, so we have to call
-     * free_stat_node on each child and free the root's dynamically
-     * allocated members instead of calling free_stat_node(&str->root)
-     */
     for (child = st->root.children; child; child = next ) {
         /* child->next will be gone after free_stat_node, so cache it here */
         next = child->next;
         free_stat_node(child);
     }
-    g_free(st->root.name);
-    g_free(st->root.bh);
 
     if (st->cfg->free_tree_pr)
         st->cfg->free_tree_pr(st);
@@ -178,7 +172,7 @@ reset_stat_node(stat_node *node)
     case STAT_DT_FLOAT:
         node->total.float_total = 0;
         node->minvalue.float_min = FLT_MAX;
-        node->maxvalue.float_max = -FLT_MAX;
+        node->maxvalue.float_max = FLT_MIN;
         break;
     }
     node->st_flags = 0;
@@ -202,7 +196,7 @@ reset_stat_node(stat_node *node)
 }
 
 /* reset the whole stats_tree */
-void
+extern void
 stats_tree_reset(void *p)
 {
     stats_tree *st = (stats_tree *)p;
@@ -214,7 +208,7 @@ stats_tree_reset(void *p)
     reset_stat_node(&st->root);
 }
 
-void
+extern void
 stats_tree_reinit(void *p)
 {
     stats_tree *st = (stats_tree *)p;
@@ -239,12 +233,11 @@ stats_tree_reinit(void *p)
     case STAT_DT_FLOAT:
         st->root.total.float_total = 0;
         st->root.minvalue.float_min = FLT_MAX;
-        st->root.maxvalue.float_max = -FLT_MAX;
+        st->root.maxvalue.float_max = FLT_MIN;
         break;
     }
     st->root.st_flags = 0;
 
-    g_free(st->root.bh);
     st->root.bh = g_new0(burst_bucket, 1);
     st->root.bt = st->root.bh;
     st->root.bcount = 0;
@@ -259,7 +252,6 @@ stats_tree_reinit(void *p)
 
     /* Do not update st_flags for the tree (sorting) - leave as was */
     st->num_columns = N_COLUMNS;
-    /* XXX - Do we really need to recreate the display name? */
     g_free(st->display_name);
     st->display_name = stats_tree_get_displayname(st->cfg->path);
 
@@ -280,14 +272,8 @@ stats_tree_free_configuration(void *p)
     g_free(cfg);
 }
 
-void
-stats_tree_init(void)
-{
-    registry = g_hash_table_new_full(g_str_hash,g_str_equal,NULL,stats_tree_free_configuration);
-}
-
 /* register a new stats_tree */
-stats_tree_cfg *
+extern stats_tree_cfg *
 stats_tree_register(const char *tapname, const char *abbr, const char *path,
             unsigned flags,
             stat_tree_packet_cb packet, stat_tree_init_cb init,
@@ -328,7 +314,7 @@ stats_tree_register(const char *tapname, const char *abbr, const char *path,
 }
 
 /* register a new stat_tree with default group REGISTER_PACKET_STAT_GROUP_UNSORTED from a plugin */
-stats_tree_cfg *
+extern stats_tree_cfg *
 stats_tree_register_plugin(const char *tapname, const char *abbr, const char *path,
             unsigned flags,
             stat_tree_packet_cb packet, stat_tree_init_cb init,
@@ -341,21 +327,21 @@ stats_tree_register_plugin(const char *tapname, const char *abbr, const char *pa
     return cfg;
 }
 
-void
+extern void
 stats_tree_set_group(stats_tree_cfg *st_config, register_stat_group_t stat_group) {
     if (st_config) {
         st_config->stat_group = stat_group;
     }
 }
 
-void
+extern void
 stats_tree_set_first_column_name(stats_tree_cfg *st_config, const char *column_name) {
     if (st_config) {
         st_config->first_column_name = g_strdup(column_name);
     }
 }
 
-stats_tree*
+extern stats_tree*
 stats_tree_new(stats_tree_cfg *cfg, tree_pres *pr, const char *filter)
 {
     stats_tree *st = g_new0(stats_tree, 1);
@@ -378,7 +364,7 @@ stats_tree_new(stats_tree_cfg *cfg, tree_pres *pr, const char *filter)
         break;
     case STAT_DT_FLOAT:
         st->root.minvalue.float_min = FLT_MAX;
-        st->root.maxvalue.float_max = -FLT_MAX;
+        st->root.maxvalue.float_max = FLT_MIN;
         break;
     }
 
@@ -407,7 +393,7 @@ stats_tree_new(stats_tree_cfg *cfg, tree_pres *pr, const char *filter)
 }
 
 /* will be the tap packet cb */
-tap_packet_status
+extern tap_packet_status
 stats_tree_packet(void *p, packet_info *pinfo, epan_dissect_t *edt, const void *pri, tap_flags_t flags)
 {
     stats_tree *st = (stats_tree *)p;
@@ -423,7 +409,7 @@ stats_tree_packet(void *p, packet_info *pinfo, epan_dissect_t *edt, const void *
         return TAP_PACKET_DONT_REDRAW;
 }
 
-stats_tree_cfg*
+extern stats_tree_cfg*
 stats_tree_get_cfg_by_abbr(const char *abbr)
 {
     if (!abbr) return NULL;
@@ -439,7 +425,7 @@ compare_stat_menu_item(const void *stat_a, const void *stat_b)
     return strcmp(stat_cfg_a->path, stat_cfg_b->path);
 }
 
-GList*
+extern GList*
 stats_tree_get_cfg_list(void)
 {
     GList* registry_list = g_hash_table_get_values(registry);
@@ -465,7 +451,7 @@ setup_tree_presentation(void *k _U_, void *v, void *p)
 
 }
 
-void
+extern void
 stats_tree_presentation(void (*registry_iterator)(void *,void *,void *),
             void (*setup_node_pr)(stat_node*),
             void (*free_tree_pr)(stats_tree*),
@@ -507,7 +493,7 @@ new_stat_node(stats_tree *st, const char *name, int parent_id, stat_node_datatyp
         break;
     case STAT_DT_FLOAT:
         node->minvalue.float_min = FLT_MAX;
-        node->maxvalue.float_max = -FLT_MAX;
+        node->maxvalue.float_max = FLT_MIN;
         break;
     }
     node->st_flags = parent_id?0:ST_FLG_ROOTCHILD;
@@ -567,7 +553,7 @@ new_stat_node(stats_tree *st, const char *name, int parent_id, stat_node_datatyp
 }
 /***/
 
-int
+extern int
 stats_tree_create_node(stats_tree *st, const char *name, int parent_id, stat_node_datatype datatype, bool with_hash)
 {
     stat_node *node = new_stat_node(st,name,parent_id,datatype,with_hash,true);
@@ -579,7 +565,7 @@ stats_tree_create_node(stats_tree *st, const char *name, int parent_id, stat_nod
 }
 
 /* XXX: should this be a macro? */
-int
+extern int
 stats_tree_create_node_by_pname(stats_tree *st, const char *name,
                 const char *parent_name, stat_node_datatype datatype, bool with_children)
 {
@@ -789,7 +775,7 @@ stats_tree_manip_node_float(manip_node_mode mode, stats_tree *st, const char *na
         return -1;
 }
 
-char*
+extern char*
 stats_tree_get_abbr(const char *opt_arg)
 {
     unsigned i;
@@ -868,7 +854,7 @@ get_range(char *rngstr)
 }
 
 
-int
+extern int
 stats_tree_create_range_node(stats_tree *st, const char *name, int parent_id, ...)
 {
     va_list list;
@@ -886,7 +872,7 @@ stats_tree_create_range_node(stats_tree *st, const char *name, int parent_id, ..
     return rng_root->id;
 }
 
-int
+extern int
 stats_tree_create_range_node_string(stats_tree *st, const char *name,
                     int parent_id, int num_str_ranges,
                     char** str_ranges)
@@ -909,7 +895,7 @@ stats_tree_create_range_node_string(stats_tree *st, const char *name,
 }
 
 /****/
-int
+extern int
 stats_tree_parent_id_by_name(stats_tree *st, const char *parent_name)
 {
     stat_node *node = (stat_node *)g_hash_table_lookup(st->names,parent_name);
@@ -921,7 +907,7 @@ stats_tree_parent_id_by_name(stats_tree *st, const char *parent_name)
 }
 
 
-int
+extern int
 stats_tree_range_node_with_pname(stats_tree *st, const char *name,
                  const char *parent_name, ...)
 {
@@ -942,7 +928,7 @@ stats_tree_range_node_with_pname(stats_tree *st, const char *name,
 }
 
 
-int
+extern int
 stats_tree_tick_range(stats_tree *st, const char *name, int parent_id,
               int value_in_range)
 {
@@ -999,7 +985,7 @@ stats_tree_tick_range(stats_tree *st, const char *name, int parent_id,
     return node->id;
 }
 
-int
+extern int
 stats_tree_create_pivot(stats_tree *st, const char *name, int parent_id)
 {
     stat_node *node = new_stat_node(st,name,parent_id,STAT_DT_INT,true,true);
@@ -1010,7 +996,7 @@ stats_tree_create_pivot(stats_tree *st, const char *name, int parent_id)
         return 0;
 }
 
-int
+extern int
 stats_tree_create_pivot_by_pname(stats_tree *st, const char *name,
                  const char *parent_name)
 {
@@ -1025,7 +1011,7 @@ stats_tree_create_pivot_by_pname(stats_tree *st, const char *name,
         return 0;
 }
 
-int
+extern int
 stats_tree_tick_pivot(stats_tree *st, int pivot_id, const char *pivot_value)
 {
     stat_node *parent = (stat_node *)g_ptr_array_index(st->parents,pivot_id);
@@ -1037,8 +1023,8 @@ stats_tree_tick_pivot(stats_tree *st, int pivot_id, const char *pivot_value)
     return pivot_id;
 }
 
-char*
-stats_tree_get_displayname (const char* fullname)
+extern char*
+stats_tree_get_displayname (char* fullname)
 {
     char *buf = g_strdup(fullname);
     char *sep;
@@ -1062,7 +1048,7 @@ stats_tree_get_displayname (const char* fullname)
     return buf;
 }
 
-int
+extern int
 stats_tree_get_default_sort_col (stats_tree *st)
 {
     switch ((st->st_flags&ST_FLG_SRTCOL_MASK)>>ST_FLG_SRTCOL_SHIFT) {
@@ -1082,13 +1068,13 @@ stats_tree_get_default_sort_col (stats_tree *st)
     return COL_COUNT;   /* nothing specific set */
 }
 
-bool
+extern bool
 stats_tree_is_default_sort_DESC (stats_tree *st)
 {
     return st->st_flags&ST_FLG_SORT_DESC;
 }
 
-const char*
+extern const char*
 stats_tree_get_column_name (stats_tree_cfg *st_config, int col_index)
 {
     switch (col_index) {
@@ -1118,7 +1104,7 @@ stats_tree_get_column_name (stats_tree_cfg *st_config, int col_index)
     }
 }
 
-int
+extern int
 stats_tree_get_column_size (int col_index)
 {
     if (col_index==COL_NAME) {
@@ -1130,7 +1116,7 @@ stats_tree_get_column_size (int col_index)
     return 0;           /* invalid column */
 }
 
-char**
+extern char**
 stats_tree_get_values_from_node (const stat_node* node)
 {
     char **values = (char**) g_malloc0(sizeof(char*)*(node->st->num_columns));
@@ -1211,7 +1197,7 @@ stats_tree_get_values_from_node (const stat_node* node)
     return values;
 }
 
-int
+extern int
 stats_tree_sort_compare (const stat_node *a, const stat_node *b, int sort_column,
                     bool sort_descending)
 {
@@ -1328,7 +1314,7 @@ stats_tree_sort_compare (const stat_node *a, const stat_node *b, int sort_column
     return result;
 }
 
-GString*
+extern GString*
 stats_tree_format_as_str(const stats_tree* st, st_format_type format_type,
                     int sort_column, bool sort_descending)
 {
@@ -1402,7 +1388,7 @@ typedef struct {
 
 /* Function to compare elements for child array sort. a and b are children, user_data
 points to a st_flags value */
-int
+extern int
 stat_node_array_sortcmp (const void *a, const void *b, void *user_data)
 {
     /* user_data is *unsigned value to st_flags */
@@ -1422,7 +1408,7 @@ clean_for_xml_tag (char *str)
 
 /** helper function to add note to formatted stats_tree */
 // NOLINTNEXTLINE(misc-no-recursion)
-void stats_tree_format_node_as_str(const stat_node *node,
+WS_DLL_PUBLIC void stats_tree_format_node_as_str(const stat_node *node,
                          GString *s,
                          st_format_type format_type,
                          unsigned indent,

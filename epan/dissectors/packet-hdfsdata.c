@@ -158,30 +158,34 @@ dissect_variable_int_string(tvbuff_t *tvb, proto_tree *hdfsdata_tree, int *offse
 static void
 dissect_access_tokens(tvbuff_t *tvb, proto_tree *hdfsdata_tree, int *offset)
 {
-  uint8_t len = 0;
+  int len = 0;
 
-  proto_tree_add_item_ret_uint8(hdfsdata_tree, hf_hdfsdata_tokenlen, tvb, *offset, 1, ENC_BIG_ENDIAN, &len);
+  len = tvb_get_uint8(tvb, *offset);
+  proto_tree_add_item(hdfsdata_tree, hf_hdfsdata_tokenlen, tvb, *offset, 1, ENC_BIG_ENDIAN);
   *offset += 1;
 
   /* token id = amount of bytes in previous */
   proto_tree_add_item(hdfsdata_tree, hf_hdfsdata_tokenid, tvb, *offset, len, ENC_ASCII);
   *offset += len;
 
-  proto_tree_add_item_ret_uint8(hdfsdata_tree, hf_hdfsdata_tokenlen, tvb, *offset, 1, ENC_BIG_ENDIAN, &len);
+  len = tvb_get_uint8(tvb, *offset);
+  proto_tree_add_item(hdfsdata_tree, hf_hdfsdata_tokenlen, tvb, *offset, 1, ENC_BIG_ENDIAN);
   *offset += 1;
 
   /* token password = amount of bytes in previous */
   proto_tree_add_item(hdfsdata_tree, hf_hdfsdata_tokenpassword, tvb, *offset, len, ENC_ASCII);
   *offset += len;
 
-  proto_tree_add_item_ret_uint8(hdfsdata_tree, hf_hdfsdata_tokenlen, tvb, *offset, 1, ENC_BIG_ENDIAN, &len);
+  len = tvb_get_uint8(tvb, *offset);
+  proto_tree_add_item(hdfsdata_tree, hf_hdfsdata_tokenlen, tvb, *offset, 1, ENC_BIG_ENDIAN);
   *offset += 1;
 
   /* token type = amount of bytes in previous */
   proto_tree_add_item(hdfsdata_tree, hf_hdfsdata_tokentype, tvb, *offset, len, ENC_ASCII);
   *offset += len;
 
-  proto_tree_add_item_ret_uint8(hdfsdata_tree, hf_hdfsdata_tokenlen, tvb, *offset, 1, ENC_BIG_ENDIAN, &len);
+  len = tvb_get_uint8(tvb, *offset);
+  proto_tree_add_item(hdfsdata_tree, hf_hdfsdata_tokenlen, tvb, *offset, 1, ENC_BIG_ENDIAN);
   *offset += 1;
 
   /* token service = amount of bytes in previous; */

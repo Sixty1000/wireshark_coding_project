@@ -24,35 +24,35 @@ image::images/ws-function-blocks.svg[{pdf-scaledwidth}]
 The function blocks in more detail:
 
 GUI:: Handling of all user input/output (all windows, dialogs and such).
-Source code can be found in the wsrepodir:ui/qt[] directory.
+Source code can be found in the _ui/qt_ directory.
 
 Core:: Main "glue code" that holds the other blocks together. Source
-code can be found in the wsrepodir:/[project root directory].
+code can be found in the root directory.
 
 Epan:: Enhanced Packet ANalyzer -- the packet analyzing engine.
-Source code can be found in the wsrepodir:epan[] directory. Epan provides
+Source code can be found in the _epan_ directory. Epan provides
 the following APIs:
 
 * Protocol Tree. Dissection information for an individual packet.
 
 * Dissectors. The various protocol dissectors in
-wsrepodir:epan/dissectors[].
+_epan/dissectors_.
 
 * Dissector Plugins - Support for implementing dissectors as separate modules.
-Source code can be found in wsrepodir:plugins[].
+Source code can be found in _plugins_.
 
 * Display Filters - The display filter engine at
-wsrepodir:epan/dfilter[].
+_epan/dfilter_.
 
 Wiretap:: The wiretap library is used to read and write capture files in libpcap,
 pcapng, and many other file formats. Source code is in the
-wsrepodir:wiretap[] directory.
+_wiretap_ directory.
 
 Capture:: The interface to the capture engine. Source code is in the
-wsrepodir:/[project root directory].
+root directory.
 
 Dumpcap:: The capture engine itself. This is the only part that executes with
-elevated privileges. Source code is in the wsrepodir:/[project root directory].
+elevated privileges. Source code is in the root directory.
 
 Npcap and libpcap:: These are external libraries that provide packet capture
 and filtering support on different platforms. The filtering in Npcap and libpcap

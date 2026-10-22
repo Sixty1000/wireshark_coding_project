@@ -133,7 +133,7 @@ create_tempdir(const char *parent_dir, const char *tmpl, GError **err)
       g_free(temp_subdir);
       g_set_error_literal(err, G_FILE_ERROR,
           g_file_error_from_errno(errno), g_strerror(errno));
-      return NULL;
+      return false;
   }
 
   return temp_subdir;

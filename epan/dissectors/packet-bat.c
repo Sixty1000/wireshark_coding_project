@@ -151,7 +151,7 @@ static const value_string vis_packettypenames[] = {
 };
 
 /* supported packet dissectors */
-static int dissect_bat_batman_v5(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree);
+static int dissect_bat_batman_v5(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree);
 
 
 static void dissect_bat_vis_v22(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
@@ -175,7 +175,7 @@ static int bat_follow_tap;
 static int dissect_bat_batman(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	uint8_t version;
-	unsigned offset = 0;
+	int offset = 0;
 
 	/* set protocol name */
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "BAT_BATMAN");
@@ -196,7 +196,7 @@ static int dissect_bat_batman(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
 	return tvb_captured_length(tvb);
 }
 
-static void dissect_bat_gwflags(tvbuff_t *tvb, uint8_t gwflags, unsigned offset, proto_item *tgw)
+static void dissect_bat_gwflags(tvbuff_t *tvb, uint8_t gwflags, int offset, proto_item *tgw)
 {
 	proto_tree *gwflags_tree;
 	uint8_t s = (gwflags & 0x80) >> 7;
@@ -213,7 +213,7 @@ static void dissect_bat_gwflags(tvbuff_t *tvb, uint8_t gwflags, unsigned offset,
 
 }
 
-static int dissect_bat_batman_v5(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree)
+static int dissect_bat_batman_v5(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree)
 {
 	proto_item *tgw;
 	proto_tree *bat_batman_tree = NULL;
@@ -342,7 +342,7 @@ static int dissect_bat_gw(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
 
 	tvbuff_t *next_tvb;
 	int length_remaining;
-	unsigned offset = 0;
+	int offset = 0;
 
 	gw_packeth = wmem_new(pinfo->pool, struct gw_packet);
 	gw_packeth->type = tvb_get_uint8(tvb, 0);
@@ -361,7 +361,7 @@ static int dissect_bat_gw(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
 
 	/* Set info column */
 	col_add_fstr(pinfo->cinfo, COL_INFO, "Type=%s",
-		     val_to_str(pinfo->pool, gw_packeth->type, gw_packettypenames, "Unknown (0x%02x)"));
+		     val_to_str(gw_packeth->type, gw_packettypenames, "Unknown (0x%02x)"));
 	if (ip != 0) {
 		col_append_fstr(pinfo->cinfo, COL_INFO, " IP: %s",
 				tvb_address_with_resolution_to_str(pinfo->pool, tvb, AT_IPv4, ip_pos));
@@ -375,7 +375,7 @@ static int dissect_bat_gw(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
 
 		ti = proto_tree_add_protocol_format(tree, proto_bat_gw, tvb, 0, 1,
 							"B.A.T.M.A.N. GW [%s]",
-							val_to_str(pinfo->pool, gw_packeth->type, gw_packettypenames, "Unknown (0x%02x)"));
+							val_to_str(gw_packeth->type, gw_packettypenames, "Unknown (0x%02x)"));
 		bat_gw_entry_tree = proto_item_add_subtree(ti, ett_bat_gw);
 
 		proto_tree_add_item(bat_gw_entry_tree, hf_bat_gw_type, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -440,7 +440,7 @@ static void dissect_bat_vis_v22(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
 
 	tvbuff_t *next_tvb;
 	int length_remaining, i;
-	unsigned offset = 0;
+	int offset = 0;
 
 	vis_packeth = wmem_new(pinfo->pool, struct vis_packet_v22);
 
@@ -532,7 +532,7 @@ static void dissect_vis_entry_v22(tvbuff_t *tvb, packet_info *pinfo _U_, proto_t
 
 		ti = proto_tree_add_protocol_format(tree, proto_bat_plugin, tvb, 0, 7,
 							    "VIS Entry: [%s] %s",
-							    val_to_str(pinfo->pool, vis_datah->type, vis_packettypenames, "Unknown (0x%02x)"),
+							    val_to_str(vis_datah->type, vis_packettypenames, "Unknown (0x%02x)"),
 							    address_with_resolution_to_str(pinfo->pool, &vis_datah->ip));
 		bat_vis_entry_tree = proto_item_add_subtree(ti, ett_bat_vis_entry);
 
@@ -561,7 +561,7 @@ static void dissect_bat_vis_v23(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
 
 	tvbuff_t *next_tvb;
 	int length_remaining, i;
-	unsigned offset = 0;
+	int offset = 0;
 
 	vis_packeth = wmem_new(pinfo->pool, struct vis_packet_v23);
 
@@ -653,7 +653,7 @@ static void dissect_vis_entry_v23(tvbuff_t *tvb, packet_info *pinfo _U_, proto_t
 
 		ti = proto_tree_add_protocol_format(tree, proto_bat_plugin, tvb, 0, 7,
 							    "VIS Entry: [%s] %s",
-							    val_to_str(pinfo->pool, vis_datah->type, vis_packettypenames, "Unknown (0x%02x)"),
+							    val_to_str(vis_datah->type, vis_packettypenames, "Unknown (0x%02x)"),
 							    address_with_resolution_to_str(pinfo->pool, &vis_datah->ip));
 		bat_vis_entry_tree = proto_item_add_subtree(ti, ett_bat_vis_entry);
 

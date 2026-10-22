@@ -26,10 +26,9 @@
 #include <epan/asn1.h>
 #include <epan/uat.h>
 #include <epan/to_str.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 #include "packet-x509af.h"
 #include "packet-tls-utils.h"
+#include "packet-reload.h"
 
 void proto_register_reload(void);
 void proto_reg_handoff_reload(void);
@@ -1018,13 +1017,12 @@ get_reload_message_length(packet_info *pinfo _U_, tvbuff_t *tvb, int offset)
 }
 
 static int
-dissect_opaque_string_or_data(tvbuff_t *tvb, packet_info *pinfo,proto_tree *tree, int anchor_index, unsigned offset, uint16_t length_size, int32_t max_field_length, bool is_string)
+dissect_opaque_string_or_data(tvbuff_t *tvb, packet_info *pinfo,proto_tree *tree, int anchor_index, uint16_t offset, uint16_t length_size, int32_t max_field_length, bool is_string)
 {
   proto_tree *opaque_tree;
   proto_item *ti_anchor;
   int         length_index     = -1;
-  uint32_t    length           = 0;
-  int         total_length     = -1;
+  int32_t     length           = -1;
   int         hf               = hf_reload_opaque;
   int         hf_data          = hf_reload_opaque_data;
   unsigned    hf_data_encoding = ENC_NA;
@@ -1041,54 +1039,38 @@ dissect_opaque_string_or_data(tvbuff_t *tvb, packet_info *pinfo,proto_tree *tree
   switch (length_size) {
   case 1:
     length_index = hf_reload_length_uint8;
+    length = (int32_t)tvb_get_uint8(tvb,offset);
     break;
   case 2:
     length_index = hf_reload_length_uint16;
+    length = (int32_t)tvb_get_ntohs(tvb, offset);
     break;
   case 3:
     length_index = hf_reload_length_uint24;
+    length = ((int32_t) (tvb_get_ntohs(tvb, offset) <<8) + (tvb_get_uint8(tvb, offset+2)));
     break;
   case 4:
     length_index = hf_reload_length_uint32;
+    length = (int32_t)tvb_get_ntohl(tvb, offset);
     break;
 
   default:
-    // XXX - DISSECTOR_ASSERT_NOT_REACHED() instead of just returning
-    // below? Looks like a dissector bug if this happens.
     break;
   }
 
   if (length_index < 0) return 0;
 
-  // hf is a FT_NONE, so it's more straightforward to set the length later.
-  ti_anchor = proto_tree_add_item(tree, hf, tvb, offset, length_size, ENC_NA);
+  ti_anchor = proto_tree_add_item(tree, hf, tvb, offset, length_size + length, ENC_NA);
+
+  if (max_field_length > 0) {
+    if ((length + length_size) > max_field_length) {
+      expert_add_info(pinfo, ti_anchor, &ei_reload_computed_len_too_big);
+      length = max_field_length - length_size;
+    }
+  }
 
   opaque_tree = proto_item_add_subtree(ti_anchor, ett_reload_opaque);
-  proto_tree_add_item_ret_uint(opaque_tree, length_index, tvb, offset, length_size, ENC_BIG_ENDIAN, &length);
-
-  // max_field_length is the maximum allowable sum of length_size and length
-  if (max_field_length > 0) {
-    if (max_field_length < length_size) {
-      expert_add_info_format(pinfo, ti_anchor, &ei_reload_computed_len_too_big, "Length size %i > max_field length %i", length_size, max_field_length);
-      max_field_length = length_size;
-    }
-  } else {
-    max_field_length = INT_MAX;
-  }
-
-  if (ckd_add(&total_length, length_size, length)) {
-    // Overflow
-    expert_add_info_format(pinfo, ti_anchor, &ei_reload_computed_len_too_big, "Computed length overflows an int");
-    total_length = max_field_length;
-    length = max_field_length - length_size;
-  } else if (total_length > max_field_length) {
-    expert_add_info(pinfo, ti_anchor, &ei_reload_computed_len_too_big);
-    total_length = max_field_length;
-    length = max_field_length - length_size;
-  }
-
-  proto_item_set_len(ti_anchor, total_length);
-
+  proto_tree_add_uint(opaque_tree, length_index, tvb, offset, length_size, (unsigned)length);
   if (length) {
     proto_tree_add_item(opaque_tree, hf_data, tvb, offset + length_size, length, hf_data_encoding);
   }
@@ -1099,20 +1081,20 @@ dissect_opaque_string_or_data(tvbuff_t *tvb, packet_info *pinfo,proto_tree *tree
     proto_item_append_text(ti_anchor, "<%d>", length);
   }
 
-  return total_length;
+  return (length_size + length);
 }
 
 static int
-dissect_opaque(tvbuff_t *tvb, packet_info *pinfo,proto_tree *tree, int anchor_index, unsigned offset, uint16_t length_size, int32_t max_field_length) {
+dissect_opaque(tvbuff_t *tvb, packet_info *pinfo,proto_tree *tree, int anchor_index, uint16_t offset, uint16_t length_size, int32_t max_field_length) {
   return dissect_opaque_string_or_data(tvb, pinfo, tree, anchor_index, offset, length_size, max_field_length, false);
 }
 
 static int
-dissect_opaque_string(tvbuff_t *tvb, packet_info *pinfo,proto_tree *tree, int anchor_index, unsigned offset, uint16_t length_size, int32_t max_field_length) {
+dissect_opaque_string(tvbuff_t *tvb, packet_info *pinfo,proto_tree *tree, int anchor_index, uint16_t offset, uint16_t length_size, int32_t max_field_length) {
   return dissect_opaque_string_or_data(tvb, pinfo, tree, anchor_index, offset, length_size, max_field_length, true);
 }
 
-static int dissect_length(tvbuff_t *tvb, proto_tree *tree, unsigned offset,  uint16_t length_size) {
+static int dissect_length(tvbuff_t *tvb, proto_tree *tree, uint16_t offset,  uint16_t length_size) {
   switch (length_size) {
   case 1:
     proto_tree_add_item(tree, hf_reload_length_uint8, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -1136,7 +1118,7 @@ static int dissect_length(tvbuff_t *tvb, proto_tree *tree, unsigned offset,  uin
   return 0;
 }
 
-static int dissect_resourceid(int anchor, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+static int dissect_resourceid(int anchor, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_local;
   proto_tree *local_tree;
@@ -1171,7 +1153,7 @@ static int dissect_resourceid(int anchor, tvbuff_t *tvb, packet_info *pinfo, pro
   return 1+local_length;
 }
 
-static int dissect_nodeid(int anchor, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+static int dissect_nodeid(int anchor, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_nodeid;
   int         hf = hf_reload_nodeid;
@@ -1219,7 +1201,7 @@ static int dissect_nodeid(int anchor, tvbuff_t *tvb, packet_info *pinfo, proto_t
 }
 
 static int
-dissect_destination(int anchor, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+dissect_destination(int anchor, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   uint8_t     destination_type;
   proto_tree *destination_tree;
@@ -1283,7 +1265,7 @@ dissect_destination(int anchor, tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
 
 
 static int
-dissect_destination_list(tvbuff_t *tvb, packet_info *pinfo, proto_tree *list_tree, unsigned offset, uint16_t length, int *numDestinations)
+dissect_destination_list(tvbuff_t *tvb, packet_info *pinfo, proto_tree *list_tree, uint16_t offset, uint16_t length, int *numDestinations)
 {
   int local_offset = 0;
   int local_increment;
@@ -1299,7 +1281,7 @@ dissect_destination_list(tvbuff_t *tvb, packet_info *pinfo, proto_tree *list_tre
 }
 
 static int
-dissect_probe_information(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+dissect_probe_information(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_probe_information;
   proto_tree *probe_information_tree;
@@ -1359,7 +1341,7 @@ dissect_probe_information(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, u
 
 
 static int
-dissect_ipaddressport(int anchor, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset)
+dissect_ipaddressport(int anchor, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset)
 {
   proto_item *ti_ipaddressport;
   proto_tree *ipaddressport_tree;
@@ -1421,7 +1403,7 @@ dissect_ipaddressport(int anchor, tvbuff_t *tvb, packet_info *pinfo, proto_tree 
 }
 
 static int
-dissect_icecandidates(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+dissect_icecandidates(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_icecandidates;
   proto_tree *icecandidates_tree;
@@ -1500,7 +1482,8 @@ dissect_icecandidates(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsig
     {
       uint32_t priority;
 
-      proto_tree_add_item_ret_uint(icecandidate_tree, hf_reload_icecandidate_priority, tvb, offset+local_offset + icecandidates_offset, 4, ENC_BIG_ENDIAN, &priority);
+      priority = tvb_get_ntohl(tvb, offset+local_offset + icecandidates_offset);
+      proto_tree_add_item(icecandidate_tree, hf_reload_icecandidate_priority, tvb, offset+local_offset + icecandidates_offset, 4, ENC_BIG_ENDIAN);
       icecandidate_offset += 4;
       proto_tree_add_item(icecandidate_tree, hf_reload_icecandidate_type, tvb,
                           offset+local_offset+icecandidates_offset+icecandidate_offset, 1, ENC_BIG_ENDIAN);
@@ -1579,7 +1562,7 @@ dissect_icecandidates(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsig
 }
 
 static int
-dissect_attachreqans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+dissect_attachreqans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_attachreqans;
   proto_tree *attachreqans_tree;
@@ -1641,7 +1624,7 @@ dissect_attachreqans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsign
 
 
 static int
-dissect_sipregistration(tvbuff_t *tvb, packet_info *pinfo,proto_tree *tree, unsigned offset, uint16_t length)
+dissect_sipregistration(tvbuff_t *tvb, packet_info *pinfo,proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_local, *ti_sipregistrationdata;
   proto_tree *local_tree, *sipregistrationdata_tree;
@@ -1652,7 +1635,8 @@ dissect_sipregistration(tvbuff_t *tvb, packet_info *pinfo,proto_tree *tree, unsi
   ti_local = proto_tree_add_item(tree, hf_reload_sipregistration, tvb, offset, length, ENC_NA);
   local_tree = proto_item_add_subtree(ti_local, ett_reload_sipregistration);
 
-  proto_tree_add_item_ret_uint8(local_tree, hf_reload_sipregistration_type, tvb,offset+local_offset,1, ENC_BIG_ENDIAN, &type);
+  type = tvb_get_uint8(tvb, offset + local_offset);
+  proto_tree_add_item(local_tree, hf_reload_sipregistration_type, tvb,offset+local_offset,1, ENC_BIG_ENDIAN);
   local_offset += 1;
   length_field = tvb_get_ntohs(tvb, offset+local_offset);
   proto_tree_add_item(local_tree, hf_reload_length_uint16, tvb,offset+local_offset,2, ENC_BIG_ENDIAN);
@@ -1693,7 +1677,7 @@ dissect_sipregistration(tvbuff_t *tvb, packet_info *pinfo,proto_tree *tree, unsi
 }
 
 static int
-dissect_turnserver(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+dissect_turnserver(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_local;
   proto_tree *local_tree;
@@ -1709,7 +1693,7 @@ dissect_turnserver(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned
   return local_offset;
 }
 
-static int dissect_redirserviceproviderdata(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+static int dissect_redirserviceproviderdata(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_local;
   proto_tree *local_tree;
@@ -1727,7 +1711,7 @@ static int dissect_redirserviceproviderdata(tvbuff_t *tvb, packet_info *pinfo, p
   return length;
 }
 
-static int dissect_redirserviceprovider(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+static int dissect_redirserviceprovider(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_local;
   proto_tree *local_tree;
@@ -1753,7 +1737,7 @@ static int dissect_redirserviceprovider(tvbuff_t *tvb, packet_info *pinfo, proto
   return (2+length_field);
 }
 
-static int dissect_datavalue(int anchor, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length, bool meta, kind_t *kind) {
+static int dissect_datavalue(int anchor, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length, bool meta, kind_t *kind) {
   proto_item *ti_datavalue;
   proto_tree *datavalue_tree;
 
@@ -1867,7 +1851,7 @@ static int dissect_datavalue(int anchor, tvbuff_t *tvb, packet_info *pinfo, prot
   return 0;
 }
 
-static unsigned getDataValueLength(tvbuff_t *tvb, unsigned offset, bool meta) {
+static unsigned getDataValueLength(tvbuff_t *tvb, uint16_t offset, bool meta) {
   if (meta != true) {
     unsigned value_length = tvb_get_ntohl(tvb,offset+1);
     return (1+4+value_length);
@@ -1879,7 +1863,7 @@ static unsigned getDataValueLength(tvbuff_t *tvb, unsigned offset, bool meta) {
   return 0;
 }
 
-static int dissect_arrayentry(int anchor, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length, bool meta, kind_t *kind) {
+static int dissect_arrayentry(int anchor, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length, bool meta, kind_t *kind) {
   proto_item *ti_arrayentry, *ti_index;
   proto_tree *arrayentry_tree;
   int         data_length = getDataValueLength(tvb, offset+4, meta);
@@ -1910,7 +1894,7 @@ static int dissect_arrayentry(int anchor, tvbuff_t *tvb, packet_info *pinfo, pro
   return (4+data_length);
 }
 
-static int dissect_dictionaryentry(int anchor, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length, bool meta, kind_t *kind) {
+static int dissect_dictionaryentry(int anchor, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length, bool meta, kind_t *kind) {
   proto_item *ti_dictionaryentry;
   proto_tree *dictionaryentry_tree;
   int         local_offset = 0;
@@ -1983,7 +1967,7 @@ static int dissect_dictionaryentry(int anchor, tvbuff_t *tvb, packet_info *pinfo
 }
 
 static int
-dissect_signature(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset)
+dissect_signature(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset)
 {
   int         local_offset = 0;
   proto_item *ti_signature;
@@ -2082,7 +2066,7 @@ dissect_signature(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned 
 
 
 static int
-dissect_storeddata(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length, kind_t *kind, bool meta)
+dissect_storeddata(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length, kind_t *kind, bool meta)
 {
   proto_item *ti_storeddata;
   proto_tree *storeddata_tree;
@@ -2152,7 +2136,7 @@ dissect_storeddata(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned
 
 
 static int
-dissect_kindid(int anchor, tvbuff_t *tvb, proto_tree *tree, unsigned offset, kind_t **kind)
+dissect_kindid(int anchor, tvbuff_t *tvb, proto_tree *tree, uint16_t offset, kind_t **kind)
 {
   proto_item *ti_kindid;
   uint32_t    kindid = 0;
@@ -2175,7 +2159,7 @@ dissect_kindid(int anchor, tvbuff_t *tvb, proto_tree *tree, unsigned offset, kin
 }
 
 static int
-dissect_kinddata(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length, bool meta)
+dissect_kinddata(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length, bool meta)
 {
   proto_item *ti_kinddata;
   proto_item *kinddata_tree;
@@ -2234,12 +2218,12 @@ dissect_kinddata(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned o
   return local_offset;
 }
 
-static int dissect_nodeid_list(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length, int hf)
+static int dissect_nodeid_list(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length, int hf)
 {
   uint16_t    list_length;
   uint16_t    local_offset   = 0;
   int32_t     list_offset    = 0;
-  uint16_t    list_increment;
+  uint16_t    list_increment = 0;
   int         nNodeIds       = 0;
   proto_item *ti_local;
   proto_tree *local_tree;
@@ -2259,7 +2243,7 @@ static int dissect_nodeid_list(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
   while (list_offset >= 0 && list_offset < list_length) {
     dissect_nodeid(-1, tvb, pinfo, local_tree, offset+local_offset+list_offset,list_length-list_offset);
     list_increment = reload_nodeid_length;
-    if (list_increment == 0) break;
+    if (list_increment <= 0) break;
     list_offset += list_increment;
     nNodeIds++;
   }
@@ -2270,7 +2254,7 @@ static int dissect_nodeid_list(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 
 
 static int
-dissect_storekindresponse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+dissect_storekindresponse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_local;
   proto_tree *local_tree;
@@ -2299,7 +2283,7 @@ dissect_storekindresponse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, u
 }
 
 static int
-dissect_storeans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+dissect_storeans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_local, *ti_kind_responses;
   proto_tree *local_tree, *kind_responses_tree;
@@ -2330,7 +2314,7 @@ dissect_storeans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned o
 }
 
 static int
-dissect_storereq(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+dissect_storereq(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_storereq;
   proto_tree *storereq_tree;
@@ -2401,7 +2385,7 @@ dissect_storereq(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned o
   return local_offset;
 }
 
-static int dissect_arrayrange(tvbuff_t *tvb, proto_tree *tree, unsigned offset) {
+static int dissect_arrayrange(tvbuff_t *tvb, proto_tree *tree, uint16_t offset) {
   proto_item *ti;
   int32_t     first;
   int32_t     last;
@@ -2421,7 +2405,7 @@ static int dissect_arrayrange(tvbuff_t *tvb, proto_tree *tree, unsigned offset) 
 
 }
 static int
-dissect_storeddataspecifier(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+dissect_storeddataspecifier(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   uint16_t    length_field, local_offset = 0;
   proto_item *ti_storeddataspecifier;
@@ -2497,7 +2481,7 @@ dissect_storeddataspecifier(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
 
 static int
-dissect_fetchreq(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length, bool meta)
+dissect_fetchreq(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length, bool meta)
 {
   proto_item *ti_fetchreq;
   proto_item *ti_specifiers;
@@ -2552,7 +2536,7 @@ dissect_fetchreq(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned o
 
 
 static int
-dissect_fetchans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+dissect_fetchans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_fetchans;
   proto_tree *fetchans_tree;
@@ -2584,7 +2568,7 @@ dissect_fetchans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned o
 
 
 static int
-dissect_statans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+dissect_statans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_statans;
   proto_tree *statans_tree;
@@ -2623,7 +2607,7 @@ dissect_statans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned of
 
 
 static int
-dissect_chordupdate(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+dissect_chordupdate(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_chordupdate;
   proto_tree *chordupdate_tree;
@@ -2659,7 +2643,7 @@ dissect_chordupdate(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigne
 
 
 static int
-dissect_chordroutequeryans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+dissect_chordroutequeryans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_chordroutequeryans;
   proto_tree *chordroutequeryans_tree;
@@ -2672,7 +2656,7 @@ dissect_chordroutequeryans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
 }
 
 static int
-dissect_chordleavedata(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+dissect_chordleavedata(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_local;
   proto_tree *local_tree;
@@ -2701,7 +2685,7 @@ dissect_chordleavedata(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsi
   return local_offset;
 }
 
-static int dissect_kindid_list(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+static int dissect_kindid_list(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_local;
   proto_tree *local_tree;
@@ -2733,7 +2717,7 @@ static int dissect_kindid_list(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
   return (1+kinds_length);
 }
 
-static int dissect_findreq(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length) {
+static int dissect_findreq(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length) {
   proto_item *ti_local;
   proto_tree *local_tree;
   uint16_t    local_offset = 0;
@@ -2747,7 +2731,7 @@ static int dissect_findreq(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
   return length;
 }
 
-static int dissect_findans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length) {
+static int dissect_findans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length) {
   proto_item *ti_local;
   proto_tree *local_tree;
   uint16_t    results_length;
@@ -2780,6 +2764,7 @@ static int dissect_findans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
       findkinddata_tree = proto_item_add_subtree(ti_findkinddata, ett_reload_findkinddata);
       dissect_kindid(hf_reload_kinddata_kind,tvb, findkinddata_tree, offset+2+results_offset,&kind);
       dissect_resourceid(hf_reload_findkinddata_closest, tvb, pinfo, findkinddata_tree, offset+2+results_offset+4,  results_length - 4 - results_offset);
+      if (findkinddata_length <= 0) break;
       results_offset += findkinddata_length;
       nResults++;
     }
@@ -2789,7 +2774,7 @@ static int dissect_findans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
   return length;
 }
 
-static int dissect_selftuningdata(tvbuff_t *tvb, proto_tree *tree, unsigned offset)
+static int dissect_selftuningdata(tvbuff_t *tvb, proto_tree *tree, uint16_t offset)
 {
   proto_item *ti_local;
   proto_tree *local_tree;
@@ -2804,7 +2789,7 @@ static int dissect_selftuningdata(tvbuff_t *tvb, proto_tree *tree, unsigned offs
   return 12;
 }
 
-static int dissect_extensiveroutingmodeoption(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+static int dissect_extensiveroutingmodeoption(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_local;
   proto_tree *local_tree;
@@ -2841,7 +2826,7 @@ static int dissect_extensiveroutingmodeoption(tvbuff_t *tvb, packet_info *pinfo,
   return local_offset;
 }
 
-static int dissect_forwardingoption(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+static int dissect_forwardingoption(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_option;
   uint16_t    local_offset  = 0;
@@ -2888,7 +2873,7 @@ static int dissect_forwardingoption(tvbuff_t *tvb, packet_info *pinfo, proto_tre
   return local_offset;
 }
 
-static int dissect_dmflag(tvbuff_t *tvb, proto_tree *tree, unsigned offset) {
+static int dissect_dmflag(tvbuff_t *tvb, proto_tree *tree, uint16_t offset) {
   proto_item *ti_local;
   proto_tree *local_tree;
   unsigned    i;
@@ -2905,7 +2890,7 @@ static int dissect_dmflag(tvbuff_t *tvb, proto_tree *tree, unsigned offset) {
   return 8;
 }
 
-static int dissect_diagnosticextension(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+static int dissect_diagnosticextension(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_local;
   proto_tree *local_tree;
@@ -2923,7 +2908,7 @@ static int dissect_diagnosticextension(tvbuff_t *tvb, packet_info *pinfo, proto_
   return local_offset;
 }
 
-static int dissect_diagnosticrequest(int anchor, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length) {
+static int dissect_diagnosticrequest(int anchor, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length) {
   proto_item *ti_local;
   proto_tree *local_tree;
   uint16_t    local_offset = 0;
@@ -2979,7 +2964,7 @@ static int dissect_diagnosticrequest(int anchor, tvbuff_t *tvb, packet_info *pin
   return local_offset;
 }
 
-static int dissect_pathtrackreq(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+static int dissect_pathtrackreq(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_local;
   proto_tree *local_tree;
@@ -2993,7 +2978,7 @@ static int dissect_pathtrackreq(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
   return local_offset;
 }
 
-static int dissect_diagnosticinfo(tvbuff_t *tvb, proto_tree *tree, unsigned offset, uint16_t length)
+static int dissect_diagnosticinfo(tvbuff_t *tvb, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_local;
   proto_tree *local_tree;
@@ -3069,8 +3054,9 @@ static int dissect_diagnosticinfo(tvbuff_t *tvb, proto_tree *tree, unsigned offs
       instances_per_kindid_tree = proto_item_add_subtree(ti_instances_per_kindid,
                                                          ett_reload_diagnosticinfo_instancesstored_info);
       dissect_kindid(hf_reload_kinddata_kind, tvb, instances_per_kindid_tree, offset+local_offset+instances_offset, &kind);
-      proto_tree_add_item_ret_uint64(instances_per_kindid_tree, hf_reload_diagnosticinfo_instancesstored_instances,
-                                     tvb, offset+local_offset+instances_offset+4, 8, ENC_BIG_ENDIAN, &instances);
+      proto_tree_add_item(instances_per_kindid_tree, hf_reload_diagnosticinfo_instancesstored_instances,
+                          tvb, offset+local_offset+instances_offset+4, 8, ENC_BIG_ENDIAN);
+      instances = tvb_get_ntoh64(tvb, offset+local_offset+instances_offset+4);
       proto_item_append_text(ti_instances_per_kindid, ": %s/%" PRId64,
           ((kind != NULL) && (kind->name != NULL)) ? kind->name : "UNKNOWN KIND", instances);
       instances_offset += 12;
@@ -3158,7 +3144,7 @@ static int dissect_diagnosticinfo(tvbuff_t *tvb, proto_tree *tree, unsigned offs
 }
 
 
-static int dissect_diagnosticresponse(int anchor, tvbuff_t *tvb, packet_info *pinfo,proto_tree *tree, unsigned offset, uint16_t length) {
+static int dissect_diagnosticresponse(int anchor, tvbuff_t *tvb, packet_info *pinfo,proto_tree *tree, uint16_t offset, uint16_t length) {
   proto_item *ti_local;
   proto_tree *local_tree;
   uint16_t    local_offset = 0;
@@ -3209,7 +3195,7 @@ static int dissect_diagnosticresponse(int anchor, tvbuff_t *tvb, packet_info *pi
   return local_offset;
 }
 
-static int dissect_pathtrackans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+static int dissect_pathtrackans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_local;
   proto_tree *local_tree;
@@ -3223,7 +3209,7 @@ static int dissect_pathtrackans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
   return local_offset;
 }
 
-static int dissect_joinreq(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+static int dissect_joinreq(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_local;
   proto_tree *local_tree;
@@ -3238,7 +3224,7 @@ static int dissect_joinreq(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
   return local_offset;
 }
 
-static int dissect_joinans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+static int dissect_joinans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_local;
   proto_tree *local_tree;
@@ -3252,7 +3238,7 @@ static int dissect_joinans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
   return local_offset;
 }
 
-static int dissect_leavereq(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+static int dissect_leavereq(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_local;
   proto_tree *local_tree;
@@ -3285,7 +3271,7 @@ static int dissect_leavereq(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
   return local_offset;
 }
 
-static int dissect_probereq(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+static int dissect_probereq(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_local,   *ti_requested_info;
   proto_tree *local_tree, *requested_info_tree;
@@ -3319,7 +3305,7 @@ static int dissect_probereq(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
   return info_list_length;
 }
 
-static int dissect_probeans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+static int dissect_probeans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   proto_item *ti_local,   *ti_infos;
   proto_tree *local_tree, *infos_tree;
@@ -3353,7 +3339,7 @@ static int dissect_probeans(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
   return length;
 }
 
-static int dissect_reload_messagecontents(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint16_t length)
+extern int dissect_reload_messagecontents(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint16_t offset, uint16_t length)
 {
   uint32_t    message_body_length;
   uint32_t    extensions_length;
@@ -3386,8 +3372,8 @@ static int dissect_reload_messagecontents(tvbuff_t *tvb, packet_info *pinfo, pro
       ti_message_code = proto_tree_add_item(message_contents_tree, hf_reload_message_code, tvb,
                                             offset, 2, ENC_BIG_ENDIAN);
       proto_item_append_text(ti_message_code, " (%s_%s)",
-                             val_to_str(pinfo->pool, MSGCODE_TO_METHOD(message_code), methods_short, "Unknown %d"),
-                             val_to_str(pinfo->pool, MSGCODE_TO_CLASS(message_code), classes_short, "Unknown %d"));
+                             val_to_str(MSGCODE_TO_METHOD(message_code), methods_short, "Unknown %d"),
+                             val_to_str(MSGCODE_TO_CLASS(message_code), classes_short, "Unknown %d"));
     }
     offset += 2;
     /* Message body */
@@ -3552,7 +3538,7 @@ static int dissect_reload_messagecontents(tvbuff_t *tvb, packet_info *pinfo, pro
               config_data_tree = proto_item_add_subtree(ti_config_data, ett_reload_configupdatereq_config_data);
               proto_tree_add_item(config_data_tree, hf_reload_length_uint24, tvb, offset+local_offset, 3, ENC_BIG_ENDIAN);
               call_dissector_only(xml_handle,
-                                  tvb_new_subset_length(tvb, offset+local_offset+3, config_length),
+                                  tvb_new_subset_length_caplen(tvb, offset+local_offset+3, config_length, length-offset-local_offset-3),
                                   pinfo, config_data_tree, NULL);
             }
           }
@@ -3589,12 +3575,13 @@ static int dissect_reload_messagecontents(tvbuff_t *tvb, packet_info *pinfo, pro
                 proto_tree_add_item(kinddescription_tree, hf_reload_length_uint16,
                                     tvb, offset+local_offset+kinds_offset, 2, ENC_BIG_ENDIAN);
                 call_dissector(xml_handle,
-                               tvb_new_subset_length(tvb, offset+local_offset+kinds_offset+2,
-                                              local_increment),
+                               tvb_new_subset_length_caplen(tvb, offset+local_offset+kinds_offset+2,
+                                              local_increment,
+                                              length-(offset+local_offset+kinds_offset+2)),
                                pinfo, kinddescription_tree);
               }
               local_increment += 2;
-              if (local_increment <= 0) break;  /* impossible.. */
+              if (local_increment <= 0) break;
               kinds_offset    += local_increment;
               nKinds++;
             }
@@ -3815,7 +3802,8 @@ static int dissect_reload_messagecontents(tvbuff_t *tvb, packet_info *pinfo, pro
       }
       ti_extension = proto_tree_add_item(extensions_tree, hf_reload_message_extension, tvb, offset+ extension_offset, 3 + 4 + extension_content_length, ENC_NA);
       extension_tree = proto_item_add_subtree(ti_extension, ett_reload_message_extension);
-      proto_tree_add_item_ret_uint16(extension_tree, hf_reload_message_extension_type, tvb, offset+ extension_offset, 2, ENC_BIG_ENDIAN, &type);
+      type = tvb_get_ntohs(tvb, offset+ extension_offset);
+      proto_tree_add_item(extension_tree, hf_reload_message_extension_type, tvb, offset+ extension_offset, 2, ENC_BIG_ENDIAN);
       proto_tree_add_item(extension_tree, hf_reload_message_extension_critical, tvb, offset+ extension_offset + 2, 1, ENC_BIG_ENDIAN);
       switch(type) {
 
@@ -3867,7 +3855,7 @@ dissect_reload_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
   uint32_t              relo_token;
   unsigned              effective_length;
   unsigned              msg_length, dgram_msg_length;
-  unsigned              offset;
+  uint16_t              offset;
   conversation_t       *conversation;
   reload_conv_info_t   *reload_info;
   reload_transaction_t *reload_trans;
@@ -4018,7 +4006,7 @@ dissect_reload_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 
   offset += MIN_HDR_LENGTH;
 
-  if ((offset + via_list_length) > msg_length) {
+  if (((unsigned)offset + via_list_length) > msg_length) {
     expert_add_info(pinfo, ti, &ei_reload_truncated_packet);
     return MIN_HDR_LENGTH;
   }
@@ -4035,7 +4023,7 @@ dissect_reload_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
   }
   offset += via_list_length;
 
-  if ((offset + destination_list_length) > msg_length) {
+  if (((unsigned)offset + destination_list_length) > msg_length) {
     expert_add_info(pinfo, ti, &ei_reload_truncated_packet);
     return offset;
   }
@@ -4054,7 +4042,7 @@ dissect_reload_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
   }
   offset += destination_list_length;
 
-  if ((offset + options_length) > msg_length) {
+  if (((unsigned)offset + options_length) > msg_length) {
     expert_add_info(pinfo, ti, &ei_reload_truncated_packet);
     return offset;
   }
@@ -4203,8 +4191,8 @@ dissect_reload_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
     proto_item_append_text(ti, ": %s %s", msg_class_str, val_to_str_const(error_code, errorcodes, "Unknown"));
   }
   else {
-    msg_class_str = val_to_str(pinfo->pool, MSGCODE_TO_CLASS(message_code), classes, "Unknown %d");
-    msg_method_str = val_to_str(pinfo->pool, MSGCODE_TO_METHOD(message_code), methods, "Unknown %d");
+    msg_class_str = val_to_str(MSGCODE_TO_CLASS(message_code), classes, "Unknown %d");
+    msg_method_str = val_to_str(MSGCODE_TO_METHOD(message_code), methods, "Unknown %d");
 
     col_add_fstr(pinfo->cinfo, COL_INFO, "%s %s",
                  msg_method_str, msg_class_str);
@@ -4327,12 +4315,12 @@ proto_register_reload(void)
   static hf_register_info hf[] = {
     { &hf_reload_response_in,
       { "Response in",  "reload.response-in", FT_FRAMENUM,
-        BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_RESPONSE), 0x0, "The response to this RELOAD Request is in this frame", HFILL
+        BASE_NONE, NULL, 0x0, "The response to this RELOAD Request is in this frame", HFILL
       }
     },
     { &hf_reload_response_to,
       { "Request in", "reload.response-to", FT_FRAMENUM,
-        BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_REQUEST), 0x0, "This is a response to the RELOAD Request in this frame", HFILL
+        BASE_NONE, NULL, 0x0, "This is a response to the RELOAD Request in this frame", HFILL
       }
     },
     { &hf_reload_time,
@@ -4950,7 +4938,7 @@ proto_register_reload(void)
         BASE_DEC, NULL, 0x0,  NULL, HFILL
       }
     },
-    { &hf_reload_metadata_hash_value,
+    { & hf_reload_metadata_hash_value,
       { "hash_value",  "reload.metadata.hash_value", FT_NONE,
         BASE_NONE,  NULL, 0x0,  NULL, HFILL
       }

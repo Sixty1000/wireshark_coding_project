@@ -24,6 +24,10 @@
 /* #include "packet-mudurl.h" */ // At the moment we are not exporting.
 #include "packet-x509af.h"
 
+#define PNAME  "MUDURL"
+#define PSNAME "MUDURL"
+#define PFNAME "mudurl"
+
 void proto_register_mudurl(void);
 void proto_reg_handoff_mudurl(void);
 
@@ -39,8 +43,8 @@ static int hf_mudurl_MUDURLSyntax_PDU;            /* MUDURLSyntax */
 
 
 
-static unsigned
-dissect_mudurl_MUDURLSyntax(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_mudurl_MUDURLSyntax(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_restricted_string(implicit_tag, BER_UNI_TAG_IA5String,
                                             actx, tree, tvb, offset, hf_index,
                                             NULL);
@@ -51,7 +55,7 @@ dissect_mudurl_MUDURLSyntax(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned o
 /*--- PDUs ---*/
 
 static int dissect_MUDURLSyntax_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_mudurl_MUDURLSyntax(false, tvb, offset, &asn1_ctx, tree, hf_mudurl_MUDURLSyntax_PDU);
@@ -77,7 +81,7 @@ void proto_register_mudurl(void) {
   }; */
 
   /* Register protocol */
-  proto_mudurl = proto_register_protocol("MUDURL", "MUDURL", "mudurl");
+  proto_mudurl = proto_register_protocol(PNAME, PSNAME, PFNAME);
 
   /* Register fields and subtrees */
   proto_register_field_array(proto_mudurl, hf, array_length(hf));

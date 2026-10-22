@@ -33,16 +33,12 @@ typedef struct _diam_sub_dis_t {
 	uint32_t cmd_code;
 	uint32_t feature_list_id;
 	bool dis_gouped;       /**< Set during dissection of grouped AVP */
-	uint32_t group_avp_code; /* Set AVP code for current dissected grouped AVP */
 	uint32_t vendor_id;
 	char *avp_str;
-	wmem_strbuf_t *group_avp_str;
 	proto_item* item;          /**< The item created for this AVP*/
 	uint32_t subscription_id_type;     /* Store the Subscription-Id-Type for use when we dissect Subscription-Id-Data */
 	uint32_t user_equipment_info_type; /* Store the User-Equipment-Info-Type for use when we dissect User-Equipment-Info-Value */
 	bool parent_message_is_request; /* Whether the Diameter message that contains your AVP is a request */
-	const char *session_id;
-	const char *imsi; /* Store IMSI from first AVP with type E.212*/
 } diam_sub_dis_t;
 
 #define DIAM_APPID_3GPP_CX      16777216
@@ -58,7 +54,6 @@ typedef struct _diam_sub_dis_t {
 #define DIAM_APPID_3GPP_SLH     16777291
 #define DIAM_APPID_3GPP_SD      16777303
 #define DIAM_APPID_3GPP_S7A     16777308
-#define DIAM_APPID_3GPP_S6C     16777312
 #define DIAM_APPID_3GPP_S6T     16777345
 
 #endif /* __PACKET_DIAMETER_H__ */

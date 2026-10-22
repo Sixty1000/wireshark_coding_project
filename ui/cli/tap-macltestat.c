@@ -1,8 +1,6 @@
 /* tap-macltestat.c
  * Copyright 2011 Martin Mathieson
  *
- * Used for LTE and NR MAC PDUs
- *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
@@ -140,29 +138,11 @@ mac_lte_stat_reset(void *phs)
     /* Zero common stats */
     memset(&(mac_lte_stat->common_stats), 0, sizeof(mac_lte_common_stats));
 
-    while (list != NULL) {
-        mac_lte_ep_t *ptr = list;
-        list = list->next;
-        g_free(ptr);
+    if (!list) {
+        return;
     }
+
     mac_lte_stat->ep_list = NULL;
-}
-
-
-/* Free memory used by tap */
-static void
-mac_lte_stat_finish(void *phs)
-{
-    mac_lte_nr_stat_t *mac_lte_stat = (mac_lte_nr_stat_t *)phs;
-    mac_lte_ep_t *list = mac_lte_stat->ep_list;
-
-    while (list != NULL) {
-        mac_lte_ep_t *ptr = list;
-        list = list->next;
-        g_free(ptr);
-    }
-
-    g_free(mac_lte_stat);
 }
 
 
@@ -230,7 +210,7 @@ static tap_packet_status
 mac_lte_stat_packet(void *phs, packet_info *pinfo, epan_dissect_t *edt _U_,
                     const void *phi, tap_flags_t flags _U_)
 {
-    /* Get reference to stat instance */
+    /* Get reference to stat window instance */
     mac_lte_nr_stat_t *hs = (mac_lte_nr_stat_t*)phs;
     mac_lte_ep_t *tmp = NULL, *te = NULL;
     int i;
@@ -504,7 +484,7 @@ mac_lte_stat_draw(void *phs)
 }
 
 /* Create a new MAC LTE stats struct */
-static bool mac_lte_stat_init(const char *opt_arg, void *userdata _U_)
+static void mac_lte_stat_init(const char *opt_arg, void *userdata _U_)
 {
     mac_lte_nr_stat_t    *hs;
     const char    *filter = NULL;
@@ -525,18 +505,16 @@ static bool mac_lte_stat_init(const char *opt_arg, void *userdata _U_)
     hs->ep_list = NULL;
 
     error_string = register_tap_listener("mac-3gpp", hs,
-                                         filter, TL_REQUIRES_NOTHING,
+                                         filter, 0,
                                          mac_lte_stat_reset,
                                          mac_lte_stat_packet,
                                          mac_lte_stat_draw,
-                                         mac_lte_stat_finish);
+                                         NULL);
     if (error_string) {
         g_string_free(error_string, TRUE);
         g_free(hs);
-        return false;
+        exit(1);
     }
-
-    return true;
 }
 
 static stat_tap_ui mac_lte_stat_ui = {

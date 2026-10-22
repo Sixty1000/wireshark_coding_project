@@ -15,7 +15,6 @@
 
 #include <epan/packet.h>
 #include <epan/expert.h>
-#include <epan/exceptions.h>
 
 #include <wiretap/pcap-encap.h>
 
@@ -263,7 +262,6 @@ const value_string link_type_vals[] = {
     { 299,  "FIRA_UCI" },
     { 300,  "MDB" },
     { 301,  "DECT_NR" },
-    { 304,  "DECT_NR_TAP" },
     { 0, NULL }
 };
 
@@ -276,7 +274,7 @@ static const value_string pseudoheader_bluetooth_direction_vals[] = {
 static int
 dissect_pcap_pktdata(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
-    volatile int offset = 0;
+    int          offset = 0;
     uint32_t    *link_type;
     tvbuff_t    *next_tvb;
     proto_item  *pseudoheader_item;
@@ -284,7 +282,6 @@ dissect_pcap_pktdata(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
     proto_item  *packet_item;
     struct eth_phdr eth;
     void        *phdr;
-    int          pkt_encap, saved_pkt_encap;
 
     DISSECTOR_ASSERT(data);
 
@@ -294,12 +291,12 @@ dissect_pcap_pktdata(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
      * We're passed a pointer to a LINKTYPE_ value.
      * Find the Wiretap encapsulation for that value.
      */
-    pkt_encap = wtap_pcap_encap_to_wtap_encap(*link_type);
+    pinfo->rec->rec_header.packet_header.pkt_encap = wtap_pcap_encap_to_wtap_encap(*link_type);
 
     /*
      * Do we know that type?
      */
-    if (pkt_encap == WTAP_ENCAP_UNKNOWN) {
+    if (pinfo->rec->rec_header.packet_header.pkt_encap == WTAP_ENCAP_UNKNOWN) {
         /*
          * Nothing we know.
          * Just report that and give up.
@@ -323,11 +320,11 @@ dissect_pcap_pktdata(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
      * pseudo-header from the bytes at the beginning of the
      * packet data.
      */
-    if (wtap_encap_requires_phdr(pkt_encap)) {
+    if (wtap_encap_requires_phdr(pinfo->rec->rec_header.packet_header.pkt_encap)) {
         /*
          * It does.  Do we have code to do that?
          */
-        switch (pkt_encap) {
+        switch (pinfo->rec->rec_header.packet_header.pkt_encap) {
 
         case WTAP_ENCAP_BLUETOOTH_H4_WITH_PHDR:
             pseudoheader_item = proto_tree_add_item(tree, hf_pcap_pktdata_pseudoheader, tvb, offset, 4, ENC_NA);
@@ -379,7 +376,7 @@ dissect_pcap_pktdata(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
          * These also require a pseudo-header, but it's not constructed
          * from packet data.
          */
-        switch (pkt_encap) {
+        switch (pinfo->rec->rec_header.packet_header.pkt_encap) {
 
         case WTAP_ENCAP_ETHERNET:
             eth.fcs_len = -1;    /* Unknown whether we have an FCS */
@@ -394,19 +391,7 @@ dissect_pcap_pktdata(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
 
     next_tvb = tvb_new_subset_remaining(tvb, offset);
 
-    saved_pkt_encap = pinfo->rec->rec_header.packet_header.pkt_encap;
-    pinfo->rec->rec_header.packet_header.pkt_encap = pkt_encap;
-    /* XXX - Some dissectors that expect a pseudo header, instead of looking
-     * at the data parameter passed in and interpreting it as a pseudo header,
-     * look at pinfo->pseudo_header. That probably won't work; they might,
-     * e.g., end up intepreting a eth_phdr as some other kind of phdr from
-     * the union.
-     */
-    TRY {
-        offset = dissector_try_uint_with_data(wtap_encap_table, pinfo->rec->rec_header.packet_header.pkt_encap, next_tvb, pinfo, tree, true, phdr);
-    } FINALLY {
-        pinfo->rec->rec_header.packet_header.pkt_encap = saved_pkt_encap;
-    } ENDTRY;
+    offset = dissector_try_uint_new(wtap_encap_table, pinfo->rec->rec_header.packet_header.pkt_encap, next_tvb, pinfo, tree, true, phdr);
 
     return offset;
 }

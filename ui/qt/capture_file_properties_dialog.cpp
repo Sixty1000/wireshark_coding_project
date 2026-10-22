@@ -17,9 +17,10 @@
 
 #include "wiretap/secrets-types.h"
 
+#include "wsutil/filesystem.h"
 #include "wsutil/str_util.h"
 #include "wsutil/utf8_entities.h"
-#include "app/application_flavor.h"
+#include "wsutil/version_info.h"
 
 #include <ui/qt/utils/qt_ui_utils.h>
 #include "main_application.h"
@@ -73,57 +74,6 @@ CaptureFilePropertiesDialog::~CaptureFilePropertiesDialog()
     delete ui;
 }
 
-QString CaptureFilePropertiesDialog::getStartTextString() const
-{
-    return tr("Capture start");
-}
-
-QString CaptureFilePropertiesDialog::getFirstItemString() const
-{
-    return tr("First packet");
-}
-
-QString CaptureFilePropertiesDialog::getLastItemString() const
-{
-    return tr("Last packet");
-}
-
-QString CaptureFilePropertiesDialog::getEndTextString() const
-{
-    return tr("Capture end");
-}
-
-QString CaptureFilePropertiesDialog::getDroppedItemString() const
-{
-    return tr("Dropped packets");
-}
-
-QString CaptureFilePropertiesDialog::getItemSizeLimitString() const
-{
-    return tr("Packet size limit (snaplen)");
-}
-
-
-QString CaptureFilePropertiesDialog::getRowTitleString() const
-{
-    return tr("Packets");
-}
-
-QString CaptureFilePropertiesDialog::getAvgItemSizeString() const
-{
-    return tr("Average packet size, B");
-}
-
-QString CaptureFilePropertiesDialog::getItemCommentString() const
-{
-    return tr("Packet Comments");
-}
-
-QString CaptureFilePropertiesDialog::getCreatedByString() const
-{
-    return tr("Created by Wireshark %1\n\n").arg(application_get_vcs_version_info());
-}
-
 /**/
 
 void CaptureFilePropertiesDialog::updateWidgets()
@@ -155,7 +105,7 @@ QString CaptureFilePropertiesDialog::summaryToHtml()
 
     QString table_begin, table_end;
     QString table_row_begin, table_ul_row_begin, table_row_end;
-    QString table_vheader_tmpl, table_hheader16_tmpl, table_hheader25_tmpl;
+    QString table_vheader_tmpl, table_hheader20_tmpl, table_hheader25_tmpl;
     QString table_data_tmpl;
 
     table_begin = "<p><table>\n";
@@ -163,8 +113,8 @@ QString CaptureFilePropertiesDialog::summaryToHtml()
     table_row_begin = "<tr>\n";
     table_ul_row_begin = "<tr style=\"border-bottom: 1px solid gray;\">\n";
     table_row_end = "</tr>\n";
-    table_vheader_tmpl = "<td width=\"16%\">%1:</td>"; // <th align="left"> looked odd
-    table_hheader16_tmpl = "<td width=\"16%\"><u>%1</u></td>";
+    table_vheader_tmpl = "<td width=\"20%\">%1:</td>"; // <th align="left"> looked odd
+    table_hheader20_tmpl = "<td width=\"20%\"><u>%1</u></td>";
     table_hheader25_tmpl = "<td width=\"25%\"><u>%1</u></td>";
     table_data_tmpl = "<td>%1</td>";
 
@@ -212,9 +162,9 @@ QString CaptureFilePropertiesDialog::summaryToHtml()
         << table_row_end;
 
     QString format_str = wtap_file_type_subtype_description(summary.file_type);
-    const char *compression_type_description = ws_compression_type_description(summary.compression_type);
+    const char *compression_type_description = wtap_compression_type_description(summary.compression_type);
     if (compression_type_description != nullptr) {
-        format_str += QStringLiteral(" (%1)").arg(compression_type_description);
+        format_str += QString(" (%1)").arg(compression_type_description);
     }
     out << table_row_begin
         << table_vheader_tmpl.arg(tr("Format"))
@@ -225,7 +175,7 @@ QString CaptureFilePropertiesDialog::summaryToHtml()
     if (summary.file_encap_type == WTAP_ENCAP_PER_PACKET) {
         for (unsigned i = 0; i < summary.packet_encap_types->len; i++)
         {
-            encaps_str.append(QStringLiteral("%1%2").arg(i > 0 ? ", " : "").arg(wtap_encap_description(g_array_index(summary.packet_encap_types, int, i))));
+            encaps_str = QString(wtap_encap_description(g_array_index(summary.packet_encap_types, int, i)));
         }
     } else {
         encaps_str = QString(wtap_encap_description(summary.file_encap_type));
@@ -245,47 +195,35 @@ QString CaptureFilePropertiesDialog::summaryToHtml()
     out << table_end;
 
     // Time Section
-    bool cap_start_time_valid = summary.cap_start_time != DBL_MAX;
-    bool cap_end_time_valid = summary.cap_end_time != DBL_MIN;
-    bool start_time_valid = summary.start_time != DBL_MAX;
-    bool stop_time_valid = summary.stop_time != DBL_MIN;
-
-    if (start_time_valid || stop_time_valid || cap_start_time_valid || cap_end_time_valid) {
+    if (summary.packet_count_ts == summary.packet_count &&
+            summary.packet_count >= 1)
+    {
         out << section_tmpl_.arg(tr("Time"));
         out << table_begin;
 
-        // cap start time
-        if (cap_start_time_valid) {
-            out << table_row_begin
-                << table_vheader_tmpl.arg(getStartTextString())
-                << table_data_tmpl.arg(time_t_to_qstring((time_t)summary.cap_start_time)) << table_row_end;
-        }
-
         // start time
-        if (start_time_valid) {
-            out << table_row_begin
-                << table_vheader_tmpl.arg(getFirstItemString())
-                << table_data_tmpl.arg(time_t_to_qstring((time_t)summary.start_time))
-                << table_row_end;
+        out << table_row_begin;
+        if (is_packet_configuration_namespace()) {
+            out << table_vheader_tmpl.arg(tr("First packet"));
+        } else {
+            out << table_vheader_tmpl.arg(tr("First event"));
         }
+        out << table_data_tmpl.arg(time_t_to_qstring((time_t)summary.start_time))
+            << table_row_end;
 
         // stop time
-        if (stop_time_valid) {
-            out << table_row_begin
-                << table_vheader_tmpl.arg(getLastItemString())
-                << table_data_tmpl.arg(time_t_to_qstring((time_t)summary.stop_time))
-                << table_row_end;
+        out << table_row_begin;
+        if (is_packet_configuration_namespace()) {
+            out << table_vheader_tmpl.arg(tr("Last packet"));
+        } else {
+            out << table_vheader_tmpl.arg(tr("Last event"));
         }
+        out << table_data_tmpl.arg(time_t_to_qstring((time_t)summary.stop_time))
+            << table_row_end;
 
-        // cap end time
-        if (cap_end_time_valid) {
-            out << table_row_begin
-                << table_vheader_tmpl.arg(getEndTextString())
-                << table_data_tmpl.arg(time_t_to_qstring((time_t)summary.cap_end_time)) << table_row_end;
-        }
-
-        // elapsed seconds (first to last packet)
-        if (start_time_valid && stop_time_valid) {
+        // elapsed seconds (capture duration)
+        if (summary.packet_count_ts >= 2)
+        {
             /* elapsed seconds */
             QString elapsed_str;
             unsigned int elapsed_time = (unsigned int)summary.elapsed_time;
@@ -294,38 +232,17 @@ QString CaptureFilePropertiesDialog::summaryToHtml()
                 elapsed_str = tr("%Ln day(s)", "", days) + " ";
             }
 
-            elapsed_str += QStringLiteral("%1:%2:%3")
+            elapsed_str += QString("%1:%2:%3")
                     .arg(elapsed_time % 86400 / 3600, 2, 10, QChar('0'))
                     .arg(elapsed_time % 3600 / 60, 2, 10, QChar('0'))
                     .arg(elapsed_time % 60, 2, 10, QChar('0'));
             out << table_row_begin
-                << table_vheader_tmpl.arg(tr("Elapsed (first to last packet)"))
-                << table_data_tmpl.arg(elapsed_str)
-                << table_row_end;
-        }
-
-        // elapsed seconds (capture duration)
-        if (cap_start_time_valid && cap_end_time_valid) {
-            /* elapsed seconds */
-            QString elapsed_str;
-            unsigned int elapsed_time = (unsigned int)(summary.cap_end_time - summary.cap_start_time);
-            unsigned int days = elapsed_time / 86400;
-            if (days) {
-                elapsed_str = tr("%Ln day(s)", "", days) + " ";
-            }
-
-            elapsed_str += QStringLiteral("%1:%2:%3")
-                .arg(elapsed_time % 86400 / 3600, 2, 10, QChar('0'))
-                .arg(elapsed_time % 3600 / 60, 2, 10, QChar('0'))
-                .arg(elapsed_time % 60, 2, 10, QChar('0'));
-            out << table_row_begin
-                << table_vheader_tmpl.arg(tr("Elapsed capturing"))
+                << table_vheader_tmpl.arg(tr("Elapsed"))
                 << table_data_tmpl.arg(elapsed_str)
                 << table_row_end;
         }
 
         out << table_end;
-
     }
 
     // Information from file sections.
@@ -335,7 +252,7 @@ QString CaptureFilePropertiesDialog::summaryToHtml()
 
         // If we have more than one section, add headers for each section.
         if (wtap_file_get_num_shbs(cap_file_.capFile()->provider.wth) > 1)
-            out << section_tmpl_.arg(tr("Section %1")
+            out << section_tmpl_.arg(QString(tr("Section %1"))
                                      .arg(section_number + 1));
 
         wtap_block_t shb_inf = wtap_file_get_shb(cap_file_.capFile()->provider.wth, section_number);
@@ -390,13 +307,20 @@ QString CaptureFilePropertiesDialog::summaryToHtml()
             out << table_begin;
 
             out << table_ul_row_begin
-                << table_hheader16_tmpl.arg(tr("Interface"))
-                << table_hheader16_tmpl.arg(tr("Interface Description"))
-                << table_hheader16_tmpl.arg(getDroppedItemString())
-                << table_hheader16_tmpl.arg(tr("Capture filter"))
-                << table_hheader16_tmpl.arg(tr("Link type"))
-                << table_hheader16_tmpl.arg(getItemSizeLimitString())
-                << table_row_end;
+                << table_hheader20_tmpl.arg(tr("Interface"));
+            if (is_packet_configuration_namespace()) {
+                out << table_hheader20_tmpl.arg(tr("Dropped packets"));
+            } else {
+                out << table_hheader20_tmpl.arg(tr("Dropped events"));
+            }
+            out << table_hheader20_tmpl.arg(tr("Capture filter"))
+                << table_hheader20_tmpl.arg(tr("Link type"));
+            if (is_packet_configuration_namespace()) {
+                out << table_hheader20_tmpl.arg(tr("Packet size limit (snaplen)"));
+            } else {
+                out << table_hheader20_tmpl.arg(tr("Event size limit (snaplen)"));
+            }
+            out << table_row_end;
         }
 
         // XXX: The mapping of interfaces to different SHBs isn't
@@ -407,19 +331,16 @@ QString CaptureFilePropertiesDialog::summaryToHtml()
 
             /* interface */
             QString interface_name(unknown);
-            if (iface.name) {
-                interface_name = iface.name;
-            }
-
-            QString interface_description(unknown);
             if (iface.descr) {
-                interface_description = iface.descr;
+                interface_name = iface.descr;
+            } else if (iface.name) {
+                interface_name = iface.name;
             }
 
             /* Dropped count */
             QString interface_drops(unknown);
             if (iface.drops_known) {
-                interface_drops = QStringLiteral("%1 (%2%)").arg(iface.drops).arg(QString::number(
+                interface_drops = QString("%1 (%2%)").arg(iface.drops).arg(QString::number(
                     /* MSVC cannot convert from unsigned __int64 to float, so first convert to signed __int64 */
                     summary.packet_count ? (100.0 * (int64_t)iface.drops)/(summary.packet_count + iface.drops) : 0, 'f', 1));
             }
@@ -429,14 +350,13 @@ QString CaptureFilePropertiesDialog::summaryToHtml()
             if (iface.cfilter && iface.cfilter[0] != '\0') {
                 interface_cfilter = iface.cfilter;
             } else if (iface.name) {
-                interface_cfilter = tr("none");
+                interface_cfilter = QString(tr("none"));
             }
 
-            QString interface_snaplen = tr("%1 bytes").arg(iface.snap);
+            QString interface_snaplen = QString(tr("%1 bytes").arg(iface.snap));
 
             out << table_row_begin
                 << table_data_tmpl.arg(interface_name)
-                << table_data_tmpl.arg(interface_description)
                 << table_data_tmpl.arg(interface_drops)
                 << table_data_tmpl.arg(interface_cfilter)
                 << table_data_tmpl.arg(wtap_encap_description(iface.encap_type))
@@ -481,8 +401,8 @@ QString CaptureFilePropertiesDialog::summaryToHtml()
         out << section_tmpl_.arg(tr("Decryption Secrets"));
         out << table_begin;
         out << table_ul_row_begin
-            << table_hheader16_tmpl.arg(tr("Type"))
-            << table_hheader16_tmpl.arg(tr("Size"))
+            << table_hheader20_tmpl.arg(tr("Type"))
+            << table_hheader20_tmpl.arg(tr("Size"))
             << table_row_end;
         // XXX: A DSB can have (multiple) comments, we could add that too.
         for (unsigned section_number = 0;
@@ -515,19 +435,23 @@ QString CaptureFilePropertiesDialog::summaryToHtml()
     // Packets
     displayed_str = marked_str = n_a;
     if (summary.filtered_count > 0 && summary.packet_count > 0) {
-            displayed_str = QStringLiteral("%1 (%2%)")
+            displayed_str = QString("%1 (%2%)")
             .arg(summary.filtered_count)
             .arg(100.0 * summary.filtered_count / summary.packet_count, 1, 'f', 1);
     }
     if (summary.packet_count > 0 && summary.marked_count > 0) {
-            marked_str = QStringLiteral("%1 (%2%)")
+            marked_str = QString("%1 (%2%)")
             .arg(summary.marked_count)
             .arg(100.0 * summary.marked_count / summary.packet_count, 1, 'f', 1);
     }
 
-    out << table_row_begin
-        << table_data_tmpl.arg(getRowTitleString())
-        << table_data_tmpl.arg(summary.packet_count)
+    out << table_row_begin;
+    if (is_packet_configuration_namespace()) {
+        out << table_data_tmpl.arg(tr("Packets"));
+    } else {
+        out << table_data_tmpl.arg(tr("Events"));
+    }
+    out << table_data_tmpl.arg(summary.packet_count)
         << table_data_tmpl.arg(displayed_str)
         << table_data_tmpl.arg(marked_str)
         << table_row_end;
@@ -535,13 +459,13 @@ QString CaptureFilePropertiesDialog::summaryToHtml()
     // Time between first and last
     captured_str = displayed_str = marked_str = n_a;
     if (seconds > 0) {
-            captured_str = QStringLiteral("%1").arg(seconds, 1, 'f', 3);
+            captured_str = QString("%1").arg(seconds, 1, 'f', 3);
     }
     if (disp_seconds > 0) {
-            displayed_str = QStringLiteral("%1").arg(disp_seconds, 1, 'f', 3);
+            displayed_str = QString("%1").arg(disp_seconds, 1, 'f', 3);
     }
     if (marked_seconds > 0) {
-            marked_str = QStringLiteral("%1").arg(marked_seconds, 1, 'f', 3);
+            marked_str = QString("%1").arg(marked_seconds, 1, 'f', 3);
     }
     out << table_row_begin
         << table_data_tmpl.arg(tr("Time span, s"))
@@ -553,13 +477,13 @@ QString CaptureFilePropertiesDialog::summaryToHtml()
     // Average packets per second
     captured_str = displayed_str = marked_str = n_a;
     if (seconds > 0) {
-            captured_str = QStringLiteral("%1").arg(summary.packet_count/seconds, 1, 'f', 1);
+            captured_str = QString("%1").arg(summary.packet_count/seconds, 1, 'f', 1);
     }
     if (disp_seconds > 0) {
-            displayed_str = QStringLiteral("%1").arg(summary.filtered_count/disp_seconds, 1, 'f', 1);
+            displayed_str = QString("%1").arg(summary.filtered_count/disp_seconds, 1, 'f', 1);
     }
     if (marked_seconds > 0) {
-            marked_str = QStringLiteral("%1").arg(summary.marked_count/marked_seconds, 1, 'f', 1);
+            marked_str = QString("%1").arg(summary.marked_count/marked_seconds, 1, 'f', 1);
     }
     out << table_row_begin
         << table_data_tmpl.arg(tr("Average pps"))
@@ -579,9 +503,13 @@ QString CaptureFilePropertiesDialog::summaryToHtml()
     if (summary.marked_count > 0) {
             marked_str = QString::number((uint64_t) ((double)summary.marked_bytes/summary.marked_count + 0.5));
     }
-    out << table_row_begin
-        << table_data_tmpl.arg(getAvgItemSizeString())
-        << table_data_tmpl.arg(captured_str)
+    out << table_row_begin;
+    if (is_packet_configuration_namespace()) {
+        out << table_data_tmpl.arg(tr("Average packet size, B"));
+    } else {
+        out << table_data_tmpl.arg(tr("Average event size, B"));
+    }
+    out << table_data_tmpl.arg(captured_str)
         << table_data_tmpl.arg(displayed_str)
         << table_data_tmpl.arg(marked_str)
         << table_row_end;
@@ -589,12 +517,12 @@ QString CaptureFilePropertiesDialog::summaryToHtml()
     // Byte count
     displayed_str = marked_str = "0";
     if (summary.bytes > 0 && summary.filtered_bytes > 0) {
-        displayed_str = QStringLiteral("%1 (%2%)")
+        displayed_str = QString("%1 (%2%)")
                 .arg(summary.filtered_bytes)
                 .arg(100.0 * summary.filtered_bytes / summary.bytes, 1, 'f', 1);
     }
     if (summary.bytes > 0 && summary.marked_bytes > 0) {
-        marked_str = QStringLiteral("%1 (%2%)")
+        marked_str = QString("%1 (%2%)")
                 .arg(summary.marked_bytes)
                 .arg(100.0 * summary.marked_bytes / summary.bytes, 1, 'f', 1);
     }
@@ -665,7 +593,11 @@ void CaptureFilePropertiesDialog::fillDetails()
 
     if (cap_file_.capFile()->packet_comment_count > 0) {
         cursor.insertBlock();
-        cursor.insertHtml(section_tmpl_.arg(getItemCommentString()));
+        if (is_packet_configuration_namespace()) {
+            cursor.insertHtml(section_tmpl_.arg(tr("Packet Comments")));
+        } else {
+            cursor.insertHtml(section_tmpl_.arg(tr("Event Comments")));
+        }
 
         for (uint32_t framenum = 1; framenum <= cap_file_.capFile()->count ; framenum++) {
             frame_data *fdata = frame_data_sequence_find(cap_file_.capFile()->provider.frames, framenum);
@@ -728,7 +660,12 @@ void CaptureFilePropertiesDialog::on_buttonBox_clicked(QAbstractButton *button)
 {
     if (button == ui->buttonBox->button(QDialogButtonBox::Apply)) {
         QClipboard *clipboard = QApplication::clipboard();
-        QString details = getCreatedByString();
+        QString details;
+        if (is_packet_configuration_namespace()) {
+            details = tr("Created by Wireshark %1\n\n").arg(get_ws_vcs_version_info());
+        } else {
+            details = tr("Created by Logray %1\n\n").arg(get_lr_vcs_version_info());
+        }
         details.append(ui->detailsTextEdit->toPlainText());
         clipboard->setText(details);
     } else if (button == ui->buttonBox->button(QDialogButtonBox::Reset)) {

@@ -9,7 +9,8 @@
 #ifndef _NETSCALER_H
 #define _NETSCALER_H
 
-#include "wtap.h"
+#include <glib.h>
+#include <wiretap/wtap.h>
 
 /* Physical Device full packet trace */
 #define	NSPR_PDPKTRACEFULLTX_V10	0x0310	/* Transmitted */
@@ -106,14 +107,6 @@
 #define NSPR_HEADER_VERSION300 0x30
 #define NSPR_HEADER_VERSION350 0x35
 
-/**
- * @brief Opens a NetScaler trace file.
- *
- * @param wth Pointer to the wtap structure.
- * @param err Error code if an error occurs.
- * @param err_info Error information if an error occurs.
- * @return wtap_open_return_val The result of opening the file.
- */
 wtap_open_return_val nstrace_open(wtap *wth, int *err, char **err_info);
 
 #endif /* _NETSCALER_H */

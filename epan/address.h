@@ -8,7 +8,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-#pragma once
+
+#ifndef __ADDRESS_H__
+#define __ADDRESS_H__
+
 #include <string.h>     /* for memcmp */
 
 #include "tvbuff.h"
@@ -21,10 +24,7 @@ extern "C" {
 #endif /* __cplusplus */
 
 /* Types of "global" addresses Wireshark knows about. */
-/**
- * @brief Identifies the type of a network layer or link layer address.
- *
- * Address types can be added here if there are many dissectors that use them or just
+/* Address types can be added here if there are many dissectors that use them or just
  * within a specific dissector.
  * If an address type is added here, it must be "registered" within address_types.c
  * For dissector address types, just use the address_type_dissector_register function
@@ -35,50 +35,36 @@ extern "C" {
  * assumed. Only representation (aka conversion of value to string) is implemented for this type.
  */
 typedef enum {
-    AT_NONE,          /**< No address / unset. */
-    AT_ETHER,         /**< MAC address (Ethernet, 802.x, FDDI); 6 bytes. */
-    AT_IPv4,          /**< IPv4 address; 4 bytes. */
-    AT_IPv6,          /**< IPv6 address; 16 bytes. */
-    AT_IPX,           /**< IPX network + node address; 10 bytes. */
-    AT_FC,            /**< Fibre Channel address; 3 bytes. */
-    AT_FCWWN,         /**< Fibre Channel World Wide Name; 8 bytes. */
-    AT_STRINGZ,       /**< Null-terminated string address. */
-    AT_EUI64,         /**< IEEE EUI-64 address; 8 bytes. */
-    AT_IB,            /**< InfiniBand GID (16 bytes) or LID (2 bytes). */
-    AT_AX25,          /**< AX.25 amateur radio address; 7 bytes. */
-    AT_VINES,         /**< Banyan VINES address; 6 bytes. */
-    AT_NUMERIC,       /**< Numeric scalar address (uint8/16/32/64); display-only. */
-    AT_MCTP,          /**< Management Component Transport Protocol address. */
-    AT_ILNP_NID,      /**< ILNP Node Identifier (NID); 8 bytes. */
-    AT_ILNP_L64,      /**< ILNP 64-bit Locator (L64); 8 bytes. */
-    AT_ILNP_ILV,      /**< ILNP Identifier-Locator Vector (ILV); 16 bytes. */
-    AT_END_OF_LIST    /**< Sentinel — must remain the last enumerator. */
+    AT_NONE,               /* no link-layer address */
+    AT_ETHER,              /* MAC (Ethernet, 802.x, FDDI) address */
+    AT_IPv4,               /* IPv4 */
+    AT_IPv6,               /* IPv6 */
+    AT_IPX,                /* IPX */
+    AT_FC,                 /* Fibre Channel */
+    AT_FCWWN,              /* Fibre Channel WWN */
+    AT_STRINGZ,            /* null-terminated string */
+    AT_EUI64,              /* IEEE EUI-64 */
+    AT_IB,                 /* Infiniband GID/LID */
+    AT_AX25,               /* AX.25 */
+    AT_VINES,              /* Banyan Vines address */
+    AT_NUMERIC,            /* Numeric address type. */
+    AT_MCTP,               /* MCTP */
+
+    AT_END_OF_LIST         /* Must be last in list */
 } address_type;
 
-
-/**
- * @brief Holds a network or link-layer address of any supported type.
- */
 typedef struct _address {
-    int         type; /**< Address family; one of the #address_type values. */
-    int         len;  /**< Length of the address data pointed to by @c data, in bytes. */
-    const void *data; /**< Pointer to the raw address bytes; not owned by this struct. */
+    int           type;         /* type of address */
+    int           len;          /* length of address, in bytes */
+    const void   *data;         /* pointer to address data */
 
     /* private */
-    void *priv; /**< Reserved for internal address-type implementation use; must not be accessed by callers. */
+    void         *priv;
 } address;
 
-
-/** @brief Static initializer for an #address with explicit type, length, and data pointer. */
 #define ADDRESS_INIT(type, len, data) {type, len, data, NULL}
-
-/** @brief Static initializer for an empty #address (@c AT_NONE, zero length, NULL data). */
 #define ADDRESS_INIT_NONE ADDRESS_INIT(AT_NONE, 0, NULL)
 
-/** @brief Clear an address structure by setting its fields to default values.
-
-    @param addr Pointer to the address structure to be cleared.
-*/
 static inline void
 clear_address(address *addr)
 {
@@ -113,14 +99,6 @@ set_address(address *addr, int addr_type, int addr_len, const void *addr_data) {
     addr->priv = NULL;
 }
 
-/**
- * @brief Sets an address with the values from a provided IPv4 address.
- *
- * This function initializes an address structure with the provided IPv4 address and its length.
- *
- * @param addr Pointer to the address structure to be initialized.
- * @param ipv4 Pointer to the IPv4 address and mask information.
- */
 static inline void
 set_address_ipv4(address *addr, const ipv4_addr_and_mask *ipv4) {
     addr->type = AT_IPv4;
@@ -130,21 +108,12 @@ set_address_ipv4(address *addr, const ipv4_addr_and_mask *ipv4) {
     addr->data = addr->priv;
 }
 
-/**
- * @brief Sets an address with the values from a provided IPv6 address.
- *
- * This function initializes an address structure with the provided IPv6 address and its length.
- *
- * @param addr Pointer to the address structure to be initialized.
- * @param ipv6 Pointer to the IPv6 address and prefix information.
- */
 static inline void
 set_address_ipv6(address *addr, const ipv6_addr_and_prefix *ipv6) {
     set_address(addr, AT_IPv6, sizeof(ws_in6_addr), &ipv6->addr);
 }
 
-/**
- * @brief Initialize an address from TVB data.
+/** Initialize an address from TVB data.
  *
  * Same as set_address but it takes a TVB and an offset. This is preferred
  * over passing the return value of tvb_get_ptr() to set_address().
@@ -160,7 +129,7 @@ set_address_ipv6(address *addr, const ipv6_addr_and_prefix *ipv6) {
  *                     AT_IPv4 or sizeof(ws_in6_addr) for AT_IPv6.
  */
 static inline void
-set_address_tvb(address *addr, int addr_type, unsigned addr_len, tvbuff_t *tvb, unsigned offset) {
+set_address_tvb(address *addr, int addr_type, int addr_len, tvbuff_t *tvb, int offset) {
     const void *p;
 
     if (addr_len != 0) {
@@ -172,8 +141,7 @@ set_address_tvb(address *addr, int addr_type, unsigned addr_len, tvbuff_t *tvb, 
     set_address(addr, addr_type, addr_len, p);
 }
 
-/**
- * @brief Initialize an address with the given values, allocating a new buffer
+/** Initialize an address with the given values, allocating a new buffer
  * for the address data using wmem-scoped memory.
  *
  * @param scope [in] The lifetime of the allocated memory, e.g., pinfo->pool
@@ -203,8 +171,7 @@ alloc_address_wmem(wmem_allocator_t *scope, address *addr,
     addr->len = addr_len;
 }
 
-/**
- * @brief Allocate an address from TVB data.
+/** Allocate an address from TVB data.
  *
  * Same as alloc_address_wmem but it takes a TVB and an offset.
  *
@@ -225,8 +192,7 @@ alloc_address_tvb(wmem_allocator_t *scope, address *addr,
     alloc_address_wmem(scope, addr, addr_type, addr_len, p);
 }
 
-/**
- * @brief Compare two addresses.
+/** Compare two addresses.
  *
  * @param addr1 [in] The first address to compare.
  * @param addr2 [in] The second address to compare.
@@ -251,8 +217,7 @@ cmp_address(const address *addr1, const address *addr2) {
     return memcmp(addr1->data, addr2->data, addr1->len);
 }
 
-/**
- * @brief Check two addresses for equality.
+/** Check two addresses for equality.
  *
  * Given two addresses, return "true" if they're equal, "false" otherwise.
  * Addresses are equal only if they have the same type and length; if the
@@ -278,8 +243,7 @@ addresses_equal(const address *addr1, const address *addr2) {
     return false;
 }
 
-/**
- * @brief Check the data of two addresses for equality.
+/** Check the data of two addresses for equality.
  *
  * Given two addresses, return "true" if they have the same length and,
  * their data is equal, "false" otherwise.
@@ -298,8 +262,7 @@ addresses_data_equal(const address *addr1, const address *addr2) {
     return false;
 }
 
-/**
- * @brief Perform a shallow copy of the address (both addresses point to the same
+/** Perform a shallow copy of the address (both addresses point to the same
  * memory location).
  *
  * @param to [in,out] The destination address.
@@ -313,8 +276,7 @@ copy_address_shallow(address *to, const address *from) {
     set_address(to, from->type, from->len, from->data);
 }
 
-/**
- * @brief Copy an address, allocating a new buffer for the address data
+/** Copy an address, allocating a new buffer for the address data
  *  using wmem-scoped memory.
  *
  * @param scope [in] The lifetime of the allocated memory, e.g., pinfo->pool
@@ -326,8 +288,7 @@ copy_address_wmem(wmem_allocator_t *scope, address *to, const address *from) {
     alloc_address_wmem(scope, to, from->type, from->len, from->data);
 }
 
-/**
- * @brief Copy an address, allocating a new buffer for the address data.
+/** Copy an address, allocating a new buffer for the address data.
  *
  * @param to [in,out] The destination address.
  * @param from [in] The source address.
@@ -337,8 +298,7 @@ copy_address(address *to, const address *from) {
     copy_address_wmem(NULL, to, from);
 }
 
-/**
- * @brief Free an address allocated with wmem-scoped memory.
+/** Free an address allocated with wmem-scoped memory.
  *
  * @param scope [in] The lifetime of the allocated memory, e.g., pinfo->pool
  * @param addr [in,out] The address whose data to free.
@@ -355,8 +315,7 @@ free_address_wmem(wmem_allocator_t *scope, address *addr) {
     clear_address(addr);
 }
 
-/**
- * @brief Free an address.
+/** Free an address.
  *
  * @param addr [in,out] The address whose data to free.
  */
@@ -365,8 +324,7 @@ free_address(address *addr) {
     free_address_wmem(NULL, addr);
 }
 
-/**
- * @brief Hash an address into a hash value (which must already have been set).
+/** Hash an address into a hash value (which must already have been set).
  *
  * @param hash_val The existing hash value.
  * @param addr The address to add.
@@ -385,8 +343,7 @@ add_address_to_hash(unsigned hash_val, const address *addr) {
     return hash_val;
 }
 
-/**
- * @brief Hash an address into a hash value (which must already have been set).
+/** Hash an address into a hash value (which must already have been set).
  *  64-bit version of add_address_to_hash().
  *
  * @param hash_val The existing hash value.
@@ -406,42 +363,31 @@ add_address_to_hash64(uint64_t hash_val, const address *addr) {
     return hash_val;
 }
 
-/**
- * @brief Converts an address to a byte array.
- *
- * This function takes an address structure and converts it into a byte array.
- * The output buffer must be provided with sufficient space to hold the address data.
- *
- * @param addr Pointer to the address structure to convert.
- * @param buf Buffer to store the converted byte array.
- * @param buf_len Length of the output buffer.
- * @return Number of bytes copied to the buffer, or 0 if an error occurred.
- */
 WS_DLL_PUBLIC unsigned address_to_bytes(const address *addr, uint8_t *buf, unsigned buf_len);
 
-/**
- * @brief Transport-layer port number types recognized by Wireshark.
- */
+/* Types of port numbers Wireshark knows about. */
 typedef enum {
-    PT_NONE,       /**< No port number applicable */
-    PT_SCTP,       /**< Stream Control Transmission Protocol (SCTP) port */
-    PT_TCP,        /**< Transmission Control Protocol (TCP) port */
-    PT_UDP,        /**< User Datagram Protocol (UDP) port */
-    PT_DCCP,       /**< Datagram Congestion Control Protocol (DCCP) port */
-    PT_IPX,        /**< IPX socket number */
-    PT_DDP,        /**< AppleTalk Datagram Delivery Protocol (DDP) connection */
-    PT_IDP,        /**< XNS Internet Datagram Protocol (IDP) socket number */
-    PT_USB,        /**< USB endpoint number; 0xffff denotes the host */
-    PT_I2C,        /**< I2C bus endpoint */
-    PT_IBQP,       /**< InfiniBand Queue Pair (QP) number */
-    PT_BLUETOOTH,  /**< Bluetooth endpoint */
-    PT_IWARP_MPA,  /**< iWARP Marker PDU Aligned (MPA) framing endpoint */
-    PT_MCTP        /**< Management Component Transport Protocol (MCTP) endpoint */
+    PT_NONE,            /* no port number */
+    PT_SCTP,            /* SCTP */
+    PT_TCP,             /* TCP */
+    PT_UDP,             /* UDP */
+    PT_DCCP,            /* DCCP */
+    PT_IPX,             /* IPX sockets */
+    PT_DDP,             /* DDP AppleTalk connection */
+    PT_IDP,             /* XNS IDP sockets */
+    PT_USB,             /* USB endpoint 0xffff means the host */
+    PT_I2C,
+    PT_IBQP,            /* Infiniband QP number */
+    PT_BLUETOOTH,
+    PT_IWARP_MPA,       /* iWarp MPA */
+    PT_MCTP
 } port_type;
 
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
+
+#endif /* __ADDRESS_H__ */
 
 /*
  * Editor modelines  -  https://www.wireshark.org/tools/modelines.html

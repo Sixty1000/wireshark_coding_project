@@ -15,16 +15,15 @@
 
 #include <ui/qt/capture_file.h>
 #include <ui/qt/models/packet_list_model.h>
-#include <ui/qt/utils/qt_ui_utils.h>
 
 #include "profile_switcher.h"
 
 #include "file.h"
 
-#include <app/application_flavor.h>
 #include <epan/epan.h>
 #include <epan/epan_dissect.h>
 #include <epan/prefs.h>
+#include "frame_tvbuff.h"
 
 // Enable switching iff:
 // - We're opening a new capture file via the UI.
@@ -35,12 +34,10 @@ ProfileSwitcher::ProfileSwitcher(QObject *parent) :
     capture_file_changed_(true),
     profile_changed_(false)
 {
+    if (g_list_length(current_profile_list()) == 0) {
+        init_profile_list();
+    }
     connect(mainApp, &MainApplication::profileChanging, this, &ProfileSwitcher::disableSwitching);
-}
-
-ProfileSwitcher::~ProfileSwitcher()
-{
-    clearProfileFilters();
 }
 
 void ProfileSwitcher::captureEventHandler(CaptureEvent ev)
@@ -58,7 +55,7 @@ void ProfileSwitcher::captureEventHandler(CaptureEvent ev)
     // track that via the filename.
     switch (ev.eventType()) {
     case CaptureEvent::Opened:
-        if (!filePathsMatch(previous_cap_file_, capture_file->filePath())) {
+        if (previous_cap_file_ != capture_file->filePath()) {
             capture_file_changed_ = true;
             profile_changed_ = false;
         }
@@ -79,12 +76,11 @@ void ProfileSwitcher::checkPacket(capture_file *cap_file, frame_data *fdata, qsi
 
     if (row == 0) {
         clearProfileFilters();
-        for (GList *cur = profile_get_list() ; cur; cur = cur->next) {
+        for (GList *cur = current_profile_list() ; cur; cur = cur->next) {
             profile_def *profile = static_cast<profile_def *>(cur->data);
-            if ((profile->auto_switch_filter == NULL) ||
-                (*profile->auto_switch_filter == '\0'))
+            if (!profile->auto_switch_filter) {
                 continue;
-
+            }
             dfilter_t *dfcode;
             if (dfilter_compile(profile->auto_switch_filter, &dfcode, NULL) && dfcode) {
                 profile_filters_.append({profile->name, dfcode});
@@ -98,16 +94,20 @@ void ProfileSwitcher::checkPacket(capture_file *cap_file, frame_data *fdata, qsi
 
     QString new_profile;
     wtap_rec rec;
-    wtap_rec_init(&rec, DEFAULT_INIT_BUFFER_SIZE_2048);
+    Buffer buf;
+    wtap_rec_init(&rec);
+    ws_buffer_init(&buf, 1514);
     epan_dissect_t edt;
 
     for (auto &cur_filter : profile_filters_) {
-        if (!cf_read_record(cap_file, fdata, &rec)) {
+        if (!cf_read_record(cap_file, fdata, &rec, &buf)) {
             continue;
         }
         epan_dissect_init(&edt, cap_file->epan, TRUE, FALSE);
         epan_dissect_prime_with_dfilter(&edt, cur_filter.dfcode);
-        epan_dissect_run(&edt, cap_file->cd_t, &rec, fdata, NULL);
+        epan_dissect_run(&edt, cap_file->cd_t, &rec,
+                         frame_tvbuff_new_buffer(&cap_file->provider, fdata, &buf),
+                         fdata, NULL);
         bool matched = dfilter_apply_edt(cur_filter.dfcode, &edt);
         epan_dissect_cleanup(&edt);
         if (matched) {
@@ -117,6 +117,7 @@ void ProfileSwitcher::checkPacket(capture_file *cap_file, frame_data *fdata, qsi
     }
 
     wtap_rec_cleanup(&rec);
+    ws_buffer_free(&buf);
 
     if (!new_profile.isEmpty()) {
         clearProfileFilters();

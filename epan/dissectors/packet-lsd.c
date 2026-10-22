@@ -36,18 +36,19 @@ static int ett_lsd;
 static expert_field ei_lsd_field;
 
 static bool
-parse_string_field(proto_tree *tree, int hf, packet_info *pinfo, tvbuff_t *tvb, unsigned offset, unsigned* next_offset, unsigned* linelen)
+parse_string_field(proto_tree *tree, int hf, packet_info *pinfo, tvbuff_t *tvb, int offset, int* next_offset, int* linelen)
 {
-  const char *str;
+  uint8_t *str;
   header_field_info* hf_info = proto_registrar_get_nth(hf);
   char **field_and_value;
   proto_item* ti;
   char *p;
 
-  if (!tvb_find_line_end_remaining(tvb, offset, linelen, next_offset))
+  *linelen = tvb_find_line_end(tvb, offset, -1, next_offset, false);
+  if (*linelen < 0)
     return false;
 
-  str = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, *linelen, ENC_ASCII);
+  str = tvb_get_string_enc(pinfo->pool, tvb, offset, *linelen, ENC_ASCII);
   if (g_ascii_strncasecmp(str, hf_info->name, strlen(hf_info->name)) == 0)
   {
       field_and_value = wmem_strsplit(pinfo->pool, str, ":", 2);
@@ -59,7 +60,7 @@ parse_string_field(proto_tree *tree, int hf, packet_info *pinfo, tvbuff_t *tvb, 
         return true;
       }
   }
-  ti = proto_tree_add_string(tree, hf, tvb, offset, *linelen, str);
+  ti = proto_tree_add_string_format(tree, hf, tvb, offset, *linelen, str, "%s", str);
   expert_add_info_format(pinfo, ti, &ei_lsd_field, "%s field malformed", hf_info->name);
 
   return true;
@@ -70,13 +71,14 @@ dissect_lsd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
   proto_item *ti = NULL;
   proto_tree *lsd_tree;
-  unsigned offset = 0, next_offset = 0, linelen;
-  const char *str;
+  int offset = 0, next_offset = 0, linelen;
+  uint8_t *str;
   char **field_and_value;
   uint16_t port;
   bool valid;
 
-  if (!tvb_find_line_end_remaining(tvb, offset, &linelen, &next_offset))
+  linelen = tvb_find_line_end(tvb, offset, -1, &next_offset, false);
+  if (linelen < 0)
       return 0;
 
   col_set_str(pinfo->cinfo, COL_PROTOCOL, "LSD");
@@ -93,9 +95,10 @@ dissect_lsd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
       return offset+linelen;
 
   offset = next_offset;
-  if (!tvb_find_line_end_remaining(tvb, offset, &linelen, &next_offset))
+  linelen = tvb_find_line_end(tvb, offset, -1, &next_offset, false);
+  if (linelen < 0)
       return offset+linelen;
-  str = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, linelen, ENC_ASCII);
+  str = tvb_get_string_enc(pinfo->pool, tvb, offset, linelen, ENC_ASCII);
   if (g_ascii_strncasecmp(str, "Port", strlen("Port")) == 0)
   {
     field_and_value = wmem_strsplit(pinfo->pool, str, ":", 2);
@@ -118,7 +121,8 @@ dissect_lsd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
       return offset+linelen;
 
   offset = next_offset;
-  if (!tvb_find_line_end_remaining(tvb, offset, &linelen, &next_offset))
+  linelen = tvb_find_line_end(tvb, offset, -1, &next_offset, false);
+  if (linelen < 0)
       return offset+linelen;
   /* Cookie is optional */
   if (tvb_strncaseeql(tvb, offset, "cookie", strlen("cookie")) == 0)
@@ -133,7 +137,7 @@ dissect_lsd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 static bool
 dissect_lsd_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
-  if (pinfo->dst.type == AT_IPv4 && pntohu32(pinfo->dst.data) == LSD_MULTICAST_ADDRESS && pinfo->destport == LSD_PORT)
+  if (pinfo->dst.type == AT_IPv4 && pntoh32(pinfo->dst.data) == LSD_MULTICAST_ADDRESS && pinfo->destport == LSD_PORT)
       return (dissect_lsd(tvb, pinfo, tree, data) != 0);
 
   if (pinfo->dst.type == AT_IPv6 && pinfo->destport == LSD_PORT)

@@ -22,8 +22,6 @@
 #include "packet-nfs.h"
 #include "packet-nlm.h"
 #include <epan/prefs.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 
 void proto_register_nlm(void);
 void proto_reg_handoff_nlm(void);
@@ -148,16 +146,13 @@ static void
 nlm_print_msgres_reply(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb)
 {
 	nlm_msg_res_matched_data *md;
-	proto_item *ti;
 
 	md=(nlm_msg_res_matched_data *)wmem_map_lookup(nlm_msg_res_matched, GINT_TO_POINTER(pinfo->num));
 	if(md){
 		nstime_t ns;
-		ti = proto_tree_add_uint(tree, hf_nlm_request_in, tvb, 0, 0, md->req_frame);
-		proto_item_set_generated(ti);
+		proto_tree_add_uint(tree, hf_nlm_request_in, tvb, 0, 0, md->req_frame);
 		nstime_delta(&ns, &pinfo->abs_ts, &md->ns);
-		ti = proto_tree_add_time(tree, hf_nlm_time, tvb, 0, 0, &ns);
-		proto_item_set_generated(ti);
+		proto_tree_add_time(tree, hf_nlm_time, tvb, 0, 0, &ns);
 	}
 }
 
@@ -168,9 +163,7 @@ nlm_print_msgres_request(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb)
 
 	md=(nlm_msg_res_matched_data *)wmem_map_lookup(nlm_msg_res_matched, GINT_TO_POINTER(pinfo->num));
 	if(md){
-		proto_item *ti;
-		ti = proto_tree_add_uint(tree, hf_nlm_reply_in, tvb, 0, 0, md->rep_frame);
-		proto_item_set_generated(ti);
+		proto_tree_add_uint(tree, hf_nlm_reply_in, tvb, 0, 0, md->rep_frame);
 	}
 }
 static void
@@ -203,10 +196,7 @@ nlm_register_unmatched_res(packet_info *pinfo, tvbuff_t *tvb, int offset)
 	nlm_msg_res_unmatched_data *old_umd;
 
 	umd.cookie_len=tvb_get_ntohl(tvb, offset);
-	if (!tvb_bytes_exist(tvb, offset + 4, umd.cookie_len)) {
-		return;
-	}
-	umd.cookie=tvb_get_ptr(tvb, offset+4, umd.cookie_len);
+	umd.cookie=tvb_get_ptr(tvb, offset+4, -1);
 
 	/* have we seen this cookie before? */
 	old_umd=(nlm_msg_res_unmatched_data *)wmem_map_lookup(nlm_msg_res_unmatched, (const void *)&umd);
@@ -231,16 +221,11 @@ nlm_register_unmatched_msg(packet_info *pinfo, tvbuff_t *tvb, int offset)
 	nlm_msg_res_unmatched_data *umd;
 	nlm_msg_res_unmatched_data *old_umd;
 
-	uint32_t cookie_len = tvb_get_ntohl(tvb, offset);
-	if (!tvb_bytes_exist(tvb, offset + 4, cookie_len)) {
-		return;
-	}
-
 	/* allocate and build the unmatched structure for this request */
 	umd = wmem_new(wmem_file_scope(), nlm_msg_res_unmatched_data);
 	umd->req_frame = pinfo->num;
 	umd->ns = pinfo->abs_ts;
-	umd->cookie_len = cookie_len;
+	umd->cookie_len = tvb_get_ntohl(tvb, offset);
 	umd->cookie = (const uint8_t *)tvb_memdup(wmem_file_scope(), tvb, offset+4, umd->cookie_len);
 
 	/* remove any old duplicates */
@@ -253,35 +238,8 @@ nlm_register_unmatched_msg(packet_info *pinfo, tvbuff_t *tvb, int offset)
 	wmem_map_insert(nlm_msg_res_unmatched, umd, umd);
 }
 
-static void
-nlm_handle_request(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree)
-{
-	if( (!pinfo->fd->visited) ){
-		nlm_register_unmatched_msg(pinfo, tvb, offset);
-	} else {
-		nlm_print_msgres_request(pinfo, tree, tvb);
-	}
-	/* for the fhandle matching that finds both request and
-	   response packet */
-	if(nfs_fhandle_reqrep_matching){
-		nlm_match_fhandle_request(pinfo, tree);
-	}
-}
 
-static void
-nlm_handle_reply(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree)
-{
-	if( (!pinfo->fd->visited) ){
-		nlm_register_unmatched_res(pinfo, tvb, offset);
-	} else {
-		nlm_print_msgres_reply(pinfo, tree, tvb);
-	}
-	/* for the fhandle matching that finds both request and
-	   response packet */
-	if(nfs_fhandle_reqrep_matching){
-		nlm_match_fhandle_reply(pinfo, tree);
-	}
-}
+
 
 static const value_string names_nlm_stats[] =
 {
@@ -355,8 +313,6 @@ dissect_lock(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int version, i
 	proto_tree* lock_tree = NULL;
 	uint32_t fh_hash, svid;
 	uint64_t start_offset=0, end_offset=0;
-	uint32_t start_offset32=0, end_offset32=0;
-	const char *hostname;
 
 	if (tree) {
 		lock_item = proto_tree_add_item(tree, hf_nlm_lock, tvb,
@@ -365,36 +321,31 @@ dissect_lock(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int version, i
 			lock_tree = proto_item_add_subtree(lock_item, ett_nlm_lock);
 	}
 
-	offset = dissect_rpc_string(tvb, pinfo, lock_tree,
-			hf_nlm_lock_caller_name, offset, &hostname);
-	col_append_fstr(pinfo->cinfo, COL_INFO, ", %s", hostname);
-
+	offset = dissect_rpc_string(tvb,lock_tree,
+			hf_nlm_lock_caller_name, offset, NULL);
 	offset = dissect_nfs3_fh(tvb, offset, pinfo, lock_tree, "fh", &fh_hash, civ);
-	col_append_fstr(pinfo->cinfo, COL_INFO, ", FH:0x%08x", fh_hash);
+	col_append_fstr(pinfo->cinfo, COL_INFO, " FH:0x%08x", fh_hash);
 
-	offset = dissect_rpc_data(tvb, pinfo, lock_tree, hf_nlm_lock_owner, offset);
+	offset = dissect_rpc_data(tvb, lock_tree, hf_nlm_lock_owner, offset);
 
 	svid = tvb_get_ntohl(tvb, offset);
 	offset = dissect_rpc_uint32(tvb, lock_tree, hf_nlm_lock_svid, offset);
+	col_append_fstr(pinfo->cinfo, COL_INFO, " svid:%d", svid);
 
 	if (version == 4) {
 		start_offset = tvb_get_ntoh64(tvb, offset);
 		offset = dissect_rpc_uint64(tvb, lock_tree, hf_nlm_lock_l_offset64, offset);
 		end_offset = tvb_get_ntoh64(tvb, offset);
 		offset = dissect_rpc_uint64(tvb, lock_tree, hf_nlm_lock_l_len64, offset);
-		col_append_fstr(pinfo->cinfo, COL_INFO,
-			", Pos:%" PRIu64 ", Len: %" PRIu64, start_offset, end_offset);
 	}
 	else {
-		start_offset32 = tvb_get_ntohl(tvb, offset);
+		start_offset = tvb_get_ntohl(tvb, offset);
 		offset = dissect_rpc_uint32(tvb, lock_tree, hf_nlm_lock_l_offset, offset);
-		end_offset32 = tvb_get_ntohl(tvb, offset);
+		end_offset = tvb_get_ntohl(tvb, offset);
 		offset = dissect_rpc_uint32(tvb, lock_tree, hf_nlm_lock_l_len, offset);
-		col_append_fstr(pinfo->cinfo, COL_INFO,
-			", Pos: %u"  ", Len: %u", start_offset32, end_offset32);
 	}
-	col_append_fstr(pinfo->cinfo, COL_INFO, ", svid:%d", svid);
 
+	col_append_fstr(pinfo->cinfo, COL_INFO, " pos:%" PRIu64 "-%" PRIu64, start_offset, end_offset);
 
 	return offset;
 }
@@ -406,11 +357,20 @@ dissect_nlm_test(tvbuff_t *tvb, int offset, packet_info *pinfo,
 {
 	if(nlm_match_msgres){
 		if(rpc_call->proc==6){	/* NLM_TEST_MSG */
-			nlm_handle_request(tvb, offset, pinfo, tree);
+			if( (!pinfo->fd->visited) ){
+				nlm_register_unmatched_msg(pinfo, tvb, offset);
+			} else {
+				nlm_print_msgres_request(pinfo, tree, tvb);
+			}
+			/* for the fhandle matching that finds both request and
+			   response packet */
+			if(nfs_fhandle_reqrep_matching){
+				nlm_match_fhandle_request(pinfo, tree);
+			}
 		}
 	}
 
-	offset = dissect_rpc_data(tvb, pinfo, tree, hf_nlm_cookie, offset);
+	offset = dissect_rpc_data(tvb, tree, hf_nlm_cookie, offset);
 	dissect_rpc_bool(tvb, tree, hf_nlm_exclusive, offset);
 	offset += 4;
 	offset = dissect_lock(tvb, pinfo, tree, version, offset, rpc_call);
@@ -423,11 +383,20 @@ dissect_nlm_lock(tvbuff_t *tvb, int offset, packet_info *pinfo,
 {
 	if(nlm_match_msgres){
 		if(rpc_call->proc==7){	/* NLM_LOCK_MSG */
-			nlm_handle_request(tvb, offset, pinfo, tree);
+			if( (!pinfo->fd->visited) ){
+				nlm_register_unmatched_msg(pinfo, tvb, offset);
+			} else {
+				nlm_print_msgres_request(pinfo, tree, tvb);
+			}
+			/* for the fhandle matching that finds both request and
+			   response packet */
+			if(nfs_fhandle_reqrep_matching){
+				nlm_match_fhandle_request(pinfo, tree);
+			}
 		}
 	}
 
-	offset = dissect_rpc_data(tvb, pinfo, tree, hf_nlm_cookie, offset);
+	offset = dissect_rpc_data(tvb, tree, hf_nlm_cookie, offset);
 	offset = dissect_rpc_bool(tvb, tree, hf_nlm_block, offset);
 	offset = dissect_rpc_bool(tvb, tree, hf_nlm_exclusive, offset);
 	offset = dissect_lock(tvb, pinfo, tree, version, offset, rpc_call);
@@ -442,11 +411,20 @@ dissect_nlm_cancel(tvbuff_t *tvb, int offset, packet_info *pinfo,
 {
 	if(nlm_match_msgres){
 		if(rpc_call->proc==8){	/* NLM_CANCEL_MSG */
-			nlm_handle_request(tvb, offset, pinfo, tree);
+			if( (!pinfo->fd->visited) ){
+				nlm_register_unmatched_msg(pinfo, tvb, offset);
+			} else {
+				nlm_print_msgres_request(pinfo, tree, tvb);
+			}
+			/* for the fhandle matching that finds both request and
+			   response packet */
+			if(nfs_fhandle_reqrep_matching){
+				nlm_match_fhandle_request(pinfo, tree);
+			}
 		}
 	}
 
-	offset = dissect_rpc_data(tvb, pinfo, tree, hf_nlm_cookie, offset);
+	offset = dissect_rpc_data(tvb, tree, hf_nlm_cookie, offset);
 	offset = dissect_rpc_bool(tvb, tree, hf_nlm_block, offset);
 	offset = dissect_rpc_bool(tvb, tree, hf_nlm_exclusive, offset);
 	offset = dissect_lock(tvb, pinfo, tree, version, offset, rpc_call);
@@ -459,11 +437,20 @@ dissect_nlm_unlock(tvbuff_t *tvb, int offset, packet_info *pinfo,
 {
 	if(nlm_match_msgres){
 		if(rpc_call->proc==9){	/* NLM_UNLOCK_MSG */
-			nlm_handle_request(tvb, offset, pinfo, tree);
+			if( (!pinfo->fd->visited) ){
+				nlm_register_unmatched_msg(pinfo, tvb, offset);
+			} else {
+				nlm_print_msgres_request(pinfo, tree, tvb);
+			}
+			/* for the fhandle matching that finds both request and
+			   response packet */
+			if(nfs_fhandle_reqrep_matching){
+				nlm_match_fhandle_request(pinfo, tree);
+			}
 		}
 	}
 
-	offset = dissect_rpc_data(tvb, pinfo, tree, hf_nlm_cookie, offset);
+	offset = dissect_rpc_data(tvb, tree, hf_nlm_cookie, offset);
 	offset = dissect_lock(tvb, pinfo, tree, version, offset, rpc_call);
 	return offset;
 }
@@ -474,11 +461,20 @@ dissect_nlm_granted(tvbuff_t *tvb, int offset, packet_info *pinfo,
 {
 	if(nlm_match_msgres){
 		if(rpc_call->proc==10){	/* NLM_GRANTED_MSG */
-			nlm_handle_request(tvb, offset, pinfo, tree);
+			if( (!pinfo->fd->visited) ){
+				nlm_register_unmatched_msg(pinfo, tvb, offset);
+			} else {
+				nlm_print_msgres_request(pinfo, tree, tvb);
+			}
+			/* for the fhandle matching that finds both request and
+			   response packet */
+			if(nfs_fhandle_reqrep_matching){
+				nlm_match_fhandle_request(pinfo, tree);
+			}
 		}
 	}
 
-	offset = dissect_rpc_data(tvb, pinfo, tree, hf_nlm_cookie, offset);
+	offset = dissect_rpc_data(tvb, tree, hf_nlm_cookie, offset);
 	offset = dissect_rpc_bool(tvb, tree, hf_nlm_exclusive, offset);
 	offset = dissect_lock(tvb, pinfo, tree, version, offset, rpc_call);
 	return offset;
@@ -494,11 +490,20 @@ dissect_nlm_test_res(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 
 	if(nlm_match_msgres){
 		if(rpc_call->proc==11){	/* NLM_TEST_RES */
-			nlm_handle_reply(tvb, offset, pinfo, tree);
+			if( (!pinfo->fd->visited) ){
+				nlm_register_unmatched_res(pinfo, tvb, offset);
+			} else {
+				nlm_print_msgres_reply(pinfo, tree, tvb);
+			}
+			/* for the fhandle matching that finds both request and
+			   response packet */
+			if(nfs_fhandle_reqrep_matching){
+				nlm_match_fhandle_reply(pinfo, tree);
+			}
 		}
 	}
 
-	offset = dissect_rpc_data(tvb, pinfo, tree, hf_nlm_cookie, offset);
+	offset = dissect_rpc_data(tvb, tree, hf_nlm_cookie, offset);
 
 	if (tree) {
 		lock_item = proto_tree_add_item(tree, hf_nlm_test_stat, tvb,
@@ -526,7 +531,7 @@ dissect_nlm_test_res(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 	    offset);
 	offset = dissect_rpc_uint32(tvb, lock_tree, hf_nlm_lock_svid,
 	    offset);
-	offset = dissect_rpc_data(tvb, pinfo, lock_tree, hf_nlm_lock_owner,
+	offset = dissect_rpc_data(tvb, lock_tree, hf_nlm_lock_owner,
 	    offset);
 
 	if (version == 4) {
@@ -554,7 +559,7 @@ dissect_nlm_share(tvbuff_t *tvb, int offset, packet_info *pinfo,
 	proto_tree* lock_tree = NULL;
 	uint32_t fh_hash;
 
-	offset = dissect_rpc_data(tvb, pinfo, tree, hf_nlm_cookie, offset);
+	offset = dissect_rpc_data(tvb, tree, hf_nlm_cookie, offset);
 
 	if (tree) {
 		lock_item = proto_tree_add_item(tree, hf_nlm_share, tvb,
@@ -564,13 +569,13 @@ dissect_nlm_share(tvbuff_t *tvb, int offset, packet_info *pinfo,
 				ett_nlm_lock);
 	}
 
-	offset = dissect_rpc_string(tvb, pinfo, lock_tree,
+	offset = dissect_rpc_string(tvb,lock_tree,
 			hf_nlm_lock_caller_name, offset, NULL);
 
 	offset = dissect_nfs3_fh(tvb, offset, pinfo, lock_tree, "fh", &fh_hash, civ);
 	col_append_fstr(pinfo->cinfo, COL_INFO, " FH:0x%08x", fh_hash);
 
-	offset = dissect_rpc_data(tvb, pinfo, lock_tree, hf_nlm_lock_owner, offset);
+	offset = dissect_rpc_data(tvb, lock_tree, hf_nlm_lock_owner, offset);
 
 	offset = dissect_rpc_uint32(tvb, lock_tree, hf_nlm_share_mode, offset);
 	offset = dissect_rpc_uint32(tvb, lock_tree, hf_nlm_share_access, offset);
@@ -581,16 +586,16 @@ dissect_nlm_share(tvbuff_t *tvb, int offset, packet_info *pinfo,
 }
 
 static int
-dissect_nlm_shareres(tvbuff_t *tvb, int offset, packet_info *pinfo,
+dissect_nlm_shareres(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 		     proto_tree *tree, int version _U_)
 {
 	uint32_t nlm_stat;
 
-	offset = dissect_rpc_data(tvb, pinfo, tree, hf_nlm_cookie, offset);
+	offset = dissect_rpc_data(tvb, tree, hf_nlm_cookie, offset);
 	nlm_stat = tvb_get_ntohl(tvb, offset);
 	if (nlm_stat) {
 		col_append_fstr(pinfo->cinfo, COL_INFO, " %s",
-		    val_to_str(pinfo->pool, nlm_stat, names_nlm_stats, "Unknown Status (%u)"));
+		    val_to_str(nlm_stat, names_nlm_stats, "Unknown Status (%u)"));
 	}
 	offset = dissect_rpc_uint32(tvb, tree, hf_nlm_stat, offset);
 	offset = dissect_rpc_uint32(tvb, tree, hf_nlm_sequence, offset);
@@ -598,10 +603,10 @@ dissect_nlm_shareres(tvbuff_t *tvb, int offset, packet_info *pinfo,
 }
 
 static int
-dissect_nlm_freeall(tvbuff_t *tvb, int offset, packet_info *pinfo,
+dissect_nlm_freeall(tvbuff_t *tvb, int offset, packet_info *pinfo _U_,
 		    proto_tree *tree,int version _U_)
 {
-	offset = dissect_rpc_string(tvb, pinfo, tree,
+	offset = dissect_rpc_string(tvb,tree,
 			hf_nlm_share_name, offset, NULL);
 
 	offset = dissect_rpc_uint32(tvb, tree, hf_nlm_state, offset);
@@ -615,28 +620,37 @@ dissect_nlm_freeall(tvbuff_t *tvb, int offset, packet_info *pinfo,
 
 /* This function is identical for all NLM protocol versions (1-4)*/
 static int
-dissect_nlm_gen_reply(tvbuff_t *tvb, packet_info *pinfo,
+dissect_nlm_gen_reply(tvbuff_t *tvb, packet_info *pinfo _U_,
 		      proto_tree *tree, void* data)
 {
 	uint32_t nlm_stat;
-	unsigned offset = 0;
+	int offset = 0;
 
 	if(nlm_match_msgres){
 		rpc_call_info_value *rpc_call=(rpc_call_info_value *)data;
 		if((rpc_call->proc==12)  /* NLM_LOCK_RES */
 		|| (rpc_call->proc==13)  /* NLM_CANCEL_RES */
 		|| (rpc_call->proc==14)  /* NLM_UNLOCK_RES */
-		|| (rpc_call->proc==15) ){ /* NLM_GRANTED_RES */
-			nlm_handle_reply(tvb, offset, pinfo, tree);
+		|| (rpc_call->proc==15) ){	/* NLM_GRENTED_RES */
+			if( (!pinfo->fd->visited) ){
+				nlm_register_unmatched_res(pinfo, tvb, offset);
+			} else {
+				nlm_print_msgres_reply(pinfo, tree, tvb);
+			}
+			/* for the fhandle matching that finds both request and
+			   response packet */
+			if(nfs_fhandle_reqrep_matching){
+				nlm_match_fhandle_reply(pinfo, tree);
+			}
 		}
 	}
 
-	offset = dissect_rpc_data(tvb, pinfo, tree, hf_nlm_cookie, offset);
+	offset = dissect_rpc_data(tvb, tree, hf_nlm_cookie, offset);
 
 	nlm_stat = tvb_get_ntohl(tvb, offset);
 	if (nlm_stat) {
 		col_append_fstr(pinfo->cinfo, COL_INFO, " %s",
-		    val_to_str(pinfo->pool, nlm_stat, names_nlm_stats, "Unknown Status (%u)"));
+		    val_to_str(nlm_stat, names_nlm_stats, "Unknown Status (%u)"));
 	}
 	offset = dissect_rpc_uint32(tvb, tree, hf_nlm_stat, offset);
 	return offset;
@@ -813,7 +827,7 @@ static const vsff nlm1_proc[] = {
 	{ 0,			NULL,
 		NULL,				NULL }
 };
-static const value_string nlm1_2_proc_vals[] = {
+static const value_string nlm1_proc_vals[] = {
 	{ NLM_NULL,		"NULL" },
 	{ NLM_TEST,		"TEST" },
 	{ NLM_LOCK,		"LOCK" },
@@ -871,6 +885,25 @@ static const vsff nlm2_proc[] = {
 	{ 0,			NULL,
 		NULL,				NULL }
 };
+static const value_string nlm2_proc_vals[] = {
+	{ NLM_NULL,		"NULL" },
+	{ NLM_TEST,		"TEST" },
+	{ NLM_LOCK,		"LOCK" },
+	{ NLM_CANCEL,		"CANCEL" },
+	{ NLM_UNLOCK,		"UNLOCK" },
+	{ NLM_GRANTED,		"GRANTED" },
+	{ NLM_TEST_MSG,		"TEST_MSG" },
+	{ NLM_LOCK_MSG,		"LOCK_MSG" },
+	{ NLM_CANCEL_MSG,	"CANCEL_MSG" },
+	{ NLM_UNLOCK_MSG,	"UNLOCK_MSG" },
+	{ NLM_GRANTED_MSG,	"GRANTED_MSG" },
+	{ NLM_TEST_RES,		"TEST_RES" },
+	{ NLM_LOCK_RES,		"LOCK_RES" },
+	{ NLM_CANCEL_RES,	"CANCEL_RES" },
+	{ NLM_UNLOCK_RES,	"UNLOCK_RES" },
+	{ NLM_GRANTED_RES,	"GRANTED_RES" },
+	{ 0,			NULL }
+};
 /* end of NLM protocol version 2 */
 
 /* NLM protocol version 3 */
@@ -918,7 +951,7 @@ static const vsff nlm3_proc[] = {
 	{ 0,			NULL,
 		NULL,				NULL }
 };
-static const value_string nlm3_4_proc_vals[] = {
+static const value_string nlm3_proc_vals[] = {
 	{ NLM_NULL,		"NULL" },
 	{ NLM_TEST,		"TEST" },
 	{ NLM_LOCK,		"LOCK" },
@@ -989,6 +1022,29 @@ static const vsff nlm4_proc[] = {
 	{ 0,			NULL,
 		NULL,				NULL }
 };
+static const value_string nlm4_proc_vals[] = {
+	{ NLM_NULL,		"NULL" },
+	{ NLM_TEST,		"TEST" },
+	{ NLM_LOCK,		"LOCK" },
+	{ NLM_CANCEL,		"CANCEL" },
+	{ NLM_UNLOCK,		"UNLOCK" },
+	{ NLM_GRANTED,		"GRANTED" },
+	{ NLM_TEST_MSG,		"TEST_MSG" },
+	{ NLM_LOCK_MSG,		"LOCK_MSG" },
+	{ NLM_CANCEL_MSG,	"CANCEL_MSG" },
+	{ NLM_UNLOCK_MSG,	"UNLOCK_MSG" },
+	{ NLM_GRANTED_MSG,	"GRANTED_MSG" },
+	{ NLM_TEST_RES,		"TEST_RES" },
+	{ NLM_LOCK_RES,		"LOCK_RES" },
+	{ NLM_CANCEL_RES,	"CANCEL_RES" },
+	{ NLM_UNLOCK_RES,	"UNLOCK_RES" },
+	{ NLM_GRANTED_RES,	"GRANTED_RES" },
+	{ NLM_SHARE,		"SHARE" },
+	{ NLM_UNSHARE,		"UNSHARE" },
+	{ NLM_NM_LOCK,		"NM_LOCK" },
+	{ NLM_FREE_ALL,		"FREE_ALL" },
+	{ 0,			NULL }
+};
 /* end of NLM protocol version 4 */
 
 static const rpc_prog_vers_info nlm_vers_info[] = {
@@ -1004,16 +1060,16 @@ proto_register_nlm(void)
 	static hf_register_info hf[] = {
 		{ &hf_nlm_procedure_v1, {
 			"V1 Procedure", "nlm.procedure_v1", FT_UINT32, BASE_DEC,
-			VALS(nlm1_2_proc_vals), 0, NULL, HFILL }},
+			VALS(nlm1_proc_vals), 0, NULL, HFILL }},
 		{ &hf_nlm_procedure_v2, {
 			"V2 Procedure", "nlm.procedure_v2", FT_UINT32, BASE_DEC,
-			VALS(nlm1_2_proc_vals), 0, NULL, HFILL }},
+			VALS(nlm2_proc_vals), 0, NULL, HFILL }},
 		{ &hf_nlm_procedure_v3, {
 			"V3 Procedure", "nlm.procedure_v3", FT_UINT32, BASE_DEC,
-			VALS(nlm3_4_proc_vals), 0, NULL, HFILL }},
+			VALS(nlm3_proc_vals), 0, NULL, HFILL }},
 		{ &hf_nlm_procedure_v4, {
 			"V4 Procedure", "nlm.procedure_v4", FT_UINT32, BASE_DEC,
-			VALS(nlm3_4_proc_vals), 0, NULL, HFILL }},
+			VALS(nlm4_proc_vals), 0, NULL, HFILL }},
 		{ &hf_nlm_cookie, {
 			"cookie", "nlm.cookie", FT_BYTES, BASE_NONE,
 			NULL, 0, NULL, HFILL }},
@@ -1034,7 +1090,7 @@ proto_register_nlm(void)
 			NULL, 0, NULL, HFILL }},
 		{ &hf_nlm_lock_svid, {
 			"svid", "nlm.lock.svid", FT_UINT32, BASE_DEC,
-			NULL, 0, "zero-based", HFILL }},
+			NULL, 0, NULL, HFILL }},
 		{ &hf_nlm_lock_l_offset64, {
 			"l_offset", "nlm.lock.l_offset64", FT_UINT64, BASE_DEC,
 			NULL, 0, NULL, HFILL }},
@@ -1081,11 +1137,11 @@ proto_register_nlm(void)
 			"sequence", "nlm.sequence", FT_INT32, BASE_DEC,
 			NULL, 0, NULL, HFILL }},
 		{ &hf_nlm_request_in, {
-			"Request MSG in", "nlm.msg_in", FT_FRAMENUM, BASE_NONE,
-			FRAMENUM_TYPE(FT_FRAMENUM_RESPONSE), 0, "The RES packet is a response to the MSG in this packet", HFILL }},
+			"Request MSG in", "nlm.msg_in", FT_UINT32, BASE_DEC,
+			NULL, 0, "The RES packet is a response to the MSG in this packet", HFILL }},
 		{ &hf_nlm_reply_in, {
-			"Reply RES in", "nlm.res_in", FT_FRAMENUM, BASE_NONE,
-			FRAMENUM_TYPE(FT_FRAMENUM_REQUEST), 0, "The response to this MSG packet is in this packet", HFILL }},
+			"Reply RES in", "nlm.res_in", FT_UINT32, BASE_DEC,
+			NULL, 0, "The response to this MSG packet is in this packet", HFILL }},
 		{ &hf_nlm_time, {
 			"Time from request", "nlm.time", FT_RELATIVE_TIME, BASE_NONE,
 			NULL, 0, "Time between Request and Reply for async NLM calls", HFILL }},

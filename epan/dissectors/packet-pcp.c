@@ -12,8 +12,6 @@
 
 #include <epan/packet.h>
 #include <epan/expert.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 #include "packet-tcp.h"
 #include "packet-tls-utils.h"
 
@@ -674,7 +672,7 @@ static int dissect_pcp_message_creds(tvbuff_t *tvb, packet_info *pinfo, proto_tr
 
     /* append the type of packet */
     col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]",
-                    val_to_str(pinfo->pool, PCP_PDU_CREDS, packettypenames, "Unknown Type:0x%02x"));
+                    val_to_str(PCP_PDU_CREDS, packettypenames, "Unknown Type:0x%02x"));
 
     /* first is the number of creds */
     proto_tree_add_item(tree, hf_pcp_creds_number_of, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -710,7 +708,7 @@ static int dissect_pcp_message_error(tvbuff_t *tvb, packet_info *pinfo, proto_tr
     proto_tree_add_item(tree, hf_pcp_pdu_error, tvb, offset, 4, ENC_BIG_ENDIAN);
     error_num = tvb_get_ntohl(tvb, offset);
     col_append_fstr(pinfo->cinfo, COL_INFO, "error=%s ",
-                    val_to_str(pinfo->pool, error_num, packettypenames_errors, "Unknown Error:%i"));
+                    val_to_str(error_num, packettypenames_errors, "Unknown Error:%i"));
     offset += 4;
 
     /* Clean out candidate names if we got an error from a PMNS_NAMES lookup. This will allow subsequent PMNS_NAMES
@@ -747,7 +745,8 @@ static int dissect_pcp_message_start(tvbuff_t *tvb, packet_info *pinfo, proto_tr
     col_append_str(pinfo->cinfo, COL_INFO, "[START]");
 
     /* status */
-    proto_tree_add_item_ret_uint(pcp_start_tree, hf_pcp_start_status, tvb, offset, 4, ENC_BIG_ENDIAN, &status);
+    status = tvb_get_ntohl(tvb, offset);
+    proto_tree_add_item(pcp_start_tree, hf_pcp_start_status, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
     if(tvb_reported_length_remaining(tvb, offset) == 0){
         /* Most likely we're in a SSL upgrade if this is the end of the start packet */
@@ -787,7 +786,7 @@ static int dissect_pcp_message_pmns_traverse(tvbuff_t *tvb, packet_info *pinfo, 
 
     /* append the type of packet */
     col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]",
-                    val_to_str(pinfo->pool, PCP_PDU_PMNS_TRAVERSE, packettypenames, "Unknown Type:0x%02x"));
+                    val_to_str(PCP_PDU_PMNS_TRAVERSE, packettypenames, "Unknown Type:0x%02x"));
 
     pcp_pmns_traverse_item = proto_tree_add_item(tree, hf_pcp_pmns_traverse, tvb, offset, -1, ENC_NA);
     pcp_pmns_traverse_tree = proto_item_add_subtree(pcp_pmns_traverse_item, ett_pcp);
@@ -843,7 +842,7 @@ static int dissect_pcp_message_pmns_names(tvbuff_t *tvb, packet_info *pinfo, pro
     uint32_t    i;
 
     /* append the type of packet */
-    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(pinfo->pool, PCP_PDU_PMNS_NAMES, packettypenames, "Unknown Type:0x%02x"));
+    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(PCP_PDU_PMNS_NAMES, packettypenames, "Unknown Type:0x%02x"));
 
     pcp_pmns_names_item = proto_tree_add_item(tree, hf_pcp_pmns_names, tvb, offset, -1, ENC_NA);
     pcp_pmns_names_tree = proto_item_add_subtree(pcp_pmns_names_item, ett_pcp);
@@ -924,7 +923,7 @@ static int dissect_pcp_message_pmns_child(tvbuff_t *tvb, packet_info *pinfo, pro
     pcp_pmns_child_tree = proto_item_add_subtree(pcp_pmns_child_item, ett_pcp);
 
     /* append the type of packet */
-    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(pinfo->pool, PCP_PDU_PMNS_CHILD, packettypenames, "Unknown Type:0x%02x"));
+    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(PCP_PDU_PMNS_CHILD, packettypenames, "Unknown Type:0x%02x"));
 
     /* subtype */
     proto_tree_add_item(pcp_pmns_child_tree, hf_pcp_pmns_subtype, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -956,7 +955,7 @@ static int dissect_pcp_message_pmns_ids(tvbuff_t *tvb, packet_info *pinfo, proto
 
     /* append the type of packet */
     col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]",
-                    val_to_str(pinfo->pool, PCP_PDU_PMNS_IDS, packettypenames, "Unknown Type:0x%02x"));
+                    val_to_str(PCP_PDU_PMNS_IDS, packettypenames, "Unknown Type:0x%02x"));
 
     pcp_pmns_ids_item = proto_tree_add_item(tree, hf_pcp_pmns_ids, tvb, offset, -1, ENC_NA);
     pcp_pmns_ids_tree = proto_item_add_subtree(pcp_pmns_ids_item, ett_pcp);
@@ -1003,7 +1002,7 @@ static int dissect_pcp_message_profile(tvbuff_t *tvb, packet_info *pinfo, proto_
     uint32_t    i;
 
     /* append the type of packet */
-    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(pinfo->pool, PCP_PDU_PROFILE, packettypenames, "Unknown Type:0x%02x"));
+    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(PCP_PDU_PROFILE, packettypenames, "Unknown Type:0x%02x"));
 
     pcp_profile_item = proto_tree_add_item(tree, hf_pcp_profile, tvb, offset, -1, ENC_NA);
     pcp_profile_tree = proto_item_add_subtree(pcp_profile_item, ett_pcp);
@@ -1065,7 +1064,7 @@ static int dissect_pcp_message_fetch(tvbuff_t *tvb, packet_info *pinfo, proto_tr
 
     /* append the type of packet */
     col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]",
-                    val_to_str(pinfo->pool, PCP_PDU_FETCH, packettypenames, "Unknown Type:0x%02x"));
+                    val_to_str(PCP_PDU_FETCH, packettypenames, "Unknown Type:0x%02x"));
 
     pcp_fetch_item = proto_tree_add_item(tree, hf_pcp_fetch, tvb, offset, -1, ENC_NA);
     pcp_fetch_tree = proto_item_add_subtree(pcp_fetch_item, ett_pcp);
@@ -1127,7 +1126,7 @@ static int dissect_pcp_message_result(tvbuff_t *tvb, packet_info *pinfo, proto_t
     uint32_t    j;
 
     /* append the type of packet */
-    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(pinfo->pool, PCP_PDU_RESULT, packettypenames, "Unknown Type:0x%02x"));
+    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(PCP_PDU_RESULT, packettypenames, "Unknown Type:0x%02x"));
 
     pcp_results_item = proto_tree_add_item(tree, hf_pcp_results, tvb, offset, -1, ENC_NA);
     pcp_results_tree = proto_item_add_subtree(pcp_results_item, ett_pcp);
@@ -1273,7 +1272,7 @@ static int dissect_pcp_message_desc_req(tvbuff_t *tvb, packet_info *pinfo, proto
     proto_tree *pcp_desc_req_tree;
 
     /* append the type of packet */
-    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(pinfo->pool, PCP_PDU_DESC_REQ, packettypenames, "Unknown Type:0x%02x"));
+    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(PCP_PDU_DESC_REQ, packettypenames, "Unknown Type:0x%02x"));
 
     /* subtree for packet type */
     pcp_desc_req_item = proto_tree_add_item(tree, hf_pcp_desc_req, tvb, offset, -1, ENC_NA);
@@ -1309,7 +1308,7 @@ static int dissect_pcp_message_desc(tvbuff_t *tvb, packet_info *pinfo, proto_tre
     uint32_t    bits_offset;
 
     /* append the type of packet */
-    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(pinfo->pool, PCP_PDU_DESC, packettypenames, "Unknown Type:0x%02x"));
+    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(PCP_PDU_DESC, packettypenames, "Unknown Type:0x%02x"));
 
     /* root desc tree */
     pcp_desc_item = proto_tree_add_item(tree, hf_pcp_desc, tvb, offset, 4, ENC_NA);
@@ -1376,7 +1375,7 @@ static int dissect_pcp_message_instance_req(tvbuff_t *tvb, packet_info *pinfo, p
     uint32_t    name_len;
 
     /* append the type of packet */
-    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(pinfo->pool, PCP_PDU_INSTANCE_REQ, packettypenames, "Unknown Type:0x%02x"));
+    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(PCP_PDU_INSTANCE_REQ, packettypenames, "Unknown Type:0x%02x"));
 
     pcp_instance_req_item = proto_tree_add_item(tree, hf_pcp_instance_req, tvb, offset, -1, ENC_NA);
     pcp_instance_req_tree = proto_item_add_subtree(pcp_instance_req_item, ett_pcp);
@@ -1419,7 +1418,7 @@ static int dissect_pcp_message_text_req(tvbuff_t *tvb, packet_info *pinfo, proto
     uint32_t    type;
 
     /* append the type of packet */
-    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(pinfo->pool, PCP_PDU_TEXT_REQ, packettypenames, "Unknown Type:0x%02x"));
+    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(PCP_PDU_TEXT_REQ, packettypenames, "Unknown Type:0x%02x"));
 
     pcp_text_req_item = proto_tree_add_item(tree, hf_pcp_text_req, tvb, offset, -1, ENC_NA);
     pcp_text_req_tree = proto_item_add_subtree(pcp_text_req_item, ett_pcp);
@@ -1459,7 +1458,7 @@ static int dissect_pcp_message_text(tvbuff_t *tvb, packet_info *pinfo, proto_tre
     uint32_t    buflen;
 
     /* append the type of packet */
-    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(pinfo->pool, PCP_PDU_TEXT, packettypenames, "Unknown Type:0x%02x"));
+    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(PCP_PDU_TEXT, packettypenames, "Unknown Type:0x%02x"));
 
     pcp_text_item = proto_tree_add_item(tree, hf_pcp_text, tvb, offset, -1, ENC_NA);
     pcp_text_tree = proto_item_add_subtree(pcp_text_item, ett_pcp);
@@ -1469,7 +1468,8 @@ static int dissect_pcp_message_text(tvbuff_t *tvb, packet_info *pinfo, proto_tre
     offset += 4;
 
     /* buflen */
-    proto_tree_add_item_ret_uint(pcp_text_tree, hf_pcp_text_buflen, tvb, offset, 4, ENC_BIG_ENDIAN, &buflen);
+    buflen = tvb_get_ntohl(tvb, offset);
+    proto_tree_add_item(pcp_text_tree, hf_pcp_text_buflen, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
 
     /* buffer */
@@ -1487,7 +1487,7 @@ static int dissect_pcp_message_text(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 static int dissect_pcp_message_user_auth(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
 {
     /* append the type of packet */
-    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(pinfo->pool, PCP_PDU_USER_AUTH, packettypenames, "Unknown Type:0x%02x"));
+    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(PCP_PDU_USER_AUTH, packettypenames, "Unknown Type:0x%02x"));
 
     proto_tree_add_item(tree, hf_pcp_user_auth_payload, tvb, offset, -1, ENC_NA);
 
@@ -1501,7 +1501,7 @@ static int dissect_pcp_message_user_auth(tvbuff_t *tvb, packet_info *pinfo, prot
 static int dissect_pcp_message_label_req(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
 {
     /* append the type of packet */
-    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(pinfo->pool, PCP_PDU_LABEL_REQ, packettypenames, "Unknown Type:0x%02x"));
+    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(PCP_PDU_LABEL_REQ, packettypenames, "Unknown Type:0x%02x"));
 
     proto_item *pcp_label_req_item = proto_tree_add_item(tree, hf_pcp_label_req, tvb, offset, -1, ENC_NA);
     proto_tree *pcp_label_req_tree = proto_item_add_subtree(pcp_label_req_item, ett_pcp);
@@ -1533,7 +1533,7 @@ static int dissect_pcp_message_label_req(tvbuff_t *tvb, packet_info *pinfo, prot
 static int dissect_pcp_message_label(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
 {
     /* append the type of packet */
-    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(pinfo->pool, PCP_PDU_LABEL, packettypenames, "Unknown Type:0x%02x"));
+    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(PCP_PDU_LABEL, packettypenames, "Unknown Type:0x%02x"));
 
     proto_item *pcp_label_item = proto_tree_add_item(tree, hf_pcp_label, tvb, offset, -1, ENC_NA);
     proto_tree *pcp_label_tree = proto_item_add_subtree(pcp_label_item, ett_pcp);
@@ -1552,7 +1552,7 @@ static int dissect_pcp_message_label(tvbuff_t *tvb, packet_info *pinfo, proto_tr
 
     /* number of label sets */
     int32_t nsets;
-    proto_tree_add_item_ret_int(pcp_label_tree, hf_pcp_label_nsets, tvb, offset, 4, ENC_BIG_ENDIAN, &nsets);
+    proto_tree_add_item_ret_int(pcp_label_tree, hf_pcp_label_nsets, tvb, offset, 4, ENC_NA, &nsets);
     offset += 4;
 
 
@@ -1584,7 +1584,7 @@ static int dissect_pcp_message_instance(tvbuff_t *tvb, packet_info *pinfo, proto
     uint32_t    padding;
 
     /* append the type of packet */
-    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(pinfo->pool, PCP_PDU_INSTANCE, packettypenames, "Unknown Type:0x%02x"));
+    col_append_fstr(pinfo->cinfo, COL_INFO, "[%s]", val_to_str(PCP_PDU_INSTANCE, packettypenames, "Unknown Type:0x%02x"));
 
     pcp_instances_item = proto_tree_add_item(tree, hf_pcp_instances, tvb, offset, -1, ENC_NA);
     pcp_instances_tree = proto_item_add_subtree(pcp_instances_item, ett_pcp);
@@ -1808,10 +1808,10 @@ static int dissect_pcp_partial_label(tvbuff_t *tvb, packet_info *pinfo, proto_tr
     offset += 2;
 
     /* Name */
-    proto_tree_add_item(pcp_label_sets_label_tree, hf_pcp_label_sets_labels_name, tvb, json_start_offset + name_offset, name_length, ENC_ASCII);
+    proto_tree_add_item(pcp_label_sets_label_tree, hf_pcp_label_sets_labels_name, tvb, json_start_offset + name_offset, name_length, ENC_ASCII | ENC_NA);
 
     /* Value */
-    proto_tree_add_item(pcp_label_sets_label_tree, hf_pcp_label_sets_labels_value, tvb, json_start_offset + value_offset, value_length, ENC_ASCII);
+    proto_tree_add_item(pcp_label_sets_label_tree, hf_pcp_label_sets_labels_value, tvb, json_start_offset + value_offset, value_length, ENC_ASCII | ENC_NA);
 
     /* Add to subtree  */
     uint8_t *name = tvb_get_string_enc(pinfo->pool, tvb, json_start_offset + name_offset, name_length, ENC_ASCII | ENC_NA);

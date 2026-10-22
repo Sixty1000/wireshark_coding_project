@@ -126,10 +126,10 @@ static const value_string packettypenames[] = { /*!< Messageid List */
  * @return int returns number of bytes used
  *
  */
-static unsigned
+static int
 count_vle_bytes(tvbuff_t *tvb, int offset)
 {
-    unsigned byte_count = 1;
+    int byte_count = 1;
 
     if(tvb_get_uint8(tvb, offset) & 0x80)     /* If the first bit of the first byte is 1 */
         byte_count = 2;                                     /* There's at least 2 bytes of content length */
@@ -214,9 +214,9 @@ dissect_reliable_message_index_base(tvbuff_t *buffer, int offset, proto_tree *tr
  *
  */
 static int
-dissect_content_length_vle(tvbuff_t *buffer, unsigned *offset, proto_tree *tree)
+dissect_content_length_vle(tvbuff_t *buffer, int *offset, proto_tree *tree)
 {
-    unsigned byte_count;
+    int     byte_count;
     uint32_t length;
 
     length     = 0;
@@ -225,11 +225,11 @@ dissect_content_length_vle(tvbuff_t *buffer, unsigned *offset, proto_tree *tree)
     switch(byte_count) /*We must calculate length by hand because we use the length later */
     {
         case 4:
-            length = tvb_get_uint8(buffer, (*offset) + 3) << 22;
-            length += (tvb_get_uint8(buffer, (*offset) + 2) << 14);
+            length = tvb_get_uint8(buffer, (*offset) + 3) << 23;
+            length += (tvb_get_uint8(buffer, (*offset) + 2) << 15);
             /* FALLTHRU */
         case 2:
-            length += ((tvb_get_uint8(buffer, (*offset) + 1) & 0x7F) << 7);
+            length += (tvb_get_uint8(buffer, (*offset) + 1) << 7);
             /* FALLTHRU */
         case 1:
             length += (tvb_get_uint8(buffer, (*offset)) & 0x7F);
@@ -332,7 +332,7 @@ dissect_reliable_message_number(tvbuff_t *buffer, int offset, proto_tree *tree)
  *
  */
 static int
-dissect_messageid(tvbuff_t *buffer, unsigned *offset, proto_tree *tree, packet_info *pinfo, bool separator)
+dissect_messageid(tvbuff_t *buffer, int *offset, proto_tree *tree, packet_info *pinfo, bool separator)
 {
     int    messageid_length;
     uint8_t messageid;
@@ -440,7 +440,7 @@ dissect_payload(tvbuff_t *buffer, int offset, int messageid, proto_tree *tree, i
  *
  */
 static int
-dissect_knet_message(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, int messageindex)
+dissect_knet_message(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset, int messageindex)
 {
     int content_length, total_length, messageid;
     int start_offset = offset;
@@ -488,7 +488,7 @@ dissect_knet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int current_pr
     proto_item *knet_ti, *message_ti;
     proto_tree *knet_tree, *message_tree;
 
-    unsigned offset = 0, content_length, messageid;
+    int offset = 0, content_length, messageid;
 
     /* Attach kNet main tree to Wireshark tree */
     knet_ti   = proto_tree_add_item(tree, proto_knet, tvb, 0, -1, ENC_NA);
@@ -521,8 +521,7 @@ dissect_knet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int current_pr
 static unsigned
 get_knet_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data _U_)
 {
-    unsigned uoffset = offset;
-    return count_vle_bytes(tvb, offset) + (unsigned)dissect_content_length_vle(tvb, &uoffset, NULL);
+    return count_vle_bytes(tvb, offset) + dissect_content_length_vle(tvb, &offset, NULL);
 }
 
 /**
@@ -548,7 +547,7 @@ dissect_knet_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
     if (tvb_reported_length(tvb) < 2)
         return 0;
 
-    unsigned offset = 0;
+    int offset = 0;
     if (dissect_content_length_vle(tvb, &offset, NULL) == 0)
         return 0;
 
@@ -599,7 +598,7 @@ dissect_knet_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
     proto_tree *datagram_tree, /* Tree containing all header related info */
                *udpflags_tree; /* Tree containing UDP Datagram Flags */
 
-    unsigned offset = 0;
+    int offset = 0;
     uint32_t packetid; /* Contains info about PacketID */
     int messageindex = 0; /*!< Index of the kNet message inside a datagram */
 

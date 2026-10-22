@@ -16,8 +16,7 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
+#include <epan/prefs.h>
 #include <epan/expert.h>
 #include "packet-link16.h"
 
@@ -248,7 +247,8 @@ static void dissect_simple_link16(tvbuff_t *tvb, packet_info *pinfo _U_, proto_t
     Link16State state;
     tvbuff_t *newtvb;
 
-    proto_tree_add_item_ret_uint(tree, hf_simple_link16_subtype, tvb, offset, 1, ENC_NA, &subtype);
+    proto_tree_add_item(tree, hf_simple_link16_subtype, tvb, offset, 1, ENC_NA);
+    subtype = tvb_get_uint8(tvb, offset);
     offset++;
 
     proto_tree_add_item(tree, hf_simple_link16_rc, tvb, offset, 1, ENC_NA);
@@ -266,10 +266,12 @@ static void dissect_simple_link16(tvbuff_t *tvb, packet_info *pinfo _U_, proto_t
     proto_tree_add_item(tree, hf_simple_link16_ssc1, tvb, offset, 2, ENC_LITTLE_ENDIAN);
     offset += 2;
 
-    proto_tree_add_item_ret_uint(tree, hf_simple_link16_stn, tvb, offset, 2, ENC_LITTLE_ENDIAN, &stn);
+    proto_tree_add_item(tree, hf_simple_link16_stn, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+    stn = tvb_get_letohs(tvb, offset);
     offset += 2;
 
-    proto_tree_add_item_ret_uint(tree, hf_simple_link16_word_count, tvb, offset, 2, ENC_LITTLE_ENDIAN, &word_count);
+    proto_tree_add_item(tree, hf_simple_link16_word_count, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+    word_count = tvb_get_uint8(tvb, offset);
     offset += 2;
 
     proto_tree_add_item(tree, hf_simple_link16_loopback_id, tvb, offset, 2, ENC_LITTLE_ENDIAN);
@@ -281,7 +283,7 @@ static void dissect_simple_link16(tvbuff_t *tvb, packet_info *pinfo _U_, proto_t
     case SIMPLE_LINK16_FIXED_FORMAT:
         memset(&state, 0, sizeof(state));
         for (i = 0; i < word_count; i += 5) {
-            newtvb = tvb_new_subset_length(tvb, offset, 10);
+            newtvb = tvb_new_subset_length_caplen(tvb, offset, 10, -1);
             add_new_data_source(pinfo, newtvb, "Link 16 Word");
             call_dissector_with_data(link16_handle, newtvb, pinfo, tree, &state);
             offset += 10;
@@ -306,7 +308,7 @@ static int * const simple_status_dx_flag_fields[] = {
 static void dissect_simple_status(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
 {
     char *name;
-    unsigned link16_status, pu;
+    int link16_status, pu;
 
     proto_tree_add_item(tree, hf_simple_status_subtype, tvb, offset, 1, ENC_NA);
     offset++;
@@ -314,7 +316,7 @@ static void dissect_simple_status(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
     proto_tree_add_item(tree, hf_simple_status_word_count, tvb, offset, 1, ENC_NA);
     offset++;
 
-    name = (char*)tvb_get_stringzpad(pinfo->pool, tvb, offset, SIMPLE_STATUS_NAME_LEN, ENC_ASCII|ENC_NA);
+    name = tvb_get_stringzpad(pinfo->pool, tvb, offset, SIMPLE_STATUS_NAME_LEN, ENC_ASCII|ENC_NA);
     col_append_fstr(pinfo->cinfo, COL_INFO, ", Name: %s", name);
     proto_tree_add_item(tree, hf_simple_status_name, tvb, offset, SIMPLE_STATUS_NAME_LEN, ENC_ASCII);
     offset += SIMPLE_STATUS_NAME_LEN;
@@ -358,7 +360,8 @@ static void dissect_simple_status(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
     proto_tree_add_item(tree, hf_simple_status_link16_sync_status, tvb, offset, 1, ENC_NA);
     offset++;
 
-    proto_tree_add_item_ret_uint(tree, hf_simple_status_link16_terminal_host_status, tvb, offset, 1, ENC_NA, &link16_status);
+    proto_tree_add_item(tree, hf_simple_status_link16_terminal_host_status, tvb, offset, 1, ENC_NA);
+    link16_status = tvb_get_uint8(tvb, offset);
     offset++;
 
     proto_tree_add_item(tree, hf_simple_status_link16_stn, tvb, offset, 2, ENC_LITTLE_ENDIAN);
@@ -375,7 +378,8 @@ static void dissect_simple_status(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
     proto_tree_add_item(tree, hf_simple_status_link11_role, tvb, offset, 1, ENC_NA);
     offset++;
 
-    proto_tree_add_item_ret_uint(tree, hf_simple_status_link11_pu, tvb, offset, 1, ENC_NA, &pu);
+    proto_tree_add_item(tree, hf_simple_status_link11_pu, tvb, offset, 1, ENC_NA);
+    pu = tvb_get_uint8(tvb, offset);
     offset++;
 
     proto_tree_add_item(tree, hf_simple_status_link11_dts_host_status, tvb, offset, 1, ENC_NA);
@@ -425,7 +429,8 @@ static int dissect_simple(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
     if (sync_bytes_bad)
         expert_add_info(pinfo, simple_item, &ei_simple_sync_bytes_bad);
 
-    item = proto_tree_add_item_ret_uint(simple_tree, hf_simple_length, tvb, offset, 2, ENC_LITTLE_ENDIAN, &length);
+    item = proto_tree_add_item(simple_tree, hf_simple_length, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+    length = tvb_get_letohs(tvb, offset);
     offset += 2;
 
     if (length < 16 || length >= 518 || length > tvb_reported_length(tvb))
@@ -453,7 +458,8 @@ static int dissect_simple(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
     packet_size -= 8;
     offset++;
 
-    proto_tree_add_item_ret_uint(simple_tree, hf_simple_packet_type, tvb, offset, 1, ENC_NA, &packet_type);
+    proto_tree_add_item(simple_tree, hf_simple_packet_type, tvb, offset, 1, ENC_NA);
+    packet_type = tvb_get_uint8(tvb, offset);
     offset++;
 
     proto_tree_add_item(simple_tree, hf_simple_transit_time, tvb, offset, 2, ENC_LITTLE_ENDIAN);

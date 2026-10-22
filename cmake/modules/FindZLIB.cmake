@@ -7,7 +7,7 @@
 #  ZLIB_LIBRARIES      - List of libraries when using zlib.
 #  ZLIB_FOUND          - True if zlib found.
 #  ZLIB_DLL_DIR        - (Windows) Path to the zlib DLL.
-#  ZLIB_DLLS_RELEASE   - (Windows) Name of the zlib DLL and its possible proxy/wrapper.
+#  ZLIB_DLL            - (Windows) Name of the zlib DLL.
 #  ZLIB_PDB            - (Windows) Name of the zlib PDB.
 #
 #  ZLIB_VERSION_STRING - The version of zlib found (x.y.z)
@@ -37,7 +37,7 @@
 
 include( FindWSWinLibs )
 # Zlib is included with GLib2
-FindWSWinLibs( "glib-bundle-*" "ZLIB_HINTS" )
+FindWSWinLibs( "vcpkg-export-*" "ZLIB_HINTS" )
 
 if(MSVC)
     # else we'll find Strawberry Perl's version
@@ -59,19 +59,20 @@ if (NOT ZLIB_INCLUDE_DIR OR NOT ZLIB_LIBRARY)
             ${ZLIB_HINTS}
         PATHS
             "[HKEY_LOCAL_MACHINE\\SOFTWARE\\GnuWin32\\Zlib;InstallPath]/include"
-        ${_zlib_sys_env_option}
+	${_zlib_sys_env_option}
     )
 
+    SET(ZLIB_NAMES z zlib zdll zlib1 zlibd zlibd1)
     FIND_LIBRARY(ZLIB_LIBRARY
         NAMES
-            z zlib zdll zlib1 zlibd zlibd1
+            ${ZLIB_NAMES}
         HINTS
             "${ZLIB_LIBDIR}"
             ${ZLIB_HINTS}/lib
             ${ZLIB_HINTS}
         PATHS
             "[HKEY_LOCAL_MACHINE\\SOFTWARE\\GnuWin32\\Zlib;InstallPath]/lib"
-        ${_zlib_sys_env_option}
+	${_zlib_sys_env_option}
     )
 endif()
 unset(_zlib_sys_env_option)
@@ -139,21 +140,20 @@ if(ZLIB_FOUND)
 
     #AddWSWinDLL(ZLIB ZLIB_HINTS "zlib*")
     # With zlib-ng the hints does not work
-    set (ZLIB_DLL_DIR "${ZLIB_HINTS}/bin"
-        CACHE PATH "Path to ZLIB DLL"
+    set ( ZLIB_DLL_DIR "${ZLIB_HINTS}/bin"
+      CACHE PATH "Path to ZLIB DLL"
     )
-    # MinGW, older zlib and vcpkg
-    set(ZLIB_DLLS_RELEASE zlib1.dll)
-    # Newer zlib and vcpkg
-    if (EXISTS "${ZLIB_DLL_DIR}/z.dll")
-        list(APPEND ZLIB_DLLS_RELEASE z.dll)
-    endif()
-    set (ZLIB_DLLS_RELEASE ${ZLIB_DLLS_RELEASE}
-        CACHE FILEPATH "ZLIB DLL file names"
+    file( GLOB _ZLIB_dll RELATIVE "${ZLIB_DLL_DIR}"
+      "${ZLIB_DLL_DIR}/zlib1.dll"
     )
-    set(ZLIB_PDB z.pdb)
-    set (ZLIB_PDB ${ZLIB_PDB}
-        CACHE FILEPATH "ZLIB PDB file name"
+    set ( ZLIB_DLL ${_ZLIB_dll}
+      CACHE FILEPATH "ZLIB DLL file name"
+    )
+    file( GLOB _ZLIB_pdb RELATIVE "${ZLIB_DLL_DIR}"
+      "${ZLIB_DLL_DIR}/zlib.pdb"
+    )
+    set ( ZLIB_PDB ${_ZLIB_pdb}
+      CACHE FILEPATH "ZLIB PDB file name"
     )
     SET(ZLIB_INCLUDE_DIRS ${ZLIB_INCLUDE_DIR})
     SET(ZLIB_LIBRARIES ${ZLIB_LIBRARY})
@@ -161,6 +161,6 @@ ELSE()
     SET(ZLIB_INCLUDE_DIRS )
     SET(ZLIB_LIBRARIES )
     SET(ZLIB_DLL_DIR )
-    SET(ZLIB_DLLS_RELEASE )
+    SET(ZLIB_DLL )
     SET(ZLIB_PDB )
 ENDIF()

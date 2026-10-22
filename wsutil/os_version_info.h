@@ -17,14 +17,8 @@
 extern "C" {
 #endif /* __cplusplus */
 
-/**
- * @brief Appends the operating system version information to a GString.
- *
- * Retrieves the current operating system's version details and appends them
- * to the provided GString. This may include the OS name, version number,
- * and build information depending on platform support.
- *
- * @param str Pointer to a GString where the OS version info will be appended.
+/*
+ * Get the OS version, and append it to a GString.
  */
 WS_DLL_PUBLIC void get_os_version_info(GString *str);
 

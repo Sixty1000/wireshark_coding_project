@@ -163,16 +163,28 @@ static const value_string nmas_errors_enum[] = {
     { 0,          NULL }
 };
 
+#if 0
+static int
+align_4(tvbuff_t *tvb, int aoffset)
+{
+    if (tvb_length_remaining(tvb, aoffset) > 4 ) {
+        return (aoffset%4);
+    }
+    return 0;
+}
+#endif
+
 static int
 nmas_string(packet_info *pinfo, tvbuff_t* tvb, int hfinfo, proto_tree *nmas_tree, int offset, bool little)
 {
     int     foffset = offset;
     uint32_t str_length;
-    wmem_strbuf_t *buffer;
+    char    *buffer;
     uint32_t i;
-    uint8_t c_char;
+    uint16_t c_char;
     uint32_t length_remaining = 0;
 
+    buffer = (char *)wmem_alloc(pinfo->pool, ITEM_LABEL_LENGTH+1);
     if (little) {
         str_length = tvb_get_letohl(tvb, foffset);
     } else {
@@ -180,7 +192,6 @@ nmas_string(packet_info *pinfo, tvbuff_t* tvb, int hfinfo, proto_tree *nmas_tree
     }
     foffset += 4;
     if (str_length >= ITEM_LABEL_LENGTH) {
-        length_remaining = tvb_reported_length_remaining(tvb, foffset);
         proto_tree_add_string(nmas_tree, hfinfo, tvb, foffset,
             length_remaining + 4, "<String too long to process>");
         foffset += length_remaining;
@@ -191,7 +202,6 @@ nmas_string(packet_info *pinfo, tvbuff_t* tvb, int hfinfo, proto_tree *nmas_tree
             "<Not Specified>");
         return foffset;
     }
-    buffer = wmem_strbuf_create(pinfo->pool);
     /*
      * XXX - other than the special-casing of null bytes,
      * we could just use "proto_tree_add_item()", as for
@@ -201,16 +211,34 @@ nmas_string(packet_info *pinfo, tvbuff_t* tvb, int hfinfo, proto_tree *nmas_tree
      * characters.
      */
     for ( i = 0; i < str_length; i++ ) {
-        c_char = tvb_get_uint8(tvb, foffset++);
-        if (c_char == 0x00) {
-            // skip
-        } else if (!g_ascii_isprint(c_char)) {
-            wmem_strbuf_append_c(buffer, '.');
+        c_char = tvb_get_uint8(tvb, foffset );
+        if (c_char<0x20 || c_char>0x7e) {
+            if (c_char != 0x00) {
+                c_char = 0x2e;
+                buffer[i] = c_char & 0xff;
+            } else {
+                i--;
+                str_length--;
+            }
         } else {
-            wmem_strbuf_append_c(buffer, c_char);
+            buffer[i] = c_char & 0xff;
+        }
+        foffset++;
+        length_remaining--;
+
+        if (length_remaining==1) {
+            i++;
+            break;
         }
     }
-    proto_tree_add_string(nmas_tree, hfinfo, tvb, offset+4, str_length, wmem_strbuf_finalize(buffer));
+    buffer[i] = '\0';
+
+    if (little) {
+        str_length = tvb_get_letohl(tvb, offset);
+    } else {
+        str_length = tvb_get_ntohl(tvb, offset);
+    }
+    proto_tree_add_string(nmas_tree, hfinfo, tvb, offset+4, str_length, buffer);
     return foffset;
 }
 
@@ -234,10 +262,10 @@ dissect_nmas_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ncp_tree, nc
     /* Fill in the INFO column. */
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "NMAS");
     col_add_fstr(pinfo->cinfo, COL_INFO, "C NMAS - %s",
-        val_to_str(pinfo->pool, subfunc, nmas_func_enum, "Unknown (0x%02x)"));
+        val_to_str(subfunc, nmas_func_enum, "Unknown (0x%02x)"));
 
     atree = proto_tree_add_subtree_format(ncp_tree, tvb, foffset, -1, ett_nmas, NULL, "Packet Type: %s",
-        val_to_str(pinfo->pool, subfunc, nmas_func_enum, "Unknown (0x%02x)"));
+        val_to_str(subfunc, nmas_func_enum, "Unknown (0x%02x)"));
     switch (subfunc) {
     case 1:
         proto_tree_add_item(atree, hf_ping_version, tvb, foffset, 4, ENC_LITTLE_ENDIAN);
@@ -258,14 +286,15 @@ dissect_nmas_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ncp_tree, nc
         foffset += 4;
         foffset += 12;
         msg_length -= 16;
-        proto_tree_add_item_ret_uint(atree, hf_subverb, tvb, foffset, 4, ENC_LITTLE_ENDIAN, &subverb);
+        proto_tree_add_item(atree, hf_subverb, tvb, foffset, 4, ENC_LITTLE_ENDIAN);
+        subverb = tvb_get_letohl(tvb, foffset);
         if (request_value) {
             request_value->req_nds_flags=subverb; /* Store the NMAS fragment verb */
         }
         foffset += 4;
         msg_length -= 4;
         col_append_fstr(pinfo->cinfo, COL_INFO, ", %s",
-            val_to_str(pinfo->pool, subverb, nmas_subverb_enum, "Unknown subverb (%u)"));
+            val_to_str(subverb, nmas_subverb_enum, "Unknown subverb (%u)"));
         switch (subverb) {
         case 0:             /* Fragmented Ping */
             proto_tree_add_item(atree, hf_ping_version, tvb, foffset, 4, ENC_LITTLE_ENDIAN);
@@ -291,7 +320,7 @@ dissect_nmas_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ncp_tree, nc
             proto_tree_add_item(atree, hf_lsm_verb, tvb, foffset, 1, ENC_LITTLE_ENDIAN);
             /*foffset += 4;*/
             col_append_fstr(pinfo->cinfo, COL_INFO, ", %s",
-                val_to_str(pinfo->pool, msgverb, nmas_lsmverb_enum, "Unknown (%u)"));
+                val_to_str(msgverb, nmas_lsmverb_enum, "Unknown (%u)"));
 
             switch (msgverb) {
             case 1:
@@ -331,7 +360,7 @@ dissect_nmas_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ncp_tree, nc
             foffset += 1;
             /*msg_length -= 12;*/
             col_append_fstr(pinfo->cinfo, COL_INFO, ", %s",
-                val_to_str(pinfo->pool, msgverb, nmas_msgverb_enum, "Unknown (%u)"));
+                val_to_str(msgverb, nmas_msgverb_enum, "Unknown (%u)"));
 
             switch(msgverb) {
             case 1:
@@ -407,7 +436,6 @@ dissect_nmas_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ncp_tree, uint
     uint32_t            return_code=0, encrypt_error=0;
     proto_tree          *atree;
     proto_item          *expert_item;
-    proto_item          *ti;
     const char          *str;
 
 
@@ -422,7 +450,7 @@ dissect_nmas_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ncp_tree, uint
     }
 
     atree = proto_tree_add_subtree_format(ncp_tree, tvb, foffset, -1, ett_nmas, NULL, "Packet Type: %s",
-        val_to_str(pinfo->pool, subfunc, nmas_func_enum, "Unknown (0x%02x)"));
+        val_to_str(subfunc, nmas_func_enum, "Unknown (0x%02x)"));
     switch (subfunc) {
     case 1:
         proto_tree_add_item(atree, hf_ping_flags, tvb, foffset, 4, ENC_LITTLE_ENDIAN);
@@ -431,8 +459,7 @@ dissect_nmas_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ncp_tree, uint
         /*foffset += 4;*/
         break;
     case 2:
-        ti = proto_tree_add_uint(atree, hf_verb, tvb, 0, 0, subverb);
-        proto_item_set_generated(ti);
+        proto_tree_add_uint(atree, hf_verb, tvb, foffset, -1, subverb);
         proto_tree_add_item(atree, hf_length, tvb, foffset, 4, ENC_LITTLE_ENDIAN);
         msg_length = tvb_get_letohl(tvb, foffset);
         foffset +=4;
@@ -476,9 +503,8 @@ dissect_nmas_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ncp_tree, uint
                 /*foffset += msg_length;*/
                 break;
             case 8:             /* Login Store Management */
-                ti = proto_tree_add_uint_format(atree, hf_lsm_verb, tvb, 0, 0, msgverb,
-                    "Subverb: %s", val_to_str(pinfo->pool, msgverb, nmas_lsmverb_enum, "Unknown (%u)"));
-                proto_item_set_generated(ti);
+                proto_tree_add_uint_format(atree, hf_lsm_verb, tvb, foffset, -1, msgverb,
+                    "Subverb: %s", val_to_str(msgverb, nmas_lsmverb_enum, "Unknown (%u)"));
                 switch(msgverb) {
                     /* The data within these structures is all encrypted. */
                 case 1:
@@ -499,7 +525,7 @@ dissect_nmas_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ncp_tree, uint
                 break;
             case 1242:          /* Message Handler */
                 proto_tree_add_uint_format(atree, hf_msg_verb, tvb, foffset, 1, msgverb,
-                                "Subverb: %s", val_to_str(pinfo->pool, msgverb, nmas_msgverb_enum, "Unknown (%u)"));
+                                "Subverb: %s", val_to_str(msgverb, nmas_msgverb_enum, "Unknown (%u)"));
                 switch(msgverb) {
                 case 1:
                     msg_length = tvb_get_ntohl(tvb, foffset);

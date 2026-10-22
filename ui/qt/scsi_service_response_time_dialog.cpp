@@ -80,9 +80,7 @@ void ScsiServiceResponseTimeDialog::provideParameterData()
     char* err;
     QString command;
 
-    command = QStringLiteral(",%1").arg(command_combo_->currentIndex());
+    command = QString(",%1").arg(command_combo_->currentIndex());
 
-    srt_param_handler_cb param = srt_table_get_param_handler_cb(srt_);
-    if (param != NULL)
-        param(srt_, command.toStdString().c_str(), &err);
+    scsistat_param(srt_, command.toStdString().c_str(), &err);
 }

@@ -19,7 +19,7 @@
 #ifndef __CAPTURE_INFO_H__
 #define __CAPTURE_INFO_H__
 
-#include "ui/capture_opts.h"
+#include "capture_opts.h"
 #include <capture/capture_session.h>
 #include <epan/capture_dissectors.h>
 
@@ -37,38 +37,20 @@ typedef struct _capture_info {
     int             new_packets;    /**< packets since last update */
 } capture_info;
 
-/**
- * @brief Aggregates packet count statistics and UI state for a live capture info display.
- */
 typedef struct _info_data {
-    packet_counts counts; /**< Running tally of packets observed, broken down by type. */
-    capture_info  ui;     /**< User interface state and display data for the capture info dialog. */
+    packet_counts     counts;     /* Packet counting */
+    capture_info      ui;         /* user interface data */
 } info_data_t;
 
-/**
- * @brief Create the capture info dialog.
- *
- * @param cinfo Pointer to the capture_info structure.
- * @param cap_session Pointer to the capture_session structure.
- */
+/** Create the capture info dialog */
 extern void
 capture_info_ui_create(capture_info *cinfo, capture_session *cap_session);
 
-/**
- * @brief Updates the UI for a capture session.
- *
- * Update the capture info counters in the dialog
- *
- * @param cinfo Pointer to the capture_info structure containing UI information.
- */
+/** Update the capture info counters in the dialog */
 extern void capture_info_ui_update(
 capture_info    *cinfo);
 
-/**
- * @brief Destroy the capture info dialog.
- *
- * @param cinfo Pointer to the capture_info structure containing the UI to be destroyed.
- */
+/** Destroy the capture info dialog again */
 extern void capture_info_ui_destroy(
 capture_info    *cinfo);
 

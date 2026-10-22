@@ -31,7 +31,6 @@
 
 #include "rtp_audio_file.h"
 #include <ws_attributes.h>
-#include <ui/qt/utils/qt_ui_utils.h>
 
 RtpAudioFile::RtpAudioFile(bool use_disk_for_temp, bool use_disk_for_frames):
       real_pos_(0)
@@ -46,7 +45,7 @@ RtpAudioFile::RtpAudioFile(bool use_disk_for_temp, bool use_disk_for_frames):
 
     tempname = "memory";
     if (use_disk_for_temp) {
-        tempname = QStringLiteral("%1/wireshark_rtp_stream").arg(tempPath());
+        tempname = QString("%1/wireshark_rtp_stream").arg(QDir::tempPath());
         sample_file_ = new QTemporaryFile(tempname, this);
     } else {
         sample_file_ = new QBuffer(this);
@@ -60,7 +59,7 @@ RtpAudioFile::RtpAudioFile(bool use_disk_for_temp, bool use_disk_for_frames):
 
     tempname = "memory";
     if (use_disk_for_frames) {
-        tempname = QStringLiteral("%1/wireshark_rtp_frames").arg(tempPath());
+        tempname = QString("%1/wireshark_rtp_frames").arg(QDir::tempPath());
         sample_file_frame_ = new QTemporaryFile(tempname, this);
     } else {
         sample_file_frame_ = new QBuffer(this);
@@ -176,7 +175,7 @@ void RtpAudioFile::setFrameReadStage(qint64 prepend_samples)
     }
 }
 
-bool RtpAudioFile::readFrameSamples(int32_t *read_buff_bytes, SAMPLE **read_buff, uint32_t *read_len, uint32_t *frame_num, rtp_frame_type *type)
+bool RtpAudioFile::readFrameSamples(int32_t *read_buff_bytes, SAMPLE **read_buff, spx_uint32_t *read_len, uint32_t *frame_num, rtp_frame_type *type)
 {
     rtp_frame_info frame_info;
     uint64_t read_bytes = 0;
@@ -205,7 +204,7 @@ bool RtpAudioFile::readFrameSamples(int32_t *read_buff_bytes, SAMPLE **read_buff
         read_bytes = frame_info.len;
     }
 
-    *read_len = (uint32_t)(read_bytes / SAMPLE_BYTES);
+    *read_len = (spx_uint32_t)(read_bytes / SAMPLE_BYTES);
 
     return true;
 }

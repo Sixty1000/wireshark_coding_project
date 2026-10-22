@@ -2,6 +2,14 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="ja_JP">
 <context>
+    <name>Abbreviation</name>
+    <message>
+        <source></source>
+        <comment>for &quot;not applicable&quot;</comment>
+        <translation></translation>
+    </message>
+</context>
+<context>
     <name>AboutDialog</name>
     <message>
         <source>About Wireshark</source>
@@ -56,12 +64,28 @@
         <translation>種類でフィルタ:</translation>
     </message>
     <message>
+        <source>Keyboard Shortcuts</source>
+        <translation>キーボードショートカット</translation>
+    </message>
+    <message>
+        <source>Search Shortcuts</source>
+        <translation>ショートカットを検索</translation>
+    </message>
+    <message>
         <source>Acknowledgments</source>
         <translation>確認</translation>
     </message>
     <message>
         <source>License</source>
         <translation>ライセンス</translation>
+    </message>
+    <message>
+        <source>About Logray</source>
+        <translation>Lograyについて</translation>
+    </message>
+    <message>
+        <source>Logray</source>
+        <translation>Logray</translation>
     </message>
     <message>
         <source>The directory does not exist</source>
@@ -139,29 +163,6 @@
     <message>
         <source>Value</source>
         <translation>値</translation>
-    </message>
-</context>
-<context>
-    <name>AnnotationEditDialog</name>
-    <message>
-        <source>Color:</source>
-        <translation>色:</translation>
-    </message>
-    <message>
-        <source>Comment (max %1 characters)</source>
-        <translation>コメント (最大 %1 文字)</translation>
-    </message>
-    <message>
-        <source>Comment:</source>
-        <translation>コメント:</translation>
-    </message>
-    <message>
-        <source>Select Annotation Color</source>
-        <translation>注釈の色を選択</translation>
-    </message>
-    <message>
-        <source>Annotations are session-only and will be lost when the capture is closed.</source>
-        <translation>アノテーションはこのセッションのみ有効で、キャプチャを閉じると失われます。</translation>
     </message>
 </context>
 <context>
@@ -719,147 +720,45 @@
     </message>
 </context>
 <context>
-    <name>BreakpointConditionDelegate</name>
+    <name>ByteViewTab</name>
     <message>
-        <source>Expression</source>
-        <translation>書式</translation>
-    </message>
-    <message>
-        <source>Lua expression — pause when truthy</source>
-        <translation>Lua書式 — 真と評価されたときに一時停止</translation>
-    </message>
-    <message>
-        <source>Evaluated each time control reaches this line; locals, upvalues, and globals are visible like Watch / Evaluate.
-Runtime errors are treated as false (silent) and surface as a warning icon on the row.</source>
-        <translation>制御がこの行に到達するたびに評価されます。ウォッチ / 評価 と同様に、ローカル変数、アップバリュー、グローバル変数を参照できます。
-実行時エラーは false として扱われ（サイレント）、行に警告アイコンとして表示されます。</translation>
-    </message>
-    <message>
-        <source>Hit Count</source>
-        <translation>ヒット回数</translation>
-    </message>
-    <message>
-        <source>Pause after N hits (0 disables)</source>
-        <translation>N 回ヒット後に一時停止（0 で無効）</translation>
-    </message>
-    <message>
-        <source>Gate the pause on a hit counter. The dropdown next to N picks the comparison mode: from pauses on every hit from N onwards (default); every pauses on hits N, 2N, 3N, …; once pauses on the N-th hit and deactivates the breakpoint. Use 0 to disable the gate. The counter is preserved across edits to Expression / Hit Count / Log Message; lowering the target below the current count rolls the counter back to 0 so the breakpoint can wait for the next N hits. Right-click the row to reset it explicitly. Combined with an Expression on the same row, the hit-count gate runs first.</source>
-        <translation>ヒットカウンタで一時停止を制御します。N の横にあるドロップダウンで比較モードを選択します: from は N 回目以降のすべてのヒットで一時停止します（既定）; every は N、2N、3N、… 回目のヒットで一時停止します; once は N 回目のヒットで一度だけ一時停止し、ブレークポイントを無効化します。0 を指定するとこの条件を無効にします。カウンタは 式 / ヒット回数 / ログメッセージ を編集しても保持されます。現在のカウントより小さい値に下げるとカウンタは 0 に戻され、ブレークポイントは次の N 回ヒットまで待機できます。行を右クリックすると明示的にリセットできます。同じ行に Expression がある場合、ヒット回数条件が先に実行されます。</translation>
-    </message>
-    <message>
-        <source>Log Message</source>
-        <translation>ログメッセージ</translation>
-    </message>
-    <message>
-        <source>Log message — supports {expr} and tags such as {filename}, {basename}, {line}, {function}, {hits}, {timestamp}, {delta}…</source>
-        <translation>ログメッセージ — {expr} と、{filename}、{basename}、{line}、{function}、{hits}、{timestamp}、{delta}… などのタグをサポート</translation>
-    </message>
-    <message>
-        <source>Logpoints write a message to the Evaluate output (and Wireshark&apos;s info log) each time the line is reached. By default execution continues without pausing; tick the Pause box on this editor to also pause after emitting (useful for log-then-inspect without duplicating the breakpoint). The line is emitted verbatim — there is no automatic file:line prefix. Inside {} the text is evaluated as a Lua expression in this frame and converted to text the same way tostring() does; reserved tags below shadow any same-named Lua local / upvalue / global. Origin: {filename}, {basename}, {line}, {function}, {what}. Counters and scope: {hits}, {depth}, {thread}. Time: {timestamp}, {datetime}, {epoch}, {epoch_ms}, {elapsed}, {delta}. Use {{ and }} for literal { and }. Per-placeholder errors substitute &apos;&lt;error: ...&gt;&apos; without aborting the line.</source>
-        <translation>ログポイントは、この行に到達するたびに 評価出力（および Wireshark の情報ログ）へメッセージを書き込みます。既定では一時停止せずに実行を継続します。このエディタの一時停止ボックスをオンにすると、出力後に一時停止することもできます（ブレークポイントを重複させずにログ出力後に調査する場合に便利です）。行はそのまま出力されます — file:line のプレフィックスは自動的には付きません。{} 内のテキストはこのフレーム内の Lua 式として評価され、tostring() と同じ方法でテキストに変換されます。下記の予約タグは、同名の Lua ローカル変数 / アップバリュー / グローバル変数より優先されます。発生元: {filename}, {basename}, {line}, {function}, {what}。カウンタとスコープ: {hits}, {depth}, {thread}。時刻: {timestamp}, {datetime}, {epoch}, {epoch_ms}, {elapsed}, {delta}。リテラルの { と } には {{ と }} を使用します。各プレースホルダのエラーは行全体を中止せず、&apos;&lt;error: ...&gt;&apos;に置換されます。</translation>
-    </message>
-    <message>
-        <source>from</source>
-        <translation>…から</translation>
-    </message>
-    <message>
-        <source>every</source>
-        <translation>すべて</translation>
-    </message>
-    <message>
-        <source>once</source>
-        <translation>一度だけ</translation>
-    </message>
-    <message>
-        <source>Comparison mode for the hit count:
-from — pause on every hit from N onwards.
-every — pause on hits N, 2N, 3N…
-once — pause once on the N-th hit and deactivate the breakpoint.</source>
-        <translation>ヒット回数の比較モード:
-from — N 回目以降のすべてのヒットで一時停止します。
-every — N、2N、3N… 回目のヒットで一時停止します。
-once — N 回目のヒットで一度だけ一時停止し、ブレークポイントを無効化します。</translation>
-    </message>
-    <message>
-        <source>Pause</source>
-        <translation>一時停止</translation>
-    </message>
-    <message>
-        <source>Pause: format and emit the log message AND pause execution.
-Off = logpoint only (matches the historical &quot;logpoints never pause&quot; convention).</source>
-        <translation>一時停止: ログメッセージを整形して出力し、さらに実行を一時停止します。
-オフ = ログポイントのみ（従来の「ログポイントは一時停止しない」という慣例に一致します）。</translation>
+        <source>Packet bytes</source>
+        <translation>パケットバイト列</translation>
     </message>
 </context>
 <context>
-    <name>CaptureCardWidget</name>
+    <name>ByteViewText</name>
     <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Capture live packets from your network.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;ネットワークからライブパケットをキャプチャします&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>Capture</source>
-        <translation>キャプチャ</translation>
+        <source>Allow hover highlighting</source>
+        <translation>ホーバーハイライトを許可</translation>
     </message>
     <message>
-        <source>Start a new capture session</source>
-        <translation>新規キャプチャセッションを開始</translation>
+        <source>Show bytes as hexadecimal</source>
+        <translation>16進数でバイト列を表示</translation>
     </message>
     <message>
-        <source>&lt;h2&gt;Capture&lt;/h2&gt;</source>
-        <translation>&lt;h2&gt;キャプチャ&lt;/h2&gt;</translation>
+        <source>…as decimal</source>
+        <translation>10進数として...</translation>
     </message>
     <message>
-        <source>…using this filter:</source>
-        <translation>…このフィルタを使用:</translation>
+        <source>…as octal</source>
+        <translation>8進数として...</translation>
     </message>
     <message>
-        <source>Capture filter</source>
-        <translation>キャプチャフィルタ</translation>
+        <source>…as bits</source>
+        <translation>ビット列として…</translation>
     </message>
     <message>
-        <source>Enter a capture filter expression to limit which data is recorded during live capture.</source>
-        <translation>ライブキャプチャ間にデータが記録されるのを制限するキャプチャフィルタ書式を入力</translation>
+        <source>Show text based on packet</source>
+        <translation>パケットをテキストベースで表示</translation>
     </message>
     <message>
-        <source>Interface type filter</source>
-        <translation>インターフェースタイプフィルタ</translation>
+        <source>…as ASCII</source>
+        <translation>ASCII形式として…</translation>
     </message>
     <message>
-        <source>Filters the capture source list by type. Shows how many sources are currently visible and how many are hidden by the active filter.</source>
-        <translation>キャプチャソースの一覧を種別ごとにフィルタします。現在表示されているソース数とアクティブフィルタによって非表示になっているソース数を表示します</translation>
-    </message>
-    <message>
-        <source>Capture sources</source>
-        <translation>キャプチャソース</translation>
-    </message>
-    <message>
-        <source>Lists available capture sources. Select one or more to capture from.</source>
-        <translation>利用可能なキャプチャソース一覧を表示します。キャプチャするソースを1つ以上選択してください</translation>
-    </message>
-    <message>
-        <source>%1 / %2 interfaces</source>
-        <translation>%1 / %2 インターフェース</translation>
-    </message>
-    <message>
-        <source>%1 / %2</source>
-        <translation>%1 / %2</translation>
-    </message>
-    <message>
-        <source>All interfaces shown</source>
-        <translation>表示されているすべてのインターフェース</translation>
-    </message>
-    <message numerus="yes">
-        <source>%n interface(s)</source>
-        <translation>
-            <numerusform>%n インターフェース</numerusform>
-        </translation>
-    </message>
-    <message numerus="yes">
-        <source>%n interface(s) shown, %1 hidden</source>
-        <translation>
-            <numerusform>%n インターフェース表示, %1 非表示</numerusform>
-        </translation>
+        <source>…as EBCDIC</source>
+        <translation>EBCDIC形式として…</translation>
     </message>
 </context>
 <context>
@@ -1025,7 +924,7 @@ Off = logpoint only (matches the historical &quot;logpoints never pause&quot; co
     </message>
     <message>
         <source>Unknown file type returned by save as dialog.</source>
-        <translation>…として保存画面から返された不明のファイルタイプ</translation>
+        <translation>…として保存画面から返された未知のファイルタイプ</translation>
     </message>
     <message>
         <source>Please report this as a Wireshark issue at https://gitlab.com/wireshark/wireshark/-/issues.</source>
@@ -1069,6 +968,10 @@ Off = logpoint only (matches the historical &quot;logpoints never pause&quot; co
 </context>
 <context>
     <name>CaptureFilePropertiesDialog</name>
+    <message>
+        <source>Details</source>
+        <translation>詳細</translation>
+    </message>
     <message>
         <source>Edit Comments</source>
         <translation>コメントを編集</translation>
@@ -1126,34 +1029,30 @@ Off = logpoint only (matches the historical &quot;logpoints never pause&quot; co
         <translation>時間</translation>
     </message>
     <message>
-        <source>Capture start</source>
-        <translation>キャプチャ開始</translation>
-    </message>
-    <message>
         <source>First packet</source>
         <translation>最初のパケット</translation>
+    </message>
+    <message>
+        <source>First event</source>
+        <translation>最初のイベント</translation>
     </message>
     <message>
         <source>Last packet</source>
         <translation>最後のパケット</translation>
     </message>
     <message>
-        <source>Capture end</source>
-        <translation>キャプチャ停止</translation>
+        <source>Last event</source>
+        <translation>最後のイベント</translation>
+    </message>
+    <message>
+        <source>Elapsed</source>
+        <translation>経過時間</translation>
     </message>
     <message numerus="yes">
         <source>%Ln day(s)</source>
         <translation>
             <numerusform>%Ln 日</numerusform>
         </translation>
-    </message>
-    <message>
-        <source>Elapsed (first to last packet)</source>
-        <translation>経過(最初から最後のパケット)</translation>
-    </message>
-    <message>
-        <source>Elapsed capturing</source>
-        <translation>キャプチャ経過</translation>
     </message>
     <message>
         <source>Section %1</source>
@@ -1184,12 +1083,12 @@ Off = logpoint only (matches the historical &quot;logpoints never pause&quot; co
         <translation>インターフェース</translation>
     </message>
     <message>
-        <source>Interface Description</source>
-        <translation>インターフェース 説明</translation>
-    </message>
-    <message>
         <source>Dropped packets</source>
         <translation>欠落したパケット</translation>
+    </message>
+    <message>
+        <source>Dropped events</source>
+        <translation>欠落したイベント</translation>
     </message>
     <message>
         <source>Capture filter</source>
@@ -1202,6 +1101,10 @@ Off = logpoint only (matches the historical &quot;logpoints never pause&quot; co
     <message>
         <source>Packet size limit (snaplen)</source>
         <translation>パケットサイズ制限(snaplen)</translation>
+    </message>
+    <message>
+        <source>Event size limit (snaplen)</source>
+        <translation>イベントサイズ制限(snaplen)</translation>
     </message>
     <message>
         <source>none</source>
@@ -1256,6 +1159,10 @@ Off = logpoint only (matches the historical &quot;logpoints never pause&quot; co
         <translation>パケット数</translation>
     </message>
     <message>
+        <source>Events</source>
+        <translation>イベント</translation>
+    </message>
+    <message>
         <source>Time span, s</source>
         <translation>時間間隔,秒</translation>
     </message>
@@ -1266,6 +1173,10 @@ Off = logpoint only (matches the historical &quot;logpoints never pause&quot; co
     <message>
         <source>Average packet size, B</source>
         <translation>平均パケットサイズ,バイト</translation>
+    </message>
+    <message>
+        <source>Average event size, B</source>
+        <translation>平均イベントサイズ,バイト</translation>
     </message>
     <message>
         <source>Bytes</source>
@@ -1284,6 +1195,10 @@ Off = logpoint only (matches the historical &quot;logpoints never pause&quot; co
         <translation>パケットコメント</translation>
     </message>
     <message>
+        <source>Event Comments</source>
+        <translation>イベント コメント</translation>
+    </message>
+    <message>
         <source>&lt;p&gt;Frame %1: </source>
         <translation>&lt;p&gt;フレーム %1: </translation>
     </message>
@@ -1295,28 +1210,35 @@ Off = logpoint only (matches the historical &quot;logpoints never pause&quot; co
 
 </translation>
     </message>
+    <message>
+        <source>Created by Logray %1
+
+</source>
+        <translation>Logray %1 によって作成されました
+
+</translation>
+    </message>
 </context>
 <context>
-    <name>CaptureFilterEntry</name>
+    <name>CaptureFilterCombo</name>
+    <message>
+        <source>Capture filter selector</source>
+        <translation>キャプチャフィルタ選択</translation>
+    </message>
+</context>
+<context>
+    <name>CaptureFilterEdit</name>
     <message>
         <source>Capture filter entry</source>
         <translation>キャプチャフィルタエントリ</translation>
     </message>
     <message>
-        <source>Saved Capture Filters</source>
-        <translation>保存したキャプチャフィルタ</translation>
+        <source>Manage saved bookmarks.</source>
+        <translation>保存したブックマークを管理</translation>
     </message>
     <message>
-        <source>Save this filter</source>
-        <translation>このフィルタを保存</translation>
-    </message>
-    <message>
-        <source>Remove this filter</source>
-        <translation>このフィルタを削除</translation>
-    </message>
-    <message>
-        <source>Manage Capture Filters</source>
-        <translation>キャプチャフィルタ管理</translation>
+        <source>Apply this filter string to the display.</source>
+        <translation>このフィルタ文字列を表示に適用</translation>
     </message>
     <message>
         <source>Multiple filters selected. Override them here or leave this blank to preserve them.</source>
@@ -1331,35 +1253,17 @@ Off = logpoint only (matches the historical &quot;logpoints never pause&quot; co
         <source>Enter a capture filter %1</source>
         <translation>キャプチャフィルタ %1 を入力</translation>
     </message>
-</context>
-<context>
-    <name>CaptureFilterSyntaxWorker</name>
     <message>
-        <source>Unable to check capture filter</source>
-        <translation>キャプチャフィルタをチェックできません</translation>
+        <source>Save this filter</source>
+        <translation>このフィルタを保存</translation>
     </message>
     <message>
-        <source>Unable to check capture filter (BPF extensions require a live handle)</source>
-        <translation>キャプチャフィルタをチェックできません(BPF拡張はライブハンドルを必要とします)</translation>
-    </message>
-</context>
-<context>
-    <name>CaptureFilterValidator</name>
-    <message>
-        <source>No interfaces selected</source>
-        <translation>インターフェースが選択されていません</translation>
+        <source>Remove this filter</source>
+        <translation>このフィルタを削除</translation>
     </message>
     <message>
-        <source>Unable to check capture filter</source>
-        <translation>キャプチャフィルタをチェックできません</translation>
-    </message>
-    <message>
-        <source>Unable to check capture filter (BPF extensions require a live handle)</source>
-        <translation>キャプチャフィルタをチェックできません(BPF拡張はライブハンドルを必要とします)</translation>
-    </message>
-    <message>
-        <source>Syntax checking unavailable</source>
-        <translation>文法チェックが利用できません</translation>
+        <source>Manage Capture Filters</source>
+        <translation>キャプチャフィルタ管理</translation>
     </message>
 </context>
 <context>
@@ -1389,6 +1293,38 @@ Off = logpoint only (matches the historical &quot;logpoints never pause&quot; co
     <message>
         <source>Input</source>
         <translation>入力</translation>
+    </message>
+    <message>
+        <source>Interface</source>
+        <translation>インターフェース</translation>
+    </message>
+    <message>
+        <source>Traffic</source>
+        <translation>トラフィック</translation>
+    </message>
+    <message>
+        <source>Link-layer Header</source>
+        <translation>リンク層ヘッダ</translation>
+    </message>
+    <message>
+        <source>Promiscuous</source>
+        <translation>プロミスキャス</translation>
+    </message>
+    <message>
+        <source>Snaplen (B)</source>
+        <translation>キャプチャ長(バイト)</translation>
+    </message>
+    <message>
+        <source>Buffer (MB)</source>
+        <translation>バッファ(メガバイト)</translation>
+    </message>
+    <message>
+        <source>Monitor Mode</source>
+        <translation>モニタモード</translation>
+    </message>
+    <message>
+        <source>Capture Filter</source>
+        <translation>キャプチャフィルタ</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;You probably want to enable this. Usually a network card will only capture the traffic sent to its own network address. If you want to capture all traffic that the network card can &amp;quot;see&amp;quot;, mark this option. See the FAQ for some more details of capturing packets from a switched network.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -1445,10 +1381,6 @@ Off = logpoint only (matches the historical &quot;logpoints never pause&quot; co
     <message>
         <source>pcap</source>
         <translation>pcap形式</translation>
-    </message>
-    <message>
-        <source>Compression:</source>
-        <translation>圧縮:</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Instead of using a single capture file, multiple files will be created.&lt;/p&gt;&lt;p&gt;The generated file names will contain an incrementing number and the start time of the capture.&lt;/p&gt;&lt;p&gt;NOTE: If enabled, at least one of the new-file criteria MUST be selected.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -1520,16 +1452,16 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>すべての802.11インターフェースにおいてモニターモードを有効化します</translation>
     </message>
     <message>
+        <source>compression</source>
+        <translation>圧縮</translation>
+    </message>
+    <message>
         <source>None</source>
         <translation>なし</translation>
     </message>
     <message>
         <source>gzip</source>
         <translation>gzip</translation>
-    </message>
-    <message>
-        <source>LZ4</source>
-        <translation>LZ4圧縮</translation>
     </message>
     <message>
         <source>File infix pattern</source>
@@ -1554,22 +1486,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;File index number before the date and time. This is the historic Wireshark ordering.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;日付と時刻の前にファイルインデックスを示します。これは歴史的なWiresharkの順序です。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>Create a new interface bookmark.</source>
-        <translation>新規インターフェースブックマークを作成</translation>
-    </message>
-    <message>
-        <source>Remove this interface bookmark.</source>
-        <translation>インターフェースブックマークを削除</translation>
-    </message>
-    <message>
-        <source>Processes:</source>
-        <translation>プロセス:</translation>
-    </message>
-    <message>
-        <source>Executable paths, command lines and user names will be stored in the capture file. A command line can contain a password.</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;After capturing has switched to the next file and the given number of files has exceeded, the oldest file will be removed.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -1692,18 +1608,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>開始</translation>
     </message>
     <message>
-        <source>Don&apos;t record processes</source>
-        <translation>プロセスを記録しない</translation>
-    </message>
-    <message>
-        <source>Record process IDs and names</source>
-        <translation>プロセスIDと名前を記録</translation>
-    </message>
-    <message>
-        <source>Record process IDs, names, paths, command lines and users</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Leave blank to use a temporary file</source>
         <translation>一時ファイルを使うため空白にしておきます</translation>
     </message>
@@ -1716,16 +1620,20 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>一時ファイルのディレクトリを指定</translation>
     </message>
     <message>
-        <source>Not supported on this platform.</source>
-        <translation type="unfinished"></translation>
+        <source>%1: %2</source>
+        <translation>%1: %2</translation>
     </message>
     <message>
-        <source>Process information can only be recorded in pcapng files.</source>
-        <translation type="unfinished"></translation>
+        <source>Addresses</source>
+        <translation>アドレス</translation>
     </message>
     <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Record which processes on this computer sent or received each packet, for the packets of TCP and UDP sockets. Which processes can be identified depends on your privileges, and the packets of very short-lived sockets can be missed.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <source>Address</source>
+        <translation>アドレス</translation>
+    </message>
+    <message>
+        <source>no addresses</source>
+        <translation>アドレスがありません</translation>
     </message>
     <message>
         <source>Error</source>
@@ -1779,14 +1687,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>pcapng形式でパケットをキャプチャします</translation>
     </message>
     <message>
-        <source>Record the processes that packets belong to:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;What to record, in pcapng files, of the processes on this computer that sent or received each packet. Executable paths, command lines and user names can be sensitive: a command line can contain a password.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Update the list of packets while capture is in progress. This can result in dropped packets on high-speed networks.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;キャプチャが進んでいる間パケット一覧を更新します。これにより、高速ネットワークにおいてはパケットが欠落することがありえます。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
@@ -1807,40 +1707,12 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;新しいパケットが更新される間隔。どのくらいの頻度でGUIが更新されるのとタイマの精度に影響します。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
-        <source>Temporary directory</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Directory in which to write temporary capture files. Leave empty to use the system default. Overridden by the --temp-dir option.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Browse…</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Don&apos;t load interfaces on startup</source>
         <translation>起動時にインタフェースを読み込みません</translation>
     </message>
     <message>
         <source>Disable external capture interfaces</source>
         <translation>外部キャプチャインタフェースを無効にします</translation>
-    </message>
-    <message>
-        <source>Nothing</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Process IDs and names</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Process IDs, names, paths, command lines and users</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Temporary Directory</source>
-        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -1987,24 +1859,12 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>出現位置:</translation>
     </message>
     <message>
-        <source>Display as:</source>
-        <translation>として表示:</translation>
+        <source>Resolve Names:</source>
+        <translation>名前解決:</translation>
     </message>
     <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;p&gt;Values will show the raw values for fields.&lt;p&gt;Strings will show human-readable strings instead of raw values for fields. Only applicable to custom columns with fields that have value strings and custom columns which can be resolved to strings.&lt;p&gt;Details will show the values using the same format as in Packet Details. Only applicable to custom columns.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;p&gt;値はフィールドの生の値を表示します。&lt;p&gt;文字列はフィールドの生の値の代わりに人が読める文字列を表示します。文字列を持つフィールドのカスタム列および文字列に解決できるカスタム列にのみ適用されます。&lt;p&gt; 詳細には、パケット詳細で使用されているのと同じ形式で値が表示されます。カスタム列にのみ適用されます。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>Values</source>
-        <translation>値</translation>
-    </message>
-    <message>
-        <source>Strings</source>
-        <translation>文字列</translation>
-    </message>
-    <message>
-        <source>Details</source>
-        <translation>詳細</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;p&gt;Show human-readable strings instead of raw values for fields. Only applicable to custom columns with fields that have value strings.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;p&gt;raw(無加工)のフィールド値の代わりに人が読むことのできる文字列を表示します。有効な文字列を含むフィールドを持つカスタム列へ適用する場合にのみ適用できます。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Missing fields.</source>
@@ -2034,28 +1894,28 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>種別</translation>
     </message>
     <message>
+        <source>Fields</source>
+        <translation>フィールド</translation>
+    </message>
+    <message>
         <source>Field Occurrence</source>
         <translation>フィールド出現位置</translation>
     </message>
     <message>
-        <source>Display Format</source>
-        <translation>表示形式</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;Values will show the raw values for fields.&lt;p&gt;Strings will show human-readable strings instead of raw values for fields. Only applicable to custom columns with fields that have value strings and custom columns which can be resolved to strings.&lt;p&gt;Details will show the values using the same format as in Packet Details. Only applicable to custom columns.&lt;/html&gt;</source>
-        <translation>&lt;html&gt; 値はフィールドの生の値を表示します。&lt;p&gt; 文字列はフィールドの生の値の代わりに人が読める文字列を表示します。 文字列を持つフィールドのカスタム列および文字列に解決できるカスタム列にのみ適用されます&lt;p&gt; 詳細には、パケット詳細で使用されているのと同じ形式で値が表示されます。カスタム列にのみ適用されます。&lt;/html&gt;</translation>
+        <source>Resolved</source>
+        <translation>解決済</translation>
     </message>
     <message>
         <source>Width</source>
         <translation>幅</translation>
     </message>
     <message>
-        <source>Custom Expression</source>
-        <translation>カスタム式</translation>
-    </message>
-    <message>
         <source>Alignment</source>
         <translation>揃え</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;Show human-readable strings instead of raw values for fields. Only applicable to custom columns with fields that have value strings.&lt;/html&gt;</source>
+        <translation>&lt;html&gt;123raw(無加工)のフィールド値の代わりに人が読むことのできる文字列を表示します。有効な文字列を含むフィールドを持つカスタム列へ適用する場合にのみ適用できます。&lt;/html&gt;</translation>
     </message>
     <message>
         <source>New Column</source>
@@ -2099,26 +1959,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <source>Copy filter text to the clipboard.</source>
         <translation>フィルタテキストをクリップボードにコピーします</translation>
     </message>
-    <message>
-        <source>No capture filter</source>
-        <translation>キャプチャフィルタなし</translation>
-    </message>
-    <message>
-        <source>Multiple filters</source>
-        <translation>複数フィルタ</translation>
-    </message>
-    <message>
-        <source>Capture filters cannot be compiled for standard input.</source>
-        <translation>標準入力に対してキャプチャフィルタをコンパイルできません</translation>
-    </message>
-    <message>
-        <source>Capture filters cannot be compiled for pipes.</source>
-        <translation>パイプに対してキャプチャフィルタをコンパイルできません</translation>
-    </message>
-    <message>
-        <source>Capture filter: %1</source>
-        <translation>キャプチャフィルタ: %1</translation>
-    </message>
 </context>
 <context>
     <name>CompressionGroupBox</name>
@@ -2137,10 +1977,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Compress with &amp;LZ4</source>
         <translation>LZ4形式で圧縮(&amp;L)</translation>
-    </message>
-    <message>
-        <source>Compress with Zstandard</source>
-        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -2239,14 +2075,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Graph a TCP conversation.</source>
         <translation>TCP対話をグラフ化します</translation>
-    </message>
-    <message>
-        <source>I/O Graphs</source>
-        <translation>入出力グラフ</translation>
-    </message>
-    <message>
-        <source>I/OGraph TCP conversations.</source>
-        <translation>TCP対話 入出力グラフ</translation>
     </message>
 </context>
 <context>
@@ -2397,105 +2225,7 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>Copy packet bytes as application/octet-stream MIME data.</source>
-        <translation>パケットバイトを application/octet-stream MIMEタイプデータとしてコピー</translation>
-    </message>
-</context>
-<context>
-    <name>DataSourceTab</name>
-    <message>
-        <source>Packet bytes</source>
-        <translation>パケットバイト列</translation>
-    </message>
-    <message>
-        <source>Displays the raw bytes of the selected packet in hexadecimal and ASCII.</source>
-        <translation>16進数とASCIIで選択したパケットの生バイト列を表示します</translation>
-    </message>
-    <message>
-        <source>Event data</source>
-        <translation>イベントデータ</translation>
-    </message>
-    <message>
-        <source>Displays the raw data of the selected event.</source>
-        <translation>選択したイベントの生データを表示します</translation>
-    </message>
-    <message>
-        <source>Packet annotations are not saved and will be lost when the capture is closed.</source>
-        <translation>パケットの注釈は保存されず、キャプチャを閉じると失われます。</translation>
-    </message>
-    <message>
-        <source>Packet Annotations</source>
-        <translation>パケット注釈</translation>
-    </message>
-    <message>
-        <source>Select one or more bytes first.</source>
-        <translation>最初に１つかそれ以上のバイト列を選択します</translation>
-    </message>
-    <message>
-        <source>Add Annotation</source>
-        <translation>注釈を追加</translation>
-    </message>
-    <message>
-        <source>No annotation found at the selection.</source>
-        <translation>選択範囲に注釈が見つかりません。</translation>
-    </message>
-    <message>
-        <source>Edit Annotation</source>
-        <translation>注釈を編集</translation>
-    </message>
-    <message>
-        <source>Start byte set: %1</source>
-        <translation>開始バイトを設定しました: %1</translation>
-    </message>
-    <message>
-        <source>Set start byte first.</source>
-        <translation>最初に開始バイトを設定してください</translation>
-    </message>
-    <message>
-        <source>Start byte (absolute): %1
-End byte (absolute): %2
-Distance (absolute, bytes): %3
-Distance (signed, bytes): %4</source>
-        <translation>開始バイト（絶対）: %1
-終了バイト（絶対）: %2
-距離（絶対、バイト）: %3
-距離（符号付き、バイト）: %4</translation>
-    </message>
-    <message>
-        <source>selected protocol</source>
-        <translation>選択したプロトコル</translation>
-    </message>
-    <message>
-        <source>selected field</source>
-        <translation>選択したフィールド</translation>
-    </message>
-    <message>
-        <source>parent protocol</source>
-        <translation>親プロトコル</translation>
-    </message>
-    <message>
-        <source>
-Reference range (%1): start %2, length %3</source>
-        <translation>参照範囲（%1）: 開始 %2、長さ %3</translation>
-    </message>
-    <message>
-        <source>
-Start byte (relative to reference): %1
-End byte (relative to reference): %2</source>
-        <translation>開始バイト（参照からの相対）: %1
-終了バイト（参照からの相対）: %2</translation>
-    </message>
-    <message>
-        <source>
-Relative to reference: n/a (outside reference range)</source>
-        <translation>参照からの相対: 該当なし（参照範囲外）</translation>
-    </message>
-    <message>
-        <source>Compute Offset</source>
-        <translation>オフセットを計算</translation>
-    </message>
-    <message>
-        <source>Offset markers cleared.</source>
-        <translation>オフセットマーカーをクリアしました</translation>
+        <translation>MIME形式データ(application/octet-stream)としてパケットバイト列をコピー</translation>
     </message>
 </context>
 <context>
@@ -2589,256 +2319,14 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
 </context>
 <context>
-    <name>DisAudioStream</name>
+    <name>DisplayFilterCombo</name>
     <message>
-        <source>No DIS signal payload is available for playback.</source>
-        <translation>再生可能な DIS 信号ペイロードがありません。</translation>
+        <source>Display filter selector</source>
+        <translation>表示フィルタの選択</translation>
     </message>
     <message>
-        <source>Unable to decode DIS audio payload for this stream.</source>
-        <translation>このストリームの DIS 音声ペイロードをデコードできません。</translation>
-    </message>
-    <message>
-        <source>Audio format is not supported by the current output device.</source>
-        <translation>現在の出力デバイスはこの音声形式に対応していません。</translation>
-    </message>
-    <message>
-        <source>Unable to open playback buffer.</source>
-        <translation>再生バッファを開けません</translation>
-    </message>
-</context>
-<context>
-    <name>DisStreamAnalysisDialog</name>
-    <message>
-        <source>DIS Stream Analysis</source>
-        <translation>DIS ストリーム解析</translation>
-    </message>
-    <message>
-        <source>Stream</source>
-        <translation>ストリーム</translation>
-    </message>
-    <message>
-        <source>Codec</source>
-        <translation>コーデック</translation>
-    </message>
-    <message>
-        <source>Duration (s)</source>
-        <translation>継続時間 (秒)</translation>
-    </message>
-    <message>
-        <source>Packets</source>
-        <translation>パケット</translation>
-    </message>
-    <message>
-        <source>Signal Packets</source>
-        <translation>信号パケット</translation>
-    </message>
-    <message>
-        <source>Transmitter Packets</source>
-        <translation>送信パケット</translation>
-    </message>
-    <message>
-        <source>Estimated Lost</source>
-        <translation>推定損失</translation>
-    </message>
-    <message>
-        <source>Jitter (mean/max ms)</source>
-        <translation>ジッタ (平均/最大ミリ秒)</translation>
-    </message>
-    <message>
-        <source>Delta (mean/max ms)</source>
-        <translation>デルタ (平均/最大ミリ秒)</translation>
-    </message>
-    <message>
-        <source>Capture Time (s)</source>
-        <translation>キャプチャ時間(秒)</translation>
-    </message>
-    <message>
-        <source>Amplitude</source>
-        <translation>振幅</translation>
-    </message>
-    <message>
-        <source>0.000 / 0.000 s</source>
-        <translation>0.000 / 0.000 秒</translation>
-    </message>
-    <message>
-        <source>Playback</source>
-        <translation>再生</translation>
-    </message>
-    <message>
-        <source>Packet</source>
-        <translation>パケット</translation>
-    </message>
-    <message>
-        <source>Time (s)</source>
-        <translation>時間(秒)</translation>
-    </message>
-    <message>
-        <source>Delta (ms)</source>
-        <translation>間隔(ミリ秒)</translation>
-    </message>
-    <message>
-        <source>Jitter (ms)</source>
-        <translation>ジッタ(ミリ秒)</translation>
-    </message>
-    <message>
-        <source>Lost</source>
-        <translation>損失</translation>
-    </message>
-    <message>
-        <source>Status</source>
-        <translation>状態</translation>
-    </message>
-    <message>
-        <source>Go To First Packet</source>
-        <translation>最初のパケットに移動</translation>
-    </message>
-    <message>
-        <source>Play</source>
-        <translation>再生</translation>
-    </message>
-    <message>
-        <source>Stop</source>
-        <translation>停止</translation>
-    </message>
-    <message>
-        <source>-</source>
-        <translation>-</translation>
-    </message>
-    <message>
-        <source>Unknown</source>
-        <translation>不明</translation>
-    </message>
-    <message>
-        <source>Problem</source>
-        <translation>問題</translation>
-    </message>
-    <message>
-        <source>OK</source>
-        <translation>OK</translation>
-    </message>
-    <message>
-        <source>Waveform</source>
-        <translation>波形</translation>
-    </message>
-    <message>
-        <source>Jitter Spikes</source>
-        <translation>ジッタスパイク</translation>
-    </message>
-    <message>
-        <source>Estimated Loss</source>
-        <translation>推定損失</translation>
-    </message>
-    <message>
-        <source>Problem Packets</source>
-        <translation>問題のパケット</translation>
-    </message>
-    <message>
-        <source>Pause</source>
-        <translation>一時停止</translation>
-    </message>
-    <message>
-        <source>Double click on graph to set start of playback.</source>
-        <translation>グラフをダブルクリックして再生開始位置を設定します。</translation>
-    </message>
-    <message>
-        <source>Start: %1 s. Double click on graph to set start of playback.</source>
-        <translation>開始: %1 秒。グラフをダブルクリックして再生開始位置を設定します。</translation>
-    </message>
-    <message>
-        <source>DIS Playback</source>
-        <translation>DIS再生</translation>
-    </message>
-</context>
-<context>
-    <name>DisStreamDialog</name>
-    <message>
-        <source>DIS Streams</source>
-        <translation>DISストリーム</translation>
-    </message>
-    <message>
-        <source>Start</source>
-        <translation>開始</translation>
-    </message>
-    <message>
-        <source>End</source>
-        <translation>終了</translation>
-    </message>
-    <message>
-        <source>Src Address</source>
-        <translation>送信元アドレス</translation>
-    </message>
-    <message>
-        <source>Src Port</source>
-        <translation>送信元ポート</translation>
-    </message>
-    <message>
-        <source>Dst Address</source>
-        <translation>宛先アドレス</translation>
-    </message>
-    <message>
-        <source>Dst Port</source>
-        <translation>宛先ポート</translation>
-    </message>
-    <message>
-        <source>Radio</source>
-        <translation>無線</translation>
-    </message>
-    <message>
-        <source>Entity</source>
-        <translation>エンティティ</translation>
-    </message>
-    <message>
-        <source>Signal</source>
-        <translation>信号</translation>
-    </message>
-    <message>
-        <source>Tx</source>
-        <translation>Tx</translation>
-    </message>
-    <message>
-        <source>Lost</source>
-        <translation>損失</translation>
-    </message>
-    <message>
-        <source>Max Delta (ms)</source>
-        <translation>最大間隔(ミリ秒)</translation>
-    </message>
-    <message>
-        <source>Mean Jitter (ms)</source>
-        <translation>平均ジッタ(ミリ秒)</translation>
-    </message>
-    <message>
-        <source>Max Jitter (ms)</source>
-        <translation>最大ジッタ(ミリ秒)</translation>
-    </message>
-    <message>
-        <source>Pb</source>
-        <translation>Pb</translation>
-    </message>
-    <message>
-        <source>Prepare Filter</source>
-        <translation>フィルタを準備</translation>
-    </message>
-    <message>
-        <source>Play</source>
-        <translation>再生</translation>
-    </message>
-    <message>
-        <source>Stop</source>
-        <translation>停止</translation>
-    </message>
-    <message>
-        <source>Analyze</source>
-        <translation>分析</translation>
-    </message>
-    <message>
-        <source>X</source>
-        <translation>X</translation>
-    </message>
-    <message>
-        <source>DIS Playback</source>
-        <translation>DIS再生</translation>
+        <source>Select from previously used filters.</source>
+        <translation>前に使ったフィルタから選択</translation>
     </message>
 </context>
 <context>
@@ -2880,10 +2368,6 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>読込フィルタ %1 を適用</translation>
     </message>
     <message>
-        <source>Enter a custom column expression %1</source>
-        <translation>%1 のカスタム列の式を入力してください</translation>
-    </message>
-    <message>
         <source>Current filter: %1</source>
         <translation>現在のフィルタ: %1</translation>
     </message>
@@ -2904,48 +2388,8 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>表示フィルタを管理</translation>
     </message>
     <message>
-        <source>Filter Button Preferences…</source>
-        <oldsource>Filter Button Preferences...</oldsource>
+        <source>Filter Button Preferences...</source>
         <translation>フィルタボタン設定…</translation>
-    </message>
-</context>
-<context>
-    <name>DisplayFilterEntry</name>
-    <message>
-        <source>Display filter entry</source>
-        <translation>表示フィルタエントリ</translation>
-    </message>
-    <message>
-        <source>Saved Display Filters</source>
-        <translation>保存した表示フィルタ</translation>
-    </message>
-    <message>
-        <source>Save this filter</source>
-        <translation>このフィルタを保存</translation>
-    </message>
-    <message>
-        <source>Remove this filter</source>
-        <translation>このフィルタを削除</translation>
-    </message>
-    <message>
-        <source>Manage Display Filters</source>
-        <translation>表示フィルタを管理</translation>
-    </message>
-    <message>
-        <source>Filter Button Preferences…</source>
-        <translation>フィルタボタン設定…</translation>
-    </message>
-    <message>
-        <source>Apply a display filter %1 &lt;%2/&gt;</source>
-        <translation>表示フィルタ %1 &lt;%2/&gt; を適用</translation>
-    </message>
-    <message>
-        <source>Display Filter Expression…</source>
-        <translation>表示フィルタ式...</translation>
-    </message>
-    <message>
-        <source>Left align buttons</source>
-        <translation>ボタンを左揃え</translation>
     </message>
 </context>
 <context>
@@ -3044,17 +2488,10 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
 </context>
 <context>
-    <name>DisplayFilterValidator</name>
-    <message>
-        <source>&quot;%1&quot; is deprecated in favour of &quot;%2&quot;. See Help section 6.4.8 for details.</source>
-        <translation>&quot;%1&quot; は非推奨で &quot;%2&quot; が推奨されます。詳細はヘルプ 6.4.8をご覧ください</translation>
-    </message>
-</context>
-<context>
     <name>DissectorSyntaxLineEdit</name>
     <message>
         <source>Dissector entry</source>
-        <translation>ダイセクタエントリ</translation>
+        <translation>ダイセクタ登録</translation>
     </message>
     <message>
         <source>Enter a dissector %1</source>
@@ -3073,19 +2510,7 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
     <message>
         <source>Dissector Tables</source>
-        <translation>ダイセクタテーブル</translation>
-    </message>
-    <message>
-        <source>Everywhere</source>
-        <translation>どこでも</translation>
-    </message>
-    <message>
-        <source>Only Name</source>
-        <translation>名前のみ</translation>
-    </message>
-    <message>
-        <source>Only Description</source>
-        <translation>説明のみ</translation>
+        <translation>ダイセクター表</translation>
     </message>
 </context>
 <context>
@@ -3121,29 +2546,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Selector Name</source>
         <translation>セレクタ名</translation>
-    </message>
-</context>
-<context>
-    <name>DistributionDialog</name>
-    <message>
-        <source>Field Values Distribution</source>
-        <translation>フィールド値の分布</translation>
-    </message>
-    <message>
-        <source>Field Value</source>
-        <translation>フィールド値</translation>
-    </message>
-    <message>
-        <source>Occurrences</source>
-        <translation>出現位置</translation>
-    </message>
-    <message>
-        <source>Percent</source>
-        <translation>パーセント</translation>
-    </message>
-    <message>
-        <source>Distribution:</source>
-        <translation>分布</translation>
     </message>
 </context>
 <context>
@@ -3185,7 +2587,7 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>すべて</translation>
     </message>
     <message>
-        <source>Only Protocol</source>
+        <source>Only Protocols</source>
         <translation>プロトコルのみ</translation>
     </message>
     <message>
@@ -3193,20 +2595,16 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>記述のみ</translation>
     </message>
     <message>
-        <source>all</source>
-        <translation>すべて</translation>
+        <source>Only enabled protocols</source>
+        <translation>有効にしたプロトコルのみ</translation>
     </message>
     <message>
-        <source>enabled</source>
-        <translation>有効</translation>
+        <source>Only disabled protocols</source>
+        <translation>無効にしたプロトコルのみ</translation>
     </message>
     <message>
-        <source>disabled</source>
-        <translation>無効</translation>
-    </message>
-    <message>
-        <source>protocols</source>
-        <translation>プロトコル</translation>
+        <source>any protocol</source>
+        <translation>すべてのプロトコル</translation>
     </message>
     <message>
         <source>non-heuristic protocols</source>
@@ -3225,7 +2623,7 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
     <message>
         <source>Description</source>
-        <translation>説明</translation>
+        <translation>記述</translation>
     </message>
 </context>
 <context>
@@ -3320,14 +2718,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Save Endpoints Map</source>
         <translation>端末の地図を保存します</translation>
-    </message>
-    <message>
-        <source>Hide aggregated</source>
-        <translation>集約されたものを非表示</translation>
-    </message>
-    <message>
-        <source>Hide IPv4 aggregated endpoints (see subnets file &amp; IPv4 preferences)</source>
-        <translation>IPv4 集約された終端を非表示 (サブネットファイルとIPv4設定を参照)</translation>
     </message>
     <message>
         <source>Failed to save map file %1.</source>
@@ -3474,46 +2864,7 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
 </context>
 <context>
-    <name>ExpertInfoModel</name>
-    <message>
-        <source>Severity: %1</source>
-        <translation>重要度: %1</translation>
-    </message>
-    <message>
-        <source>Summary: %1</source>
-        <translation>概要: %1</translation>
-    </message>
-    <message>
-        <source>Summary: Packet comments listed below.</source>
-        <translation>概要: パケットコメントを下記に一覧</translation>
-    </message>
-    <message>
-        <source>Group: %1</source>
-        <translation>グループ: %1</translation>
-    </message>
-    <message>
-        <source>Protocol: %1</source>
-        <translation>プロトコル: %1</translation>
-    </message>
-    <message>
-        <source>Count: %1</source>
-        <translation>カウント: %1</translation>
-    </message>
-    <message>
-        <source>Packet: %1</source>
-        <translation>パケット %1</translation>
-    </message>
-    <message>
-        <source>Header Field: %1</source>
-        <translation>ヘッダーフィールド: %1</translation>
-    </message>
-</context>
-<context>
     <name>ExpertInfoProxyModel</name>
-    <message>
-        <source>Count: %1</source>
-        <translation>カウント: %1</translation>
-    </message>
     <message>
         <source>Packet</source>
         <translation>パケット</translation>
@@ -3587,14 +2938,6 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>コンテントタイプ:</translation>
     </message>
     <message>
-        <source>Unique</source>
-        <translation>一意</translation>
-    </message>
-    <message>
-        <source>Only display the first of identical entries</source>
-        <translation>重複する項目は最初のみ表示</translation>
-    </message>
-    <message>
         <source>Searching for objects</source>
         <translation>オブジェクトを探索中</translation>
     </message>
@@ -3605,14 +2948,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Only display entries containing this string</source>
         <translation>この文字列を含むエントリのみ表示します</translation>
-    </message>
-    <message>
-        <source>Save All</source>
-        <translation>すべて保存</translation>
-    </message>
-    <message>
-        <source>Save Displayed</source>
-        <translation>表示されたものを保存</translation>
     </message>
     <message>
         <source>Preview</source>
@@ -3633,10 +2968,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Save Object As…</source>
         <translation>…としてオブジェクトを保存</translation>
-    </message>
-    <message>
-        <source>Save Objects In…</source>
-        <translation>…のオブジェクトを保存</translation>
     </message>
     <message>
         <source>Save All Objects In…</source>
@@ -3689,17 +3020,6 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
 </context>
 <context>
-    <name>ExtArgTable</name>
-    <message>
-        <source>Add custom data</source>
-        <translation>カスタムデータを追加</translation>
-    </message>
-    <message>
-        <source>Custom:</source>
-        <translation>カスタム:</translation>
-    </message>
-</context>
-<context>
     <name>ExtcapArgumentFileSelection</name>
     <message>
         <source>Clear</source>
@@ -3710,16 +3030,12 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>すべてのファイル(</translation>
     </message>
     <message>
-        <source>%1 Open File</source>
-        <translation>%1 ファイルを開く</translation>
+        <source>Open File</source>
+        <translation>ファイルを開く</translation>
     </message>
     <message>
-        <source>%1 Select File</source>
-        <translation>%1 ファイルを選択</translation>
-    </message>
-    <message>
-        <source>%1 Select Folder</source>
-        <translation type="unfinished"></translation>
+        <source>Select File</source>
+        <translation>ファイルを選択</translation>
     </message>
 </context>
 <context>
@@ -3732,14 +3048,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Start</source>
         <translation>開始</translation>
-    </message>
-    <message>
-        <source>Interface Sub-options</source>
-        <translation>インターフェース サブオプション</translation>
-    </message>
-    <message>
-        <source>Ok</source>
-        <translation>Ok</translation>
     </message>
     <message>
         <source>Default</source>
@@ -3758,31 +3066,23 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>extcap インターフェース %1 のヘルプを見つけることができません。与えられたファイル: %2</translation>
     </message>
     <message>
-        <source>Bookmark</source>
-        <translation>ブックマーク</translation>
-    </message>
-    <message>
-        <source>Type a name to create a bookmark</source>
-        <translation>名前を入力してブックマークを作成します</translation>
-    </message>
-    <message>
-        <source>Save parameters on capture start</source>
+        <source>Save parameter(s) on capture start</source>
         <translation>キャプチャ開始時にパラメタを保存します</translation>
     </message>
 </context>
 <context>
     <name>FieldFilterEdit</name>
     <message>
-        <source>Field entry</source>
-        <translation>フィールドエントリ</translation>
+        <source>Display filter entry</source>
+        <translation>表示フィルタエントリ</translation>
     </message>
     <message>
         <source>Enter a field %1</source>
         <translation>フィールド %1 を入力</translation>
     </message>
     <message>
-        <source>Invalid field: </source>
-        <translation>無効なフィールド: </translation>
+        <source>Invalid filter: </source>
+        <translation>無効なフィルタ:</translation>
     </message>
 </context>
 <context>
@@ -3913,45 +3213,6 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
 </context>
 <context>
-    <name>FilterExpressionEdit</name>
-    <message>
-        <source>Saved Filters</source>
-        <translation>保存したフィルタ</translation>
-    </message>
-    <message>
-        <source>Save this filter</source>
-        <translation>このフィルタを保存</translation>
-    </message>
-    <message>
-        <source>Remove this filter</source>
-        <translation>このフィルタを削除</translation>
-    </message>
-    <message>
-        <source>Manage Saved Filters</source>
-        <translation>保存したフィルタを管理</translation>
-    </message>
-    <message>
-        <source>Filter Button Preferences…</source>
-        <translation>フィルタボタン設定…</translation>
-    </message>
-    <message>
-        <source>Manage saved filters</source>
-        <translation>保存したフィルタを管理</translation>
-    </message>
-    <message>
-        <source>Clear the filter</source>
-        <translation>フィルタをクリア</translation>
-    </message>
-    <message>
-        <source>Apply this filter</source>
-        <translation>このフィルタを適用</translation>
-    </message>
-    <message>
-        <source>Recent filters</source>
-        <translation>最近のフィルタ</translation>
-    </message>
-</context>
-<context>
     <name>FilterExpressionFrame</name>
     <message>
         <source>Frame</source>
@@ -3967,7 +3228,7 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
     <message>
         <source>Enter a description for the filter button</source>
-        <translation>フィルタボタンの説明を入力します</translation>
+        <translation>フィルタボタンの記述を入力します</translation>
     </message>
     <message>
         <source>Filter:</source>
@@ -4001,8 +3262,7 @@ Relative to reference: n/a (outside reference range)</source>
 <context>
     <name>FilterExpressionToolBar</name>
     <message>
-        <source>Filter Button Preferences…</source>
-        <oldsource>Filter Button Preferences...</oldsource>
+        <source>Filter Button Preferences...</source>
         <translation>フィルタボタン設定…</translation>
     </message>
     <message>
@@ -4035,13 +3295,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Filter Expression</source>
         <translation>フィルタ式</translation>
-    </message>
-</context>
-<context>
-    <name>FilterValidator</name>
-    <message>
-        <source>Invalid filter: %1</source>
-        <translation>無効なフィルタ: %1</translation>
     </message>
 </context>
 <context>
@@ -4108,10 +3361,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>MAC destination address.</source>
         <translation>宛先MACアドレス</translation>
-    </message>
-    <message>
-        <source>Save %1 rules as…</source>
-        <translation>…として %1 ルールを保存</translation>
     </message>
     <message>
         <source>Text file (*.txt);;All Files (</source>
@@ -4209,14 +3458,6 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>グローバルExtcapパス</translation>
     </message>
     <message>
-        <source>Personal Themes</source>
-        <translation>個人テーマ</translation>
-    </message>
-    <message>
-        <source>User-installed theme files (*.jsonc)</source>
-        <translation>ユーザーインストールテーマファイル (*.jsonc)</translation>
-    </message>
-    <message>
         <source>MaxMind DB path</source>
         <translation>MaxMind DB パス</translation>
     </message>
@@ -4263,6 +3504,11 @@ Relative to reference: n/a (outside reference range)</source>
 <context>
     <name>FollowStreamDialog</name>
     <message>
+        <source>Filter Out This Stream</source>
+        <oldsource>Hide this stream</oldsource>
+        <translation>このストリームを除外します</translation>
+    </message>
+    <message>
         <source>Print</source>
         <translation>印刷</translation>
     </message>
@@ -4275,7 +3521,7 @@ Relative to reference: n/a (outside reference range)</source>
     <message numerus="yes">
         <source>%Ln server pkt(s), </source>
         <translation type="vanished">
-            <numerusform>%Ln サーバーパケット, </numerusform>
+            <numerusform>%Ln サーバパケット, </numerusform>
         </translation>
     </message>
     <message>
@@ -4304,15 +3550,7 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
     <message>
         <source>Raw</source>
-        <translation>Raw (生データ)</translation>
-    </message>
-    <message>
-        <source>Prepare as Filter</source>
-        <translation>フィルタとして準備</translation>
-    </message>
-    <message>
-        <source>Apply as Filter</source>
-        <translation>フィルタとして適用</translation>
+        <translation>Raw(無加工)形式</translation>
     </message>
     <message>
         <source>Save as…</source>
@@ -4342,6 +3580,22 @@ Relative to reference: n/a (outside reference range)</source>
         <source>%Ln turn(s).</source>
         <translation>
             <numerusform>%Ln ターン</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Event %1. </source>
+        <translation>イベント %1 </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln &lt;span style=&quot;color: %1; background-color:%2&quot;&gt;reads&lt;/span&gt;, </source>
+        <translation>
+            <numerusform>%Ln &lt;span style=&quot;color: %1; background-color:%2&quot;&gt;読み取り&lt;/span&gt;, </numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%Ln &lt;span style=&quot;color: %1; background-color:%2&quot;&gt;writes&lt;/span&gt;, </source>
+        <translation>
+            <numerusform>%Ln &lt;span style=&quot;color: %1; background-color:%2&quot;&gt;書き込み&lt;/span&gt;, </numerusform>
         </translation>
     </message>
     <message>
@@ -4375,6 +3629,18 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>%1 stream not found on the selected packet.</source>
         <translation>選択したパケットに %1 ストリームは見つかりませんでした</translation>
+    </message>
+    <message>
+        <source>Read activity(%6)</source>
+        <translation>読み取りアクティビティ(%6)</translation>
+    </message>
+    <message>
+        <source>Write activity(%6)</source>
+        <translation>書き込みアクティビティ(%6)</translation>
+    </message>
+    <message>
+        <source>Entire I/O activity (%1)</source>
+        <translation>全体のI/Oアクティビティ(%1)</translation>
     </message>
     <message>
         <source>Entire conversation (%1)</source>
@@ -4475,16 +3741,61 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>フォントの選択</translation>
     </message>
     <message>
-        <source>Theme</source>
-        <translation>テーマ</translation>
+        <source>Colors:</source>
+        <translation>色:</translation>
     </message>
     <message>
-        <source>Theme Author Information</source>
-        <translation>テーマ著者情報</translation>
+        <source>System Default</source>
+        <translation>システム デフォルト</translation>
     </message>
     <message>
-        <source>Theme Description</source>
-        <translation>テーマ説明</translation>
+        <source>Solid</source>
+        <translation>Solid</translation>
+    </message>
+    <message>
+        <source>Sample ignored packet text</source>
+        <translation>無視されたパケットテキストのサンプル</translation>
+    </message>
+    <message>
+        <source>Sample marked packet text</source>
+        <translation>マークされたパケットテキストのサンプル</translation>
+    </message>
+    <message>
+        <source>Sample active selected item</source>
+        <translation>アクティブな選択済み項目サンプル</translation>
+    </message>
+    <message>
+        <source>Style:</source>
+        <translation>スタイル:</translation>
+    </message>
+    <message>
+        <source>Gradient</source>
+        <translation>勾配</translation>
+    </message>
+    <message>
+        <source>Sample inactive selected item</source>
+        <translation>非アクティブな選択済み項目サンプル</translation>
+    </message>
+    <message>
+        <source>Sample &quot;Follow Stream&quot; client text</source>
+        <translation>&quot;ストリーム追跡&quot;クライアントテキストのサンプル</translation>
+    </message>
+    <message>
+        <source>Sample &quot;Follow Stream&quot; server text</source>
+        <translation>&quot;ストリーム追跡&quot;サーバテキストのサンプル</translation>
+    </message>
+    <message>
+        <source>Sample valid filter</source>
+        <translation>有効フィルタのサンプル</translation>
+    </message>
+    <message>
+        <source>Sample invalid filter</source>
+        <translation>無効フィルタのサンプル</translation>
+    </message>
+    <message>
+        <source>Sample warning filter</source>
+        <oldsource>Sample deprecated filter</oldsource>
+        <translation>非推奨フィルタのサンプル</translation>
     </message>
     <message>
         <source>Example GIF query packets have jumbo window sizes</source>
@@ -4494,30 +3805,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Lazy badgers move unique waxy jellyfish packets</source>
         <translation>Geraldさんが作成したpangram すべての文字を１文字使う回文 Lazy badgers move unique waxy jellyfish packets.</translation>
-    </message>
-    <message>
-        <source>System</source>
-        <translation>システム</translation>
-    </message>
-    <message>
-        <source>Light</source>
-        <translation>ライト</translation>
-    </message>
-    <message>
-        <source>Dark</source>
-        <translation>ダーク</translation>
-    </message>
-    <message>
-        <source>Appearance mode:</source>
-        <translation>外観モード</translation>
-    </message>
-    <message>
-        <source>Theme:</source>
-        <translation>テーマ:</translation>
-    </message>
-    <message>
-        <source>Theme by %1</source>
-        <translation>%1 によるテーマ</translation>
     </message>
     <message>
         <source>Font</source>
@@ -4658,85 +3945,6 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
 </context>
 <context>
-    <name>HexDataSourceView</name>
-    <message>
-        <source>Allow hover highlighting</source>
-        <translation>ホーバーハイライトを許可</translation>
-    </message>
-    <message>
-        <source>Annotations</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Add annotation…</source>
-        <translation>注釈を追加…</translation>
-    </message>
-    <message>
-        <source>Edit annotation…</source>
-        <translation>注釈を編集…</translation>
-    </message>
-    <message>
-        <source>Remove annotation</source>
-        <translation>注釈を削除</translation>
-    </message>
-    <message>
-        <source>Offset markers</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Start byte for offset</source>
-        <translation>オフセットの開始バイト</translation>
-    </message>
-    <message>
-        <source>End byte for offset</source>
-        <translation>オフセットの終了バイト</translation>
-    </message>
-    <message>
-        <source>Clear offset markers</source>
-        <translation>オフセットマーカーをクリア</translation>
-    </message>
-    <message>
-        <source>Show bytes as hexadecimal</source>
-        <translation>16進数でバイト列を表示</translation>
-    </message>
-    <message>
-        <source>…as decimal</source>
-        <translation>10進数として...</translation>
-    </message>
-    <message>
-        <source>…as octal</source>
-        <translation>8進数として...</translation>
-    </message>
-    <message>
-        <source>…as bits</source>
-        <translation>ビット列として…</translation>
-    </message>
-    <message>
-        <source>Show text as frame encoding</source>
-        <translation>フレームエンコードに応じてテキストを表示</translation>
-    </message>
-    <message>
-        <source>Show text based on event</source>
-        <translation>イベントに応じてテキストを表示</translation>
-    </message>
-    <message>
-        <source>…as ASCII</source>
-        <translation>ASCII形式として…</translation>
-    </message>
-    <message>
-        <source>…as EBCDIC</source>
-        <translation>EBCDIC形式として…</translation>
-    </message>
-    <message>
-        <source>…as UTF-8</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Comment: %1</source>
-        <translation>コメント: %1</translation>
-    </message>
-</context>
-<context>
     <name>IOConsoleDialog</name>
     <message>
         <source>Dialog</source>
@@ -4745,10 +3953,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Enter code</source>
         <translation>コードを入力</translation>
-    </message>
-    <message>
-        <source>Console</source>
-        <translation>コンソール</translation>
     </message>
     <message>
         <source>Evaluate</source>
@@ -4770,6 +3974,94 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>ダイアログ</translation>
     </message>
     <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
+
+&lt;h3&gt;Valuable and amazing time-saving keyboard shortcuts&lt;/h3&gt;
+&lt;table&gt;&lt;tbody&gt;
+
+&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;Zoom in&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;Zoom out&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;x&lt;/th&gt;&lt;td&gt;Zoom in X axis&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;X&lt;/th&gt;&lt;td&gt;Zoom out X axis&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;y&lt;/th&gt;&lt;td&gt;Zoom in Y axis&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Y&lt;/th&gt;&lt;td&gt;Zoom out Y axis&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;Reset graph to its initial state&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;Move right 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;Move left 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↑&lt;/th&gt;&lt;td&gt;Move up 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↓&lt;/th&gt;&lt;td&gt;Move down 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;Move right 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;Move left 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;Move up 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;Move down 1 pixel&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;Go to packet under cursor&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;z&lt;/th&gt;&lt;td&gt;Toggle mouse drag / zoom&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;Toggle capture / session time origin&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;Toggle crosshairs&lt;/td&gt;&lt;/th&gt;
+
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;/body&gt;&lt;/html&gt;</source>
+        <oldsource>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
+
+&lt;h3&gt;Valuable and amazing time-saving keyboard shortcuts&lt;/h3&gt;
+&lt;table&gt;&lt;tbody&gt;
+
+&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;Zoom in&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;Zoom out&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;Reset graph to its initial state&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;Move right 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;Move left 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↑&lt;/th&gt;&lt;td&gt;Move up 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↓&lt;/th&gt;&lt;td&gt;Move down 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;Move right 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;Move left 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;Move up 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;Move down 1 pixel&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;Go to packet under cursor&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;z&lt;/th&gt;&lt;td&gt;Toggle mouse drag / zoom&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;Toggle capture / session time origin&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;Toggle crosshairs&lt;/td&gt;&lt;/th&gt;
+
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;/body&gt;&lt;/html&gt;</oldsource>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
+
+&lt;h3&gt;価値のあり、すばらしく、時間を節約するキーボードショートカット&lt;/h3&gt;
+&lt;table&gt;&lt;tbody&gt;
+
+&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;ズームイン&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;ズームアウト&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;x&lt;/th&gt;&lt;td&gt;X軸のズーム&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;X&lt;/th&gt;&lt;td&gt;X軸のズームアウト&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;y&lt;/th&gt;&lt;td&gt;Y軸のズーム&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Y&lt;/th&gt;&lt;td&gt;Y軸のズームアウト&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;初期状態にグラフをリセット&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;右に10ピクセル移動&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;左に10ピクセル移動&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↑&lt;/th&gt;&lt;td&gt;上に10ピクセル移動&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↓&lt;/th&gt;&lt;td&gt;下に10ピクセル移動&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;右に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;左に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;上に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;下に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;カーソル位置のパケットへ移動&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;z&lt;/th&gt;&lt;td&gt;マウスドラッグ/ズーム(切替)&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;キャプチャ/セッション(切替)&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;十字カーソル(切替)&lt;/td&gt;&lt;/th&gt;
+
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
         <source>Add a new graph.</source>
         <translation>新規グラフを追加します</translation>
     </message>
@@ -4778,19 +4070,19 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>すべてのグラフをクリア</translation>
     </message>
     <message>
-        <source>Remove the selected graphs.</source>
+        <source>Remove the selected graph(s).</source>
         <translation>選択したグラフを削除します</translation>
     </message>
     <message>
-        <source>Duplicate the selected graphs.</source>
+        <source>Duplicate the selected graph(s).</source>
         <translation>選択したグラフを複製します</translation>
     </message>
     <message>
-        <source>Move the selected graphs upwards.</source>
+        <source>Move the selected graph(s) upwards.</source>
         <translation>選択したグラフを上に移動します</translation>
     </message>
     <message>
-        <source>Move the selected graphs downwards.</source>
+        <source>Move the selected graph(s) downwards.</source>
         <translation>選択したグラフを下に移動します</translation>
     </message>
     <message>
@@ -4830,74 +4122,8 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>自動アップデート</translation>
     </message>
     <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
-
-&lt;h3&gt;Valuable and amazing time-saving keyboard shortcuts&lt;/h3&gt;
-&lt;table&gt;&lt;tbody&gt;
-
-&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;Zoom in&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;Zoom out&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;x&lt;/th&gt;&lt;td&gt;Zoom in X axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;X&lt;/th&gt;&lt;td&gt;Zoom out X axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;y&lt;/th&gt;&lt;td&gt;Zoom in Y axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;Y&lt;/th&gt;&lt;td&gt;Zoom out Y axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;Reset graph to its initial state&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;Move right 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;Move left 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;↑&lt;/th&gt;&lt;td&gt;Move up 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;↓&lt;/th&gt;&lt;td&gt;Move down 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;Move right 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;Move left 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;Move up 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;Move down 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;Move right 100 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;Move left 100 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;Move up 100 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;Move down 100 pixels&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;Go to packet under cursor&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;z&lt;/th&gt;&lt;td&gt;Toggle mouse drag / zoom&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;Toggle capture / session time origin&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;Toggle crosshairs&lt;/td&gt;&lt;/th&gt;
-
-&lt;/tbody&gt;&lt;/table&gt;
-&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
-
-&lt;h3&gt;価値があり、驚くほど時間を節約できるキーボードショートカット&lt;/h3&gt;
-&lt;table&gt;&lt;tbody&gt;
-
-&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;拡大&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;縮小&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;x&lt;/th&gt;&lt;td&gt;X軸を拡大&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;X&lt;/th&gt;&lt;td&gt;X軸を縮小&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;y&lt;/th&gt;&lt;td&gt;Y軸を拡大&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;Y&lt;/th&gt;&lt;td&gt;Y軸を縮小&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;グラフを初期状態にリセット&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;右に10ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;左に10ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;↑&lt;/th&gt;&lt;td&gt;上に10ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;↓&lt;/th&gt;&lt;td&gt;下に10ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;右に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;左に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;上に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;下に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;右に100ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;左に100ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;上に100ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;下に100ピクセル移動&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;カーソル下のパケットへ移動&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;z&lt;/th&gt;&lt;td&gt;マウスドラッグ / ズームを切り替え&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;キャプチャ / セッション時間原点を切り替え&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;十字線を切り替え&lt;/td&gt;&lt;/th&gt;
-
-&lt;/tbody&gt;&lt;/table&gt;
-&lt;/body&gt;&lt;/html&gt;</translation>
+        <source>Enable legend</source>
+        <translation>凡例を有効化</translation>
     </message>
     <message>
         <source>Reset Graph</source>
@@ -4997,38 +4223,6 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>Shift+下</translation>
     </message>
     <message>
-        <source>Move Up 100 Pixels</source>
-        <translation>上に100ピクセル移動</translation>
-    </message>
-    <message>
-        <source>Alt+Up</source>
-        <translation>Alt+上</translation>
-    </message>
-    <message>
-        <source>Move Left 100 Pixels</source>
-        <translation>左に100ピクセル移動</translation>
-    </message>
-    <message>
-        <source>Alt+Left</source>
-        <translation>Alt+左</translation>
-    </message>
-    <message>
-        <source>Move Right 100 Pixels</source>
-        <translation>右に100ピクセル移動</translation>
-    </message>
-    <message>
-        <source>Alt+Right</source>
-        <translation>Alt+右</translation>
-    </message>
-    <message>
-        <source>Move Down 100 Pixels</source>
-        <translation>下に100ピクセル移動</translation>
-    </message>
-    <message>
-        <source>Alt+Down</source>
-        <translation>Alt+下</translation>
-    </message>
-    <message>
         <source>Go To Packet Under Cursor</source>
         <translation>カーソルの位置のパケットに移動</translation>
     </message>
@@ -5063,14 +4257,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>T</source>
         <translation>T</translation>
-    </message>
-    <message>
-        <source>Toggle X-axis between relative time and time of day</source>
-        <translation>X軸を相対時間と時刻で切り替えます</translation>
-    </message>
-    <message>
-        <source>Toggle Y-axis between logarithmic and linear scale</source>
-        <translation>Y軸を対数スケールと線形スケールで切り替える</translation>
     </message>
     <message>
         <source>Crosshairs</source>
@@ -5249,16 +4435,24 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>5分</translation>
     </message>
     <message>
-        <source>%1 I/O Graphs: %2</source>
-        <translation>%1 入出力グラフ: %2</translation>
+        <source>Wireshark I/O Graphs: %1</source>
+        <translation>Wireshark入出力グラフ: %1</translation>
     </message>
     <message>
         <source>Filtered packets</source>
         <translation>フィルタされたパケット</translation>
     </message>
     <message>
+        <source>Filtered events</source>
+        <translation>フィルタされたイベント</translation>
+    </message>
+    <message>
         <source>All packets</source>
         <translation>すべてのパケット</translation>
+    </message>
+    <message>
+        <source>All events</source>
+        <translation>すべてのイベント</translation>
     </message>
     <message>
         <source>All Packets</source>
@@ -5269,6 +4463,14 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>TCPエラー</translation>
     </message>
     <message>
+        <source>All Events</source>
+        <translation>すべてのイベント</translation>
+    </message>
+    <message>
+        <source>All Execs</source>
+        <translation>全ての Execs</translation>
+    </message>
+    <message>
         <source>Hover over the graph for details.</source>
         <translation>詳細はグラフの上にマウスをのせてください</translation>
     </message>
@@ -5277,12 +4479,24 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>この間隔にパケットはありません</translation>
     </message>
     <message>
+        <source>No events in interval</source>
+        <translation>この間隔にイベントはありません</translation>
+    </message>
+    <message>
         <source>Click to select packet</source>
         <translation>クリックしてパケットを選んでください</translation>
     </message>
     <message>
         <source>Packet</source>
         <translation>パケット</translation>
+    </message>
+    <message>
+        <source>Click to select event</source>
+        <translation>クリックしてイベントを選んでください</translation>
+    </message>
+    <message>
+        <source>Event</source>
+        <translation>イベント</translation>
     </message>
     <message>
         <source>%1 (%2s%3).</source>
@@ -5373,11 +4587,11 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
     <message>
         <source>Delta (ms)</source>
-        <translation>間隔(ミリ秒)</translation>
+        <translation>間隔 (ms)</translation>
     </message>
     <message>
         <source>Jitter (ms)</source>
-        <translation>ジッタ(ミリ秒)</translation>
+        <translation>ジッタ (ms)</translation>
     </message>
     <message>
         <source>Bandwidth</source>
@@ -5577,7 +4791,7 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
     <message>
         <source>;;Raw (*.raw)</source>
-        <translation>;;Raw (生データ) 形式 (*.raw)</translation>
+        <translation>;;Raw(無加工)形式 (*.raw)</translation>
     </message>
     <message>
         <source>Warning</source>
@@ -5692,6 +4906,10 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>パケット形式正規表現</translation>
     </message>
     <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Perl compatible regular expression capturing a single packet in the file with named groups identifieing data to import. Anchors ^ and $ also match before/after newlines &lt;/p&gt;&lt;p&gt;Required is only a data group, also supported are time, dir and seqno.&lt;/p&gt;&lt;p&gt;Regex flags: DUPNAMES, MULTILINE and NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;インポートするデータを識別する名前付きグループとともにファイルにある１つのパケットをキャプチャするPerl互換正規表現 アンカー、 ^ および $ 記号も新規の行の前後に合致します。 &lt;/p&gt;&lt;p&gt;必須はデータグループのみ、またtime,dirおよびseqnoもサポートされます。&lt;/p&gt;&lt;p&gt;Regex フラグ: DUPNAMES, MULTILINE および NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
         <source>This is regexHintLabel, it will be set to default_regex_hint</source>
         <translation>これは regexHintLabel です。default_regex_hint に設定されます</translation>
     </message>
@@ -5770,18 +4988,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>None</source>
         <translation>なし</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Whether to treat multiple byte groups as being in little-endian byte order, instead of the default, network (big-endian) order.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;デフォルトのネットワークでの（ビックエンディアン）順のかわりに、リトルエンディアンのバイト順であるとして複数バイトグループを取り扱うかどうか&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>Little-endian:</source>
-        <translation>リトルエンディアン:</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Perl compatible regular expression capturing a single packet in the file with named groups identifying data to import. Anchors ^ and $ also match before/after newlines &lt;/p&gt;&lt;p&gt;The only required group is data, but time, dir and seqno are also supported.&lt;/p&gt;&lt;p&gt;Regex flags: DUPNAMES, MULTILINE and NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Perl互換の正規表現で、ファイル内の単一のパケットをキャプチャします。インポートするデータを識別する名前付きグループが含まれます。  アンカー ^ および $ は、改行の前後にも適合します。&lt;/p&gt;&lt;p&gt; 必須のグループは data だけですが、time, dir および seqno もサポートされています。&lt;/p&gt;&lt;p&gt;正規表現のフラグ: DUPNAMES、MULTILINE、NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>&lt;small&gt;&lt;i&gt;recommended regex:&lt;/small&gt;&lt;/i&gt;</source>
@@ -5952,8 +5158,7 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>サポートされているフィールドは data, dir, time, seqno です</translation>
     </message>
     <message>
-        <source>Missing capturing group data (use (?&lt;data&gt;(…)) )</source>
-        <oldsource>Missing capturing group data (use (?&lt;data&gt;(...)) )</oldsource>
+        <source>Missing capturing group data (use (?&lt;data&gt;(...)) )</source>
         <translation>キャプチャグループデータが欠けています ( (?&lt;data&gt;(...))を使用してください )</translation>
     </message>
     <message>
@@ -5967,107 +5172,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Import Text File</source>
         <translation>テキストファイルをインポート</translation>
-    </message>
-</context>
-<context>
-    <name>ImsiListDialog</name>
-    <message>
-        <source>IMSI List</source>
-        <translation>IMSIリスト</translation>
-    </message>
-    <message>
-        <source>&lt;small&gt;Select one or more IMSIs to view flow sequence or prepare a display filter.&lt;/small&gt;</source>
-        <translation>&lt;small&gt;一つ以上のIMSIを選択してシーケンスの流れをみたりフィルタを準備します&lt;/small&gt;</translation>
-    </message>
-    <message>
-        <source>Only show IMSIs matching the current display filter</source>
-        <translation>現在の表示フィルタにあうIMSIのみ表示します</translation>
-    </message>
-    <message>
-        <source>Limit to display filter</source>
-        <translation>表示フィルタに制限</translation>
-    </message>
-    <message>
-        <source>IMSI</source>
-        <translation>IMSI</translation>
-    </message>
-    <message>
-        <source>Packets</source>
-        <translation>パケット</translation>
-    </message>
-    <message>
-        <source>First Frame</source>
-        <translation>最初のフレーム</translation>
-    </message>
-    <message>
-        <source>Last Frame</source>
-        <translation>最後のフレーム</translation>
-    </message>
-    <message>
-        <source>Protocols</source>
-        <translation>プロトコル</translation>
-    </message>
-    <message>
-        <source>Prepare Filter</source>
-        <translation>フィルタを準備</translation>
-    </message>
-    <message>
-        <source>Prepare a display filter matching selected IMSIs.</source>
-        <translation>選択したIMSIにあう表示フィルタを準備</translation>
-    </message>
-    <message>
-        <source>&lt;small&gt;%1 IMSIs found. Double-click to filter.&lt;/small&gt;</source>
-        <translation>&lt;small&gt;%1 IMSIsが見つかりました。ダブルクリックしてフィルタします&lt;/small&gt;</translation>
-    </message>
-</context>
-<context>
-    <name>InPacketFindBar</name>
-    <message>
-        <source>String</source>
-        <translation>文字列</translation>
-    </message>
-    <message>
-        <source>Regular Expression</source>
-        <translation>正規表現</translation>
-    </message>
-    <message>
-        <source>Case sensitive</source>
-        <translation>大文字小文字を区別</translation>
-    </message>
-    <message>
-        <source>Find</source>
-        <translation>検索</translation>
-    </message>
-    <message>
-        <source>Cancel</source>
-        <translation>キャンセル</translation>
-    </message>
-    <message>
-        <source>invalid pattern</source>
-        <translation>無効なパターン</translation>
-    </message>
-    <message>
-        <source>no matches</source>
-        <translation>合致なし</translation>
-    </message>
-    <message>
-        <source>%1 of %2</source>
-        <translation>%1 of %2</translation>
-    </message>
-</context>
-<context>
-    <name>InfoBannerWidget</name>
-    <message>
-        <source>Tips and announcements</source>
-        <translation>TIPSとお知らせ</translation>
-    </message>
-    <message>
-        <source>%1: %2 (%3 of %4)</source>
-        <translation>%1: %2 (%3 of %4)</translation>
-    </message>
-    <message>
-        <source>Action: %1</source>
-        <translation>アクション: %1</translation>
     </message>
 </context>
 <context>
@@ -6117,14 +5221,6 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>仮想</translation>
     </message>
     <message>
-        <source>Tunnel Interfaces</source>
-        <translation>トンネルインターフェース</translation>
-    </message>
-    <message>
-        <source>Loopback Devices</source>
-        <translation>ループバックデバイス</translation>
-    </message>
-    <message>
         <source>Remote interfaces</source>
         <translation>リモートインターフェース</translation>
     </message>
@@ -6137,16 +5233,12 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>外部のキャプチャインターフェース無効化</translation>
     </message>
     <message>
-        <source>&lt;p&gt;Local interfaces are unavailable because WinPcap is installed but is no longer supported.&lt;/p&gt;&lt;p&gt;You can fix this by uninstalling WinPcap and installing &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;.&lt;/p&gt;</source>
-        <translation>&lt;p&gt;WinPcapがインストールされているものの、もはやサポートされていないためにローカルインターフェースは利用できません。&lt;/p&gt;&lt;p&gt;WinPcapをアンインストールして &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;をインストールすることにより修正することができます。&lt;/p&gt;</translation>
-    </message>
-    <message>
         <source>&lt;p&gt;Local interfaces are unavailable because no packet capture driver is installed.&lt;/p&gt;&lt;p&gt;You can fix this by installing &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;.&lt;/p&gt;</source>
         <translation>&lt;p&gt;キャプチャドライバがインストールされていないのでローカルインターフェースは利用できません。&lt;p&gt;以下をインストールすることで修正できます。 &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;。&lt;/p&gt;</translation>
     </message>
     <message>
-        <source>&lt;p&gt;Local interfaces are unavailable because the packet capture driver isn&apos;t loaded.&lt;/p&gt;&lt;p&gt;You can fix this by running &lt;pre&gt;net start npcap&lt;/pre&gt; if you have Npcap installed. The command must be run as Administrator.&lt;/p&gt;</source>
-        <translation>&lt;p&gt;パケットキャプチャドライバが読み込まれていないためローカルインターフェースは利用できません。&lt;/p&gt;&lt;p&gt;もしNpcapをインストールしていたら &lt;pre&gt;net start npcap&lt;/pre&gt; を実行することで修正できます。このコマンドは管理者として実行しなければなりません。&lt;/p&gt;</translation>
+        <source>&lt;p&gt;Local interfaces are unavailable because the packet capture driver isn&apos;t loaded.&lt;/p&gt;&lt;p&gt;You can fix this by running &lt;pre&gt;net start npcap&lt;/pre&gt; if you have Npcap installed or &lt;pre&gt;net start npf&lt;/pre&gt; if you have WinPcap installed. Both commands must be run as Administrator.&lt;/p&gt;</source>
+        <translation>&lt;p&gt;キャプチャドライバが読み込まれていないためローカルインターフェースは利用できません。&lt;/p&gt;&lt;p&gt;以下を実行することで修正することができます。 もしNpcapをインストールした場合、&lt;pre&gt;net start npcap&lt;/pre&gt; もしWinPcapをインストールした場合、&lt;pre&gt;net start npf&lt;/pre&gt; 両方のコマンドは管理者権限として実行する必要があります。&lt;/p&gt;</translation>
     </message>
     <message>
         <source>&lt;p&gt;You don&apos;t have permission to capture on local interfaces.&lt;/p&gt;&lt;p&gt;You can fix this by &lt;a href=&quot;file://%1&quot;&gt;installing ChmodBPF&lt;/a&gt;.&lt;/p&gt;</source>
@@ -6172,35 +5264,12 @@ Relative to reference: n/a (outside reference range)</source>
         <source>Hide Interface</source>
         <translation>インターフェースを隠す</translation>
     </message>
-    <message>
-        <source>Unknown</source>
-        <translation>不明</translation>
-    </message>
-    <message>
-        <source>Hide all &apos;%1&apos; interfaces</source>
-        <translation>すべての &apos;%1&apos; 印らーフェースを隠す</translation>
-    </message>
 </context>
 <context>
     <name>InterfaceSortFilterModel</name>
     <message>
         <source>No interfaces to be displayed. %1 interfaces hidden.</source>
         <translation>インターフェースは表示されません。 %1 インターフェース非表示</translation>
-    </message>
-</context>
-<context>
-    <name>InterfaceStatsWorker</name>
-    <message>
-        <source>The interface statistics stream stopped unexpectedly.</source>
-        <translation>インターフェース統計ストリームが予期せず停止しました</translation>
-    </message>
-    <message>
-        <source>Unable to start the interface statistics stream.</source>
-        <translation>インターフェース統計ストリームを開始できません</translation>
-    </message>
-    <message>
-        <source>This build has no packet capture support.</source>
-        <translation>このビルドはパケットキャプチャをサポートしていません</translation>
     </message>
 </context>
 <context>
@@ -6283,16 +5352,8 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>モニタモード</translation>
     </message>
     <message>
-        <source>Optimize</source>
-        <translation>最適化</translation>
-    </message>
-    <message>
         <source>Capture Filter</source>
         <translation>キャプチャフィルタ</translation>
-    </message>
-    <message>
-        <source>Traffic</source>
-        <translation>トラフィック</translation>
     </message>
     <message>
         <source>Addresses</source>
@@ -6317,46 +5378,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Capture filter</source>
         <translation>キャプチャフィルタ</translation>
-    </message>
-</context>
-<context>
-    <name>JsonDataSourceView</name>
-    <message>
-        <source>Event JSON</source>
-        <translation>JSONイベント</translation>
-    </message>
-</context>
-<context>
-    <name>KeyboardShortcutsDialog</name>
-    <message>
-        <source>Keyboard Shortcuts</source>
-        <translation>キーボードショートカット</translation>
-    </message>
-    <message>
-        <source>Search Shortcuts</source>
-        <translation>ショートカットを検索</translation>
-    </message>
-    <message>
-        <source>Print Shortcutlist</source>
-        <translation>ショートカット一覧を印刷</translation>
-    </message>
-    <message>
-        <source>Close</source>
-        <translation>閉じる</translation>
-    </message>
-    <message>
-        <source>Copy</source>
-        <translation>コピー</translation>
-    </message>
-    <message numerus="yes">
-        <source>Copy Row(s)</source>
-        <translation>
-            <numerusform>行をコピー</numerusform>
-        </translation>
-    </message>
-    <message>
-        <source>%1 %2</source>
-        <translation>%1 %2</translation>
     </message>
 </context>
 <context>
@@ -7251,81 +6272,6 @@ Relative to reference: n/a (outside reference range)</source>
         <source>Show file load time</source>
         <translation>ファイル読込時間を表示</translation>
     </message>
-    <message>
-        <source>Packet list multi-color display mode:</source>
-        <translation>パケット一覧マルチカラー表示モード:</translation>
-    </message>
-    <message>
-        <source>Off</source>
-        <translation>オフ</translation>
-    </message>
-    <message>
-        <source>Scrollbar only</source>
-        <translation>スクロールバーのみ</translation>
-    </message>
-    <message>
-        <source>Equal stripes</source>
-        <translation>縞模様</translation>
-    </message>
-    <message>
-        <source>Shift right</source>
-        <translation>シフト右</translation>
-    </message>
-    <message>
-        <source>75%</source>
-        <translation>75%</translation>
-    </message>
-    <message>
-        <source>80%</source>
-        <translation>80%</translation>
-    </message>
-    <message>
-        <source>85%</source>
-        <translation>85%</translation>
-    </message>
-    <message>
-        <source>90%</source>
-        <translation>90%</translation>
-    </message>
-    <message>
-        <source>95%</source>
-        <translation>95%</translation>
-    </message>
-    <message>
-        <source>Separator style:</source>
-        <translation>区切りスタイル:</translation>
-    </message>
-    <message>
-        <source>Vertical</source>
-        <translation>垂直</translation>
-    </message>
-    <message>
-        <source>Diagonal</source>
-        <translation>対角</translation>
-    </message>
-    <message>
-        <source>Bubble</source>
-        <translation>バブル</translation>
-    </message>
-    <message>
-        <source>Display multiple colors in packet details</source>
-        <translation>パケット詳細部に複数の色を表示します</translation>
-    </message>
-</context>
-<context>
-    <name>LearnCardWidget</name>
-    <message>
-        <source>&lt;h2&gt;Learn&lt;/h2&gt;</source>
-        <translation>&lt;h2&gt;学習&lt;/h2&gt;</translation>
-    </message>
-    <message>
-        <source>Learn</source>
-        <translation>学習</translation>
-    </message>
-    <message>
-        <source>Opens the Wireshark documentation website</source>
-        <translation>WiresharkドキュメントWebサイトを開く</translation>
-    </message>
 </context>
 <context>
     <name>LteMacStatisticsDialog</name>
@@ -7340,10 +6286,6 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>Include RACH frames in filter</source>
         <translation>フィルタのRACHフレームを含める</translation>
-    </message>
-    <message>
-        <source>3GPP Mac Statistics (%1 UEs, %2 frames)</source>
-        <translation>3GPP MAC統計 (%1 UEs, %2 フレーム)</translation>
     </message>
     <message>
         <source>MAC Statistics</source>
@@ -7385,12 +6327,16 @@ Relative to reference: n/a (outside reference range)</source>
 &lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
 
-&lt;h3&gt;価値があり、驚くほど時間を節約できるキーボードショートカット&lt;/h3&gt;
+&lt;h3&gt;価値のあり、すばらしく、時間を節約するキーボードショートカット&lt;/h3&gt;
 &lt;table&gt;&lt;tbody&gt;
 
-&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;拡大&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;縮小&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;グラフを初期状態にリセット&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;ズームイン&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;ズームアウト&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;x&lt;/th&gt;&lt;td&gt;X軸のズーム&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;X&lt;/th&gt;&lt;td&gt;X軸のズームアウト&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;y&lt;/th&gt;&lt;td&gt;Y軸のズーム&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Y&lt;/th&gt;&lt;td&gt;Y軸のズームアウト&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;初期状態にグラフをリセット&lt;/td&gt;&lt;/th&gt;
 
 &lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;右に10ピクセル移動&lt;/td&gt;&lt;/th&gt;
 &lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;左に10ピクセル移動&lt;/td&gt;&lt;/th&gt;
@@ -7401,11 +6347,11 @@ Relative to reference: n/a (outside reference range)</source>
 &lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;上に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
 &lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;下に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
 
-&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;カーソル下のパケットへ移動&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;カーソル位置のパケットへ移動&lt;/td&gt;&lt;/th&gt;
 
-&lt;tr&gt;&lt;th&gt;z&lt;/th&gt;&lt;td&gt;マウスドラッグ / ズームを切り替え&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;キャプチャ / セッション時間原点を切り替え&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;十字線を切り替え&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;z&lt;/th&gt;&lt;td&gt;マウスドラッグ/ズーム(切替)&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;キャプチャ/セッション(切替)&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;十字カーソル(切替)&lt;/td&gt;&lt;/th&gt;
 
 &lt;/tbody&gt;&lt;/table&gt;
 &lt;/body&gt;&lt;/html&gt;</translation>
@@ -7580,7 +6526,7 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
     <message>
         <source>Go To Packet Under Cursor</source>
-        <translation>カーソル位置パケットに移動</translation>
+        <translation>カーソル位置のパケットに移動</translation>
     </message>
     <message>
         <source>Go to packet currently under the cursor</source>
@@ -7702,14 +6648,6 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>3GPP RLC 統計</translation>
     </message>
     <message>
-        <source>Launch UL Graph</source>
-        <translation>UL Graphを起動</translation>
-    </message>
-    <message>
-        <source>Launch DL Graph</source>
-        <translation>DL Graphを起動</translation>
-    </message>
-    <message>
         <source>Include SR frames in filter</source>
         <translation>フィルタにあるSRフレームを含める</translation>
     </message>
@@ -7770,570 +6708,8 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>DL 欠落</translation>
     </message>
     <message>
-        <source>LTE RLC Statistics (%1 UEs, %2 frames)</source>
-        <translation>LTE RLC 統計 (%1 UEs, %2 フレーム)</translation>
-    </message>
-    <message>
         <source>RLC Statistics</source>
         <translation>RLC統計</translation>
-    </message>
-</context>
-<context>
-    <name>LuaDebuggerBreakpointsController</name>
-    <message numerus="yes">
-        <source>Are you sure you want to remove %Ln breakpoint(s)?</source>
-        <translation type="obsolete">
-            <numerusform>Are you sure you want to remove %Ln breakpoint?</numerusform>
-        </translation>
-    </message>
-</context>
-<context>
-    <name>LuaDebuggerCodeTabsController</name>
-    <message numerus="yes">
-        <source>There are unsaved changes in %Ln open file(s).</source>
-        <translation>
-            <numerusform>%Ln 個の開いているファイルに未保存の変更があります</numerusform>
-        </translation>
-    </message>
-    <message>
-        <source>Save Lua Script</source>
-        <translation>Luaスクリプトを保存</translation>
-    </message>
-    <message>
-        <source>Could not write to %1:
-%2</source>
-        <translation>%1 に書き込めませんでした:
-%2</translation>
-    </message>
-    <message>
-        <source>Lua Debugger</source>
-        <translation>Luaデバッガ</translation>
-    </message>
-    <message>
-        <source>Save changes to %1 before closing?</source>
-        <translation>閉じる前に %1 への変更を保存しますか？</translation>
-    </message>
-</context>
-<context>
-    <name>LuaDebuggerCodeView</name>
-    <message>
-        <source>Click: add or remove breakpoint
-Drag existing breakpoint: move to nearest free visible line
-Shift+click: on an empty line, add a disabled breakpoint;
-on an existing breakpoint, toggle its active state</source>
-        <translation>クリック: ブレークポイントを追加または削除t
-既存のブレークポイントをドラッグ: 最も近い空いている表示行へ移動
-Shift+クリック: 空行では無効なブレークポイントを追加
-既存のブレークポイントでは有効/無効を切り替え</translation>
-    </message>
-</context>
-<context>
-    <name>LuaDebuggerDialog</name>
-    <message>
-        <source>Open Lua Script</source>
-        <translation>オープンLuaスクリプト</translation>
-    </message>
-    <message>
-        <source>Save (%1)</source>
-        <translation>保存 (%1)</translation>
-    </message>
-    <message>
-        <source>Continue execution (F5)</source>
-        <translation>実行を続行(F5)</translation>
-    </message>
-    <message>
-        <source>Step over (F10)</source>
-        <translation>ステップオーバー (F10)</translation>
-    </message>
-    <message>
-        <source>Step into (F11)</source>
-        <translation>ステップイン (F11)</translation>
-    </message>
-    <message>
-        <source>Step out (Shift+F11)</source>
-        <translation>ステップアウト(Shift+F11)</translation>
-    </message>
-    <message>
-        <source>Run to line (%1)</source>
-        <translation>行まで実行 (%1)</translation>
-    </message>
-    <message>
-        <source>Reload Lua Plugins (Ctrl+Shift+L)</source>
-        <translation>Luaプラグインを再読込 (Ctrl+Shift+L)</translation>
-    </message>
-    <message>
-        <source>Find in script (%1)</source>
-        <translation>スクリプト内を検索 (%1)</translation>
-    </message>
-    <message>
-        <source>Go to line (%1)</source>
-        <translation>行へ移動 (%1)</translation>
-    </message>
-    <message>
-        <source>Location</source>
-        <translation>場所</translation>
-    </message>
-    <message>
-        <source>Variables</source>
-        <translation>変数</translation>
-    </message>
-    <message>
-        <source>From: Locals</source>
-        <translation>From: ローカル変数</translation>
-    </message>
-    <message>
-        <source>From: Upvalues</source>
-        <translation>From: アップバリュー</translation>
-    </message>
-    <message>
-        <source>From: Globals</source>
-        <translation>From: グローバル変数</translation>
-    </message>
-    <message>
-        <source>
-… (truncated)</source>
-        <translation>… (切り詰められました)</translation>
-    </message>
-    <message>
-        <source>&lt;p&gt;&lt;b&gt;Locals&lt;/b&gt;&lt;br/&gt;Parameters and local variables for the selected stack frame.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Upvalues&lt;/b&gt;&lt;br/&gt;Outer variables that this function actually uses from surrounding code. Anything the function does not reference does not appear here.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Globals&lt;/b&gt;&lt;br/&gt;Names from the global environment table.&lt;/p&gt;&lt;p&gt;Values that differ from the previous pause are drawn in a &lt;b&gt;bold accent color&lt;/b&gt;, and briefly flash on the pause that introduced the change.&lt;/p&gt;</source>
-        <translation>&lt;p&gt;&lt;b&gt;ローカル変数&lt;/b&gt;&lt;br/&gt;選択したスタックフレームのパラメータとローカル変数&lt;/p&gt;&lt;p&gt;&lt;b&gt;アップバリュー&lt;/b&gt;&lt;br/&gt;この関数が周囲のコードから実際に使用している外部変数です。関数が参照しないものはここには表示されません&lt;/p&gt;&lt;p&gt;&lt;b&gt;グローバル変数&lt;/b&gt;&lt;br/&gt;グローバル環境変数テーブル名&lt;/p&gt;&lt;p&gt;前回の一時停止時と異なる値は &lt;b&gt;太字のアクセントカラー&lt;/b&gt;で描画され、その変更が発生した一時停止時に短く点滅します&lt;/p&gt;</translation>
-    </message>
-    <message>
-        <source>Name</source>
-        <translation>名前</translation>
-    </message>
-    <message>
-        <source>Value</source>
-        <translation>値</translation>
-    </message>
-    <message>
-        <source>Type</source>
-        <translation>種別</translation>
-    </message>
-    <message>
-        <source>Watch</source>
-        <translation>ウォッチ</translation>
-    </message>
-    <message>
-        <source>Stack Trace</source>
-        <translation>ステックトレース</translation>
-    </message>
-    <message>
-        <source>Function</source>
-        <translation>ファンクション</translation>
-    </message>
-    <message>
-        <source>Select a row to inspect locals and upvalues for that frame. Double-click a Lua frame to open its source location.</source>
-        <translation>行を選択して、そのフレームのローカル変数とアップバリューを調べます。Luaフレームをダブルクリックしてソース位置を開きます</translation>
-    </message>
-    <message>
-        <source>Breakpoints</source>
-        <translation>ブレークポイント</translation>
-    </message>
-    <message>
-        <source>&lt;p&gt;&lt;b&gt;Expression&lt;/b&gt;&lt;br/&gt;Pause only when this Lua expression is truthy in the current frame. Runtime errors count as false and surface a warning icon on the row.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Hit Count&lt;/b&gt;&lt;br/&gt;Gate the pause on a hit counter. The dropdown next to &lt;i&gt;N&lt;/i&gt; picks the comparison mode: &lt;code&gt;from&lt;/code&gt; pauses on every hit from &lt;i&gt;N&lt;/i&gt; onwards (default); &lt;code&gt;every&lt;/code&gt; pauses on hits &lt;i&gt;N&lt;/i&gt;, 2&amp;times;&lt;i&gt;N&lt;/i&gt;, 3&amp;times;&lt;i&gt;N&lt;/i&gt;, &amp;hellip;; &lt;code&gt;once&lt;/code&gt; pauses on the &lt;i&gt;N&lt;/i&gt;-th hit and deactivates the breakpoint. The counter is preserved across edits; right-click the row to reset it.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Log Message&lt;/b&gt;&lt;br/&gt;Write a line to the &lt;i&gt;Evaluate&lt;/i&gt; output (and Wireshark&apos;s debug log) each time the breakpoint fires &amp;mdash; after the &lt;i&gt;Hit Count&lt;/i&gt; gate and any &lt;i&gt;Expression&lt;/i&gt; allow it. By default execution continues; click the pause toggle on the editor row to also pause after emitting. Tags: &lt;code&gt;{expr}&lt;/code&gt; (any Lua value); &lt;code&gt;{filename}&lt;/code&gt;, &lt;code&gt;{basename}&lt;/code&gt;, &lt;code&gt;{line}&lt;/code&gt;, &lt;code&gt;{function}&lt;/code&gt;, &lt;code&gt;{what}&lt;/code&gt;; &lt;code&gt;{hits}&lt;/code&gt;, &lt;code&gt;{depth}&lt;/code&gt;, &lt;code&gt;{thread}&lt;/code&gt;; &lt;code&gt;{timestamp}&lt;/code&gt;, &lt;code&gt;{datetime}&lt;/code&gt;, &lt;code&gt;{epoch}&lt;/code&gt;, &lt;code&gt;{epoch_ms}&lt;/code&gt;, &lt;code&gt;{elapsed}&lt;/code&gt;, &lt;code&gt;{delta}&lt;/code&gt;; &lt;code&gt;{{&lt;/code&gt; / &lt;code&gt;}}&lt;/code&gt; for literal braces.&lt;/p&gt;&lt;p&gt;Edit the &lt;i&gt;Location&lt;/i&gt; cell (double-click, F2, or right-click &amp;rarr; Edit) to attach one of these. A white core inside the breakpoint dot &amp;mdash; in this list and in the gutter &amp;mdash; marks rows that carry extras.&lt;/p&gt;</source>
-        <translation>&lt;p&gt;&lt;b&gt;式&lt;/b&gt;&lt;br/&gt;現在のフレームでこの Lua 式が真と評価された場合のみ一時停止します。実行時エラーは false として扱われ、行に警告アイコンとして表示されます。&lt;/p&gt;&lt;p&gt;&lt;b&gt;ヒット回数&lt;/b&gt;&lt;br/&gt;ヒットカウンタで一時停止を制御します。 &lt;i&gt;N&lt;/i&gt; の横にあるドロップダウンで比較モードを選択します: &lt;code&gt;from&lt;/code&gt;は &lt;i&gt;N&lt;/i&gt; 回目以降のすべてのヒットで一時停止します(既定) &lt;code&gt;every&lt;/code&gt; は &lt;i&gt;N&lt;/i&gt; &#xa0;回、2x &lt;i&gt;N&lt;/i&gt;回、3x&lt;i&gt;N&lt;/i&gt;回目毎に毎回一時停止します。 &lt;code&gt;once&lt;/code&gt; は &lt;i&gt;N&lt;/i&gt; &#xa0;回目のヒットで一度だけ一時停止し、ブレークポイントを無効化します。カウンタは編集しても保持されます。行を右クリックするとリセットできます。&lt;/p&gt;&lt;p&gt;&lt;b&gt;ログメッセージ&lt;/b&gt;&lt;br/&gt;ブレークポイントが発火するたびに &lt;i&gt;Evaluate&lt;/i&gt; 出力 (およびWiresharkのデバッグログ出力)へ1行書き込みます。なお、&lt;i&gt;ヒット回数&lt;/i&gt; 条件と任意の &lt;i&gt;式&lt;/i&gt; が許可した後になります。既定では実行を継続します。エディタ行の一時停止トグルをクリックすると、出力後に一時停止することもできます。タグ: &lt;code&gt;{expr}&lt;/code&gt; (any Lua value); &lt;code&gt;{filename}&lt;/code&gt;, &lt;code&gt;{basename}&lt;/code&gt;, &lt;code&gt;{line}&lt;/code&gt;, &lt;code&gt;{function}&lt;/code&gt;, &lt;code&gt;{what}&lt;/code&gt;; &lt;code&gt;{hits}&lt;/code&gt;, &lt;code&gt;{depth}&lt;/code&gt;, &lt;code&gt;{thread}&lt;/code&gt;; &lt;code&gt;{timestamp}&lt;/code&gt;, &lt;code&gt;{datetime}&lt;/code&gt;, &lt;code&gt;{epoch}&lt;/code&gt;, &lt;code&gt;{epoch_ms}&lt;/code&gt;, &lt;code&gt;{elapsed}&lt;/code&gt;, &lt;code&gt;{delta}&lt;/code&gt;; &lt;code&gt;{{&lt;/code&gt; / &lt;code&gt;}}&lt;/code&gt; をリテラルの括弧に利用します。&lt;/p&gt;&lt;p&gt;（ダブルクリック、F2、または右クリック &amp;amp;rarr; 編集）。ブレークポイント点の内側の白い芯は、この一覧およびガター上で、追加設定を持つ行を示します。編集中にエディタのモードドロップダウンを切り替えると、他のページで入力した未確定のテキストは破棄されます。入力内容を保持するには、切り替える前にそのページで Enter を押してください。&lt;/p&gt;</translation>
-    </message>
-    <message>
-        <source>Active</source>
-        <translation>アクティブ</translation>
-    </message>
-    <message>
-        <source>Line</source>
-        <translation>行</translation>
-    </message>
-    <message>
-        <source>Hits</source>
-        <translation>ヒット</translation>
-    </message>
-    <message>
-        <source>ON — Break on Lua errors</source>
-        <translation>ON — Luaエラーでブレーク</translation>
-    </message>
-    <message>
-        <source>OFF — Break on Lua errors</source>
-        <translation>OFF — Luaエラーでブレーク</translation>
-    </message>
-    <message>
-        <source>Files</source>
-        <translation>ファイル</translation>
-    </message>
-    <message>
-        <source>Evaluate</source>
-        <translation>評価</translation>
-    </message>
-    <message>
-        <source>&lt;b&gt;Lua Expression Evaluation&lt;/b&gt;&lt;br&gt;&lt;br&gt;Code runs in a protected environment: runtime errors are caught and shown in the output instead of propagating.&lt;br&gt;&lt;br&gt;&lt;b&gt;What works:&lt;/b&gt;&lt;ul&gt;&lt;li&gt;Read/modify global variables (&lt;code&gt;_G.x = 42&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Modify table contents (&lt;code&gt;my_table.field = 99&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Call functions and inspect return values&lt;/li&gt;&lt;/ul&gt;&lt;b&gt;Limitations:&lt;/b&gt;&lt;ul&gt;&lt;li&gt;Local variables cannot be modified directly (use &lt;code&gt;debug.setlocal()&lt;/code&gt;) unless there is an associated &lt;i&gt;assign&lt;/i&gt; method (&lt;code&gt;pinfo.src_port&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Long-running expressions are automatically aborted&lt;/li&gt;&lt;li&gt;&lt;b&gt;Warning:&lt;/b&gt; Changes to globals persist and can affect ongoing dissection&lt;/li&gt;&lt;/ul&gt;</source>
-        <translation>&lt;b&gt;Lua式の評価&lt;/b&gt;&lt;br&gt;&lt;br&gt;コードは保護された環境で実行されます。実行時エラーは伝播せず、捕捉されて出力に表示されます。&lt;br&gt;&lt;br&gt;&lt;b&gt;実行可能な動作:&lt;/b&gt;&lt;ul&gt;&lt;li&gt;  グローバル変数の読み取り・変更 (&lt;code&gt;_G.x = 42&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;テーブル内容の変更 (&lt;code&gt;my_table.field = 99&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;&#xa0; 関数の呼び出しおよび戻り値の確認&lt;/li&gt;&lt;/ul&gt;&lt;b&gt;制限事項:&lt;/b&gt;&lt;ul&gt;&lt;li&gt;  ローカル変数は直接変更できません ( &lt;code&gt;debug.setlocal()を使用するか&lt;/code&gt;&lt;i&gt;代入&lt;/i&gt; メソッドが関連付けられている場合を除く (&lt;code&gt;pinfo.src_port&lt;/code&gt;)&lt;/li&gt;)&lt;li&gt; 長時間実行される式は自動的に中断されます&lt;/li&gt;&lt;li&gt;&lt;b&gt;警告k:&lt;/b&gt; グローバル変数への変更は永続化され、進行中のディセクションに影響を与える可能性があります &lt;/li&gt;&lt;/ul&gt;</translation>
-    </message>
-    <message>
-        <source>Enter Lua expression</source>
-        <translation>Lua式を入力</translation>
-    </message>
-    <message>
-        <source>Output</source>
-        <translation>出力</translation>
-    </message>
-    <message>
-        <source>Execute the Lua code (Ctrl+Return)</source>
-        <translation>Luaコードを実行 (Ctrl+Return)</translation>
-    </message>
-    <message>
-        <source>Clear</source>
-        <translation>クリア</translation>
-    </message>
-    <message>
-        <source>Clear output</source>
-        <translation>出力をクリア</translation>
-    </message>
-    <message>
-        <source>Settings</source>
-        <translation>設定</translation>
-    </message>
-    <message>
-        <source>Auto (follow color scheme)</source>
-        <translation>自動 (配色に従う)</translation>
-    </message>
-    <message>
-        <source>Dark</source>
-        <translation>ダーク</translation>
-    </message>
-    <message>
-        <source>Light</source>
-        <translation>ライト</translation>
-    </message>
-    <message>
-        <source>Color theme for the code editor</source>
-        <translation>コードエディタのカラーテーマ</translation>
-    </message>
-    <message>
-        <source>Code View Theme:</source>
-        <translation>コード表示テーマ:</translation>
-    </message>
-    <message numerus="yes">
-        <source>Are you sure you want to remove %Ln breakpoint(s)?</source>
-        <translation type="vanished">
-            <numerusform>本当に %Ln 個のブレークポイントを削除してもよろしいですか？</numerusform>
-        </translation>
-    </message>
-    <message numerus="yes">
-        <source>Are you sure you want to remove %Ln watch(es)?</source>
-        <translation type="vanished">
-            <numerusform>本当に %Ln 個のウォッチを削除してもよろしいですか？</numerusform>
-        </translation>
-    </message>
-    <message>
-        <source>Type: %1</source>
-        <translation>種別: %1</translation>
-    </message>
-    <message numerus="yes">
-        <source>There are unsaved changes in %Ln open file(s).</source>
-        <translation type="vanished">
-            <numerusform>%Ln 個の開いているファイルに未保存の変更があります</numerusform>
-        </translation>
-    </message>
-    <message>
-        <source>Remove All Breakpoints</source>
-        <translation>すべてのブレークポイントを削除</translation>
-    </message>
-    <message>
-        <source>Add Watch (%1)</source>
-        <translation>ウォッチを追加 (%1)</translation>
-    </message>
-    <message>
-        <source>&lt;p&gt;Each row is either a &lt;b&gt;Variables-tree path&lt;/b&gt; or a &lt;b&gt;Lua expression&lt;/b&gt;; the panel auto-detects which based on the syntax you type.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Path watches&lt;/b&gt; &amp;mdash; resolved against the paused frame&apos;s locals, upvalues, and globals:&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Section-qualified: &lt;code&gt;Locals.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;, &lt;code&gt;Upvalues.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;, &lt;code&gt;Globals.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;.&lt;/li&gt;&lt;li&gt;Section root alone: &lt;code&gt;Locals&lt;/code&gt;, &lt;code&gt;Upvalues&lt;/code&gt;, &lt;code&gt;Globals&lt;/code&gt; (&lt;code&gt;_G&lt;/code&gt; is an alias for &lt;code&gt;Globals&lt;/code&gt;).&lt;/li&gt;&lt;li&gt;Unqualified name: resolved in &lt;b&gt;Locals &amp;rarr; Upvalues &amp;rarr; Globals&lt;/b&gt; order; the row tooltip shows which section matched.&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;After the first segment, chain &lt;code&gt;.field&lt;/code&gt; or bracket keys &amp;mdash; integer (&lt;code&gt;[1]&lt;/code&gt;, &lt;code&gt;[-1]&lt;/code&gt;, &lt;code&gt;[0x1F]&lt;/code&gt;), boolean (&lt;code&gt;[true]&lt;/code&gt;), or short-literal string (&lt;code&gt;[&quot;key&quot;]&lt;/code&gt;, &lt;code&gt;[&apos;k&apos;]&lt;/code&gt;). Depth is capped at 32 segments.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Expression watches&lt;/b&gt; &amp;mdash; anything that is not a plain path (operators, function/method calls, table constructors, length &lt;code&gt;#&lt;/code&gt;, comparisons, &amp;hellip;) is evaluated as Lua against the same locals/upvalues/globals. &lt;b&gt;You do not need a leading &lt;code&gt;=&lt;/code&gt; or &lt;code&gt;return&lt;/code&gt;&lt;/b&gt;; value-returning expressions auto-return their value. Examples: &lt;code&gt;#packets&lt;/code&gt;, &lt;code&gt;tbl[i + 1]&lt;/code&gt;, &lt;code&gt;obj:method()&lt;/code&gt;, &lt;code&gt;a == b&lt;/code&gt;, &lt;code&gt;{x, y}&lt;/code&gt;. Tables produced by an expression are expandable, and children re-resolve on every pause.&lt;/p&gt;&lt;p&gt;Values are only read while the debugger is &lt;b&gt;paused&lt;/b&gt;; otherwise the Value column shows a muted em dash. Values that differ from the previous pause are drawn in a &lt;b&gt;bold accent color&lt;/b&gt;, and briefly flash on the pause that introduced the change.&lt;/p&gt;&lt;p&gt;Double-click or press &lt;b&gt;F2&lt;/b&gt; to edit a row; &lt;b&gt;Delete&lt;/b&gt; removes it; drag rows to reorder. Use the &lt;b&gt;Evaluate&lt;/b&gt; panel below to run statements with side effects (assignments, blocks, loops).&lt;/p&gt;</source>
-        <translation>&lt;p&gt;各行は &lt;b&gt;変数ツリーパス&lt;/b&gt; または &lt;b&gt;Lua式&lt;/b&gt;のいずれかです。; パネルは入力された構文に基づいて自動判定します。&lt;/p&gt;&lt;p&gt;&lt;b&gt;パスウォッチ&lt;/b&gt; 一時停止中フレームのローカル変数、アップバリュー、グローバル変数に対して解決されます:&lt;/p&gt;&lt;ul&gt;&lt;li&gt;セクション修飾:&lt;code&gt;ローカル変数&lt;i&gt;名&lt;/i&gt;&lt;/code&gt;, &lt;code&gt;アップバリュー&lt;i&gt;名&lt;/i&gt;&lt;/code&gt;, &lt;code&gt;グローバル変数&lt;i&gt;名&lt;/i&gt;&lt;/code&gt;.&lt;/li&gt;&lt;li&gt;セクションルート単独: &lt;code&gt;ロケール&lt;/code&gt;, &lt;code&gt;アップバリュー&lt;/code&gt;, &lt;code&gt;グローバル変数&lt;/code&gt; (&lt;code&gt;_G&lt;/code&gt; は &lt;code&gt;グローバル変数&lt;/code&gt;の別名です).&lt;/li&gt;&lt;li&gt;非修飾名:&lt;b&gt;ローカル変数 アップバリュー グローバル変数&lt;/b&gt; の順にに解決されます; 行のツールチップには一致したセクションが表示されます。&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;最初のセグメント以降は、&lt;code&gt;.フィールド&lt;/code&gt; またはブラケットキー; 整数 (&lt;code&gt;[1]&lt;/code&gt;, &lt;code&gt;[-1]&lt;/code&gt;, &lt;code&gt;[0x1F]&lt;/code&gt;), 真偽値 (&lt;code&gt;[true]&lt;/code&gt;), 短いリテラル文字列 (&lt;code&gt;[&quot;key&quot;]&lt;/code&gt;, &lt;code&gt;[&apos;k&apos;]&lt;/code&gt;). を連結できます。深度は 32 セグメントまでに制限されます。&lt;/p&gt;&lt;p&gt;&lt;b&gt;式ウォッチ&lt;/b&gt;  単純なパスではないもの（演算子、関数/メソッド呼び出し、テーブルコンストラクタ、長さ &lt;code&gt;#&lt;/code&gt;, 比較) は、同じローカル変数/アップバリュー/グローバル変数に対する Lua として評価されます。 &lt;b&gt;先頭の&lt;code&gt;=&lt;/code&gt; や &lt;code&gt;return&lt;/code&gt;は不要です。&lt;/b&gt; 値を返す式は自動的に値を返します。例:&lt;code&gt;#packets&lt;/code&gt;, &lt;code&gt;tbl[i + 1]&lt;/code&gt;, &lt;code&gt;obj:method()&lt;/code&gt;, &lt;code&gt;a == b&lt;/code&gt;, &lt;code&gt;{x, y}&lt;/code&gt; 式が生成したテーブルは展開可能で、子要素は一時停止のたびに再解決されます。&lt;/p&gt;&lt;p&gt;値はデバッガが&lt;b&gt;一時停止&lt;/b&gt; のときだけ読み取られます。それ以外の場合、Value 列には薄い em ダッシュが表示されます。前回の一時停止時と異なる値は &lt;b&gt;太字のアクセントカラー&lt;/b&gt; で描画され、その変更が発生した一時停止時に短く点滅します。&lt;/p&gt;&lt;p&gt;行を編集するにはダブルクリックまたは&lt;b&gt;F2&lt;/b&gt; を押します。削除するには &lt;b&gt;Delete&lt;/b&gt;を押します。行はドラッグして並べ替えられます。副作用のある文（代入、ブロック、ループ）を実行するには、下の&lt;b&gt;Evaluate&lt;/b&gt;パネルを使用してください。&lt;/p&gt;</translation>
-    </message>
-    <message>
-        <source>Remove Watch (%1)</source>
-        <translation>ウォッチを削除 (%1)</translation>
-    </message>
-    <message>
-        <source>Remove All Watches (%1)</source>
-        <translation>すべてのウォッチを削除 (%1)</translation>
-    </message>
-    <message>
-        <source>No breakpoints</source>
-        <translation>ブレークポイントはありません</translation>
-    </message>
-    <message>
-        <source>Edit Breakpoint</source>
-        <translation>ブレークポイントを編集</translation>
-    </message>
-    <message>
-        <source>Remove Breakpoint (%1)</source>
-        <translation>ブレークポイントを削除 (%1)</translation>
-    </message>
-    <message>
-        <source>Remove All Breakpoints (%1)</source>
-        <translation>すべてのブレークポイントを削除 (%1)</translation>
-    </message>
-    <message>
-        <source>Undo</source>
-        <translation>元に戻す</translation>
-    </message>
-    <message>
-        <source>Redo</source>
-        <translation>やり直し</translation>
-    </message>
-    <message>
-        <source>Cut</source>
-        <translation>切り取り</translation>
-    </message>
-    <message>
-        <source>Copy</source>
-        <translation>コピー</translation>
-    </message>
-    <message>
-        <source>Paste</source>
-        <translation>貼り付け</translation>
-    </message>
-    <message>
-        <source>Select All</source>
-        <translation>すべてを選択</translation>
-    </message>
-    <message>
-        <source>Add Breakpoint</source>
-        <translation>ブレークポイントを追加</translation>
-    </message>
-    <message>
-        <source>Remove Breakpoint</source>
-        <translation>ブレークポイントを削除</translation>
-    </message>
-    <message>
-        <source>Run to this line</source>
-        <translation>この行まで実行</translation>
-    </message>
-    <message>
-        <source>Add Watch: &quot;%1&quot;</source>
-        <translation>ウォッチを追加: &quot;%1&quot;</translation>
-    </message>
-    <message>
-        <source>Debugger is paused. Uncheck to disable.</source>
-        <translation>デバッガは一時停止中です。無効化するにはチェックを外してください</translation>
-    </message>
-    <message>
-        <source>Debugger is enabled. Uncheck to disable.</source>
-        <translation>デバッガが有効です。チェックを外して無効にします</translation>
-    </message>
-    <message>
-        <source>Debugger is disabled while a live capture is running. Stop the capture to re-enable.</source>
-        <translation>  &#xa0; &#xa0; &#xa0; &#xa0; &#xa0; &lt;translation&gt;ライブキャプチャの実行中はデバッガが無効になります。再度有効化するにはキャプチャを停止してください</translation>
-    </message>
-    <message>
-        <source>Debugger is disabled. Check to enable.</source>
-        <translation>デバッガが無効です。チェックして有効にします</translation>
-    </message>
-    <message>
-        <source>Disabled (live capture)</source>
-        <translation>無効 (ライブキャプチャ)</translation>
-    </message>
-    <message>
-        <source>Disabled</source>
-        <translation>無効</translation>
-    </message>
-    <message>
-        <source>Paused</source>
-        <translation>一時停止中</translation>
-    </message>
-    <message>
-        <source>(runtime error)</source>
-        <translation>(ランタイムエラー)</translation>
-    </message>
-    <message>
-        <source>Running</source>
-        <translation>実行中</translation>
-    </message>
-    <message>
-        <source>Lua Scripts (*.lua);;All Files (*)</source>
-        <translation>Lua スクリプト (*.lua);;すべてのファイル (*)</translation>
-    </message>
-    <message>
-        <source>Lua Debugger</source>
-        <translation>Luaデバッガ</translation>
-    </message>
-    <message>
-        <source>Continue</source>
-        <translation>続行</translation>
-    </message>
-    <message>
-        <source>F5</source>
-        <translation>F5</translation>
-    </message>
-    <message>
-        <source>Step Over</source>
-        <translation>ステップオーバー</translation>
-    </message>
-    <message>
-        <source>F10</source>
-        <translation>F10</translation>
-    </message>
-    <message>
-        <source>Step Into</source>
-        <translation>ステップイン</translation>
-    </message>
-    <message>
-        <source>F11</source>
-        <translation>F11</translation>
-    </message>
-    <message>
-        <source>Step Out</source>
-        <translation>ステップアウト</translation>
-    </message>
-    <message>
-        <source>Shift+F11</source>
-        <translation>Shift+F11</translation>
-    </message>
-    <message>
-        <source>Add Watch</source>
-        <translation>ウォッチを追加</translation>
-    </message>
-    <message>
-        <source>Ctrl+Shift+W</source>
-        <translation>Ctrl+Shift+W</translation>
-    </message>
-    <message>
-        <source>Open File</source>
-        <translation>ファイルを開く</translation>
-    </message>
-    <message>
-        <source>Save</source>
-        <translation>保存</translation>
-    </message>
-    <message>
-        <source>Ctrl+S</source>
-        <translation>Ctrl+S</translation>
-    </message>
-    <message>
-        <source>Find…</source>
-        <translation>検索…</translation>
-    </message>
-    <message>
-        <source>Ctrl+F</source>
-        <translation>Ctrl+F</translation>
-    </message>
-    <message>
-        <source>Go to Line…</source>
-        <translation>行へ移動…</translation>
-    </message>
-    <message>
-        <source>Ctrl+G</source>
-        <translation>Ctrl+G</translation>
-    </message>
-    <message>
-        <source>Reload Lua Plugins</source>
-        <translation>Luaプラグインを再読込</translation>
-    </message>
-    <message>
-        <source>Ctrl+Shift+L</source>
-        <translation>Ctrl+Shift+L</translation>
-    </message>
-</context>
-<context>
-    <name>LuaDebuggerFindFrame</name>
-    <message>
-        <source>Find:</source>
-        <translation>検索:</translation>
-    </message>
-    <message>
-        <source>Find Next</source>
-        <translation>次を検索</translation>
-    </message>
-    <message>
-        <source>Find Previous</source>
-        <translation>前を検索</translation>
-    </message>
-    <message>
-        <source>Replace:</source>
-        <translation>置換:</translation>
-    </message>
-    <message>
-        <source>Replace</source>
-        <translation>置換</translation>
-    </message>
-    <message>
-        <source>Replace All</source>
-        <translation>すべてを置換</translation>
-    </message>
-    <message>
-        <source>Close</source>
-        <translation>閉じる</translation>
-    </message>
-</context>
-<context>
-    <name>LuaDebuggerGoToLineFrame</name>
-    <message>
-        <source>Line:</source>
-        <translation>行:</translation>
-    </message>
-    <message>
-        <source>Go to line</source>
-        <translation>行へ移動…</translation>
-    </message>
-    <message>
-        <source>Cancel</source>
-        <translation>キャンセル</translation>
-    </message>
-</context>
-<context>
-    <name>LuaDebuggerPauseOverlay</name>
-    <message>
-        <source>Lua debugger paused</source>
-        <translation>Luaデバッガは一時停止中です</translation>
-    </message>
-    <message>
-        <source>Use the Lua Debugger window to step, continue, or evaluate. The main window resumes when execution is released.</source>
-        <translation>ステップ実行、続行、評価には Lua デバッガウィンドウを使用してください。実行が解放されるとメインウィンドウが再開します</translation>
-    </message>
-</context>
-<context>
-    <name>LuaDebuggerWatchController</name>
-    <message numerus="yes">
-        <source>Are you sure you want to remove %Ln watch(es)?</source>
-        <translation type="obsolete">
-            <numerusform>Are you sure you want to remove %Ln watch?</numerusform>
-        </translation>
-    </message>
-    <message>
-        <source>Lua Debugger</source>
-        <translation>Luaデバッガ</translation>
-    </message>
-    <message numerus="yes">
-        <source>Watch expression is too long (maximum %Ln characters).</source>
-        <translation>
-            <numerusform>ウォッチ式が長すぎます(最大 %Ln 文字)</numerusform>
-        </translation>
-    </message>
-</context>
-<context>
-    <name>LuaDebuggerWatchRowPresenter</name>
-    <message>
-        <source>Enter a variable path (e.g. Locals.x, Globals.t.k) or a Lua expression in the Watch column to see a value here.</source>
-        <translation>ここに値を表示するには、Watch 列に変数パス(例: Locals.x, Globals.t.k)または Lua式を入力してください</translation>
-    </message>
-    <message>
-        <source>Value shown only while the debugger is paused.</source>
-        <translation>値はデバッガの一時停止中のみ表示されます</translation>
-    </message>
-    <message>
-        <source>Value shown only while the debugger is paused. The debugger is currently disabled.</source>
-        <translation>値はデバッガの一時停止中のみ表示されます。デバッガは現在無効です</translation>
-    </message>
-    <message>
-        <source>Type: %1</source>
-        <translation>種別: %1</translation>
-    </message>
-    <message>
-        <source>error</source>
-        <translation>エラー</translation>
-    </message>
-    <message>
-        <source>Could not evaluate watch.</source>
-        <translation>ウォッチを評価できませんでした</translation>
-    </message>
-    <message>
-        <source>Expression — re-evaluated on every pause.</source>
-        <translation>式 — 一時停止のたびに再評価されます</translation>
     </message>
 </context>
 <context>
@@ -8392,46 +6768,6 @@ Shift+クリック: 空行では無効なブレークポイントを追加
         <translation>は最高位のエキスパート情報レベルです</translation>
     </message>
     <message>
-        <source>Expert information</source>
-        <translation>エキスパート情報</translation>
-    </message>
-    <message>
-        <source>Opens the expert information dialog, showing errors, warnings, and other relevant information about the capture.</source>
-        <translation>エキスパート情報画面を開いて、エラー、警告および他のキャプチャに関連する情報を表示します</translation>
-    </message>
-    <message>
-        <source>Capture comment</source>
-        <translation>キャプチャコメント</translation>
-    </message>
-    <message>
-        <source>Opens the Capture File Properties dialog to view or edit capture-level comments.</source>
-        <translation>キャプチャファイルプロパティ画面を開いてキャプチャレベルコメントを表示もしくは編集します</translation>
-    </message>
-    <message>
-        <source>Information</source>
-        <translation>情報</translation>
-    </message>
-    <message>
-        <source>Displays general information, status messages, and expert severity details.</source>
-        <translation>一般的な情報、ステータスメッセージおよびエキスパート重大度を表示します</translation>
-    </message>
-    <message>
-        <source>Packet statistics</source>
-        <translation>パケット統計</translation>
-    </message>
-    <message>
-        <source>Shows the number of captured, displayed, and selected packets.</source>
-        <translation>キャプチャしたパケット数、表示されたパケット数および選択したパケット数を表示します</translation>
-    </message>
-    <message>
-        <source>Configuration profile</source>
-        <translation>設定プロファイル</translation>
-    </message>
-    <message>
-        <source>Displays the current configuration profile and allows switching between profiles.</source>
-        <translation>現在の設定プロファイルを表示してプロファイル間の切替を許可します</translation>
-    </message>
-    <message>
         <source>ERROR</source>
         <translation>エラー</translation>
     </message>
@@ -8478,8 +6814,12 @@ Shift+クリック: 空行では無効なブレークポイントを追加
         <translation>選択されたパケット: %1 %2 </translation>
     </message>
     <message>
-        <source> %1 Aggregated: %2</source>
-        <translation> %1 集約: %2</translation>
+        <source>Selected Event: %1 %2 </source>
+        <translation>選択したイベント: %1 %2 </translation>
+    </message>
+    <message>
+        <source>Events: %1</source>
+        <translation>イベント: %1</translation>
     </message>
     <message>
         <source> %1 Selected: %2 (%3%)</source>
@@ -8511,23 +6851,23 @@ Shift+クリック: 空行では無効なブレークポイントを追加
         <translation>パケットなし</translation>
     </message>
     <message>
-        <source>From Zip File…</source>
-        <oldsource>From Zip File...</oldsource>
+        <source>No Events</source>
+        <translation>イベントなし</translation>
+    </message>
+    <message>
+        <source>From Zip File...</source>
         <translation>Zipファイルより...</translation>
     </message>
     <message>
-        <source>From Directory…</source>
-        <oldsource>From Directory...</oldsource>
+        <source>From Directory...</source>
         <translation>ディレクトリより...</translation>
     </message>
     <message>
-        <source>Selected Personal Profile…</source>
-        <oldsource>Selected Personal Profile...</oldsource>
+        <source>Selected Personal Profile...</source>
         <translation>選択された個人プロファイル...</translation>
     </message>
     <message>
-        <source>All Personal Profiles…</source>
-        <oldsource>All Personal Profiles...</oldsource>
+        <source>All Personal Profiles...</source>
         <translation>すべての個人プロファイル...</translation>
     </message>
     <message>
@@ -8548,36 +6888,8 @@ Shift+クリック: 空行では無効なブレークポイントを追加
 <context>
     <name>MainWindow</name>
     <message>
-        <source> before updating</source>
-        <translation>更新前</translation>
-    </message>
-    <message>
-        <source>Please close the current file before updating.</source>
-        <translation>更新する前に現在のファイルを閉じてください</translation>
-    </message>
-    <message>
         <source>Display filter as %1</source>
         <translation>%1 として表示フィルタ</translation>
-    </message>
-    <message>
-        <source>…as %1</source>
-        <translation>%1 として…</translation>
-    </message>
-    <message>
-        <source>The Wireshark Network Analyzer</source>
-        <translation>ワイヤーシャーク ネットワークアナライザ</translation>
-    </message>
-    <message>
-        <source>The Stratoshark System Call and Log Analyzer</source>
-        <translation>Stratoshark システムコールログアナライザ</translation>
-    </message>
-    <message>
-        <source>Capturing from %1</source>
-        <translation>%1 からキャプチャ中</translation>
-    </message>
-    <message>
-        <source>Clear Menu</source>
-        <translation>メニューをクリア</translation>
     </message>
 </context>
 <context>
@@ -8600,7 +6912,7 @@ Shift+クリック: 空行では無効なブレークポイントを追加
     </message>
     <message>
         <source>This folder:</source>
-        <translation>このフォルダ:</translation>
+        <translation>このフォルダ:（（</translation>
     </message>
     <message>
         <source>Browse…</source>
@@ -8770,8 +7082,8 @@ Shift+クリック: 空行では無効なブレークポイントを追加
         <translation>MACアドレス</translation>
     </message>
     <message>
-        <source>Search vendor name using a case-insensitive regular expression.</source>
-        <translation>大文字小文字を区別しない正規表現を用いてベンダ名を検索します</translation>
+        <source>Search vendor name using a case-insentitive regular expression.</source>
+        <translation>大文字小文字を区別した正規表現を用いてベンダ名を検索します</translation>
     </message>
     <message>
         <source>Vendor Name</source>
@@ -8815,29 +7127,6 @@ Shift+クリック: 空行では無効なブレークポイントを追加
     <message>
         <source>Vendor Name</source>
         <translation>ベンダ名</translation>
-    </message>
-</context>
-<context>
-    <name>MarkerDialog</name>
-    <message>
-        <source>Choose marker:</source>
-        <translation>マーカーを選択:</translation>
-    </message>
-    <message>
-        <source>Enter new position:</source>
-        <translation>新規位置を入力:</translation>
-    </message>
-    <message>
-        <source>Move marker</source>
-        <translation>マーカーを移動</translation>
-    </message>
-    <message>
-        <source>Delete marker</source>
-        <translation>マーカーを削除</translation>
-    </message>
-    <message>
-        <source>OK</source>
-        <translation>OK</translation>
     </message>
 </context>
 <context>
@@ -9002,7 +7291,7 @@ Shift+クリック: 空行では無効なブレークポイントを追加
     </message>
     <message>
         <source>Burst measurement interval (ms):</source>
-        <translation>バースト計測間隔(ミリ秒):</translation>
+        <translation>バースト計測間隔(ms):</translation>
     </message>
     <message>
         <source>Burst alarm threshold (packets):</source>
@@ -9065,10 +7354,6 @@ Shift+クリック: 空行では無効なブレークポイントを追加
         <translation>パケットダイアグラム</translation>
     </message>
     <message>
-        <source>Displays a visual diagram of the selected packet&apos;s fields.</source>
-        <translation>選択したパケットのフィールドのビジュアル図を表示します</translation>
-    </message>
-    <message>
         <source>Show Field Values</source>
         <translation>フィールド値を表示</translation>
     </message>
@@ -9116,20 +7401,8 @@ Shift+クリック: 空行では無効なブレークポイントを追加
         <translation>ダイアログ</translation>
     </message>
     <message>
-        <source>&amp;Edit</source>
-        <translation>編集(&amp;E)</translation>
-    </message>
-    <message>
         <source>&lt;small&gt;&lt;i&gt;&lt;/i&gt;&lt;/small&gt;</source>
         <translation>&lt;small&gt;&lt;i&gt;&lt;/i&gt;&lt;/small&gt;</translation>
-    </message>
-    <message>
-        <source>Find in Packet</source>
-        <translation>パケットを検索</translation>
-    </message>
-    <message>
-        <source>Find in the packet details tree (Ctrl+Alt+F)</source>
-        <translation>パケット詳細ツリーを検索 (Ctrl+Alt+F)</translation>
     </message>
     <message>
         <source>Show packet bytes</source>
@@ -9138,14 +7411,6 @@ Shift+クリック: 空行では無効なブレークポイントを追加
     <message>
         <source>Layout:</source>
         <translation>レイアウト:</translation>
-    </message>
-    <message>
-        <source>Find in &amp;Packet</source>
-        <translation>パケットを検索(&amp;P)</translation>
-    </message>
-    <message>
-        <source>Find in the packet details tree (%1)</source>
-        <translation>パケット詳細ツリーを検索 (%1)</translation>
     </message>
     <message>
         <source>Packet %1</source>
@@ -9177,142 +7442,14 @@ Shift+クリック: 空行では無効なブレークポイントを追加
     </message>
 </context>
 <context>
-    <name>PacketFormatBlankGroupBox</name>
-    <message>
-        <source>The selected format has no options</source>
-        <translation>選択した形式にはオプションはありません</translation>
-    </message>
-</context>
-<context>
-    <name>PacketFormatCArraysGroupBox</name>
+    <name>PacketFormatGroupBox</name>
     <message>
         <source>GroupBox</source>
         <translation>グループボックス</translation>
     </message>
     <message>
         <source>Packet Format</source>
-        <translation>パケット形式</translation>
-    </message>
-    <message>
-        <source>Include secondary data sources</source>
-        <translation>第２データソースを含む</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Generate arrays for secondary data sources like reassembled or decrypted buffers in addition to the frame&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;フレームに加えて再組立てや復号化したバッファなどの第二データソースの配列を作成します。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Include an array to index into the list of frames&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt; フレーム一覧を参照するためのインデックス配列を含めます。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>Include index</source>
-        <translation>インデックスを含む</translation>
-    </message>
-</context>
-<context>
-    <name>PacketFormatCSVGroupBox</name>
-    <message>
-        <source>GroupBox</source>
-        <translation>グループボックス</translation>
-    </message>
-    <message>
-        <source>Packet Format</source>
-        <translation>パケット形式</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Escape non-ASCII and whitespace characters&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;ASCII以外と空白文字をエスケープ&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>ASCII</source>
-        <translation>アスキー文字形式</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Export as a UTF-8 CSV&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;UTF-8のCSV形式としてエクスポート&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>UTF-8</source>
-        <translation>UTF-8形式</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Include a Byte Order Mark at the beginning of the file, for Windows&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Windowsのためにバイト順序マークをファイルの先頭に含みます&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>Include Byte Order Mark</source>
-        <translation>バイト順序マークを含む</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Prefix values that a spreadsheet would evaluate as a formula (those starting with &quot;=&quot;, &quot;+&quot;, &quot;-&quot; or &quot;@&quot;) with an apostrophe, so that packet data cannot inject a formula into the exported file&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&#xa0; &apos;=&apos;, &apos;+&apos;, &apos;-&apos;, &apos;@&apos; で始まる値は、エクスポートしたファイルで数式として解釈されないよう、先頭にアポストロフィ (&apos;) を付加します。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>Escape spreadsheet formulas</source>
-        <translation>スプレッドシート数式をエスケープ</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Replace whitespace characters (tabs, newlines, etc.) with C-style escapes&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt; 空白文字（タブ、改行など）を C 言語形式のエスケープ表記に置換する&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>Escape whitespace</source>
-        <translation>空白をエスケープ</translation>
-    </message>
-</context>
-<context>
-    <name>PacketFormatJSONGroupBox</name>
-    <message>
-        <source>GroupBox</source>
-        <translation>グループボックス</translation>
-    </message>
-    <message>
-        <source>Packet Format</source>
-        <translation>パケット形式</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Avoid duplicate keys in the JSON by using a list for sibling fields with the same key&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;同じキーを持つ同階層のフィールドにはリストを使用し、JSON内で重複するキーを避けてください&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>No duplicate keys</source>
-        <translation>重複キーなし</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Output compact JSON without indentation (significantly faster and smaller)&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;インデントなしのコンパクトJSON形式で出力 ( 大幅に高速化されサイズも削減)&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>Compact (no indentation)</source>
-        <translation>コンパクト(インデントなし)</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Export a name/value pair for each field with the field value&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation> 各フィールドについて、フィールドの値を含む名前／値のペアをエクスポート</translation>
-    </message>
-    <message>
-        <source>Values</source>
-        <translation>値</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Export a name/value pair for each field with the hex bytes of its packet data&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation> 各フィールドについて、パケットデータの16進数バイト列を含む名前／値のペアをエクスポートする</translation>
-    </message>
-    <message>
-        <source>Raw Bytes</source>
-        <translation>生バイト</translation>
-    </message>
-</context>
-<context>
-    <name>PacketFormatTextGroupBox</name>
-    <message>
-        <source>GroupBox</source>
-        <translation>グループボックス</translation>
-    </message>
-    <message>
-        <source>Packet Format</source>
-        <translation>パケット形式</translation>
+        <translation>パケットフォーマット</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Packet summary lines similar to the packet list&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -9336,7 +7473,7 @@ Shift+クリック: 空行では無効なブレークポイントを追加
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Export only top-level packet detail items&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;最上位のパケット詳細項目のみエクスポート&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;最上位のパケット詳細の項目のみエクスポート&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>All co&amp;llapsed</source>
@@ -9348,11 +7485,11 @@ Shift+クリック: 空行では無効なブレークポイントを追加
     </message>
     <message>
         <source>As displa&amp;yed</source>
-        <translation>表示されたとおり(&amp;y)</translation>
+        <translation>表示された通り(&amp;y)</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Export all packet detail items&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;すべてのパケット詳細項目をエクスポート&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;すべてのパケット項目をエクスポート&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>All e&amp;xpanded</source>
@@ -9364,7 +7501,7 @@ Shift+クリック: 空行では無効なブレークポイントを追加
     </message>
     <message>
         <source>Bytes</source>
-        <translation>バイト</translation>
+        <translation>バイト列</translation>
     </message>
     <message>
         <source>Include secondary data sources</source>
@@ -9372,26 +7509,14 @@ Shift+クリック: 空行では無効なブレークポイントを追加
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Generate hexdumps for secondary data sources like reassembled or decrypted buffers in addition to the frame&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;フレームに加えて再組立てや復号化したバッファなどの第二データソースに対し16進数ダンプを作成します。&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>Include timestamp preamble</source>
-        <translation>タイムスタンププリアンブルを含む</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Include each frame timestamp immediately before its hex dump, using the current time display format.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;現在の時刻表示形式で16進数ダンプの直前に各フレームのタイムスタンプを含めてください&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;フレームに加えて第二データソースに対し再組立てや復号化したバッファなどの16進数ダンプを作成します。&lt;/html&gt;</translation>
     </message>
 </context>
 <context>
     <name>PacketList</name>
     <message>
-        <source>Go to Packet</source>
-        <translation>パケットへ移動</translation>
-    </message>
-    <message>
-        <source>Tag Links</source>
-        <translation type="unfinished"></translation>
+        <source>Protocol Preferences</source>
+        <translation>プロトコル設定</translation>
     </message>
     <message>
         <source>Summary as Text</source>
@@ -9404,10 +7529,6 @@ Shift+クリック: 空行では無効なブレークポイントを追加
     <message>
         <source>…as YAML</source>
         <translation>YAMLとして…</translation>
-    </message>
-    <message>
-        <source>…as HTML</source>
-        <translation>HTMLとして…</translation>
     </message>
     <message>
         <source>Decode As…</source>
@@ -9424,26 +7545,6 @@ Shift+クリック: 空行では無効なブレークポイントを追加
     <message>
         <source>[ Comment text exceeds %1. Stopping. ]</source>
         <translation>[ コメントテキスト超過 %1 停止中 ]</translation>
-    </message>
-    <message>
-        <source>Unpin Selected Rows</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message numerus="yes">
-        <source>Pin Selected Rows (max %Ln)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-        </translation>
-    </message>
-    <message>
-        <source>Pin Selected Rows</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message numerus="yes">
-        <source>At most %Ln rows can be pinned.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-        </translation>
     </message>
 </context>
 <context>
@@ -9469,18 +7570,6 @@ Shift+クリック: 空行では無効なブレークポイントを追加
         <translation>内容にあわせて揃える</translation>
     </message>
     <message>
-        <source>&lt;html&gt;Values will show the raw values for fields.&lt;p&gt;Strings will show human-readable strings instead of raw values for fields. Only applicable to custom columns with fields that have value strings and custom columns which can be resolved to strings.&lt;p&gt;Details will show the values using the same format as in Packet Details. Only applicable to custom columns.&lt;/html&gt;</source>
-        <translation>&lt;html&gt; 値はフィールドの生の値を表示します。&lt;p&gt; 文字列はフィールドの生の値の代わりに人が読める文字列を表示します。 文字列を持つフィールドのカスタム列および文字列に解決できるカスタム列にのみ適用されます&lt;p&gt; 詳細には、パケット詳細で使用されているのと同じ形式で値が表示されます。カスタム列にのみ適用されます。&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>Display as Values</source>
-        <translation>値として表示</translation>
-    </message>
-    <message>
-        <source>Display as Strings</source>
-        <translation>文字列として表示</translation>
-    </message>
-    <message>
         <source>Column Preferences…</source>
         <translation>列の設定…</translation>
     </message>
@@ -9489,16 +7578,8 @@ Shift+クリック: 空行では無効なブレークポイントを追加
         <translation>内容に合わせて列幅を揃える…</translation>
     </message>
     <message>
-        <source>Unfreeze Columns</source>
-        <translation>列の固定解除</translation>
-    </message>
-    <message>
-        <source>Freeze Column</source>
-        <translation>列を固定</translation>
-    </message>
-    <message>
-        <source>Display as Packet Details</source>
-        <translation>パケット詳細として表示</translation>
+        <source>Resolve Names</source>
+        <translation>名前を解決</translation>
     </message>
     <message>
         <source>Remove this Column</source>
@@ -9516,39 +7597,20 @@ Shift+クリック: 空行では無効なブレークポイントを追加
 <context>
     <name>PacketListModel</name>
     <message>
-        <source>Marked</source>
-        <translation>マーク済</translation>
-    </message>
-    <message>
-        <source>Ignored</source>
-        <translation>無視済</translation>
-    </message>
-    <message>
-        <source>Reference Time</source>
-        <translation>基準時刻</translation>
-    </message>
-    <message>
-        <source>Modified</source>
-        <translation>修正済</translation>
-    </message>
-</context>
-<context>
-    <name>PacketListProxyModel</name>
-    <message>
         <source>Column</source>
-        <translation type="unfinished"></translation>
+        <translation>列</translation>
     </message>
     <message>
         <source>%1 can only be sorted with %2 or fewer visible rows; increase cache size in Layout preferences</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 は %2 か、より少ない表示行数でのみソートできます。設定のレイアウトでキャッシュサイズを増やしてください。</translation>
     </message>
     <message>
         <source>Sorting &quot;%1&quot;…</source>
-        <translation type="unfinished"></translation>
+        <translation>&quot;%1&quot; ソート中…</translation>
     </message>
     <message>
         <source>Sorting …</source>
-        <translation type="unfinished"></translation>
+        <translation>ソート中 …</translation>
     </message>
 </context>
 <context>
@@ -9622,520 +7684,6 @@ Shift+クリック: 空行では無効なブレークポイントを追加
     <message>
         <source>Select a path</source>
         <translation>パスを選択</translation>
-    </message>
-</context>
-<context>
-    <name>PinnedRowsModel</name>
-    <message>
-        <source>This packet is pinned but doesn&apos;t match the display filter.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>This packet is pinned but has been aggregated into a later row with the same key.</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>Plot</name>
-    <message>
-        <source>Field cannot be empty.</source>
-        <translation>フィールドを空にはできません</translation>
-    </message>
-</context>
-<context>
-    <name>PlotAction</name>
-    <message>
-        <source>Plot %1 with current filter</source>
-        <translation>現在のフィルタで %1 を描画</translation>
-    </message>
-    <message>
-        <source>Plot %1</source>
-        <translation>%1 を描画</translation>
-    </message>
-</context>
-<context>
-    <name>PlotDialog</name>
-    <message>
-        <source>Dialog</source>
-        <translation>ダイアログ</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
-
-&lt;h3&gt;Valuable and amazing time-saving keyboard shortcuts&lt;/h3&gt;
-&lt;table&gt;&lt;tbody&gt;
-
-&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;Zoom in&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;Zoom out&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;x&lt;/th&gt;&lt;td&gt;Zoom in X axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;X&lt;/th&gt;&lt;td&gt;Zoom out X axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;y&lt;/th&gt;&lt;td&gt;Zoom in Y axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;Y&lt;/th&gt;&lt;td&gt;Zoom out Y axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;Reset plot to its initial state&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;Move right 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;Move left 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;↑&lt;/th&gt;&lt;td&gt;Move up 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;↓&lt;/th&gt;&lt;td&gt;Move down 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;Move right 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;Move left 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;Move up 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;Move down 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;Move right 100 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;Move left 100 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;Move up 100 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;Move down 100 pixels&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;Go to packet under cursor&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;Toggle time origin&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;Toggle crosshairs&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;a&lt;/th&gt;&lt;td&gt;Toggle top axis&lt;/td&gt;&lt;/th&gt;
-
-&lt;/tbody&gt;&lt;/table&gt;
-&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
-
-&lt;h3&gt;価値のあり、すばらしく、時間を節約するキーボードショートカット&lt;/h3&gt;
-&lt;table&gt;&lt;tbody&gt;
-
-&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;拡大&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;縮小&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;x&lt;/th&gt;&lt;td&gt;X軸の拡大&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;X&lt;/th&gt;&lt;td&gt;X軸の縮小&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;y&lt;/th&gt;&lt;td&gt;Y軸の拡大&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;Y&lt;/th&gt;&lt;td&gt;Y軸の縮小&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;初期状態にグラフをリセット&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;右に10ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;左に10ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;↑&lt;/th&gt;&lt;td&gt;上に10ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;↓&lt;/th&gt;&lt;td&gt;したに10ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;右に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;左に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;上に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;下に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;右に100ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;左に100ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;上に100ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;下に100ピクセル移動&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;カーソル下のパケットへ移動&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;時間の基準を切り替え&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;十字カーソルの表示/非表示&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;a&lt;/th&gt;&lt;td&gt;上部軸の表示/非表示&lt;/td&gt;&lt;/th&gt;
-
-&lt;/tbody&gt;&lt;/table&gt;
-&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>Add a new plot.</source>
-        <translation>新規グラフを追加します</translation>
-    </message>
-    <message>
-        <source>Remove the selected plots.</source>
-        <translation>選択したグラフを削除します</translation>
-    </message>
-    <message>
-        <source>Duplicate the selected plots.</source>
-        <translation>選択したグラフを複製します</translation>
-    </message>
-    <message>
-        <source>Move the selected plots upwards.</source>
-        <translation>選択したグラフを上に移動します</translation>
-    </message>
-    <message>
-        <source>Move the selected plots downwards.</source>
-        <translation>選択したグラフを下に移動します</translation>
-    </message>
-    <message>
-        <source>Clear all plots.</source>
-        <translation>すべてのグラフをクリアします</translation>
-    </message>
-    <message>
-        <source>Automatic update</source>
-        <translation>自動アップデート</translation>
-    </message>
-    <message>
-        <source>Reset Plot</source>
-        <translation>グラフをリセットします</translation>
-    </message>
-    <message>
-        <source>Reset the plot to its initial state.</source>
-        <translation>グラフを初期状態にリセットします</translation>
-    </message>
-    <message>
-        <source>0</source>
-        <translation>0</translation>
-    </message>
-    <message>
-        <source>Zoom In</source>
-        <translation>拡大</translation>
-    </message>
-    <message>
-        <source>+</source>
-        <translation>+</translation>
-    </message>
-    <message>
-        <source>Zoom Out</source>
-        <translation>縮小</translation>
-    </message>
-    <message>
-        <source>-</source>
-        <translation>-</translation>
-    </message>
-    <message>
-        <source>Move Up 10 Pixels</source>
-        <translation>上に10ピクセル移動</translation>
-    </message>
-    <message>
-        <source>Up</source>
-        <translation>上</translation>
-    </message>
-    <message>
-        <source>Move Left 10 Pixels</source>
-        <translation>左に10ピクセル移動</translation>
-    </message>
-    <message>
-        <source>Left</source>
-        <translation>左</translation>
-    </message>
-    <message>
-        <source>Move Right 10 Pixels</source>
-        <translation>右に10ピクセル移動</translation>
-    </message>
-    <message>
-        <source>Right</source>
-        <translation>右</translation>
-    </message>
-    <message>
-        <source>Move Down 10 Pixels</source>
-        <translation>下に10ピクセル移動</translation>
-    </message>
-    <message>
-        <source>Down</source>
-        <translation>下</translation>
-    </message>
-    <message>
-        <source>Move Up 1 Pixel</source>
-        <translation>上に1ピクセル移動</translation>
-    </message>
-    <message>
-        <source>Shift+Up</source>
-        <translation>Shift+上</translation>
-    </message>
-    <message>
-        <source>Move Left 1 Pixel</source>
-        <translation>左に1ピクセル移動</translation>
-    </message>
-    <message>
-        <source>Shift+Left</source>
-        <translation>Shift+Left</translation>
-    </message>
-    <message>
-        <source>Move Right 1 Pixel</source>
-        <translation>右に1ピクセル移動</translation>
-    </message>
-    <message>
-        <source>Shift+Right</source>
-        <translation>Shift+右</translation>
-    </message>
-    <message>
-        <source>Move Down 1 Pixel</source>
-        <translation>下に1ピクセル移動</translation>
-    </message>
-    <message>
-        <source>Move down 1 Pixel</source>
-        <translation>下に1ピクセル移動</translation>
-    </message>
-    <message>
-        <source>Shift+Down</source>
-        <translation>Shift+下</translation>
-    </message>
-    <message>
-        <source>Move Up 100 Pixels</source>
-        <translation>上に100ピクセル移動</translation>
-    </message>
-    <message>
-        <source>Alt+Up</source>
-        <translation>Alt+上</translation>
-    </message>
-    <message>
-        <source>Move Left 100 Pixels</source>
-        <translation>左に100ピクセル移動</translation>
-    </message>
-    <message>
-        <source>Alt+Left</source>
-        <translation>Alt+左</translation>
-    </message>
-    <message>
-        <source>Move Right 100 Pixels</source>
-        <translation>右に100ピクセル移動</translation>
-    </message>
-    <message>
-        <source>Alt+Right</source>
-        <translation>Alt+右</translation>
-    </message>
-    <message>
-        <source>Move Down 100 Pixels</source>
-        <translation>下に100ピクセル移動</translation>
-    </message>
-    <message>
-        <source>Alt+Down</source>
-        <translation>Alt+下</translation>
-    </message>
-    <message>
-        <source>Go To Packet Under Cursor</source>
-        <translation>カーソル位置のパケットに移動</translation>
-    </message>
-    <message>
-        <source>Go to packet currently under the cursor</source>
-        <translation>現在のカーソル位置のパケットへ移動します</translation>
-    </message>
-    <message>
-        <source>G</source>
-        <translation>G</translation>
-    </message>
-    <message>
-        <source>Time origin</source>
-        <translation>時刻基準</translation>
-    </message>
-    <message>
-        <source>Toggle between time relative to first data point and time relative to capture start</source>
-        <translation> 最初のデータ点基準の時間とキャプチャ開始時刻基準の時間を切り替え</translation>
-    </message>
-    <message>
-        <source>T</source>
-        <translation>T</translation>
-    </message>
-    <message>
-        <source>Log scale</source>
-        <translation>ログのスケール</translation>
-    </message>
-    <message>
-        <source>Toggle Y-axis between logarithmic and linear scale</source>
-        <translation>Y軸を対数スケールと線形スケールで切り替え</translation>
-    </message>
-    <message>
-        <source>Crosshairs</source>
-        <translation>十字カーソル</translation>
-    </message>
-    <message>
-        <source>Toggle crosshairs</source>
-        <translation>十字カーソルの表示を切り替え</translation>
-    </message>
-    <message>
-        <source>Space</source>
-        <translation>スペース</translation>
-    </message>
-    <message>
-        <source>Top axis</source>
-        <translation>上部軸</translation>
-    </message>
-    <message>
-        <source>Toggle top axis on and off</source>
-        <translation>上部軸のオンとオフを切り替え</translation>
-    </message>
-    <message>
-        <source>A</source>
-        <translation>A </translation>
-    </message>
-    <message>
-        <source>Legend</source>
-        <translation>凡例</translation>
-    </message>
-    <message>
-        <source>Toggle legend</source>
-        <translation>凡例の表示を切り替え</translation>
-    </message>
-    <message>
-        <source>Zoom In X Axis</source>
-        <translation>X軸を拡大</translation>
-    </message>
-    <message>
-        <source>X</source>
-        <translation>X</translation>
-    </message>
-    <message>
-        <source>Zoom Out X Axis</source>
-        <translation>X軸を縮小</translation>
-    </message>
-    <message>
-        <source>Shift+X</source>
-        <translation>Shift+X</translation>
-    </message>
-    <message>
-        <source>Zoom In Y Axis</source>
-        <translation>Y軸を拡大</translation>
-    </message>
-    <message>
-        <source>Y</source>
-        <translation>Y</translation>
-    </message>
-    <message>
-        <source>Zoom Out Y Axis</source>
-        <translation>Y軸を縮小</translation>
-    </message>
-    <message>
-        <source>Shift+Y</source>
-        <translation>Shift+Y</translation>
-    </message>
-    <message>
-        <source>Add Marker</source>
-        <translation>マーカーを追加</translation>
-    </message>
-    <message>
-        <source>Move Marker</source>
-        <translation>マーカーを移動</translation>
-    </message>
-    <message>
-        <source>Show Pos Marker</source>
-        <translation>Posマーカーを表示</translation>
-    </message>
-    <message>
-        <source>Show Markers Difference</source>
-        <translation>マーカーの差異を表示</translation>
-    </message>
-    <message>
-        <source>Delete Marker</source>
-        <translation>マーカーを削除</translation>
-    </message>
-    <message>
-        <source>Delete All</source>
-        <translation>すべてを削除</translation>
-    </message>
-    <message>
-        <source>Show Markers DataPoints</source>
-        <translation>マーカーのデータポイントを表示</translation>
-    </message>
-    <message>
-        <source>Auto Scroll</source>
-        <translation>自動スクロール</translation>
-    </message>
-    <message>
-        <source>Multiple Value Axes</source>
-        <translation>複数値の軸</translation>
-    </message>
-    <message>
-        <source>Plots</source>
-        <translation>グラフ</translation>
-    </message>
-    <message>
-        <source>Save As…</source>
-        <translation>...として保存</translation>
-    </message>
-    <message>
-        <source>Copy</source>
-        <translation>コピー</translation>
-    </message>
-    <message>
-        <source>Copy plots from another profile.</source>
-        <translation>別のプロファイルからグラフをコピーします</translation>
-    </message>
-    <message>
-        <source>Markers</source>
-        <translation>マーカー</translation>
-    </message>
-    <message>
-        <source>Filtered packets</source>
-        <translation>フィルタされたパケット</translation>
-    </message>
-    <message>
-        <source>All packets</source>
-        <translation>すべてのパケット</translation>
-    </message>
-    <message>
-        <source>Seq. num.</source>
-        <translation>シーケンス番号</translation>
-    </message>
-    <message>
-        <source>Frame num.</source>
-        <translation>フレーム番号</translation>
-    </message>
-    <message>
-        <source>Release to zoom, x = %1 to %2, y = %3 to %4</source>
-        <translation>離してズーム, x = %1 から %2, y = %3 から %4</translation>
-    </message>
-    <message>
-        <source>Unable to select range.</source>
-        <translation>範囲を選択できません</translation>
-    </message>
-    <message>
-        <source>Select a plot for details.</source>
-        <translation>詳細のためのグラフを選択します</translation>
-    </message>
-    <message>
-        <source>Click to select packet</source>
-        <translation>クリックしてパケットを選択</translation>
-    </message>
-    <message>
-        <source>%1 Plots: %2</source>
-        <translation>%1 描画: %2</translation>
-    </message>
-    <message>
-        <source>Packet</source>
-        <translation>パケット</translation>
-    </message>
-    <message>
-        <source>%1 (%2s%3).</source>
-        <translation>%1 (%2s%3).</translation>
-    </message>
-    <message>
-        <source>Move to top left</source>
-        <translation>左上に移動</translation>
-    </message>
-    <message>
-        <source>Move to top center</source>
-        <translation>中央上に移動</translation>
-    </message>
-    <message>
-        <source>Move to top right</source>
-        <translation>右上に移動</translation>
-    </message>
-    <message>
-        <source>Move to bottom left</source>
-        <translation>左下に移動</translation>
-    </message>
-    <message>
-        <source>Move to bottom center</source>
-        <translation>中央下に移動</translation>
-    </message>
-    <message>
-        <source>Move to bottom right</source>
-        <translation>右下に移動</translation>
-    </message>
-    <message>
-        <source>Time (s)</source>
-        <translation>時間(秒)</translation>
-    </message>
-    <message>
-        <source>relative to capture start</source>
-        <translation>キャプチャ開始を基準に</translation>
-    </message>
-    <message>
-        <source>relative to first data point</source>
-        <translation>最初のデータ時を基準に</translation>
-    </message>
-    <message>
-        <source>Portable Document Format (*.pdf)</source>
-        <translation>PDF形式 (*.pdf)</translation>
-    </message>
-    <message>
-        <source>Portable Network Graphics (*.png)</source>
-        <translation>PNG形式 (*.png)</translation>
-    </message>
-    <message>
-        <source>Windows Bitmap (*.bmp)</source>
-        <translation>Windowsビットマップ形式 (*.bmp)</translation>
-    </message>
-    <message>
-        <source>JPEG File Interchange Format (*.jpeg *.jpg)</source>
-        <translation>JPEG形式 (*.jpeg *.jpg)</translation>
-    </message>
-    <message>
-        <source>Save Graph As…</source>
-        <translation>...としてグラフを保存</translation>
     </message>
 </context>
 <context>
@@ -10237,16 +7785,6 @@ Shift+クリック: 空行では無効なブレークポイントを追加
         <source>Preferences</source>
         <translation>設定</translation>
     </message>
-    <message>
-        <source>Copy</source>
-        <translation>コピー</translation>
-    </message>
-    <message numerus="yes">
-        <source>Copy Row(s)</source>
-        <translation>
-            <numerusform>行をコピー</numerusform>
-        </translation>
-    </message>
 </context>
 <context>
     <name>PrefsModel</name>
@@ -10267,12 +7805,8 @@ Shift+クリック: 空行では無効なブレークポイントを追加
         <translation>列</translation>
     </message>
     <message>
-        <source>Theme and Font</source>
-        <translation>テーマとフォント</translation>
-    </message>
-    <message>
-        <source>Welcome Page</source>
-        <translation>Welcomeページ</translation>
+        <source>Font and Colors</source>
+        <translation>フォントと色</translation>
     </message>
     <message>
         <source>Capture</source>
@@ -10289,10 +7823,6 @@ Shift+クリック: 空行では無効なブレークポイントを追加
     <message>
         <source>RSA Keys</source>
         <translation>RSA 鍵</translation>
-    </message>
-    <message>
-        <source>Aggregation</source>
-        <translation>集約</translation>
     </message>
 </context>
 <context>
@@ -10381,6 +7911,10 @@ Shift+クリック: 空行では無効なブレークポイントを追加
         <translation>設定プロファイル</translation>
     </message>
     <message>
+        <source>Auto switch event limit</source>
+        <translation>自動スイッチイベント限度</translation>
+    </message>
+    <message>
         <source>Import</source>
         <comment>noun</comment>
         <translation>インポート</translation>
@@ -10391,30 +7925,30 @@ Shift+クリック: 空行では無効なブレークポイントを追加
         <translation>エクスポート</translation>
     </message>
     <message>
-        <source>From Zip File…</source>
-        <oldsource>From Zip File...</oldsource>
+        <source>From Zip File...</source>
         <translation>Zipファイルより...</translation>
     </message>
     <message>
-        <source>From Directory…</source>
-        <oldsource>From Directory...</oldsource>
+        <source>From Directory...</source>
         <translation>ディレクトリより...</translation>
     </message>
     <message numerus="yes">
-        <source>%Ln Selected Personal Profile(s)…</source>
-        <oldsource>%Ln Selected Personal Profile(s)...</oldsource>
+        <source>%Ln Selected Personal Profile(s)...</source>
         <translation>
             <numerusform>%Ln 選択された個人プロファイル...</numerusform>
         </translation>
     </message>
     <message>
-        <source>All Personal Profiles…</source>
-        <oldsource>All Personal Profiles...</oldsource>
+        <source>All Personal Profiles...</source>
         <translation>すべての個人プロファイル...</translation>
     </message>
     <message>
         <source>New profile</source>
         <translation>新規プロファイル</translation>
+    </message>
+    <message>
+        <source>Profile Error</source>
+        <translation>プロファイルエラー</translation>
     </message>
     <message>
         <source>Exporting profiles</source>
@@ -10439,6 +7973,22 @@ Shift+クリック: 空行では無効なブレークポイントを追加
         <translation type="vanished">
             <numerusform>%Ln 選択された個人プロファイル</numerusform>
         </translation>
+    </message>
+    <message>
+        <source>An import of profiles is not allowed, while changes are pending</source>
+        <translation>プロファイルのインポートは許可されません。この間の変更は保留されます。</translation>
+    </message>
+    <message>
+        <source>An import is pending to be saved. Additional imports are not allowed</source>
+        <translation>保存されるインポートは保留中です。追加のインポートは許可されません。</translation>
+    </message>
+    <message>
+        <source>An export of profiles is only allowed for personal profiles</source>
+        <translation>プロファイルのエクスポートは個人プロファイルのみ許可されます。</translation>
+    </message>
+    <message>
+        <source>An export of profiles is not allowed, while changes are pending</source>
+        <translation>プロファイルのエクスポートは許可されません。この間の変更は保留されます。</translation>
     </message>
     <message numerus="yes">
         <source>%Ln profile(s) exported</source>
@@ -10508,24 +8058,24 @@ Shift+クリック: 空行では無効なブレークポイントを追加
         <translation>これはシステム提供プロファイルです</translation>
     </message>
     <message>
+        <source>A profile change for this name is pending</source>
+        <translation>この名前のプロファイルの変更は保留中です。</translation>
+    </message>
+    <message>
+        <source> (See: %1)</source>
+        <translation> (参照: %1)</translation>
+    </message>
+    <message>
+        <source>This is an invalid profile definition</source>
+        <translation>これは無効なプロファイル定義です。</translation>
+    </message>
+    <message>
         <source>A profile already exists with this name</source>
         <translation>この名前のプロファイルは既に存在します。</translation>
     </message>
     <message>
-        <source>Duplicate profile name (%1)</source>
-        <translation>プロファイル名が重複しています (%1)</translation>
-    </message>
-    <message>
-        <source>A profile change for this name is pending (See: %1)</source>
-        <translation>この名前のプロファイル変更が保留中です (参照: %1)</translation>
-    </message>
-    <message>
-        <source>%1 (originally %2)</source>
-        <translation>%1 (元は %2)</translation>
-    </message>
-    <message>
-        <source>The %1 profile is being deleted</source>
-        <translation>%1 プロファイルを削除しています</translation>
+        <source>A profile with this name is being deleted</source>
+        <translation>この名前のプロファイルは削除されました。</translation>
     </message>
     <message>
         <source>Created from default settings</source>
@@ -10549,8 +8099,16 @@ Shift+クリック: 空行では無効なブレークポイントを追加
         <translation>コピー</translation>
     </message>
     <message>
+        <source>Exporting profiles while changes are pending is not allowed</source>
+        <translation>変更が保留中のプロファイルのエキスポートはは許可されません。</translation>
+    </message>
+    <message>
         <source>No profiles found to export</source>
         <translation>エキスポートするプロファイルが見つかりませんでした</translation>
+    </message>
+    <message>
+        <source>Can&apos;t delete profile directory</source>
+        <translation>プロファイルのディレクトリを削除できません</translation>
     </message>
     <message>
         <source>A profile name cannot contain the following characters: %1</source>
@@ -10563,6 +8121,18 @@ Shift+クリック: 空行では無効なブレークポイントを追加
     <message>
         <source>A profile cannot start or end with a period (.)</source>
         <translation>プロファイルはピリオド (.) で開始や終了できません</translation>
+    </message>
+    <message>
+        <source>Default</source>
+        <translation>デフォルト</translation>
+    </message>
+    <message>
+        <source>Global</source>
+        <translation>グローバル</translation>
+    </message>
+    <message>
+        <source>Personal</source>
+        <translation>個人</translation>
     </message>
     <message>
         <source>Renamed from: %1</source>
@@ -10610,33 +8180,13 @@ Shift+クリック: 空行では無効なブレークポイントを追加
         <source>Loading</source>
         <translation>ロード中</translation>
     </message>
-    <message>
-        <source>Task progress</source>
-        <translation>タスクの進捗</translation>
-    </message>
-    <message>
-        <source>Shows the progress of the current background task.</source>
-        <translation>現在のバックグラウンドタスクの進捗を表示します</translation>
-    </message>
-    <message>
-        <source>Progress bar</source>
-        <translation>進捗バー</translation>
-    </message>
-    <message>
-        <source>Shows the percentage of the task that has been completed.</source>
-        <translation>完了したタスクの割合を表示します</translation>
-    </message>
-    <message>
-        <source>Stop</source>
-        <translation>停止</translation>
-    </message>
-    <message>
-        <source>Stops the current background task.</source>
-        <translation>現在のバックグラウンドタスクを停止します</translation>
-    </message>
 </context>
 <context>
     <name>ProtoTree</name>
+    <message>
+        <source>Packet details</source>
+        <translation>パケット詳細</translation>
+    </message>
     <message>
         <source>Not a field or protocol</source>
         <translation>フィールドやプロトコルではあります</translation>
@@ -10662,10 +8212,6 @@ Shift+クリック: 空行では無効なブレークポイントを追加
         <translation>すべて閉じる</translation>
     </message>
     <message>
-        <source>Distribution…</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Copy</source>
         <translation>コピー</translation>
     </message>
@@ -10679,7 +8225,7 @@ Shift+クリック: 空行では無効なブレークポイントを追加
     </message>
     <message>
         <source>Description</source>
-        <translation>説明</translation>
+        <translation>記述</translation>
     </message>
     <message>
         <source>Field Name</source>
@@ -10702,36 +8248,8 @@ Shift+クリック: 空行では無効なブレークポイントを追加
         <translation>フィルタフィールドリファレンス</translation>
     </message>
     <message>
-        <source>Tagging Rules...</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Tag Links</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Coloring Rule Preferences...</source>
-        <translation>色付けルール設定...</translation>
-    </message>
-    <message>
-        <source>Coloring Rules...</source>
-        <translation>色付けルール...</translation>
-    </message>
-    <message>
-        <source>Resume Coloring Rule</source>
-        <translation>色付けルールを復元</translation>
-    </message>
-    <message>
-        <source>Pause Coloring Rule</source>
-        <translation>色付けルールを停止</translation>
-    </message>
-    <message>
-        <source>Resume All Coloring Rules</source>
-        <translation>すべての色付けルールを復元</translation>
-    </message>
-    <message>
-        <source>Copied %1</source>
-        <translation>%1 コピー済</translation>
+        <source>Copied </source>
+        <translation>コピー済</translation>
     </message>
     <message>
         <source>Wiki Page for %1</source>
@@ -10744,29 +8262,6 @@ Shift+クリック: 空行では無効なブレークポイントを追加
     <message>
         <source>Colorize with Filter</source>
         <translation>フィルタで色付け</translation>
-    </message>
-</context>
-<context>
-    <name>ProtoTreeModel</name>
-    <message>
-        <source>Comment</source>
-        <translation>コメント</translation>
-    </message>
-    <message>
-        <source>Chat</source>
-        <translation>チャット</translation>
-    </message>
-    <message>
-        <source>Note</source>
-        <translation>注意</translation>
-    </message>
-    <message>
-        <source>Warning</source>
-        <translation>警告</translation>
-    </message>
-    <message>
-        <source>Error</source>
-        <translation>エラー</translation>
     </message>
 </context>
 <context>
@@ -10933,6 +8428,34 @@ Shift+クリック: 空行では無効なブレークポイントを追加
 </context>
 <context>
     <name>QObject</name>
+    <message>
+        <source>Average Throughput (bits/s)</source>
+        <translation>平均スループット(bits/s)</translation>
+    </message>
+    <message>
+        <source>Round Trip Time (ms)</source>
+        <translation>往復遅延時間(ミリ秒)</translation>
+    </message>
+    <message>
+        <source>Segment Length (B)</source>
+        <translation>セグメント長(バイト)</translation>
+    </message>
+    <message>
+        <source>Sequence Number (B)</source>
+        <translation>シーケンス番号(バイト)</translation>
+    </message>
+    <message>
+        <source>Time (s)</source>
+        <translation>時間(秒)</translation>
+    </message>
+    <message>
+        <source>Window Size (B)</source>
+        <translation>ウインドウサイズ(バイト)</translation>
+    </message>
+    <message>
+        <source>Unacked (Outstanding) Bytes (B)</source>
+        <translation>ACKされていない(未処理の)バイト(B)</translation>
+    </message>
     <message>
         <source>[no capture file]</source>
         <translation>[キャプチャファイルなし]</translation>
@@ -11255,7 +8778,7 @@ Shift+クリック: 空行では無効なブレークポイントを追加
     </message>
     <message>
         <source>Unknown (%1)</source>
-        <translation>不明 (%1)</translation>
+        <translation>未知 (%1)</translation>
     </message>
     <message>
         <source>CCCH</source>
@@ -11270,40 +8793,12 @@ Shift+クリック: 空行では無効なブレークポイントを追加
         <translation>DRB-%1</translation>
     </message>
     <message>
-        <source>Left</source>
-        <translation>左</translation>
-    </message>
-    <message>
-        <source>Center</source>
-        <translation>中央</translation>
-    </message>
-    <message>
-        <source>Right</source>
-        <translation>右</translation>
-    </message>
-    <message>
         <source>Unknown</source>
         <translation>不明</translation>
     </message>
     <message>
-        <source>Values</source>
-        <translation>値</translation>
-    </message>
-    <message>
-        <source>Strings</source>
-        <translation>文字列</translation>
-    </message>
-    <message>
-        <source>Details</source>
-        <translation>詳細</translation>
-    </message>
-    <message>
         <source>UE Id</source>
         <translation>UE Id</translation>
-    </message>
-    <message>
-        <source></source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Name</source>
@@ -11330,10 +8825,8 @@ Shift+クリック: 空行では無効なブレークポイントを追加
         <translation>無効な表示フィルタ</translation>
     </message>
     <message>
-        <source>The filter expression &quot;%1&quot; isn&apos;t a valid display filter.
-(%2).</source>
-        <translation>フィルタ式 &quot;%1&quot; は有効な表示フィルタではありません
-(%2)</translation>
+        <source>The filter expression %1 isn&apos;t a valid display filter. (%2).</source>
+        <translation>%1 フィルターの書式は有効な表示フィルタではありません (%2)</translation>
     </message>
     <message>
         <source>Error</source>
@@ -11428,308 +8921,23 @@ Shift+クリック: 空行では無効なブレークポイントを追加
         <translation>読込</translation>
     </message>
     <message>
-        <source>Average Throughput</source>
-        <translation>平均スループット</translation>
+        <source>Left</source>
+        <translation>左</translation>
     </message>
     <message>
-        <source>Round Trip Time</source>
-        <translation>往復遅延時間</translation>
+        <source>Center</source>
+        <translation>中央</translation>
     </message>
     <message>
-        <source>Segment Length</source>
-        <translation>セグメント長</translation>
-    </message>
-    <message>
-        <source>Sequence Number</source>
-        <translation>シーケンス番号</translation>
-    </message>
-    <message>
-        <source>Time</source>
-        <translation>時間</translation>
-    </message>
-    <message>
-        <source>Window Size</source>
-        <translation>ウィンドウサイズ</translation>
-    </message>
-    <message>
-        <source>Unacked (Outstanding) Bytes</source>
-        <translation>ACKされていない(未処理の)バイト</translation>
-    </message>
-    <message>
-        <source>Dissector</source>
-        <translation>ダイセクタ</translation>
-    </message>
-    <message>
-        <source>File Type</source>
-        <translation>ファイル形式</translation>
-    </message>
-    <message>
-        <source>Codec</source>
-        <translation>コーデック</translation>
-    </message>
-    <message>
-        <source>Analysis</source>
-        <translation>分析</translation>
-    </message>
-    <message>
-        <source>Tap Listener</source>
-        <translation>タップリスナ</translation>
-    </message>
-    <message>
-        <source>Display Filter</source>
-        <translation>表示フィルタ</translation>
-    </message>
-    <message>
-        <source>User Interface</source>
-        <translation>ユーザーインターフェース</translation>
-    </message>
-    <message>
-        <source>not found</source>
-        <translation>見つかりません</translation>
-    </message>
-    <message>
-        <source>Global</source>
-        <translation>グローバル</translation>
-    </message>
-    <message>
-        <source>Personal</source>
-        <translation>個人</translation>
-    </message>
-    <message>
-        <source>Type: %1</source>
-        <translation>種別: %1</translation>
-    </message>
-    <message>
-        <source>%1 = %2</source>
-        <translation>%1 = %2</translation>
-    </message>
-    <message>
-        <source>Copy Name</source>
-        <translation>名前をコピー</translation>
-    </message>
-    <message>
-        <source>Copy Value</source>
-        <translation>値をコピー</translation>
-    </message>
-    <message>
-        <source>Copy Path</source>
-        <translation>パスをコピー</translation>
-    </message>
-    <message>
-        <source>Copy Name &amp;&amp; Value</source>
-        <translation>名前と値をコピー</translation>
-    </message>
-    <message>
-        <source>Add Watch: &quot;%1&quot;</source>
-        <translation>ウォッチを追加: &quot;%1&quot;</translation>
-    </message>
-    <message>
-        <source>Reload Lua Plugins</source>
-        <translation>Luaプラグインを再読込</translation>
-    </message>
-    <message>
-        <source>Are you sure you want to reload all Lua plugins?
-
-This will restart all Lua scripts and may affect capture analysis.</source>
-        <translation>本当にすべてのLuaプラグインを再読み込みしてもよろしいですか？
-これによりすべての Lua スクリプトが再起動され、キャプチャ解析に影響する可能性があります</translation>
-    </message>
-    <message>
-        <source>Evaluation available when debugger is paused</source>
-        <translation>評価はデバッガの一時停止中に利用できます</translation>
-    </message>
-    <message>
-        <source>Enter Lua expression</source>
-        <translation>Lua式を入力</translation>
-    </message>
-    <message>
-        <source>Error: %1</source>
-        <translation>エラー: %1</translation>
-    </message>
-    <message>
-        <source>Error: Unknown error</source>
-        <translation>エラー:不明なエラー</translation>
-    </message>
-    <message>
-        <source>Open Source</source>
-        <translation>ソースを開く</translation>
-    </message>
-    <message>
-        <source>Copy Location</source>
-        <translation>位置をコピー</translation>
-    </message>
-    <message>
-        <source>Show in Finder</source>
-        <translation>ファインダーで表示</translation>
-    </message>
-    <message>
-        <source>Show in Folder</source>
-        <translation>フォルダで表示</translation>
-    </message>
-    <message>
-        <source>Add Watch</source>
-        <translation>ウォッチを追加</translation>
-    </message>
-    <message>
-        <source>Remove All Watches</source>
-        <translation>すべてのウォッチを削除</translation>
-    </message>
-    <message>
-        <source>Duplicate Watch</source>
-        <translation>ウォッチを複製</translation>
-    </message>
-    <message>
-        <source>Edit Watch</source>
-        <translation>ウォッチを編集</translation>
-    </message>
-    <message>
-        <source>Remove</source>
-        <translation>削除</translation>
-    </message>
-    <message>
-        <source>Clear All Watches</source>
-        <translation>すべてのウォッチをクリア</translation>
-    </message>
-    <message numerus="yes">
-        <source>Are you sure you want to remove %Ln watch(es)?</source>
-        <translation>
-            <numerusform>本当に %Ln 個のウォッチを削除してもよろしいですか？</numerusform>
-        </translation>
-    </message>
-    <message>
-        <source>Maximum watch depth reached</source>
-        <translation>ウォッチの最大深度に達しました</translation>
-    </message>
-    <message>
-        <source>Maximum watch depth reached.</source>
-        <translation>ウォッチの最大深度に達しました</translation>
-    </message>
-    <message>
-        <source>Location</source>
-        <translation>位置</translation>
-    </message>
-    <message>
-        <source>&lt;p&gt;&lt;b&gt;Hit-count summary&lt;/b&gt;&lt;/p&gt;&lt;p&gt;&lt;code&gt;≥N&lt;/code&gt; &amp;mdash; &lt;i&gt;from&lt;/i&gt; mode: pause from hit &lt;i&gt;N&lt;/i&gt; onwards.&lt;br/&gt;&lt;code&gt;×N&lt;/code&gt; &amp;mdash; &lt;i&gt;every&lt;/i&gt; mode: pause on hits &lt;i&gt;N&lt;/i&gt;, &lt;i&gt;2N&lt;/i&gt;, &lt;i&gt;3N&lt;/i&gt;, &amp;hellip;&lt;br/&gt;&lt;code&gt;@N&lt;/code&gt; &amp;mdash; &lt;i&gt;once&lt;/i&gt; mode: pause once on the &lt;i&gt;N&lt;/i&gt;th hit, then deactivate.&lt;/p&gt;&lt;p&gt;The cell starts with the running hit counter; if a gate is set it follows in parentheses, e.g. &lt;code&gt;3 (≥10)&lt;/code&gt;. With no hit gate the cell is just the counter.&lt;/p&gt;&lt;p&gt;Edit the &lt;i&gt;Location&lt;/i&gt; cell to set or change the gate (see the breakpoint-extras section).&lt;/p&gt;</source>
-        <translation>&lt;p&gt;&lt;b&gt;ヒット回数サマリ&lt;/b&gt;&lt;/p&gt;&lt;p&gt;&lt;code&gt;≥N&lt;/code&gt; &amp;mdash; &lt;i&gt;from&lt;/i&gt; モード: &lt;i&gt;N&lt;/i&gt; 回目以降のすべてのヒットで一時停止します。&lt;br/&gt;&lt;code&gt;×N&lt;/code&gt; &amp;mdash; &lt;i&gt;every&lt;/i&gt; モード:  &lt;i&gt;N&lt;/i&gt;, &lt;i&gt;2N&lt;/i&gt;, &lt;i&gt;3N&lt;/i&gt;...回目のヒットで一時停止します。 &lt;br/&gt;&lt;code&gt;@N&lt;/code&gt; &amp;mdash; &lt;i&gt;once&lt;/i&gt; モード:  &lt;i&gt;N&lt;/i&gt;回目のヒットで一度だけ一時停止し、その後ブレークポイントを無効化します。&lt;/p&gt;&lt;p&gt;セルは実行中のヒットカウンタで始まり、条件が設定されている場合は括弧内に表示されます（例: &lt;code&gt;3 (≥10)&lt;/code&gt; ヒット条件がない場合、セルにはカウンタのみ表示されます。&lt;/p&gt;&lt;p&gt;条件を編集するには &lt;i&gt;Location&lt;/i&gt;セルを編集してください（ブレークポイント拡張セクションを参照） &lt;/p&gt;</translation>
-    </message>
-    <message>
-        <source>Edit...</source>
-        <translation>編集...</translation>
-    </message>
-    <message>
-        <source>Reset Hit Count</source>
-        <translation>ヒット回数をリセット</translation>
-    </message>
-    <message>
-        <source>Reset All Hit Counts</source>
-        <translation>すべてのヒット回数をリセット</translation>
-    </message>
-    <message>
-        <source>Remove All Breakpoints</source>
-        <translation>すべてのブレークポイントを削除</translation>
-    </message>
-    <message>
-        <source>Clear All Breakpoints</source>
-        <translation>すべてのブレークポイントをクリア</translation>
-    </message>
-    <message numerus="yes">
-        <source>Are you sure you want to remove %Ln breakpoint(s)?</source>
-        <translation>
-            <numerusform>%Ln 個のブレークポイントを削除してもよろしいですか？</numerusform>
-        </translation>
-    </message>
-    <message>
-        <source>Location: %1:%2</source>
-        <translation>位置: %1:%2</translation>
-    </message>
-    <message>
-        <source>Condition: %1</source>
-        <translation>条件: %1</translation>
-    </message>
-    <message>
-        <source>pauses on hits %1, 2×%1, 3×%1, …</source>
-        <translation>%1、2×%1、3×%1、… 回目のヒットで一時停止</translation>
-    </message>
-    <message>
-        <source>pauses once on hit %1, then deactivates the breakpoint</source>
-        <translation>%1 回目のヒットで一度だけ一時停止し、その後ブレークポイントを無効化</translation>
-    </message>
-    <message>
-        <source>pauses on every hit from %1 onwards</source>
-        <translation>%1 回目以降のすべてのヒットで一時停止</translation>
-    </message>
-    <message>
-        <source>Hit Count: %1 / %2 (%3)</source>
-        <translation>ヒット回数: %1 / %2 (%3)</translation>
-    </message>
-    <message>
-        <source>Hits: %1</source>
-        <translation>ヒット: %1</translation>
-    </message>
-    <message>
-        <source>Log: %1</source>
-        <translation>ログ: %1</translation>
-    </message>
-    <message>
-        <source>(logpoint — also pauses)</source>
-        <translation>(ログポイント — 一時停止も行います)</translation>
-    </message>
-    <message>
-        <source>(logpoint — does not pause)</source>
-        <translation>(ログポイント — 一時停止しません)</translation>
-    </message>
-    <message>
-        <source>Condition error on last evaluation — treated as false (silent). Edit or reset the breakpoint to clear.</source>
-        <translation>前回の評価で条件エラーが発生しました — false として扱われます（サイレント）。解除するにはブレークポイントを編集またはリセットしてください</translation>
-    </message>
-    <message>
-        <source>Condition error: %1</source>
-        <translation>条件エラー: %1</translation>
-    </message>
-    <message>
-        <source>File not found: %1</source>
-        <translation>ファイルが見つかりません: %1</translation>
-    </message>
-    <message>
-        <source>&amp;Edit...</source>
-        <translation>編集(&amp;E)...</translation>
-    </message>
-    <message>
-        <source>&amp;Disable</source>
-        <translation>無効化(&amp;D)</translation>
-    </message>
-    <message>
-        <source>&amp;Enable</source>
-        <translation>有効化(&amp;E)</translation>
-    </message>
-    <message>
-        <source>&amp;Remove</source>
-        <translation>削除(&amp;R)</translation>
-    </message>
-    <message>
-        <source>No breakpoints
-%1: add or remove breakpoint on the current line in the editor</source>
-        <translation>ブレークポイントはありません
-%1: エディタの現在の行にブレークポイントを追加または削除</translation>
-    </message>
-    <message>
-        <source>All breakpoints are inactive — click to activate all
-%1: add or remove on the current line in the editor</source>
-        <translation>すべてのブレークポイントは無効です — クリックしてすべて有効化します
-%1: エディタの現在の行で追加または削除</translation>
-    </message>
-    <message>
-        <source>Click to deactivate all breakpoints
-%1: add or remove on the current line in the editor</source>
-        <translation>クリックしてすべてのブレークポイントを無効化します
-%1: エディタの現在の行で追加または削除</translation>
+        <source>Right</source>
+        <translation>右</translation>
     </message>
 </context>
 <context>
-    <name>RecentCaptureFilesListModel</name>
+    <name>QObject::QObject::QObject</name>
     <message>
-        <source>%1 (file no longer found at path)</source>
-        <translation>%1 (ファイルがパスにありませんでした)</translation>
+        <source>CCCH</source>
+        <translation>CCCH</translation>
     </message>
 </context>
 <context>
@@ -12205,12 +9413,12 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     </message>
     <message>
         <source>Delta (ms)</source>
-        <translation>間隔(ミリ秒)</translation>
+        <translation>間隔 (ms)</translation>
     </message>
     <message>
         <source>Jitter (ms)</source>
         <oldsource>Jitter</oldsource>
-        <translation>ジッタ(ミリ秒)</translation>
+        <translation>ジッタ (ms)</translation>
     </message>
     <message>
         <source>Skew</source>
@@ -12244,11 +9452,9 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <source>Stream %1 Delta</source>
         <translation>ストリーム %1 デルタ</translation>
     </message>
-    <message numerus="yes">
-        <source> %Ln stream(s), </source>
-        <translation>
-            <numerusform> %Ln ストリーム, </numerusform>
-        </translation>
+    <message>
+        <source> %1 streams, </source>
+        <translation> %1 ストリーム, </translation>
     </message>
     <message>
         <source>Save one stream CSV</source>
@@ -12261,6 +9467,10 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source>&amp;Analyze</source>
         <translation>分析(&amp;A)</translation>
+    </message>
+    <message>
+        <source>Open the analysis window for the selected stream(s)</source>
+        <translation>&#x3000;選択したストリームの分析ウインドウを開きます</translation>
     </message>
     <message>
         <source>&amp;Set List</source>
@@ -12277,10 +9487,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source>Replace existing list in RTP Analysis Dialog with new one</source>
         <translation>RTP分析画面の既存リストを新規に置換</translation>
-    </message>
-    <message>
-        <source>Open the analysis window for the selected stream(s)</source>
-        <translation>選択したストリームの分析ウィンドウを開く</translation>
     </message>
     <message>
         <source>Add new set to existing list in RTP Analysis Dialog</source>
@@ -12367,7 +9573,7 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>フィルタを準備(&amp;F)</translation>
     </message>
     <message>
-        <source>Prepare a filter matching the selected streams.</source>
+        <source>Prepare a filter matching the selected stream(s).</source>
         <translation>選択したストリームに合致するフィルタを準備します</translation>
     </message>
     <message>
@@ -12558,18 +9764,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>時刻</translation>
     </message>
     <message>
-        <source>Visual Sample Rate:</source>
-        <translation>視覚サンプルレート:</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Adjust the sampling rate used for the waveform display. Higher values display higher frequency harmonics but take additional processing time. Values between 1 kHz and 48 kHz are supported.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;波形表示で用いられるサンプリングレートを調節します。 値を高くすると高周波の倍音も表示されますが、処理時間が多くかかります。1kHz〜48kHzの範囲の値が使用可能です。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source> Hz</source>
-        <translation>ヘルツ</translation>
-    </message>
-    <message>
         <source>&amp;Export</source>
         <translation>エクスポート(&amp;E)</translation>
     </message>
@@ -12646,14 +9840,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>選択したストリームをミュート・ミュート解除</translation>
     </message>
     <message>
-        <source>Solo</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Unmute selected streams and mute all other streams</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Route audio to left channel of selected streams</source>
         <translation>選択したストリームの左チャンネルへオーディオを接続</translation>
     </message>
@@ -12715,7 +9901,7 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     </message>
     <message>
         <source>I&amp;naudible streams</source>
-        <translation>聴取不可のストリーム(&amp;n)</translation>
+        <translation>音声のないストリーム(&amp;n)</translation>
     </message>
     <message>
         <source>Select/Deselect inaudible streams</source>
@@ -12746,7 +9932,7 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>フィルタを準備(&amp;F)</translation>
     </message>
     <message>
-        <source>Prepare a filter matching the selected streams.</source>
+        <source>Prepare a filter matching the selected stream(s).</source>
         <translation>選択したストリームに合致するフィルタを準備します</translation>
     </message>
     <message>
@@ -12874,9 +10060,8 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>音声なし</translation>
     </message>
     <message>
-        <source>Decoding streams…</source>
-        <oldsource>Decoding streams...</oldsource>
-        <translation>ストリームをデコード中…</translation>
+        <source>Decoding streams...</source>
+        <translation>ストリームをデコード中</translation>
     </message>
     <message>
         <source>Out of Sequence</source>
@@ -12898,11 +10083,9 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <source>Double click on cell to change audio routing</source>
         <translation>セルをダブルクリックして音声ルーティングを変更します</translation>
     </message>
-    <message numerus="yes">
-        <source>%Ln stream(s)</source>
-        <translation>
-            <numerusform>%Ln ストリーム</numerusform>
-        </translation>
+    <message>
+        <source>%1 streams</source>
+        <translation>%1 ストリーム</translation>
     </message>
     <message>
         <source>, %1 selected</source>
@@ -12921,21 +10104,12 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>, 開始: %1, カーソル: %2. &quot;G&quot; を押してパケット %3 へ移動します。ダブルクリックして再生開始を設定します。</translation>
     </message>
     <message>
-        <source>Playback of stream %1 failed.</source>
-        <translation>ストリーム %1 の再生に失敗しました</translation>
-    </message>
-    <message>
-        <source>Save failed.</source>
-        <translation>保存に失敗しました</translation>
+        <source>Playback of stream %1 failed!</source>
+        <translation>ストリーム %1 の再生に失敗しました!!</translation>
     </message>
     <message>
         <source>Automatic</source>
         <translation>自動</translation>
-    </message>
-    <message>
-        <source>Resampling waveform…</source>
-        <oldsource>Resampling waveform...</oldsource>
-        <translation>波形を再サンプリング...</translation>
     </message>
     <message>
         <source>WAV (*.wav)</source>
@@ -12978,6 +10152,10 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>保存にて適したストリームはありません</translation>
     </message>
     <message>
+        <source>Save failed!</source>
+        <translation>保存失敗!!</translation>
+    </message>
+    <message>
         <source>Can&apos;t write header of AU file</source>
         <translation>AUファイルのヘッダを書き込むことができません</translation>
     </message>
@@ -12994,8 +10172,7 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>ダブルクリックして音声ルーティングを変更します</translation>
     </message>
     <message>
-        <source>Preparing to play…</source>
-        <oldsource>Preparing to play...</oldsource>
+        <source>Preparing to play...</source>
         <translation>再生準備中...</translation>
     </message>
     <message>
@@ -13047,11 +10224,11 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     </message>
     <message>
         <source>Lost</source>
-        <translation>損失</translation>
+        <translation>欠落</translation>
     </message>
     <message>
         <source>Max Delta (ms)</source>
-        <translation>最大間隔(ミリ秒)</translation>
+        <translation>最大間隔(ms)</translation>
     </message>
     <message>
         <source>Max Jitter</source>
@@ -13098,7 +10275,7 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>分析(&amp;A)</translation>
     </message>
     <message>
-        <source>Open the analysis window for the selected streams and add it to it</source>
+        <source>Open the analysis window for the selected stream(s) and add it to it</source>
         <translation>選択したストリームに対して分析ウインドウを開き追加します</translation>
     </message>
     <message>
@@ -13107,11 +10284,11 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     </message>
     <message>
         <source>Min Delta (ms)</source>
-        <translation>最小間隔(ミリ秒)</translation>
+        <translation>最小間隔(ms)</translation>
     </message>
     <message>
         <source>Mean Delta (ms)</source>
-        <translation>平均間隔(ミリ秒)</translation>
+        <translation>平均間隔(ms)</translation>
     </message>
     <message>
         <source>Min Jitter</source>
@@ -13154,7 +10331,7 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>パケットをマーク</translation>
     </message>
     <message>
-        <source>Mark the packets of the selected streams.</source>
+        <source>Mark the packets of the selected stream(s).</source>
         <translation>選択したストリームのパケットをマークします</translation>
     </message>
     <message>
@@ -13198,7 +10375,7 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>G</translation>
     </message>
     <message>
-        <source>Prepare a filter matching the selected streams.</source>
+        <source>Prepare a filter matching the selected stream(s).</source>
         <translation>選択したストリームに合致するフィルタを準備します</translation>
     </message>
     <message>
@@ -13257,17 +10434,13 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <source>as YAML</source>
         <translation>YAMLとして</translation>
     </message>
-    <message numerus="yes">
-        <source>%Ln stream(s)</source>
-        <translation>
-            <numerusform>%Ln ストリーム</numerusform>
-        </translation>
+    <message>
+        <source>%1 streams</source>
+        <translation>%1 ストリーム</translation>
     </message>
-    <message numerus="yes">
-        <source>, %1 selected, %Ln total packet(s)</source>
-        <translation>
-            <numerusform>, %1 選択済, %Ln 全パケット</numerusform>
-        </translation>
+    <message>
+        <source>, %1 selected, %2 total packets</source>
+        <translation>, %1 選択, %2 全パケット</translation>
     </message>
     <message>
         <source>Save RTPDump As…</source>
@@ -13770,14 +10943,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>複数発生するフィールド値</translation>
     </message>
     <message>
-        <source>Search the selected packet details tree</source>
-        <translation>選択したパケット詳細ツリーを検索</translation>
-    </message>
-    <message>
-        <source>Find in selected Packet</source>
-        <translation>選択したパケットを検索</translation>
-    </message>
-    <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Search for data using display filter syntax (e.g. ip.addr==10.1.1.1), a hexadecimal string (e.g. fffffda5), a plain string (e.g. My String) or a regular expression (e.g. colou?r).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <oldsource>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Search for data using display filter syntax (e.g. ip.addr==10.1.1.1), a hexadecimal string (e.g. fffffda5) or a plain string (e.g. My String).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</oldsource>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;表示フィルタ構文(例 ip.addr==10.1.1.1),16数文字列(例 ffffda5),平文文字列(例 My String)もしくは正規表現(例 colou?r)を用いてデータを検索しますt;/body&gt;&lt;/html&gt;</translation>
@@ -13815,12 +10980,20 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>無効なフィルタです</translation>
     </message>
     <message>
-        <source>Search for a plain text string in the current packet details tree (e.g. My String).</source>
-        <translation>現在のパケット詳細ツリーのプレインテキスト文字列を検索 (例 My String)</translation>
+        <source>Event List</source>
+        <translation>イベントリスト</translation>
     </message>
     <message>
-        <source>Search using a regular expression in the current packet details tree (e.g. colou?r).</source>
-        <translation>現在のパケット詳細ツリーを正規表現で検索 (例 colou?r)</translation>
+        <source>Event Details</source>
+        <translation>イベント詳細</translation>
+    </message>
+    <message>
+        <source>Event Bytes</source>
+        <translation>イベントバイト数</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Search the Info column of the event list (summary pane), decoded event display labels (tree view pane) or the ASCII-converted event data (hex view pane).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;イベント一覧(概要部分)やデコードされたイベント表示ラベル(ツリー表示部分)やアスキー変換されたイベントデータ(16進数表示部分)を検索します&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>That filter doesn&apos;t test anything.</source>
@@ -13865,30 +11038,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source>No packet matched that filter.</source>
         <translation>フィルタに一致するパケットはありませんでした</translation>
-    </message>
-    <message>
-        <source>Find in Packet supports string and regular expression search only.</source>
-        <translation>パケット内検索は文字列および正規表現のみ対応しています</translation>
-    </message>
-    <message>
-        <source>[no matches] %1</source>
-        <translation>[合致なし] %1</translation>
-    </message>
-    <message>
-        <source>No %1 found.</source>
-        <translation>%1 は見つかりません</translation>
-    </message>
-    <message>
-        <source>[%1 of %2]</source>
-        <translation>[%1 of %2]</translation>
-    </message>
-    <message>
-        <source>Search for a plain text string/char in the current packet details tree (e.g. &apos;flag&apos; or &apos;f&apos;).</source>
-        <translation>現在のパケット詳細ツリー内でプレーンテキスト文字列または文字を検索します（例 &apos;flag&apos; や &apos;f&apos;)</translation>
-    </message>
-    <message>
-        <source>Search using a regular expression in the current packet details tree (e.g. &apos;d&apos;).</source>
-        <translation>現在のパケット詳細ツリー内で正規表現を使用して検索します (例 &apos;d&apos;)</translation>
     </message>
 </context>
 <context>
@@ -14014,7 +11163,7 @@ This will restart all Lua scripts and may affect capture analysis.</source>
 &lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;上に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
 &lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;下に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
 
-&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;カーソルの位置のパケットへ移動&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;カーソル位置のパケットへ移動&lt;/td&gt;&lt;/th&gt;
 &lt;tr&gt;&lt;th&gt;n&lt;/th&gt;&lt;td&gt;次のパケットへ移動&lt;/td&gt;&lt;/th&gt;
 &lt;tr&gt;&lt;th&gt;p&lt;/th&gt;&lt;td&gt;前のパケットへ移動&lt;/td&gt;&lt;/th&gt;
 
@@ -14167,7 +11316,7 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     </message>
     <message>
         <source>Go to packet currently under the cursor</source>
-        <translation>現在のカーソル位置にあるパケットに移動します</translation>
+        <translation>現在のカーソル位置のパケットに移動します</translation>
     </message>
     <message>
         <source>G</source>
@@ -14245,14 +11394,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
 <context>
     <name>ShortcutListModel</name>
     <message>
-        <source>Display Filter Input</source>
-        <translation>表示フィルタ入力</translation>
-    </message>
-    <message>
-        <source>Jump to display filter input box</source>
-        <translation>表示フィルタ入力ボックスへジャンプ</translation>
-    </message>
-    <message>
         <source>Shortcut</source>
         <translation>ショートカット</translation>
     </message>
@@ -14262,7 +11403,7 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     </message>
     <message>
         <source>Description</source>
-        <translation>説明</translation>
+        <translation>記述</translation>
     </message>
 </context>
 <context>
@@ -14378,10 +11519,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>UTF-8形式</translation>
     </message>
     <message>
-        <source>UTF-8 Unescaped</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>YAML</source>
         <translation>YAML形式</translation>
     </message>
@@ -14427,10 +11564,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
 <context>
     <name>ShowPacketBytesTextEdit</name>
     <message>
-        <source>&lt;html&gt;Mouse byte selection is enabled when&lt;p&gt;&quot;Decode as&quot; = None&lt;p&gt;AND&lt;p&gt;&quot;Show as&quot; = ASCII, ASCII &amp; Control, EBCDIC or Raw&lt;/html&gt;</source>
-        <translation>&lt;html&gt;マウスいよるバイト選択は以下の場合に有効です&lt;p&gt;&quot;...としてでコード&quot; が未設定&lt;p&gt;かつ&lt;p&gt;&quot;...として表示&quot; が、ASCII, ASCII &amp; Control, EBCDIC もしくは Raw&lt;/html&gt;</translation>
-    </message>
-    <message>
         <source>Show Selected</source>
         <translation>選択されたものを表示</translation>
     </message>
@@ -14443,7 +11576,7 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <name>SplashOverlay</name>
     <message>
         <source>Initializing dissectors</source>
-        <translation>ダイセクタを初期化中</translation>
+        <translation>ダイセクターを初期化中</translation>
     </message>
     <message>
         <source>Initializing tap listeners</source>
@@ -14455,7 +11588,7 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     </message>
     <message>
         <source>Registering dissectors</source>
-        <translation>ダイセクタを登録中</translation>
+        <translation>ダイセクターを登録中</translation>
     </message>
     <message>
         <source>Registering plugins</source>
@@ -14464,7 +11597,7 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     </message>
     <message>
         <source>Handing off dissectors</source>
-        <translation>ダイセクタをハンドオフしています</translation>
+        <translation>ダイセクターを除去中</translation>
     </message>
     <message>
         <source>Handing off plugins</source>
@@ -14564,7 +11697,7 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     </message>
     <message>
         <source>Description</source>
-        <translation>説明</translation>
+        <translation>記述</translation>
     </message>
 </context>
 <context>
@@ -14587,6 +11720,124 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source>Dialog</source>
         <translation>ダイアログ</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
+
+&lt;h3&gt;Valuable and amazing time-saving keyboard shortcuts&lt;/h3&gt;
+&lt;table&gt;&lt;tbody&gt;
+
+&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;Zoom in&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;Zoom out&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;x&lt;/th&gt;&lt;td&gt;Zoom in X axis&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;X&lt;/th&gt;&lt;td&gt;Zoom out X axis&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;y&lt;/th&gt;&lt;td&gt;Zoom in Y axis&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Y&lt;/th&gt;&lt;td&gt;Zoom out Y axis&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;Reset graph to its initial state&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;Move right 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;Move left 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↑&lt;/th&gt;&lt;td&gt;Move up 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↓&lt;/th&gt;&lt;td&gt;Move down 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;Move right 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;Move left 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;Move up 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;Move down 1 pixel&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Pg Up&lt;/i&gt;&lt;/th&gt;&lt;td&gt;Next stream&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Pg Dn&lt;/i&gt;&lt;/th&gt;&lt;td&gt;Previous stream&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;d&lt;/th&gt;&lt;td&gt;Switch direction (swap TCP endpoints)&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;Go to packet under cursor&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;z&lt;/th&gt;&lt;td&gt;Toggle mouse drag / zoom&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;s&lt;/th&gt;&lt;td&gt;Toggle relative / absolute sequence numbers&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;Toggle capture / session time origin&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;Toggle crosshairs&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;1&lt;/th&gt;&lt;td&gt;Round Trip Time graph&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;2&lt;/th&gt;&lt;td&gt;Throughput graph&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;3&lt;/th&gt;&lt;td&gt;Stevens-style Time / Sequence graph&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;4&lt;/th&gt;&lt;td&gt;tcptrace-style Time / Sequence graph&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;5&lt;/th&gt;&lt;td&gt;Window Scaling graph&lt;/td&gt;&lt;/th&gt;
+
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;/body&gt;&lt;/html&gt;</source>
+        <oldsource>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
+
+&lt;h3&gt;Valuable and amazing time-saving keyboard shortcuts&lt;/h3&gt;
+&lt;table&gt;&lt;tbody&gt;
+
+&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;Zoom in&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;Zoom out&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;Reset graph to its initial state&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;Move right 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;Move left 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↑&lt;/th&gt;&lt;td&gt;Move up 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↓&lt;/th&gt;&lt;td&gt;Move down 10 pixels&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;Move right 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;Move left 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;Move up 1 pixel&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;Move down 1 pixel&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Pg Up&lt;/i&gt;&lt;/th&gt;&lt;td&gt;Next stream&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Pg Dn&lt;/i&gt;&lt;/th&gt;&lt;td&gt;Previous stream&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;d&lt;/th&gt;&lt;td&gt;Switch direction (swap TCP endpoints)&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;Go to packet under cursor&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;z&lt;/th&gt;&lt;td&gt;Toggle mouse drag / zoom&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;s&lt;/th&gt;&lt;td&gt;Toggle relative / absolute sequence numbers&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;Toggle capture / session time origin&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;Toggle crosshairs&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;1&lt;/th&gt;&lt;td&gt;Round Trip Time graph&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;2&lt;/th&gt;&lt;td&gt;Throughput graph&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;3&lt;/th&gt;&lt;td&gt;Stevens-style Time / Sequence graph&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;4&lt;/th&gt;&lt;td&gt;tcptrace-style Time / Sequence graph&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;5&lt;/th&gt;&lt;td&gt;Window Scaling graph&lt;/td&gt;&lt;/th&gt;
+
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;/body&gt;&lt;/html&gt;</oldsource>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
+
+&lt;h3&gt;価値のありすばらしく時間を節約するキーボードショートカット&lt;/h3&gt;
+&lt;table&gt;&lt;tbody&gt;
+
+&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;ズームイン&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;ズームアウト&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;x&lt;/th&gt;&lt;td&gt;X軸にズームイン&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;X&lt;/th&gt;&lt;td&gt;X軸にズームアウト&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;y&lt;/th&gt;&lt;td&gt;Y軸にズームイン&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Y&lt;/th&gt;&lt;td&gt;Y軸にズームアウト&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;初期状態にグラフをリセット&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;右に10ピクセル移動&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;左に10ピクセル移動&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↑&lt;/th&gt;&lt;td&gt;上に10ピクセル移動&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↓&lt;/th&gt;&lt;td&gt;下に10ピクセル移動&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;右に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;左に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;上に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;下に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Pg Up&lt;/i&gt;&lt;/th&gt;&lt;td&gt;新規ストリーム&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Pg Dn&lt;/i&gt;&lt;/th&gt;&lt;td&gt;前のストリーム&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;d&lt;/th&gt;&lt;td&gt;方向を切替 (TCP端末を切替)&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;カーソル位置のパケットへ移動&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;z&lt;/th&gt;&lt;td&gt;マウスドラッグとズームを切替&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;s&lt;/th&gt;&lt;td&gt;相対と絶対シーケンス番号を切替&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;キャプチャとセッション時間基準を切替&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;十字カーソルを切替&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;1&lt;/th&gt;&lt;td&gt;往復遅延時間グラフ&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;2&lt;/th&gt;&lt;td&gt;スループットグラフ&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;3&lt;/th&gt;&lt;td&gt;スティーブン形式時間シーケンスグラフ&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;4&lt;/th&gt;&lt;td&gt;tcptrace形式時間シーケンスグラフ&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;5&lt;/th&gt;&lt;td&gt;ウインドウスケーリンググラフ&lt;/td&gt;&lt;/th&gt;
+
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>&lt;small&gt;&lt;i&gt;Mouse over for shortcuts&lt;/i&gt;&lt;/small&gt;</source>
@@ -14640,14 +11891,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source>zooms</source>
         <translation>ズーム</translation>
-    </message>
-    <message>
-        <source>Sampling Method</source>
-        <translation>サンプリング方法</translation>
-    </message>
-    <message>
-        <source>Select which packets and how the RTT sampling is done</source>
-        <translation> どのパケットを選択し、どのようにRTTのサンプリングを行うかを選択します。</translation>
     </message>
     <message>
         <source>Display Round Trip Time vs Sequence Number</source>
@@ -14831,7 +12074,7 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     </message>
     <message>
         <source>Go to packet currently under the cursor</source>
-        <translation>現在のカーソル位置にあるパケットへ移動します</translation>
+        <translation>現在のカーソル位置のパケットへ移動します</translation>
     </message>
     <message>
         <source>G</source>
@@ -14848,14 +12091,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source>Z</source>
         <translation>Z</translation>
-    </message>
-    <message>
-        <source>Legend</source>
-        <translation>凡例</translation>
-    </message>
-    <message>
-        <source>Toggle legend</source>
-        <translation>凡例を切替</translation>
     </message>
     <message>
         <source>Relative / Absolute Sequence Numbers</source>
@@ -14880,18 +12115,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source>T</source>
         <translation>T</translation>
-    </message>
-    <message>
-        <source>Axis SI Units</source>
-        <translation>軸のSI単位</translation>
-    </message>
-    <message>
-        <source>Toggle axis SI units</source>
-        <translation>軸のSI単位の切替</translation>
-    </message>
-    <message>
-        <source>U</source>
-        <translation>U</translation>
     </message>
     <message>
         <source>Crosshairs</source>
@@ -14920,90 +12143,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source>Throughput</source>
         <translation>スループット</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
-
-&lt;h3&gt;Valuable and amazing time-saving keyboard shortcuts&lt;/h3&gt;
-&lt;table&gt;&lt;tbody&gt;
-
-&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;Zoom in&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;Zoom out&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;x&lt;/th&gt;&lt;td&gt;Zoom in X axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;X&lt;/th&gt;&lt;td&gt;Zoom out X axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;y&lt;/th&gt;&lt;td&gt;Zoom in Y axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;Y&lt;/th&gt;&lt;td&gt;Zoom out Y axis&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;Reset graph to its initial state&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;Move right 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;Move left 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;↑&lt;/th&gt;&lt;td&gt;Move up 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;↓&lt;/th&gt;&lt;td&gt;Move down 10 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;Move right 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;Move left 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;Move up 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;Move down 1 pixel&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Pg Up&lt;/i&gt;&lt;/th&gt;&lt;td&gt;Next stream&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Pg Dn&lt;/i&gt;&lt;/th&gt;&lt;td&gt;Previous stream&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;d&lt;/th&gt;&lt;td&gt;Switch direction (swap TCP endpoints)&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;Go to packet under cursor&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;z&lt;/th&gt;&lt;td&gt;Toggle mouse drag / zoom&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;s&lt;/th&gt;&lt;td&gt;Toggle relative / absolute sequence numbers&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;Toggle capture / session time origin&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;u&lt;/th&gt;&lt;td&gt;Toggle axis SI units&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;Toggle crosshairs&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;1&lt;/th&gt;&lt;td&gt;Round Trip Time graph&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;2&lt;/th&gt;&lt;td&gt;Throughput graph&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;3&lt;/th&gt;&lt;td&gt;Stevens-style Time / Sequence graph&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;4&lt;/th&gt;&lt;td&gt;tcptrace-style Time / Sequence graph&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;5&lt;/th&gt;&lt;td&gt;Window Scaling graph&lt;/td&gt;&lt;/th&gt;
-
-&lt;/tbody&gt;&lt;/table&gt;
-&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
-
-&lt;h3&gt;Valuable and amazing time-saving keyboard shortcuts&lt;/h3&gt;
-&lt;table&gt;&lt;tbody&gt;
-
-&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;ズームイン&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;ズームアウトt&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;x&lt;/th&gt;&lt;td&gt;X軸にズームイン&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;X&lt;/th&gt;&lt;td&gt;X軸にズームアウトs&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;y&lt;/th&gt;&lt;td&gt;Y軸にズームイン&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;Y&lt;/th&gt;&lt;td&gt;Y軸にズームアウト&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;初期状態にグラフをリセット&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;右に10ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;左に10ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;↑&lt;/th&gt;&lt;td&gt;上に10ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;↓&lt;/th&gt;&lt;td&gt;下に10ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;右に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;左に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;上に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;下に1ピクセル移動&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Pg Up&lt;/i&gt;&lt;/th&gt;&lt;td&gt;次のストリーム&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Pg Dn&lt;/i&gt;&lt;/th&gt;&lt;td&gt;前のストリーム&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;d&lt;/th&gt;&lt;td&gt;向きを切替 (TCP終端を切替)&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;カーソル位置のパケットへ移動&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;z&lt;/th&gt;&lt;td&gt;マウスドラッグとズームを切替&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;s&lt;/th&gt;&lt;td&gt;相対と絶対シーケンス番号を切替&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;キャプチャとセッション時間基準を切替&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;u&lt;/th&gt;&lt;td&gt;SI軸単位を切替&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;Space&lt;/th&gt;&lt;td&gt;十字カーソルを切替&lt;/td&gt;&lt;/th&gt;
-
-&lt;tr&gt;&lt;th&gt;1&lt;/th&gt;&lt;td&gt;往復遅延時間グラフ&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;2&lt;/th&gt;&lt;td&gt;スループットグラフ&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;3&lt;/th&gt;&lt;td&gt;スティーブン形式 時間シーケンスグラフh&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;4&lt;/th&gt;&lt;td&gt;tcptrace形式 時間シーケンスグラフ&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;5&lt;/th&gt;&lt;td&gt;ウインドウスケーリンググラフ&lt;/td&gt;&lt;/th&gt;
-
-&lt;/tbody&gt;&lt;/table&gt;
-&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Switch to the Throughput graph</source>
@@ -15050,38 +12189,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>4</translation>
     </message>
     <message>
-        <source>All Data Packets</source>
-        <translation>すべてのデータパケット</translation>
-    </message>
-    <message>
-        <source>Sampling from all data packets</source>
-        <translation>すべてのデータパケットからサンプリング</translation>
-    </message>
-    <message>
-        <source>All Data Packets w/ SACK</source>
-        <translation>すべてのデータパケットでSACKのもの</translation>
-    </message>
-    <message>
-        <source>Sampling from all data packets w/ SACK</source>
-        <translation>すべてのデータパケットでSACKのものからサンプリング</translation>
-    </message>
-    <message>
-        <source>Data Packets matching RTT</source>
-        <translation>RTTに適合するデータパケット</translation>
-    </message>
-    <message>
-        <source>Sampling from RTT packets</source>
-        <translation>RTTパケットからサンプリング</translation>
-    </message>
-    <message>
-        <source>Data Packets matching Karn RTT</source>
-        <translation>Karn RTTに適合するデータパケット</translation>
-    </message>
-    <message>
-        <source>Sampling from Karn RTT packets</source>
-        <translation>Karn RTTパケットからサンプリング</translation>
-    </message>
-    <message>
         <source>Zoom In X Axis</source>
         <translation>X軸をズームイン</translation>
     </message>
@@ -15112,42 +12219,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source>Shift+Y</source>
         <translation>Shift+Y</translation>
-    </message>
-    <message>
-        <source>Segments</source>
-        <translation>セグメント</translation>
-    </message>
-    <message>
-        <source>ACK</source>
-        <translation>ACK</translation>
-    </message>
-    <message>
-        <source>Dup ACKs</source>
-        <translation>重複ACK</translation>
-    </message>
-    <message>
-        <source>SACK</source>
-        <translation>SACK</translation>
-    </message>
-    <message>
-        <source>Most recent SACK</source>
-        <translation>最新のSACK</translation>
-    </message>
-    <message>
-        <source>SACK 2</source>
-        <translation>SACK 2</translation>
-    </message>
-    <message>
-        <source>Subsequent SACKs</source>
-        <translation>後続の SACK</translation>
-    </message>
-    <message>
-        <source>Receive Window</source>
-        <translation>受信ウインドウ</translation>
-    </message>
-    <message>
-        <source>Zero Window</source>
-        <translation>ゼロウィンドウ</translation>
     </message>
     <message>
         <source>Save As…</source>
@@ -15184,30 +12255,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source> for %1:%2 %3 %4:%5</source>
         <translation>for %1:%2 %3 %4:%5</translation>
-    </message>
-    <message>
-        <source>Move to top left</source>
-        <translation>左上に移動</translation>
-    </message>
-    <message>
-        <source>Move to top center</source>
-        <translation>中央上に移動</translation>
-    </message>
-    <message>
-        <source>Move to top right</source>
-        <translation>右上に移動</translation>
-    </message>
-    <message>
-        <source>Move to bottom left</source>
-        <translation>左下に移動</translation>
-    </message>
-    <message>
-        <source>Move to bottom center</source>
-        <translation>中央下に移動</translation>
-    </message>
-    <message>
-        <source>Move to bottom right</source>
-        <translation>右下に移動</translation>
     </message>
     <message>
         <source>%1 %2 (%3s len %4 seq %5 ack %6 win %7)</source>
@@ -15306,177 +12353,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     </message>
 </context>
 <context>
-    <name>TaggingRulesDialog</name>
-    <message>
-        <source>Dialog</source>
-        <translation type="unfinished">ダイアログ</translation>
-    </message>
-    <message>
-        <source>Follow Link:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>How to open a tag link in the packet list.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Ctrl+Shift+Click</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Click</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Right-click only</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Emoji Size:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Emoji size as a percentage of the row height. Does not affect text tag labels or the separator character.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>100%</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>90%</source>
-        <translation type="unfinished">90%</translation>
-    </message>
-    <message>
-        <source>80%</source>
-        <translation type="unfinished">80%</translation>
-    </message>
-    <message>
-        <source>70%</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>60%</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>50%</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Separator:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Single character shown between tags when more than one rule matches. Leave empty for none.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Save these tagging rules and open the Coloring Rules dialog with this rule&apos;s filter and name pre-filled.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Copy to Coloring Rule</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;small&gt;&lt;i&gt;A hint.&lt;/i&gt;&lt;/small&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Add a new tagging rule.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Delete this tagging rule.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Duplicate this tagging rule.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Clear all tagging rules.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Tagging Rules %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Shift+Command+Click</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Import…</source>
-        <translation type="unfinished">インポート…</translation>
-    </message>
-    <message>
-        <source>Select a file and add its rules to the end of the list.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Export…</source>
-        <translation type="unfinished">エクスポート…</translation>
-    </message>
-    <message>
-        <source>Save rules to a file.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Copy tagging rules from another profile.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Open </source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>(no tagrules.jsonc file yet — will be created on save)</source>
-        <oldsource>(no tagrules file yet — will be created on save)</oldsource>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Click to edit. Drag to move. Sample Emojis &lt;a href=&quot;https://emojipedia.org&quot;&gt;here&lt;/a&gt;. All matching rules are applied.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Import Tagging Rules</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Export %1 Tagging Rules</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>TaggingRulesModel</name>
-    <message>
-        <source>Name</source>
-        <translation type="unfinished">名前</translation>
-    </message>
-    <message>
-        <source>Filter</source>
-        <translation type="unfinished">フィルタ</translation>
-    </message>
-    <message>
-        <source>Tag</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Link</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Comment</source>
-        <translation type="unfinished">コメント</translation>
-    </message>
-    <message>
-        <source>New tagging rule</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
     <name>TapParameterDialog</name>
     <message>
         <source>Dialog</source>
@@ -15542,315 +12418,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source>Error saving file %1</source>
         <translation>ファイル保存エラー %1</translation>
-    </message>
-</context>
-<context>
-    <name>TcpDedupDialog</name>
-    <message>
-        <source>TCP Duplication Table</source>
-        <translation>TCP複製テーブル</translation>
-    </message>
-    <message>
-        <source>The &quot;Detect duplication (capture-level) packets&quot; preference must be enabled in
-Preferences → Protocols → TCP to use this table.</source>
-        <translation>このテーブルを利用するには&quot;検出された複製パケット(キャプチャレベル)&quot; 設定を以下で有効にする必要があります
-設定 → プロトコル → TCP</translation>
-    </message>
-    <message>
-        <source>Time</source>
-        <translation>時間</translation>
-    </message>
-    <message>
-        <source>Delta</source>
-        <translation>間隔</translation>
-    </message>
-    <message>
-        <source>Frame Number</source>
-        <translation>フレーム番号</translation>
-    </message>
-    <message>
-        <source>Duplication Total</source>
-        <translation>複製合計</translation>
-    </message>
-    <message>
-        <source>Frame List</source>
-        <translation>フレーム一覧</translation>
-    </message>
-    <message>
-        <source>Info</source>
-        <translation>情報</translation>
-    </message>
-    <message>
-        <source>Stream:</source>
-        <translation>ストリーム:</translation>
-    </message>
-</context>
-<context>
-    <name>ThemeDebugDialog</name>
-    <message>
-        <source>Theme Debug</source>
-        <translation>テーマデバッグ</translation>
-    </message>
-    <message>
-        <source>Name:</source>
-        <translation>名前:</translation>
-    </message>
-    <message>
-        <source>Internal:</source>
-        <translation>内部:</translation>
-    </message>
-    <message>
-        <source>Version:</source>
-        <translation>バージョン:</translation>
-    </message>
-    <message>
-        <source>Author:</source>
-        <translation>作者:</translation>
-    </message>
-    <message>
-        <source>Description:</source>
-        <translation>説明</translation>
-    </message>
-    <message>
-        <source>Mode:</source>
-        <translation>モード:</translation>
-    </message>
-    <message>
-        <source>Dark mode:</source>
-        <translation>ダークモード:</translation>
-    </message>
-    <message>
-        <source>Theme</source>
-        <translation>テーマ</translation>
-    </message>
-    <message>
-        <source>Geometry:</source>
-        <translation>サイズと位置:</translation>
-    </message>
-    <message>
-        <source>Frame geometry:</source>
-        <translation>フレームのサイズと位置:</translation>
-    </message>
-    <message>
-        <source>Screen:</source>
-        <translation>スクリーン:</translation>
-    </message>
-    <message>
-        <source>DPI / DPR:</source>
-        <translation>DPI / DPR:</translation>
-    </message>
-    <message>
-        <source>Window state:</source>
-        <translation>ウインドウ状態:</translation>
-    </message>
-    <message>
-        <source>These values refresh live while the dialog is open.</source>
-        <translation> ダイアログが開いている間は値がリアルタイムで更新されます。</translation>
-    </message>
-    <message>
-        <source>Main Window</source>
-        <translation>メインウインドウ</translation>
-    </message>
-    <message>
-        <source>Track widget under mouse</source>
-        <translation>マウスのある場所のウィジェットを追跡</translation>
-    </message>
-    <message>
-        <source>The inspector reports any widget in this application under the cursor — including child dialogs. Widgets that belong to this debug window are skipped so the last hovered target stays pinned. Hold Alt+Shift and click any widget to pin it: this turns off tracking and locks the readout onto that widget (re-check the box above to resume). Note: on macOS, tool windows are hidden whenever another application has focus, so tracking pauses until Wireshark is frontmost again.</source>
-        <translation> インスペクターは、このアプリケーション内でカーソル下にあるすべてのウィジェット（子ダイアログを含む）を表示します。このデバッグウィンドウに属するウィジェットは除外されるため、直前にホバーしていた対象が固定されます。
-Alt+Shift を押しながら任意のウィジェットをクリックするとピン留めされ、トラッキングが無効になって表示がそのウィジェットに固定されます（上のチェックボックスを再度オンにすると再開します）。
-注：macOS では、別のアプリケーションがフォーカスを持つとツールウィンドウが非表示になるため、Wireshark が再び最前面になるまでトラッキングは一時停止します。</translation>
-    </message>
-    <message>
-        <source>Cursor (global):</source>
-        <translation>カーソル(グローバル):</translation>
-    </message>
-    <message>
-        <source>Class:</source>
-        <translation>クラス:</translation>
-    </message>
-    <message>
-        <source>Object name:</source>
-        <translation>オブジェクト名:</translation>
-    </message>
-    <message>
-        <source>Font:</source>
-        <translation>フォント:</translation>
-    </message>
-    <message>
-        <source>Global rect:</source>
-        <translation>グローバル矩形:</translation>
-    </message>
-    <message>
-        <source>Parent chain:</source>
-        <translation>親チェーン:</translation>
-    </message>
-    <message>
-        <source>Palette (Active group):</source>
-        <translation>パレット (アクティブグループ):</translation>
-    </message>
-    <message>
-        <source>Role</source>
-        <translation>ロール</translation>
-    </message>
-    <message>
-        <source>Color</source>
-        <translation>色</translation>
-    </message>
-    <message>
-        <source>ThemeManager token</source>
-        <translation>テーママネージャートークン</translation>
-    </message>
-    <message>
-        <source>Swatch</source>
-        <translation>スウォッチ</translation>
-    </message>
-    <message>
-        <source>Stylesheet:</source>
-        <translation>スタイルシート:</translation>
-    </message>
-    <message>
-        <source>(no stylesheet)</source>
-        <translation>(スタイルシートなし)</translation>
-    </message>
-    <message>
-        <source>Widget Inspector</source>
-        <translation> ウィジェットインスペクタ</translation>
-    </message>
-    <message>
-        <source>Token</source>
-        <translation>トークン</translation>
-    </message>
-    <message>
-        <source>Hex</source>
-        <translation>16進数</translation>
-    </message>
-    <message>
-        <source>Tokens</source>
-        <translation>トークン</translation>
-    </message>
-    <message>
-        <source>Refresh</source>
-        <translation>更新</translation>
-    </message>
-    <message>
-        <source>yes</source>
-        <translation>はい</translation>
-    </message>
-    <message>
-        <source>no</source>
-        <translation>いいえ</translation>
-    </message>
-    <message>
-        <source>(no main window)</source>
-        <translation>(メインウインドウなし)</translation>
-    </message>
-    <message>
-        <source>(unknown)</source>
-        <translation>(不明)</translation>
-    </message>
-    <message>
-        <source>maximized</source>
-        <translation>最大化</translation>
-    </message>
-    <message>
-        <source>minimized</source>
-        <translation>最小化</translation>
-    </message>
-    <message>
-        <source>fullscreen</source>
-        <translation>フルスクリーン</translation>
-    </message>
-    <message>
-        <source>active</source>
-        <translation>アクティブ</translation>
-    </message>
-    <message>
-        <source>normal</source>
-        <translation>通常</translation>
-    </message>
-    <message>
-        <source>(unset)</source>
-        <translation>(未設定)</translation>
-    </message>
-    <message>
-        <source>(none)</source>
-        <translation>(なし)</translation>
-    </message>
-    <message>
-        <source>(unnamed)</source>
-        <translation>(名称未設定)</translation>
-    </message>
-</context>
-<context>
-    <name>ThemePreviewWidget</name>
-    <message>
-        <source>No.</source>
-        <translation>No.</translation>
-    </message>
-    <message>
-        <source>Time</source>
-        <translation>時間</translation>
-    </message>
-    <message>
-        <source>Delta</source>
-        <translation>間隔</translation>
-    </message>
-    <message>
-        <source>Source</source>
-        <translation>送信元</translation>
-    </message>
-    <message>
-        <source>Destination</source>
-        <translation>宛先</translation>
-    </message>
-    <message>
-        <source>Protocol</source>
-        <translation>プロトコル</translation>
-    </message>
-    <message>
-        <source>Length</source>
-        <translation>長さ</translation>
-    </message>
-    <message>
-        <source>Show Coloring Rules</source>
-        <translation>色付けルールを表示</translation>
-    </message>
-    <message>
-        <source>Save Image As…</source>
-        <translation>...として画像を保存</translation>
-    </message>
-    <message>
-        <source>Save Theme Preview</source>
-        <translation>テーマプレビューを保存</translation>
-    </message>
-    <message>
-        <source>PNG Image (*.png)</source>
-        <translation>PNG画像 (*.png)</translation>
-    </message>
-    <message>
-        <source>Could not write the image to &quot;%1&quot;.</source>
-        <translation>イメージを &quot;%1&quot; に書き込めませんでした</translation>
-    </message>
-    <message>
-        <source>Info</source>
-        <translation>情報</translation>
-    </message>
-    <message>
-        <source>Ready</source>
-        <translation>準備</translation>
-    </message>
-    <message>
-        <source>Profile: Default</source>
-        <translation>プロファイル: デフォルト</translation>
-    </message>
-    <message>
-        <source>Packets: %1</source>
-        <translation>パケット: %1</translation>
-    </message>
-    <message>
-        <source>Displayed: %1 (100.0%)</source>
-        <translation>表示: %1 (100.0%)</translation>
     </message>
 </context>
 <context>
@@ -15933,14 +12500,6 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     <message>
         <source>Name resolution</source>
         <translation>名前解決</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Display exact numbers instead of rounding with SI prefixes. (Exact numbers always used when sorting.)&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation> SI接頭辞による丸めを使わず、正確な数値を表示する。（ソート時には常に正確な数値が使用されます）</translation>
-    </message>
-    <message>
-        <source>Display raw data</source>
-        <translation>生データを表示</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Only show conversations matching the current display filter&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -16165,7 +12724,7 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
         <translation>フロー順序(&amp;S)</translation>
     </message>
     <message>
-        <source>Show flow sequence for selected calls.</source>
+        <source>Show flow sequence for selected call(s).</source>
         <translation>選択した通話のフロー順序を表示</translation>
     </message>
     <message>
@@ -16173,7 +12732,7 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
         <translation>フィルタを準備(&amp;F)</translation>
     </message>
     <message>
-        <source>Prepare a filter matching the selected calls.</source>
+        <source>Prepare a filter matching the selected calls(s).</source>
         <translation>選択した通話に合致するフィルタを準備します</translation>
     </message>
     <message>
@@ -16325,129 +12884,14 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     </message>
 </context>
 <context>
-    <name>WelcomeHeaderWidget</name>
-    <message>
-        <source>Form</source>
-        <translation>フォーム</translation>
-    </message>
-    <message>
-        <source>Application Name</source>
-        <translation>アプリケーション名</translation>
-    </message>
-    <message>
-        <source>Application name</source>
-        <translation>アプリケーション名</translation>
-    </message>
-    <message>
-        <source>Wireshark</source>
-        <translation>Wireshark</translation>
-    </message>
-    <message>
-        <source>Version information</source>
-        <translation>バージョン情報</translation>
-    </message>
-    <message>
-        <source>Version of the application currently running</source>
-        <translation>現在実行中のアプリケーションのバージョン</translation>
-    </message>
-    <message>
-        <source>Variant of the application running</source>
-        <translation>実行中アプリケーションのビルド種別</translation>
-    </message>
-    <message>
-        <source>Build variant of the application currently running</source>
-        <translation>現在実行中のアプリケーションのビルド種別</translation>
-    </message>
-    <message>
-        <source>Development Build</source>
-        <translation>開発ビルド</translation>
-    </message>
-    <message>
-        <source>Update Available</source>
-        <translation>更新が利用可能</translation>
-    </message>
-    <message>
-        <source>Graphical indicator that an update is available</source>
-        <translation>更新が利用可能なことを示すグラフィカルインジケータ</translation>
-    </message>
-    <message>
-        <source>.</source>
-        <translation>.</translation>
-    </message>
-    <message>
-        <source>Update available</source>
-        <translation>更新が利用可能</translation>
-    </message>
-    <message>
-        <source>A new update is available</source>
-        <translation>新しい更新が利用可能です</translation>
-    </message>
-    <message>
-        <source>Update available: %1</source>
-        <translation>利用可能な更新: %1</translation>
-    </message>
-    <message>
-        <source>Release Notes</source>
-        <translation>リリースノート</translation>
-    </message>
-    <message>
-        <source>Opens a browser to show the release notes for the available update</source>
-        <translation>利用可能な更新のリリースノートを表示するためにブラウザを開きます</translation>
-    </message>
-    <message>
-        <source>Download Update</source>
-        <translation>更新をダウンロード</translation>
-    </message>
-    <message>
-        <source>Starts the download process for the currently available update</source>
-        <translation>現在利用可能な更新のダウンロード処理を開始します</translation>
-    </message>
-    <message>
-        <source>Dismiss update notification</source>
-        <translation>更新通知を閉じる</translation>
-    </message>
-    <message>
-        <source>Dismiss the update notification and show the information about an update again on either next application start or when a new update is available</source>
-        <translation>更新通知を閉じ、次回アプリケーション起動時または新しい更新が利用可能になったときに更新情報を再度表示します</translation>
-    </message>
-    <message>
-        <source>Update %1 is available</source>
-        <translation>更新 %1 が利用可能です</translation>
-    </message>
-    <message>
-        <source>A new update for version %1 is available (current version is %2)</source>
-        <translation>バージョン %1 の新しい更新が利用可能です (現在のバージョンは %2)</translation>
-    </message>
-    <message>
-        <source>Release Notes for update %1</source>
-        <translation>更新 %1 のリリースノート</translation>
-    </message>
-    <message>
-        <source>Opens a browser to show the release notes for %1</source>
-        <translation>%1 のリリースノートを表示するためにブラウザを開きます</translation>
-    </message>
-    <message>
-        <source>Download update %1</source>
-        <translation>更新 %1 をダウンロード</translation>
-    </message>
-    <message>
-        <source>Starts the download process for update %1</source>
-        <translation>更新 %1 のダウンロード処理を開始します</translation>
-    </message>
-</context>
-<context>
     <name>WelcomePage</name>
     <message>
         <source>Form</source>
         <translation>フォーム</translation>
     </message>
     <message>
-        <source>Open</source>
-        <translation>開く</translation>
-    </message>
-    <message>
-        <source>List of recently opened files. Files that can no longer be found on disk are shown in italics.</source>
-        <translation>最近開いたファイルのリストです。ディスクに既に見つからないファイルは斜体で表示されます</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:large;&quot;&gt;Welcome to Wireshark&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:large;&quot;&gt;Wiresharkへようこそ&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Open a file on your file system&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -16466,20 +12910,116 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
         <translation>以前に開いたキャプチャファイル</translation>
     </message>
     <message>
-        <source>Tips and announcements</source>
-        <translation>TIPSとお知らせ</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Capture live packets from your network.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;ネットワークから現在のパケットをキャプチャします&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
-        <source>Rotating tips, sponsor acknowledgements, and announcements for Wireshark and Stratoshark conferences.</source>
-        <translation>TIPS、スポンサーの通知、WiresharkおよびStratoshark会議のアナウンスを順番に表示します</translation>
+        <source>&lt;h2&gt;Capture&lt;/h2&gt;</source>
+        <translation>&lt;h2&gt;キャプチャ&lt;/h2&gt;</translation>
     </message>
     <message>
-        <source>Learn</source>
-        <translation>学習</translation>
+        <source>…using this filter:</source>
+        <translation>…このフィルタを利用:</translation>
     </message>
     <message>
-        <source>Links to documentation, wiki, and community resources.</source>
-        <translation>ドキュメント、Wikiおよびコミュニティリソースへのリンク</translation>
+        <source>Interface list</source>
+        <translation>インターフェース一覧</translation>
+    </message>
+    <message>
+        <source>List of available capture interfaces</source>
+        <translation>利用可能なキャプチャインターフェース一覧</translation>
+    </message>
+    <message>
+        <source>&lt;h2&gt;Learn&lt;/h2&gt;</source>
+        <translation>&lt;h2&gt;学習&lt;/h2&gt;</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head&gt;
+&lt;style&gt;
+a:link {
+  color: palette(text);
+  text-decoration: none;
+}
+a:hover {
+  color: palette(text);
+  text-decoration: underline;
+}
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+
+&lt;table&gt;&lt;tr&gt;
+&lt;th&gt;&lt;a href=&quot;https://www.wireshark.org/docs/wsug_html_chunked/&quot;&gt;User&apos;s Guide&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://gitlab.com/wireshark/wireshark/-/wikis/&quot;&gt;Wiki&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://ask.wireshark.org/&quot;&gt;Questions and Answers&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://www.wireshark.org/lists/&quot;&gt;Mailing Lists&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://sharkfest.wireshark.org/&quot;&gt;SharkFest&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://discord.com/invite/ts9GZCjGj5&quot;&gt;Wireshark Discord&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://wiresharkfoundation.org/donate/&quot;&gt;Donate&lt;/a&gt;&lt;/th&gt;
+
+&lt;/tr&gt;&lt;/table&gt;
+&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head&gt;
+&lt;style&gt;
+a:link {
+  color: palette(text);
+  text-decoration: none;
+}
+a:hover {
+  color: palette(text);
+  text-decoration: underline;
+}
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+
+&lt;table&gt;&lt;tr&gt;
+&lt;th&gt;&lt;a href=&quot;https://www.wireshark.org/docs/wsug_html_chunked/&quot;&gt;ユーザーズガイド&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://gitlab.com/wireshark/wireshark/-/wikis/&quot;&gt;Wiki&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://ask.wireshark.org/&quot;&gt;質問と回答&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://www.wireshark.org/lists/&quot;&gt;メーリングリスト&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://sharkfest.wireshark.org/&quot;&gt;SharkFest Wireshark開発者会議&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://discord.com/invite/ts9GZCjGj5&quot;&gt;Wireshark Discord&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://wiresharkfoundation.org/donate/&quot;&gt;寄付&lt;/a&gt;&lt;/th&gt;
+
+&lt;/tr&gt;&lt;/table&gt;
+&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Show in Finder</source>
@@ -16490,22 +13030,46 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
         <translation>フォルダで表示</translation>
     </message>
     <message>
-        <source>Welcome page</source>
-        <translation>Welcomeページ</translation>
+        <source>Welcome to %1</source>
+        <translation>%1 へようこそ</translation>
     </message>
     <message>
-        <source>The %1 welcome page provides access to recent files, capture interfaces, and learning resources.</source>
-        <translation>%1 welcomeページは最近のファイル、キャプチャインターフェースおよび学習リソースへのアクセスを提供します</translation>
-    </message>
-    <message>
-        <source>List of recently opened capture files. Double-click or press Enter to open.</source>
-        <translation>最近開いたキャプチャファイルのリスト、ダブルクリックかEnterキーを押して開きます</translation>
+        <source>All interfaces shown</source>
+        <translation>すべての表示されたインターフェース</translation>
     </message>
     <message numerus="yes">
         <source>%n interface(s) shown, %1 hidden</source>
-        <translation type="obsolete">
-            <numerusform>%n interface shown, %1 hidden</numerusform>
+        <translation>
+            <numerusform>%n インターフェース表示, %1 非表示</numerusform>
         </translation>
+    </message>
+    <message>
+        <source>You are sniffing the glue that holds the Internet together using Wireshark </source>
+        <translation>あなたはWiresharkを使ってインターネットを互いにつなぐ膠をキャプチャしています</translation>
+    </message>
+    <message>
+        <source>You are sniffing the glue that holds your system together using Logray </source>
+        <translation>あなたはLograyを使ってシステムを互いに繋ぐ膠をキャプチャしています</translation>
+    </message>
+    <message>
+        <source>You are running Wireshark </source>
+        <translation>Wiresharkを起動中</translation>
+    </message>
+    <message>
+        <source>You are running Logray </source>
+        <translation>Lograyを起動中です </translation>
+    </message>
+    <message>
+        <source> You receive automatic updates.</source>
+        <translation>自動アップデートを受信します</translation>
+    </message>
+    <message>
+        <source> You have disabled automatic updates.</source>
+        <translation>自動アップデートを無効にしました</translation>
+    </message>
+    <message>
+        <source>not found</source>
+        <translation>見つかりません</translation>
     </message>
     <message>
         <source>Copy file path</source>
@@ -16517,65 +13081,6 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     </message>
 </context>
 <context>
-    <name>WelcomePagePreferencesFrame</name>
-    <message>
-        <source>Frame</source>
-        <translation>フレーム</translation>
-    </message>
-    <message>
-        <source>Show the Open and Capture sections next to each other when the window is wide enough, otherwise stacked.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Prefer Open and Capture sections side-by-side</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Tips Section</source>
-        <translation>TIPSセクション</translation>
-    </message>
-    <message>
-        <source>Show Tips section in sidebar</source>
-        <translation>サイドバーにTIPSセクションを表示</translation>
-    </message>
-    <message>
-        <source>Show slides</source>
-        <translation>スライドを表示</translation>
-    </message>
-    <message>
-        <source>Event Notifications (e.g. SharkFest)</source>
-        <translation>イベント通知（Sharkfestなど）</translation>
-    </message>
-    <message>
-        <source>Sponsorship and Donor information</source>
-        <translation>スポンサーと寄付者情報</translation>
-    </message>
-    <message>
-        <source>Tip of the Day</source>
-        <translation>今日のTIP</translation>
-    </message>
-    <message>
-        <source>Auto advance slides</source>
-        <translation>スライドを自動送り</translation>
-    </message>
-    <message>
-        <source>Slide display interval</source>
-        <translation>スライド表示間隔</translation>
-    </message>
-    <message>
-        <source> s</source>
-        <translation> s</translation>
-    </message>
-    <message>
-        <source>Learn Section</source>
-        <translation>学習セクション</translation>
-    </message>
-    <message>
-        <source>Show Learn section in sidebar</source>
-        <translation>サイドバーに学習セクションを表示</translation>
-    </message>
-</context>
-<context>
     <name>WirelessFrame</name>
     <message>
         <source>Frame</source>
@@ -16584,14 +13089,6 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     <message>
         <source>Interface</source>
         <translation>インターフェース</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Set the 802.11 band.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;802.11バンドを設定します&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>Band</source>
-        <translation>バンド</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Set the 802.11 channel.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -16636,6 +13133,14 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     <message>
         <source>802.11 Preferences</source>
         <translation>802.11設定</translation>
+    </message>
+    <message>
+        <source>AirPcap Control Panel</source>
+        <translation>AirPcapコントロールパネル</translation>
+    </message>
+    <message>
+        <source>Open the AirPcap Control Panel</source>
+        <translation>AirPcapコントロールパネルを開く</translation>
     </message>
     <message>
         <source>Unable to set channel or offset.</source>
@@ -17028,7 +13533,7 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     </message>
     <message>
         <source>Description</source>
-        <translation>説明</translation>
+        <translation>記述</translation>
     </message>
     <message>
         <source>Field Name</source>
@@ -17181,7 +13686,7 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     </message>
     <message>
         <source>Copy this item&apos;s description</source>
-        <translation>この項目の説明をコピーします</translation>
+        <translation>この項目の記述をコピーします</translation>
     </message>
     <message>
         <source>Copy this item&apos;s field name</source>
@@ -17721,7 +14226,7 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     </message>
     <message>
         <source>Show each dissector table and its entries</source>
-        <translation>各ダイセクタテーブルとそのエントリを表示</translation>
+        <translation>各々のダイセクター表とそのエントリを表示します</translation>
     </message>
     <message>
         <source>Show the currently supported protocols and display filter fields</source>
@@ -17848,84 +14353,12 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
         <translation>オプション…(&amp;O)</translation>
     </message>
     <message>
-        <source>Main Window</source>
-        <translation>メインウインドウ</translation>
-    </message>
-    <message>
-        <source>Allows jumping to a specific packet by its number.</source>
-        <translation>番号で特定のパケットにジャンプすることを許可します</translation>
-    </message>
-    <message>
-        <source>Search packet</source>
-        <translation>パケットを検索</translation>
-    </message>
-    <message>
-        <source>Allows searching for packets based on different criteria like display filters or text.</source>
-        <translation>表示フィルタやテキストのような異なる条件に基づいてパケットの検索を許可します</translation>
-    </message>
-    <message>
-        <source>Edit Address</source>
-        <translation>アドレスを編集</translation>
-    </message>
-    <message>
-        <source>Allows editing address resolution information for the current capture.</source>
-        <translation>現在のキャプチャのアドレス解決情報を編集することを許可します</translation>
-    </message>
-    <message>
-        <source>Edit Column</source>
-        <translation>列の編集</translation>
-    </message>
-    <message>
-        <source>Allows adding, removing, or modifying columns in the packet list.</source>
-        <translation>パケット一覧の列の追加、削除、修正を許可します</translation>
-    </message>
-    <message>
-        <source>Edit Preference</source>
-        <translation>設定を編集</translation>
-    </message>
-    <message>
-        <source>Allows changing protocol or application preferences.</source>
-        <translation>プロトコルやアプリケーションの設定の変更を許可します</translation>
-    </message>
-    <message>
-        <source>Edit Filter Expression</source>
-        <translation>フィルタ式を編集</translation>
-    </message>
-    <message>
-        <source>Allows creating or editing display filter buttons.</source>
-        <translation>表示フィルタボタンの作成や編集を許可します</translation>
-    </message>
-    <message>
-        <source>Main View</source>
-        <translation>メインビュー</translation>
-    </message>
-    <message>
-        <source>Main Menu</source>
-        <translation>メインメニュー</translation>
-    </message>
-    <message>
         <source>&amp;3GPP Uu</source>
         <translation>&amp;3GPP Uu</translation>
     </message>
     <message>
         <source>&amp;Wireless</source>
         <translation>無線(&amp;W)</translation>
-    </message>
-    <message>
-        <source>Contains buttons for common actions like starting a capture or opening a file.</source>
-        <translation>キャプチャを開始したりファイルを開いたりなどの共通アクションのためのボタンを含みます</translation>
-    </message>
-    <message>
-        <source>Status Bar</source>
-        <translation>ステータスバー</translation>
-    </message>
-    <message>
-        <source>Shows information about the current capture file and application state.</source>
-        <translation>現在のキャプチャファイルやアプリケーション状態について情報を表示します</translation>
-    </message>
-    <message>
-        <source>Contains the display filter edit box and expression buttons.</source>
-        <translation>表示フィルタ編集ボックスやフィルタ式ボタンを含みます</translation>
     </message>
     <message>
         <source>&amp;User&apos;s Guide</source>
@@ -17938,30 +14371,6 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     <message>
         <source>Display Filters</source>
         <translation>表示フィルタ</translation>
-    </message>
-    <message>
-        <source>Display Filter Reference</source>
-        <translation>表示フィルタ参照</translation>
-    </message>
-    <message>
-        <source>First Packet in Conversation</source>
-        <translation>対話の最初のパケット</translation>
-    </message>
-    <message>
-        <source>Go to the first packet in this conversation</source>
-        <translation>この対話の最初のパケットへ移動</translation>
-    </message>
-    <message>
-        <source>Last Packet in Conversation</source>
-        <translation>対話の最後のパケット</translation>
-    </message>
-    <message>
-        <source>Go to the last packet in this conversation</source>
-        <translation>この対話の最後のパケットへ移動</translation>
-    </message>
-    <message>
-        <source>Redissect Packets</source>
-        <translation>パケットを再解析</translation>
     </message>
     <message>
         <source>Capture &amp;Filters…</source>
@@ -17982,10 +14391,6 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     <message>
         <source>As &amp;YAML</source>
         <translation>YAMLとして(&amp;Y)</translation>
-    </message>
-    <message>
-        <source>As &amp;HTML</source>
-        <translation>HTMLとして(&amp;H)</translation>
     </message>
     <message>
         <source>All Visible Items</source>
@@ -18048,14 +14453,6 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
         <translation>キャプチャファイルで使用されたTLSシークレットを埋め込みます</translation>
     </message>
     <message>
-        <source>Inject ESP Secrets</source>
-        <translation>ESPシークレットを注入</translation>
-    </message>
-    <message>
-        <source>Embed used ESP secrets in the capture file</source>
-        <translation>キャプチャファイル内にESPシークレットの埋め込みが使用されています</translation>
-    </message>
-    <message>
         <source>Discard All Secrets</source>
         <translation>すべてのシークレットを破棄</translation>
     </message>
@@ -18070,22 +14467,6 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     <message>
         <source>TCP throughput</source>
         <translation>TCP スループット</translation>
-    </message>
-    <message>
-        <source>Duplication Table</source>
-        <translation>複製テーブル</translation>
-    </message>
-    <message>
-        <source>TCP capture-level duplicate packet table</source>
-        <translation>TCPキャプチャレベル複製パケットテーブル</translation>
-    </message>
-    <message>
-        <source>Distribution</source>
-        <translation>分布</translation>
-    </message>
-    <message>
-        <source>Distribution statistics</source>
-        <translation>分布統計</translation>
     </message>
     <message>
         <source>General</source>
@@ -18108,14 +14489,6 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
         <translation>HTTPリクエストシーケンス</translation>
     </message>
     <message>
-        <source>&amp;BPv7</source>
-        <translation>&amp;BPv7</translation>
-    </message>
-    <message>
-        <source>BPv7 PDU and block statistics</source>
-        <translation>BPv7 PDU およびブロック統計</translation>
-    </message>
-    <message>
         <source>E2AP</source>
         <translation>E2AP</translation>
     </message>
@@ -18134,14 +14507,6 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     <message>
         <source>Create graphs based on display filter fields</source>
         <translation>表示フィルタのフィールドに基づいてグラフを作成します</translation>
-    </message>
-    <message>
-        <source>Plots</source>
-        <translation>グラフ</translation>
-    </message>
-    <message>
-        <source>Plot display filter fields over time</source>
-        <translation>表示フィルタのフィールドを時間経過で描画</translation>
     </message>
     <message>
         <source>&amp;Main Toolbar</source>
@@ -18192,22 +14557,6 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
         <translation>標準サイズ</translation>
     </message>
     <message>
-        <source>Pin Selected Rows</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Keep the selected packets at the top of the packet list, or unpin them if they are all pinned</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Unpin All Rows</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Unpin all of the packets pinned to the top of the packet list</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Reset layout to default size</source>
         <translation>デフォルトサイズにレイアウトをリセット</translation>
     </message>
@@ -18248,14 +14597,6 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
         <translation>パケットの時間をUNIX/POSIX起源(1970-01-01)以来の秒数で表示します</translation>
     </message>
     <message>
-        <source>Seconds Since Capture Start</source>
-        <translation>キャプチャ開始からの秒数</translation>
-    </message>
-    <message>
-        <source>Show packet times as seconds since the start of the capture file.</source>
-        <translation>パケット時間を最初にキャプチャされたパケットからの秒数で表示します</translation>
-    </message>
-    <message>
         <source>Seconds Since Previous Captured Packet</source>
         <translation>前にキャプチャされたパケットからの秒数</translation>
     </message>
@@ -18272,12 +14613,24 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
         <translation>パケット時間を前に表示されたパケットからの秒数で表示します</translation>
     </message>
     <message>
+        <source>UTC Date and Time of Day (1970-01-01 01:02:03.123456)</source>
+        <translation>UTC日時 (1973-06-14 01:02:03.123456)</translation>
+    </message>
+    <message>
         <source>Show packet times as the UTC date and time of day.</source>
         <translation>パケット時間をUTC日付および時刻で表示します</translation>
     </message>
     <message>
+        <source>UTC Year, Day of Year, and Time of Day (1970/001 01:02:03.123456)</source>
+        <translation>UTC年、通年日、時刻 (1970/001 01:02:03.123456)</translation>
+    </message>
+    <message>
         <source>Show packet times as the UTC year, day of the year and time of day.</source>
         <translation>パケット時間をUTC年、通年日、時刻で表示します</translation>
+    </message>
+    <message>
+        <source>UTC Time of Day (01:02:03.123456)</source>
+        <translation>UTC時刻 (01:02:03.123456)</translation>
     </message>
     <message>
         <source>Show packet times as the UTC time of day.</source>
@@ -18389,31 +14742,15 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     </message>
     <message>
         <source>&amp;Conversation Hash Tables</source>
-        <translation>会話ハッシュテーブル(&amp;C)</translation>
+        <translation>対話ハッシュ表(&amp;C)</translation>
     </message>
     <message>
         <source>&amp;Dissector Tables</source>
-        <translation>ダイセクタテーブル(&amp;D)</translation>
+        <translation>ダイセクター表(&amp;D)</translation>
     </message>
     <message>
         <source>&amp;Supported Protocols</source>
         <translation>サポートされているプロトコル(&amp;S)</translation>
-    </message>
-    <message>
-        <source>&amp;Keyboard Shortcuts</source>
-        <translation>&amp;キーボードショートカット</translation>
-    </message>
-    <message>
-        <source>Show the current keyboard shortcuts</source>
-        <translation>現在のキーボードショートカットを表示します</translation>
-    </message>
-    <message>
-        <source>&amp;Theme Debug</source>
-        <translation>テーマデバッグ (&amp;T)</translation>
-    </message>
-    <message>
-        <source>Show the active theme, main window geometry, and live widget info</source>
-        <translation>アクティブテーマ、メインウインドウのサイズと位置およびライブウィジェットの情報を表示します</translation>
     </message>
     <message>
         <source>MAP Summary</source>
@@ -18430,14 +14767,6 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     <message>
         <source>&amp;Coloring Rules…</source>
         <translation>色付けルール…(&amp;C)</translation>
-    </message>
-    <message>
-        <source>&amp;Tagging Rules…</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Edit the packet tagging rules.</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Show Linked Packet in New Window</source>
@@ -18551,19 +14880,7 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     </message>
     <message>
         <source>&amp;Unmark All Displayed</source>
-        <translation>表示されているすべてのマークを解除(&amp;U)</translation>
-    </message>
-    <message>
-        <source>UTC Date and Time of Day (1970-01-01 01:02:03.123456Z)</source>
-        <translation>UTC日時 (1970-01-01 01:02:03.123456Z)</translation>
-    </message>
-    <message>
-        <source>UTC Year, Day of Year, and Time of Day (1970/001 01:02:03.123456Z)</source>
-        <translation>UTC年、通年日、時刻  (1970/001 01:02:03.123456Z)</translation>
-    </message>
-    <message>
-        <source>UTC Time of Day (01:02:03.123456Z)</source>
-        <translation>UTC時刻 (01:02:03.123456Z)</translation>
+        <translation>表示されているものすべてをマーク解除(&amp;U)</translation>
     </message>
     <message>
         <source>All VoIP Calls</source>
@@ -18604,15 +14921,11 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     </message>
     <message>
         <source>Auto Scroll in Li&amp;ve Capture</source>
-        <translation>ライブキャプチャ中の自動スクロール(&amp;v)</translation>
+        <translation>生のキャプチャを自動スクロール(&amp;v)</translation>
     </message>
     <message>
         <source>Automatically scroll to the last packet during a live capture.</source>
         <translation>キャプチャ中の最後のパケットを自動スクロールします</translation>
-    </message>
-    <message>
-        <source>Aggregate Packets</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Expert Information</source>
@@ -18742,8 +15055,16 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
         <translation>ファイルを結合する前に変更を保存する必要があります</translation>
     </message>
     <message>
+        <source>Invalid Display Filter</source>
+        <translation>無効な表示フィルタ</translation>
+    </message>
+    <message>
         <source>Invalid Read Filter</source>
         <translation>無効な読込フィルタ</translation>
+    </message>
+    <message>
+        <source>The filter expression %1 isn&apos;t a valid read filter. (%2).</source>
+        <translation>フィルタ式 %1 は有効な読込みフィルタではありません(%2)</translation>
     </message>
     <message>
         <source> before importing a capture</source>
@@ -18757,14 +15078,6 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     <message>
         <source>You cannot export packets to the current capture file.</source>
         <translation>現在のキャプチャファイルへパケットをエクスポートすることはできません</translation>
-    </message>
-    <message>
-        <source>Display frames grouped by your configured aggregation fields.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Display frames grouped by your configured aggregation fields. To activate, go to Preferences → Aggregation.</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Do you want to save the changes you&apos;ve made%1?</source>
@@ -18788,34 +15101,12 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
         <translation>更新を確認…</translation>
     </message>
     <message>
-        <source>Main View Splitter</source>
-        <translation>メインビュー分割</translation>
-    </message>
-    <message>
-        <source>Contains the packet list, protocol tree, and packet bytes.</source>
-        <translation>パケット一覧、プロトコルツリーとパケットバイト列を含みます</translation>
-    </message>
-    <message>
-        <source>Extra View Splitter</source>
-        <translation>エクストラビュー分割</translation>
-    </message>
-    <message>
-        <source>Contains packet extras and bytes views.</source>
-        <translation>パケットエクストラとバイトビューを含みます</translation>
-    </message>
-    <message>
         <source>Unable to drop files during capture.</source>
         <translation>キャプチャ中にファイルをドロップできません</translation>
     </message>
     <message>
-        <source>The filter expression &quot;%1&quot; isn&apos;t a valid read filter.
-(%2).</source>
-        <translation>フィルタ式 &quot;%1&quot; は有効なリードフィルタではありません
-(%2).</translation>
-    </message>
-    <message>
         <source>Unknown file type returned by merge dialog.</source>
-        <translation>結合画面から返された不明なファイルタイプ</translation>
+        <translation>結合画面から返された未知のファイルタイプ</translation>
     </message>
     <message>
         <source>Please report this as a Wireshark issue at https://gitlab.com/wireshark/wireshark/-/issues.</source>
@@ -18823,11 +15114,7 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     </message>
     <message>
         <source>Unknown file type returned by export dialog.</source>
-        <translation>エクスポート画面から返された不明なファイルタイプ</translation>
-    </message>
-    <message>
-        <source>Unsaved packets…</source>
-        <translation>保存されていないパケット…</translation>
+        <translation>エクスポート画面から返された未知のファイルタイプ</translation>
     </message>
     <message>
         <source>Do you want to stop the capture and save the captured packets%1?</source>
@@ -18848,12 +15135,12 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     <message>
         <source>Stop and Quit &amp;without Saving</source>
         <oldsource>Stop and Quit without Saving</oldsource>
-        <translation>保存せずに停止して終了(&amp;w)</translation>
+        <translation>保存しないで停止して終了(&amp;w)</translation>
     </message>
     <message>
         <source>Quit &amp;without Saving</source>
         <oldsource>Quit without Saving</oldsource>
-        <translation>保存せずに終了(&amp;w)</translation>
+        <translation>保存しないで終了(&amp;w)</translation>
     </message>
     <message>
         <source>USB CDC Data</source>
@@ -18876,30 +15163,6 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
         <translation>ツールバーを表示/非表示</translation>
     </message>
     <message>
-        <source>DIS Streams</source>
-        <translation>DISストリーム</translation>
-    </message>
-    <message>
-        <source>Show and analyze DIS radio streams</source>
-        <translation>DIS無線ストリームを表示・分析します</translation>
-    </message>
-    <message>
-        <source>IMSI List</source>
-        <translation>IMSIリスト</translation>
-    </message>
-    <message>
-        <source>Show all IMSIs in the capture</source>
-        <translation>キャプチャにあるすべてのIMSIを表示</translation>
-    </message>
-    <message>
-        <source>Lua Debugger</source>
-        <translation>Luaデバッガ</translation>
-    </message>
-    <message>
-        <source>Software update checking is not available on this platform.</source>
-        <translation>このプラットフォームではソフトウェア更新の確認を利用できません</translation>
-    </message>
-    <message>
         <source>Continue &amp;without Saving</source>
         <oldsource>Continue without Saving</oldsource>
         <translation>保存せずに続ける(&amp;w)</translation>
@@ -18908,6 +15171,14 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
         <source>Stop and Continue &amp;without Saving</source>
         <oldsource>Stop and Continue without Saving</oldsource>
         <translation>保存せずに停止して続ける(&amp;w)</translation>
+    </message>
+    <message>
+        <source>The Wireshark Network Analyzer</source>
+        <translation>ワイヤーシャークネットワークアナライザ</translation>
+    </message>
+    <message>
+        <source>Capturing from %1</source>
+        <translation>%1 からキャプチャ中</translation>
     </message>
     <message>
         <source> before opening another file</source>
@@ -18920,6 +15191,10 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     <message>
         <source>%1: %2</source>
         <translation>%1: %2</translation>
+    </message>
+    <message>
+        <source>Clear Menu</source>
+        <translation>メニューをクリア</translation>
     </message>
     <message>
         <source> before closing the file</source>
@@ -18937,12 +15212,12 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
         <source>Export SSL Session Keys (%Ln key(s))</source>
         <oldsource>Export SSL Session Keys (%1 key%2</oldsource>
         <translation type="vanished">
-            <numerusform>SSLセッション鍵をエクスポート (%Ln keys)</numerusform>
+            <numerusform>SSLセッション鍵をエクスポート (%Ln 鍵)</numerusform>
         </translation>
     </message>
     <message>
         <source>Raw data (*.bin *.dat *.raw);;All Files (</source>
-        <translation>Raw (無加工) データ形式 (*.bin *.dat *.raw);;すべてのファイル (</translation>
+        <translation>Raw(無加工)データ形式 (*.bin *.dat *.raw);;すべてのファイル(</translation>
     </message>
     <message>
         <source>Couldn&apos;t copy text. Try another item.</source>
@@ -18951,14 +15226,6 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     <message>
         <source>Are you sure you want to remove all packet comments?</source>
         <translation>本当にすべてのパケットコメントを削除してよいですか？</translation>
-    </message>
-    <message>
-        <source>No %1 Secrets</source>
-        <translation>%1 シークレットなし</translation>
-    </message>
-    <message>
-        <source>There are no available secrets used to decrypt %1 traffic in the capture file.  Would you like to view information about how to decrypt %2 traffic on the wiki?</source>
-        <translation>キャプチャファイルには %1 トラフィックを復号化するために用いられる利用可能なシークレットはありません。Wikiで %2 トラフィックを復号する方法についての情報をご覧になりますか？</translation>
     </message>
     <message>
         <source>Unable to build conversation filter.</source>
@@ -19027,19 +15294,15 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     </message>
     <message>
         <source> before reloading Lua plugins</source>
-        <translation>Lua プラグインを再読み込みする前に</translation>
+        <translation>Lua プラグインの再読込前</translation>
     </message>
     <message>
         <source>Please wait while Wireshark is initializing…</source>
-        <translation>Wiresharkの初期化中です。しばらくお待ちください…</translation>
+        <translation>Wiresharkが初期化している間お待ちください…</translation>
     </message>
     <message>
-        <source> before exporting PDUs</source>
-        <translation>PDUをエクスポートする前</translation>
-    </message>
-    <message>
-        <source> before stripping headers</source>
-        <translation>ヘッダを除去する前</translation>
+        <source> before updating</source>
+        <translation>更新前</translation>
     </message>
     <message>
         <source>There are no TLS Session Keys to save.</source>
@@ -19048,7 +15311,7 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     <message numerus="yes">
         <source>Export TLS Session Keys (%Ln key(s))</source>
         <translation>
-            <numerusform>TLSセッション鍵をエクスポート (%Ln 個)</numerusform>
+            <numerusform>TLSセッション鍵をエクスポート (%Ln keys)</numerusform>
         </translation>
     </message>
     <message>
@@ -19056,8 +15319,16 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
         <translation>TLSセッション鍵 (*.keys *.txt);;すべてのファイル (</translation>
     </message>
     <message>
+        <source>No TLS Secrets</source>
+        <translation>TLSシークレットなし</translation>
+    </message>
+    <message>
+        <source>There are no available secrets used to decrypt TLS traffic in the capture file.  Would you like to view information about how to decrypt TLS traffic on the wiki?</source>
+        <translation>キャプチャファイルにはTLSトラフィックを復号化するために用いられる利用可能なシークレットはありません。WikiでTLSトラフィックを復号する方法についての情報をご覧になりますか？</translation>
+    </message>
+    <message>
         <source>Are you sure you want to discard all decryption secrets?</source>
-        <translation>すべての復号シークレットを破棄してもよろしいですか？</translation>
+        <translation>本当にすべての復号化シークレットを破棄されますか？</translation>
     </message>
     <message>
         <source>No filter available. Try another %1.</source>
@@ -19089,7 +15360,7 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     </message>
     <message>
         <source> before restarting the capture</source>
-        <translation>キャプチャを再開する前に</translation>
+        <translation>キャプチャを再スタートする前に</translation>
     </message>
     <message>
         <source>Wiki Page for %1</source>
@@ -19097,7 +15368,7 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     </message>
     <message>
         <source>&lt;p&gt;The Wireshark Wiki is maintained by the community.&lt;/p&gt;&lt;p&gt;The page you are about to load might be wonderful, incomplete, wrong, or nonexistent.&lt;/p&gt;&lt;p&gt;Proceed to the wiki?&lt;/p&gt;</source>
-        <translation>&lt;p&gt;Wireshark Wikiはコミュニティによって運営されています &lt;/p&gt;&lt;p&gt;ロードしようとしているページは素晴らしいかもしれませんが、不完全、誤り、または存在しないかもしれません。&lt;/p&gt;&lt;p&gt;Wikiに移動しますか？&lt;/p&gt;</translation>
+        <translation>&lt;p&gt;ワイヤーシャークWikiはコミュニティによって運営されています &lt;/p&gt;&lt;p&gt;いま見ているページはすばらしかったり、不完全だったり、間違っていたり、存在しないかもしれません。&lt;/p&gt;&lt;p&gt;Wikiに移動しますか？&lt;/p&gt;</translation>
     </message>
     <message>
         <source>Loading</source>
@@ -19109,7 +15380,7 @@ Alt+Shift を押しながら任意のウィジェットをクリックすると�
     </message>
     <message>
         <source>Rescanning</source>
-        <translation>再スキャン中</translation>
+        <translation>再スキャニング中</translation>
     </message>
 </context>
 <context>

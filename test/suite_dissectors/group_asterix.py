@@ -7,11 +7,10 @@
 '''ASTERIX dissector tests'''
 
 import inspect
-
 import pytest
 
 # Wireshark modules
-# from suite_dissectors.dissectorstest import *
+from suite_dissectors.dissectorstest import *
 
 
 class TestAsterix:
@@ -46,8 +45,8 @@ class _asterix_validator_real:
             total_length % 256
         ] + byte_list
         expected_result = {
-            "asterix.category": f"{self.category}",
-            "asterix.length": f"{total_length}",
+            "asterix.category": "{}".format(self.category),
+            "asterix.length": "{}".format(total_length),
             "asterix.message":
             {
                 "asterix.fspec": "",
@@ -87,14 +86,15 @@ class _asterix_re_validator_real(_asterix_validator_real):
             re_length % 256
         ] + byte_list
         expected_result = {
-            "asterix.re_field_len": f"{re_length}",
+            "asterix.re_field_len": "{}".format(re_length),
             "asterix.fspec": "",
-            f"asterix.{self.category:03}_RE_{field}": expected_message
+            "asterix.{:03}_RE_{}".format(self.category, field): expected_message
         }
         if line_no is None:
             caller = inspect.getframeinfo(inspect.stack()[1][0])
             line_no = caller.lineno
-        self.add_dissection(byte_list, f"asterix.{self.category:03}_RE", expected_result, line_no)
+        self.add_dissection(byte_list, "asterix.{:03}_RE".format(
+            self.category), expected_result, line_no)
 
 
 @pytest.fixture
@@ -111,9 +111,9 @@ def asterix_re_validator(dissection_validator):
 def fspec_local(key, idx, value):
     result = {
         "asterix.fspec": "",
-        f"asterix.{key}":
+        "asterix.{}".format(key):
         {
-            f"asterix.{key}_{idx}": value
+            "asterix.{}_{}".format(key, idx): value
         }
     }
     return result
@@ -122,9 +122,9 @@ def fspec_local(key, idx, value):
 def fspec_global(key, idx, value):
     result = {
         "asterix.fspec": "",
-        f"asterix.{key}":
+        "asterix.{}".format(key):
         {
-            f"asterix.{idx}": value
+            "asterix.{}".format(idx): value
         }
     }
     return result
@@ -132,20 +132,20 @@ def fspec_global(key, idx, value):
 
 def dict_local(vmap, key, idx, value):
     result = vmap.copy()
-    result[f"asterix.{key}_{idx}"] = value
+    result["asterix.{}_{}".format(key, idx)] = value
     return result
 
 
 def dict_global(vmap, key, value):
     result = vmap.copy()
-    result[f"asterix.{key}"] = value
+    result["asterix.{}".format(key)] = value
     return result
 
 
 def dict_fspec_local(vmap, key, idx, value):
     result = {
         "asterix.fspec": "",
-        f"asterix.{key}": dict_local(vmap, key, idx, value)
+        "asterix.{}".format(key): dict_local(vmap, key, idx, value)
     }
     return result
 
@@ -153,7 +153,7 @@ def dict_fspec_local(vmap, key, idx, value):
 def dict_fspec_global(vmap, key, idx, value):
     result = {
         "asterix.fspec": "",
-        f"asterix.{key}": dict_global(vmap, idx, value)
+        "asterix.{}".format(key): dict_global(vmap, idx, value)
     }
     return result
 
@@ -161,10 +161,10 @@ def dict_fspec_global(vmap, key, idx, value):
 def counter_local(vmap, counter, key, idx, value):
     result = {
         "asterix.fspec": "",
-        f"asterix.{key}":
+        "asterix.{}".format(key):
         {
             "asterix.counter": counter,
-            f"asterix.{key}": dict_local(vmap, key, idx, value)
+            "asterix.{}".format(key): dict_local(vmap, key, idx, value)
         }
     }
     return result
@@ -499,6 +499,24 @@ class TestCategory019:
                 "asterix.counter": "3",
                 "asterix.019_552":
                 {
+                    "asterix.019_552_RSI": "18",
+                    "asterix.019_552_RS1090": "0",
+                    "asterix.019_552_TX1030": "1",
+                    "asterix.019_552_TX1090": "1",
+                    "asterix.019_552_RSS": "0",
+                    "asterix.019_552_RSO": "1"
+                },
+                "asterix.019_552":
+                {
+                    "asterix.019_552_RSI": "86",
+                    "asterix.019_552_RS1090": "1",
+                    "asterix.019_552_TX1030": "1",
+                    "asterix.019_552_TX1090": "1",
+                    "asterix.019_552_RSS": "1",
+                    "asterix.019_552_RSO": "0"
+                },
+                "asterix.019_552":
+                {
                     "asterix.019_552_RSI": "0x9a",
                     "asterix.019_552_RS1090": "0",
                     "asterix.019_552_TX1030": "0",
@@ -678,7 +696,7 @@ class TestCategory019:
             [0x01, 0x80, 0x7f, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00],
             "asterix.019_600",
             {
-                "asterix.019_600_LAT": "359.99999983236194",
+                "asterix.019_600_LAT": "359.999999832362",
                 "asterix.019_600_LON": "0"
             }
         )
@@ -695,7 +713,7 @@ class TestCategory019:
             "asterix.019_600",
             {
                 "asterix.019_600_LAT": "0",
-                "asterix.019_600_LON": "359.99999983236194"
+                "asterix.019_600_LON": "359.999999832362"
             }
         )
         validator.add_dissection(
@@ -1055,6 +1073,13 @@ class _disabled_TestCategory034:
             "asterix.034_070",
             {
                 "asterix.counter": "3",
+                "asterix.034_070":
+                dict_local(x_070, "034_070", "TYPE", "16"),
+                "asterix.034_070":
+                {
+                    "asterix.034_070_TYP": "16",
+                    "asterix.034_070_COUNT": "2047"
+                },
                 "asterix.034_070":
                 dict_local(x_070, "034_070", "COUNT", "2047"),
             }
@@ -1491,7 +1516,7 @@ class TestCategory048:
         validator.add_dissection(
             [0x10, 0x00, 0x00, 0xff, 0xff],
             "asterix.048_040",
-            dict_local(x_040, "048_040", "THETA", "359.9945068359375")
+            dict_local(x_040, "048_040", "THETA", "359.994506835938")
         )
         x_070 = {
             "asterix.048_070_V": "0",
@@ -1741,7 +1766,7 @@ class TestCategory048:
         validator.add_dissection(
             [0x01, 0x04, 0x00, 0x00, 0xff, 0xff],
             "asterix.048_200",
-            dict_local(x_200, "048_200", "HDG", "359.9945068359375")
+            dict_local(x_200, "048_200", "HDG", "359.994506835938")
         )
         x_170 = {
             "asterix.048_170_CNF": "0",
@@ -2151,6 +2176,10 @@ class TestCategory048:
                 "asterix.048_120_RDS":
                 {
                     "asterix.counter": "3",
+                    "asterix.048_120_RDS":
+                    dict_local(x_120_RDS, "048_120_RDS", "DOP", "-32768"),
+                    "asterix.048_120_RDS":
+                    dict_local(x_120_RDS, "048_120_RDS", "AMB", "65535"),
                     "asterix.048_120_RDS":
                     dict_local(x_120_RDS, "048_120_RDS", "FRQ", "65535")
                 }
@@ -3364,7 +3393,7 @@ class TestCategory063:
             [0x01, 0x80, 0x7f, 0xff],
             "asterix.063_081",
             {
-                "asterix.063_081_VALUE": "179.9945068359375"
+                "asterix.063_081_VALUE": "179.994506835938"
             }
         )
         validator.add_dissection(
@@ -3410,7 +3439,7 @@ class TestCategory063:
             [0x01, 0x20, 0x7f, 0xff],
             "asterix.063_091",
             {
-                "asterix.063_091_VALUE": "179.9945068359375"
+                "asterix.063_091_VALUE": "179.994506835938"
             }
         )
         validator.add_dissection(
@@ -3424,7 +3453,7 @@ class TestCategory063:
             [0x01, 0x10, 0x7f, 0xff],
             "asterix.063_092",
             {
-                "asterix.063_092_VALUE": "179.9945068359375"
+                "asterix.063_092_VALUE": "179.994506835938"
             }
         )
         validator.add_dissection(

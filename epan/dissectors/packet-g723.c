@@ -14,7 +14,7 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include "packet-rtp_pt.h"
+#include <epan/rtp_pt.h>
 
 void proto_reg_handoff_g723(void);
 void proto_register_g723(void);
@@ -53,7 +53,7 @@ static const value_string g723_frame_size_and_codec_type_value[] = {
 static int
 dissect_g723(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	unsigned octet;
 
 	proto_item *ti;

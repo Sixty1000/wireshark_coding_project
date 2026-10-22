@@ -17,7 +17,6 @@
 #include <epan/tfs.h>
 
 #include "packet-bacnet.h"
-#include "packet-bacapp.h"
 
 void proto_register_bvlc(void);
 void proto_reg_handoff_bvlc(void);
@@ -89,9 +88,6 @@ static int hf_bscvlc_orig_vmac;
 static int hf_bscvlc_dest_vmac;
 static int hf_bscvlc_connect_vmac;
 static int hf_bscvlc_connect_uuid;
-static int hf_bscvlc_identity_device_id;
-static int hf_bscvlc_hello_opt;
-static int hf_bscvlc_hello_opt_identity_relay;
 
 static dissector_table_t bvlc_dissector_table;
 static dissector_table_t bscvlc_dissector_table;
@@ -179,10 +175,6 @@ static const value_string bvlc_ipv6_result_names[] = {
 
 static const value_string bscvlc_header_type_names[] = {
 	{ 0x01, "Secure Path" },
-	{ 0x02, "Hello" },
-	{ 0x03, "Identity" },
-	{ 0x04, "Hint" },
-	{ 0x05, "Token" },
 	{ 0x1F, "Proprietary Header Option" },
 	{ 0,    NULL }
 };
@@ -247,21 +239,13 @@ static const true_false_string control_reserved_set_high = {
 	"Shall be zero and is zero."
 };
 
-/* BSCVLC Header option bits */
-#define BSCVLC_HDR_MORE_OPTIONS_FOLLOW            0x80
-#define BSCVLC_HDR_MUST_UNDERSTAND                0x40
-#define BSCVLC_HDR_EVERY_SEGMENT                  0x40
-#define BSCVLC_HDR_DATA_PRESENT                   0x20
-#define BSCVLC_HDR_OPTION_TYPE_MASK               0x1F
+#define BSCVLC_HEADER_OPTION_TYPE		0x1F
+#define BSCVLC_HEADER_OPTION_DATA		0x20
+#define BSCVLC_HEADER_OPTION_MUST_UNDERSTAND	0x40
+#define BSCVLC_HEADER_OPTION_MORE_OPTIONS	0x80
 
-/* BSCVLC Header options and their bits */
-#define BSCVLC_HDR_OPT_SECURE_PATH                0x01  /* only data option */
-#define BSCVLC_HDR_OPT_HELLO                      0x02  /* only destination option */
-#define BSCVLC_HDR_OPT_HELLO_BIT_IDENT_RELAY      0x01  /* only with the connect request */
-#define BSCVLC_HDR_OPT_IDENTITY                   0x03  /* only data option */
-#define BSCVLC_HDR_OPT_HINT                       0x04  /* only data option */
-#define BSCVLC_HDR_OPT_TOKEN                      0x05  /* only data option */
-#define BSCVLC_HDR_OPT_PROPRIETARY                0x1F  /* data or destination option */
+#define BSCVLC_HEADER_TYPE_SECURE_PATH		0x01
+#define BSCVLC_HEADER_TYPE_PROPRIETARY		0x1F
 
 
 static const true_false_string header_opt_data_set_high = {
@@ -277,18 +261,6 @@ static const true_false_string header_opt_must_understand_set_high = {
 static const true_false_string header_opt_more_set_high = {
 	"Another header option follows in the current header option list.",
 	"This is the last header option in the current header option list."
-};
-
-#define BSCVLC_HELLO_IDENTITY_RELAY		0x01
-
-static const true_false_string hello_opt_identity_relay_set_high = {
-	"Identity relay is allowed.",
-	"Identity relay is forbidden."
-};
-
-static int * const bscvlc_hello1_opt_flags[] = {
-	&hf_bscvlc_hello_opt_identity_relay,
-	NULL
 };
 
 static const value_string
@@ -509,44 +481,11 @@ BACnetErrorCode[] = {
     { 197, "tcp-error"},
     { 198, "ip-address-not-reachable"},
     { 199, "ip-error"},
-    { 200, "certificate-expired"},
-    { 201, "certificate-invalid"},
-    { 202, "certificate-malformed"},
-    { 203, "certificate-revoked"},
-    { 204, "unknown-key"},
-    { 205, "referenced-port-in-error"},
-    { 206, "not-enabled"},
-    { 207, "adjust-scope-required"},
-    { 208, "auth-scope-required"},
-    { 209, "bind-scope-required"},
-    { 210, "config-scope-required"},
-    { 211, "control-scope-required"},
-    { 212, "extended-scope-required"},
-    { 213, "incorrect-client"},
-    { 214, "install-scope-required"},
-    { 215, "insufficient-scope"},
-    { 216, "no-default-scope"},
-    { 217, "no-policy"},
-    { 218, "revoked-token"},
-    { 219, "override-scope-required"},
-    { 220, "inactive-token"},
-    { 221, "unknown-audience"},
-    { 222, "unknown-client"},
-    { 223, "unknown-scope"},
-    { 224, "view-scope-required"},
-    { 225, "incorrect-audience"},
-    { 226, "incorrect-client-origin"},
-    { 227, "invalid-array-size"},
-    { 228, "incorrect-issuer"},
-    { 229, "invalid-token"},
     { 0,   NULL}
 /* Enumerated values 0-255 are reserved for definition by ASHRAE.
    Enumerated values 256-65535 may be used by others subject to the
    procedures and constraints described in Clause 23. */
 };
-static value_string_ext BACnetErrorCode_ext = VALUE_STRING_EXT_INIT(BACnetErrorCode);
-
-
 
 static int * const bscvlc_control_flags[] = {
 	&hf_bscvlc_control_data_option,
@@ -577,8 +516,7 @@ dissect_ipv4_bvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 	proto_tree *bdt_tree; /* Broadcast Distribution Table */
 	proto_tree *fdt_tree; /* Foreign Device Table */
 
-	unsigned offset;
-	bool sec_decrypted;
+	int offset;
 	uint8_t bvlc_type;
 	uint8_t bvlc_function;
 	uint16_t bvlc_length;
@@ -618,7 +556,7 @@ dissect_ipv4_bvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 
 	/* Put the BVLC Type in the info column */
 	col_append_fstr(pinfo->cinfo, COL_INFO, " BVLC Function %s ",
-		  val_to_str_const(bvlc_function, bvlc_function_names, "unknown"));
+                  val_to_str_const(bvlc_function, bvlc_function_names, "unknown"));
 
 	ti = proto_tree_add_item(tree, proto_bvlc, tvb, 0, bvlc_length, ENC_NA);
 	bvlc_tree = proto_item_add_subtree(ti, ett_bvlc);
@@ -724,8 +662,8 @@ dissect_ipv4_bvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 		/*offset += 2;*/
 		break;
 	case 0x0C: /* Secure-BVLL */
-		/*offset =*/ bacnet_dissect_sec_wrapper(tvb, pinfo, tree, offset, NULL, &sec_decrypted);
-		if (!sec_decrypted) {
+		offset = bacnet_dissect_sec_wrapper(tvb, pinfo, tree, offset, NULL);
+		if (offset < 0) {
 			call_data_dissector(tvb, pinfo, tree);
 			return tvb_captured_length(tvb);
 		}
@@ -777,8 +715,7 @@ dissect_ipv6_bvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 	proto_item *ti;
 	proto_tree *bvlc_tree;
 
-	unsigned offset;
-	bool sec_decrypted;
+	int offset;
 	uint8_t bvlc_type;
 	uint8_t bvlc_function;
 	uint16_t bvlc_length = 0;
@@ -832,7 +769,7 @@ dissect_ipv6_bvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 
 	/* Put the BVLC Type in the info column */
 	col_append_fstr(pinfo->cinfo, COL_INFO, " BVLC Function %s ",
-		  val_to_str_const(bvlc_function, bvlc_ipv6_function_names, "unknown"));
+                  val_to_str_const(bvlc_function, bvlc_ipv6_function_names, "unknown"));
 
 	ti = proto_tree_add_item(tree, proto_bvlc, tvb, 0,
 		bvlc_length, ENC_NA);
@@ -915,8 +852,8 @@ dissect_ipv6_bvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 		offset += 2;
 		break;
 	case 0x0B: /* Secure-BVLL */
-		offset = bacnet_dissect_sec_wrapper(tvb, pinfo, tree, offset, NULL, &sec_decrypted);
-		if (!sec_decrypted) {
+		offset = bacnet_dissect_sec_wrapper(tvb, pinfo, tree, offset, NULL);
+		if (offset < 0) {
 			call_data_dissector(tvb, pinfo, tree);
 			return tvb_captured_length(tvb);
 		}
@@ -988,18 +925,16 @@ dissect_bscvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 	int start;
 	int bvlc_length;
 	int packet_length;
-	int npdu_length = 0;
+	int npdu_length;
 	uint8_t bvlc_function;
 	uint8_t bvlc_control;
 	uint8_t bvlc_result;
 	uint8_t hdr_byte;
-	uint8_t option;
+	int8_t mac_buffer[16];
 	unsigned bvlc_message_id;
-	bool bMustSegment;
+	unsigned idx;
 	bool bMoreFlag;
 	bool bDataFlag;
-	const char *pszUnderstand;
-	const char *pszOption;
 	proto_tree *subtree;
 
 	/* Calculate length of BSCVLC block to get remaining payload length */
@@ -1032,8 +967,8 @@ dissect_bscvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 		      (hdr_byte = tvb_get_uint8(tvb, bvlc_length)) != 0 && bMoreFlag)
 		{
 			/* get flags and type... */
-			bMoreFlag = (hdr_byte & BSCVLC_HDR_MORE_OPTIONS_FOLLOW);
-			bDataFlag = (hdr_byte & BSCVLC_HDR_DATA_PRESENT);
+			bMoreFlag= (hdr_byte & BSCVLC_HEADER_OPTION_MORE_OPTIONS);
+			bDataFlag= (hdr_byte & BSCVLC_HEADER_OPTION_DATA);
 			bvlc_length++;
 
 			if(bDataFlag)
@@ -1053,8 +988,8 @@ dissect_bscvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 		      (hdr_byte = tvb_get_uint8(tvb, bvlc_length)) != 0 && bMoreFlag)
 		{
 			/* get flags and type... */
-			bMoreFlag= (hdr_byte & BSCVLC_HDR_MORE_OPTIONS_FOLLOW);
-			bDataFlag= (hdr_byte & BSCVLC_HDR_DATA_PRESENT);
+			bMoreFlag= (hdr_byte & BSCVLC_HEADER_OPTION_MORE_OPTIONS);
+			bDataFlag= (hdr_byte & BSCVLC_HEADER_OPTION_DATA);
 			bvlc_length++;
 
 			if(bDataFlag)
@@ -1102,7 +1037,7 @@ dissect_bscvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 
 	/* Put the BSCVLC Type and Message ID in the info column */
 	col_append_fstr(pinfo->cinfo, COL_INFO, " BSCVLC Function %s Message-ID %u",
-		  val_to_str_const(bvlc_function, bscvlc_function_names, "unknown"), bvlc_message_id);
+                  val_to_str_const(bvlc_function, bscvlc_function_names, "unknown"), bvlc_message_id);
 
 	/* Fill the tree... */
 	offset = 0;
@@ -1121,7 +1056,9 @@ dissect_bscvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 
 	if ((bvlc_control & BSCVLC_CONTROL_ORIG_ADDRESS) != 0)
 	{
-		col_append_fstr(pinfo->cinfo, COL_INFO, " SMAC %s", tvb_bytes_to_str(pinfo->pool, tvb, offset, 6));
+		for(idx = 0; idx < 6; idx++)
+			snprintf(&mac_buffer[idx * 2], sizeof(mac_buffer) - (idx * 2), "%02X", tvb_get_uint8(tvb, offset + idx));
+		col_append_fstr(pinfo->cinfo, COL_INFO, " SMAC %s", mac_buffer);
 
 		proto_tree_add_item(bvlc_tree, hf_bscvlc_orig_vmac, tvb, offset, 6, ENC_NA);
 		offset += 6;
@@ -1129,7 +1066,9 @@ dissect_bscvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 
 	if ((bvlc_control & BSCVLC_CONTROL_DEST_ADDRESS) != 0)
 	{
-		col_append_fstr(pinfo->cinfo, COL_INFO, " DMAC %s", tvb_bytes_to_str(pinfo->pool, tvb, offset, 6));
+		for(idx = 0; idx < 6; idx++)
+			snprintf(&mac_buffer[idx * 2],  sizeof(mac_buffer) - (idx * 2), "%02X", tvb_get_uint8(tvb, offset + idx));
+		col_append_fstr(pinfo->cinfo, COL_INFO, " DMAC %s", mac_buffer);
 
 		proto_tree_add_item(bvlc_tree, hf_bscvlc_dest_vmac, tvb, offset, 6, ENC_NA);
 		offset += 6;
@@ -1143,10 +1082,8 @@ dissect_bscvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 		      (hdr_byte = tvb_get_uint8(tvb, offset)) != 0 && bMoreFlag)
 		{
 			/* get flags and type... */
-			option = (hdr_byte & BSCVLC_HDR_OPTION_TYPE_MASK);
-			bMustSegment = (hdr_byte & BSCVLC_HDR_MUST_UNDERSTAND);
-			bMoreFlag = (hdr_byte & BSCVLC_HDR_MORE_OPTIONS_FOLLOW);
-			bDataFlag = (hdr_byte & BSCVLC_HDR_DATA_PRESENT);
+			bMoreFlag= (hdr_byte & BSCVLC_HEADER_OPTION_MORE_OPTIONS);
+			bDataFlag= (hdr_byte & BSCVLC_HEADER_OPTION_DATA);
 			start = offset;
 
 			offset++;
@@ -1158,63 +1095,15 @@ dissect_bscvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 				offset += npdu_length;
 			}
 
-			if(bMustSegment)
-				pszUnderstand = "must understand";
-			else
-				pszUnderstand = "optional";
-
-			switch(option)
-			{
-			case BSCVLC_HDR_OPT_SECURE_PATH:
-				pszOption = "secure path";
-				break;
-			case BSCVLC_HDR_OPT_HELLO:
-				pszOption = "hello";
-				break;
-			case BSCVLC_HDR_OPT_IDENTITY:
-				pszOption = "identity";
-				break;
-			case BSCVLC_HDR_OPT_HINT:
-				pszOption = "hint";
-				break;
-			case BSCVLC_HDR_OPT_TOKEN:
-				pszOption = "token";
-				break;
-			case BSCVLC_HDR_OPT_PROPRIETARY:
-				pszOption = "proprietary";
-				break;
-			default:
-				pszOption = "reserved by ASHREA";
-				break;
-			}
-
 			subtree = proto_tree_add_subtree_format(bvlc_tree, tvb, start, offset - start,
-					ett_bscvlc_hdr, NULL, "Destination %s option %s", pszUnderstand, pszOption);
+	                                ett_bscvlc_hdr, NULL, "%s", "Destination Options");
 			proto_tree_add_bitmask_value(subtree, tvb, start, hf_bscvlc_header,
 				ett_bscvlc_hdr, bscvlc_header_flags, hdr_byte);
 
 			if(bDataFlag)
 			{
-				proto_tree_add_item(subtree, hf_bscvlc_header_length, tvb, start + 1, 2, ENC_BIG_ENDIAN);
-				switch(option)
-				{
-				case BSCVLC_HDR_OPT_HELLO:
-					proto_tree_add_bitmask_value(subtree, tvb, start + 3, hf_bscvlc_hello_opt,
-						ett_bscvlc_hdr, bscvlc_hello1_opt_flags, tvb_get_uint8(tvb, start + 3));
-					break;
-				case BSCVLC_HDR_OPT_IDENTITY:
-					proto_tree_add_item(subtree, hf_bscvlc_identity_device_id, tvb, start + 3, 3, ENC_BIG_ENDIAN);
-					break;
-				case BSCVLC_HDR_OPT_HINT:
-					bacnet_dissect_scope(tvb_new_subset_length(tvb, start, npdu_length + 3), pinfo, subtree, 3, "scope: ");
-					break;
-				case BSCVLC_HDR_OPT_TOKEN:
-					bacnet_dissect_token(tvb_new_subset_length(tvb, start, npdu_length + 3), pinfo, subtree, 3, "token: ");
-					break;
-				default:
-					proto_tree_add_item(subtree, hf_bscvlc_header_data, tvb, start + 3, npdu_length, ENC_NA);
-					break;
-				}
+				proto_tree_add_item(subtree, hf_bscvlc_header_length, tvb, start + 1, 2, ENC_NA);
+				proto_tree_add_item(subtree, hf_bscvlc_header_data, tvb, start + 3, npdu_length, ENC_NA);
 			}
 		}
 	}
@@ -1227,10 +1116,8 @@ dissect_bscvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 		      (hdr_byte = tvb_get_uint8(tvb, offset)) != 0 && bMoreFlag)
 		{
 			/* get flags and type... */
-			option = (hdr_byte & BSCVLC_HDR_OPTION_TYPE_MASK);
-			bMustSegment = (hdr_byte & BSCVLC_HDR_EVERY_SEGMENT);
-			bMoreFlag = (hdr_byte & BSCVLC_HDR_MORE_OPTIONS_FOLLOW);
-			bDataFlag = (hdr_byte & BSCVLC_HDR_DATA_PRESENT);
+			bMoreFlag= (hdr_byte & BSCVLC_HEADER_OPTION_MORE_OPTIONS);
+			bDataFlag= (hdr_byte & BSCVLC_HEADER_OPTION_DATA);
 			start = offset;
 
 			offset++;
@@ -1242,63 +1129,15 @@ dissect_bscvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 				offset += npdu_length;
 			}
 
-			if(bMustSegment)
-				pszUnderstand = "must understand";
-			else
-				pszUnderstand = "optional";
-
-			switch(option)
-			{
-			case BSCVLC_HDR_OPT_SECURE_PATH:
-				pszOption = "secure path";
-				break;
-			case BSCVLC_HDR_OPT_HELLO:
-				pszOption = "hello";
-				break;
-			case BSCVLC_HDR_OPT_IDENTITY:
-				pszOption = "identity";
-				break;
-			case BSCVLC_HDR_OPT_HINT:
-				pszOption = "hint";
-				break;
-			case BSCVLC_HDR_OPT_TOKEN:
-				pszOption = "token";
-				break;
-			case BSCVLC_HDR_OPT_PROPRIETARY:
-				pszOption = "proprietary";
-				break;
-			default:
-				pszOption = "reserved by ASHREA";
-				break;
-			}
-
 			subtree = proto_tree_add_subtree_format(bvlc_tree, tvb, start, offset - start,
-					ett_bscvlc_hdr, NULL, "Data %s option %s", pszUnderstand, pszOption);
+	                                ett_bscvlc_hdr, NULL, "%s", "Data Options");
 			proto_tree_add_bitmask_value(subtree, tvb, start, hf_bscvlc_header,
 				ett_bscvlc_hdr, bscvlc_header_flags, hdr_byte);
 
 			if(bDataFlag)
 			{
-				proto_tree_add_item(subtree, hf_bscvlc_header_length, tvb, start + 1, 2, ENC_BIG_ENDIAN);
-				switch(option)
-				{
-				case BSCVLC_HDR_OPT_HELLO:
-					proto_tree_add_bitmask_value(subtree, tvb, start + 3, hf_bscvlc_hello_opt,
-						ett_bscvlc_hdr, bscvlc_hello1_opt_flags, tvb_get_uint8(tvb, start + 3));
-					break;
-				case BSCVLC_HDR_OPT_IDENTITY:
-					proto_tree_add_item(subtree, hf_bscvlc_identity_device_id, tvb, start + 3, 3, ENC_BIG_ENDIAN);
-					break;
-				case BSCVLC_HDR_OPT_HINT:
-					bacnet_dissect_scope(tvb_new_subset_length(tvb, start, npdu_length + 3), pinfo, subtree, 3, "scope: ");
-					break;
-				case BSCVLC_HDR_OPT_TOKEN:
-					bacnet_dissect_token(tvb_new_subset_length(tvb, start, npdu_length + 3), pinfo, subtree, 3, "token: ");
-					break;
-				default:
-					proto_tree_add_item(subtree, hf_bscvlc_header_data, tvb, start + 3, npdu_length, ENC_NA);
-					break;
-				}
+				proto_tree_add_item(subtree, hf_bscvlc_header_length, tvb, start + 1, 2, ENC_NA);
+				proto_tree_add_item(subtree, hf_bscvlc_header_data, tvb, start + 3, npdu_length, ENC_NA);
 			}
 		}
 	}
@@ -1314,7 +1153,7 @@ dissect_bscvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 		break;
 	case 0x00: /* BVLC-Result */
 		subtree = proto_tree_add_subtree_format(bvlc_tree, tvb, offset, packet_length - offset,
-				ett_bscvlc_hdr, NULL, "%s", "BVLC-Result");
+	                        ett_bscvlc_hdr, NULL, "%s", "BVLC-Result");
 		proto_tree_add_item(subtree, hf_bscvlc_function, tvb,
 				offset, 1, ENC_NA);
 		offset++;
@@ -1324,7 +1163,7 @@ dissect_bscvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 		offset++;
 
 		col_append_fstr(pinfo->cinfo, COL_INFO, " %s",
-		    val_to_str_const(bvlc_result, bscvlc_result_names, "unknown"));
+                    val_to_str_const(bvlc_result, bscvlc_result_names, "unknown"));
 
 		if(bvlc_result)
 		{
@@ -1332,10 +1171,10 @@ dissect_bscvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 					offset, 1, ENC_NA);
 			offset++;
 			proto_tree_add_item(subtree, hf_bscvlc_error_class, tvb,
-					offset, 2, ENC_BIG_ENDIAN);
+					offset, 2, ENC_NA);
 			offset += 2;
 			proto_tree_add_item(subtree, hf_bscvlc_error_code, tvb,
-					offset, 2, ENC_BIG_ENDIAN);
+					offset, 2, ENC_NA);
 			offset += 2;
 			proto_tree_add_item(subtree, hf_bscvlc_result_data, tvb,
 					offset, packet_length - offset, ENC_NA);
@@ -1345,7 +1184,7 @@ dissect_bscvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 		break;
 	case 0x03: /* Address-Resolution-ACK */
 		subtree = proto_tree_add_subtree_format(bvlc_tree, tvb, offset, packet_length - offset,
-				ett_bscvlc_hdr, NULL, "%s", "Address-Resolution-ACK");
+	                        ett_bscvlc_hdr, NULL, "%s", "Address-Resolution-ACK");
 		proto_tree_add_item(subtree, hf_bscvlc_uris, tvb,
 				offset, packet_length - offset, ENC_NA);
 		/* Force and of packet */
@@ -1353,7 +1192,7 @@ dissect_bscvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 		break;
 	case 0x04: /* Advertisement */
 		subtree = proto_tree_add_subtree_format(bvlc_tree, tvb, offset, packet_length - offset,
-				ett_bscvlc_hdr, NULL, "%s", "Advertisement");
+	                        ett_bscvlc_hdr, NULL, "%s", "Advertisement");
 		proto_tree_add_item(subtree, hf_bscvlc_hub_conn_state, tvb,
 				offset, 1, ENC_NA);
 		offset++;
@@ -1361,15 +1200,15 @@ dissect_bscvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 				offset, 1, ENC_NA);
 		offset++;
 		proto_tree_add_item(subtree, hf_bscvlc_max_bvlc_length, tvb,
-				offset, 2, ENC_BIG_ENDIAN);
+				offset, 2, ENC_NA);
 		offset += 2;
 		proto_tree_add_item(subtree, hf_bscvlc_max_npdu_length, tvb,
-				offset, 2, ENC_BIG_ENDIAN);
+				offset, 2, ENC_NA);
 		offset += 2;
 		break;
 	case 0x06: /* Connect-Request */
 		subtree = proto_tree_add_subtree_format(bvlc_tree, tvb, offset, packet_length - offset,
-				ett_bscvlc_hdr, NULL, "%s", "Connect-Request");
+	                        ett_bscvlc_hdr, NULL, "%s", "Connect-Request");
 		proto_tree_add_item(subtree, hf_bscvlc_connect_vmac, tvb,
 				offset, 6, ENC_NA);
 		offset += 6;
@@ -1377,15 +1216,15 @@ dissect_bscvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 				offset, 16, ENC_NA);
 		offset += 16;
 		proto_tree_add_item(subtree, hf_bscvlc_max_bvlc_length, tvb,
-				offset, 2, ENC_BIG_ENDIAN);
+				offset, 2, ENC_NA);
 		offset += 2;
 		proto_tree_add_item(subtree, hf_bscvlc_max_npdu_length, tvb,
-				offset, 2, ENC_BIG_ENDIAN);
+				offset, 2, ENC_NA);
 		offset += 2;
 		break;
 	case 0x07: /* Connect-Accept */
 		subtree = proto_tree_add_subtree_format(bvlc_tree, tvb, offset, packet_length - offset,
-				ett_bscvlc_hdr, NULL, "%s", "Connect-Accept");
+	                        ett_bscvlc_hdr, NULL, "%s", "Connect-Accept");
 		proto_tree_add_item(subtree, hf_bscvlc_connect_vmac, tvb,
 				offset, 6, ENC_NA);
 		offset += 6;
@@ -1393,17 +1232,17 @@ dissect_bscvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 				offset, 16, ENC_NA);
 		offset += 16;
 		proto_tree_add_item(subtree, hf_bscvlc_max_bvlc_length, tvb,
-				offset, 2, ENC_BIG_ENDIAN);
+				offset, 2, ENC_NA);
 		offset += 2;
 		proto_tree_add_item(subtree, hf_bscvlc_max_npdu_length, tvb,
-				offset, 2, ENC_BIG_ENDIAN);
+				offset, 2, ENC_NA);
 		offset += 2;
 		break;
 	case 0x0C: /* Proprietary-Message */
 		subtree = proto_tree_add_subtree_format(bvlc_tree, tvb, offset, packet_length - offset,
-				ett_bscvlc_hdr, NULL, "%s", "Proprietary-Message");
+	                        ett_bscvlc_hdr, NULL, "%s", "Proprietary-Message");
 		proto_tree_add_item(subtree, hf_bscvlc_vendor_id, tvb,
-				offset, 2, ENC_BIG_ENDIAN);
+				offset, 2, ENC_NA);
 		offset += 2;
 		proto_tree_add_item(subtree, hf_bscvlc_proprietary_opt_type, tvb,
 				offset, 1, ENC_NA);
@@ -1603,22 +1442,22 @@ proto_register_bvlc(void)
 		{ &hf_bscvlc_header_opt_type,
 			{ "Header Type",	"bscvlc.header_type",
 			FT_UINT8, BASE_HEX, VALS(bscvlc_header_type_names),
-			BSCVLC_HDR_OPTION_TYPE_MASK, "BSCVLC Header Option", HFILL }
+			BSCVLC_HEADER_OPTION_TYPE, "BSCVLC Header Option", HFILL }
 		},
 		{ &hf_bscvlc_header_opt_data,
 			{ "Header Data",	"bscvlc.header_data_present",
 			FT_BOOLEAN, 8, TFS(&header_opt_data_set_high),
-			BSCVLC_HDR_DATA_PRESENT, "BSCVLC Header Option", HFILL }
+			BSCVLC_HEADER_OPTION_DATA, "BSCVLC Header Option", HFILL }
 		},
 		{ &hf_bscvlc_header_opt_must_understand,
 			{ "Header Must Understand","bscvlc.header_understand",
 			FT_BOOLEAN, 8, TFS(&header_opt_must_understand_set_high),
-			BSCVLC_HDR_MUST_UNDERSTAND, "BSCVLC Header Option", HFILL }
+			BSCVLC_HEADER_OPTION_MUST_UNDERSTAND, "BSCVLC Header Option", HFILL }
 		},
 		{ &hf_bscvlc_header_opt_more,
 			{ "Header More",	"bscvlc.header_more",
 			FT_BOOLEAN, 8, TFS(&header_opt_more_set_high),
-			BSCVLC_HDR_MORE_OPTIONS_FOLLOW, "BSCVLC Header Option", HFILL }
+			BSCVLC_HEADER_OPTION_MORE_OPTIONS, "BSCVLC Header Option", HFILL }
 		},
 		{ &hf_bscvlc_vendor_id,
 			{ "Vendor ID",          "bscvlc.vendor_id",
@@ -1671,7 +1510,7 @@ proto_register_bvlc(void)
 		},
 		{ &hf_bscvlc_error_code,
 			{ "Error Code",		"bscvlc.error_code",
-			FT_UINT32, BASE_DEC|BASE_EXT_STRING, &BACnetErrorCode_ext, 0, NULL, HFILL }
+			FT_UINT32, BASE_DEC, VALS(BACnetErrorCode), 0, NULL, HFILL }
 		},
 		{ &hf_bscvlc_result_data,
 			{ "Result Data",	"bscvlc.result_data",
@@ -1707,21 +1546,6 @@ proto_register_bvlc(void)
 			{ "Connecting UUID",	"bscvlc.connect_uuid",
 			FT_BYTES, BASE_NONE, NULL, 0,
 			"BSCVLC Connecting UUID", HFILL }
-		},
-		{ &hf_bscvlc_identity_device_id,
-			{ "Identity Device ID",	"bscvlc.identity_device_id",
-			FT_UINT24, BASE_DEC, NULL, 0,
-			"BSCVLC Identity Device ID", HFILL }
-		},
-		{ &hf_bscvlc_hello_opt,
-			{ "Hello option",		"bscvlc.hello_opt",
-			FT_UINT8, BASE_HEX, NULL, 0,
-			"BSCVLC Hello option", HFILL }
-		},
-		{ &hf_bscvlc_hello_opt_identity_relay,
-			{ "Hello Identity Relay","bscvlc.hello_opt_identity_relay",
-			FT_BOOLEAN, 8, TFS(&hello_opt_identity_relay_set_high),
-			BSCVLC_HELLO_IDENTITY_RELAY, "BSCVLC Hello Option", HFILL }
 		},
 	};
 

@@ -1,4 +1,4 @@
-/* packet-clique-rm.c
+/* packet-clique_rm.c
  * Routines for clique reliable multicast dissector
  * Copyright 2007, Collabora Ltd.
  *   @author: Sjoerd Simons <sjoerd.simons@collabora.co.uk>
@@ -226,8 +226,9 @@ dissect_unreliable_packet(proto_tree *clique_rm_tree, uint8_t type, tvbuff_t *tv
           hf_clique_rm_whois_request_id, tvb, offset, 4, ENC_BIG_ENDIAN);
         break;
       case PACKET_TYPE_WHOIS_REPLY:
-        proto_tree_add_item_ret_uint(clique_rm_tree,
-          hf_clique_rm_whois_reply_name_length, tvb, offset, 1, ENC_BIG_ENDIAN, &len);
+        len = tvb_get_uint8(tvb, offset);
+        proto_tree_add_item(clique_rm_tree,
+          hf_clique_rm_whois_reply_name_length, tvb, offset, 1, ENC_BIG_ENDIAN);
         offset += 1;
         proto_tree_add_item(clique_rm_tree,
           hf_clique_rm_whois_reply_name, tvb, offset, len, ENC_ASCII);
@@ -278,7 +279,7 @@ dissect_clique_rm_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 
   col_set_str(pinfo->cinfo, COL_PROTOCOL, "Clique-rm");
   col_add_str(pinfo->cinfo, COL_INFO,
-               val_to_str(pinfo->pool, type, packet_type_vals, "Unknown (0x%02x)"));
+               val_to_str(type, packet_type_vals, "Unknown (0x%02x)"));
 
   /* rewind back to just behind the prefix */
   offset = 6;
@@ -460,7 +461,7 @@ proto_register_clique_rm(void)
 void
 proto_reg_handoff_clique_rm(void)
 {
-  heur_dissector_add("udp", dissect_clique_rm_heur, "Clique RM over UDP", "clique_rm_udp", proto_clique_rm, HEURISTIC_DISABLE);
+  heur_dissector_add("udp", dissect_clique_rm_heur, "Clique RM over UDP", "clique_rm_udp", proto_clique_rm, HEURISTIC_ENABLE);
 }
 
 /*

@@ -10,8 +10,6 @@
  */
 
 #include "config.h"
-#define WS_LOG_DOMAIN "packet-snort-config"
-#include <wireshark.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -23,16 +21,13 @@
 #include "packet-snort-config.h"
 #include "ws_attributes.h"
 
-#define MAX_LINE_LENGTH 4096U
-#define STR_BUF_SIZE 1024U
-
 /* Forward declaration */
 static void parse_config_file(SnortConfig_t *snort_config, FILE *config_file_fd, const char *filename, const char *dirname, int recursion_level);
 
 /* Skip white space from 'source', return pointer to first non-whitespace char */
 static const char *skipWhiteSpace(const char *source, int *accumulated_offset)
 {
-    unsigned offset = 0;
+    int offset = 0;
 
     /* Skip any leading whitespace */
     while ((source[offset] == ' ') || (source[offset] == '\t')) {
@@ -52,8 +47,8 @@ static const char *skipWhiteSpace(const char *source, int *accumulated_offset)
  * - returns: requested string.  Returns from static buffer when copy is false */
 static char* read_token(const char* source, char delimeter, int *length, int *accumulated_length, bool copy)
 {
-    static char static_buffer[MAX_LINE_LENGTH];
-    unsigned offset = 0;
+    static char static_buffer[1024];
+    int offset = 0;
 
     const char *source_proper = skipWhiteSpace(source, accumulated_length);
 
@@ -65,7 +60,8 @@ static char* read_token(const char* source, char delimeter, int *length, int *ac
     *accumulated_length += offset;
     if (copy) {
         /* Copy into new string */
-        char *new_string = g_strndup(source_proper, offset);
+        char *new_string = g_strndup(source_proper, offset+1);
+        new_string[offset] = '\0';
         return new_string;
     }
     else {
@@ -362,7 +358,6 @@ static bool parse_variables_line(SnortConfig_t *snort_config, const char *line)
     /* Now value */
     value = read_token(line + accumulated_length, ' ', &length, &accumulated_length, true);
     if (value == NULL) {
-        g_free(variable_name);
         return false;
     }
 
@@ -373,7 +368,7 @@ static bool parse_variables_line(SnortConfig_t *snort_config, const char *line)
                 /* This can be relative or absolute. */
                 snort_config->rule_path = value;
                 snort_config->rule_path_is_absolute = g_path_is_absolute(value);
-                ws_debug("rule_path set to %s (is_absolute=%d)",
+                snort_debug_printf("rule_path set to %s (is_absolute=%d)\n",
                                    snort_config->rule_path, snort_config->rule_path_is_absolute);
             }
             g_hash_table_insert(snort_config->vars, variable_name, value);
@@ -450,7 +445,7 @@ char *expand_reference(SnortConfig_t *snort_config, char *reference)
     int accumulated_length = 0;
 
     /* Extract up to ',', then substitute prefix! */
-    ws_debug("expand_reference(%s)", reference);
+    snort_debug_printf("expand_reference(%s)\n", reference);
     char *prefix = read_token(reference, ',', &length, &accumulated_length, false);
 
     if (*prefix != '\0') {
@@ -566,7 +561,7 @@ static bool parse_include_file(SnortConfig_t *snort_config, const char *line, co
         /* Try to open the file. */
         new_config_fd = ws_fopen(substituted_filename, "r");
         if (new_config_fd == NULL) {
-            ws_debug("Failed to open config file %s", substituted_filename);
+            snort_debug_printf("Failed to open config file %s\n", substituted_filename);
             report_failure("Snort dissector: Failed to open config file %s\n", substituted_filename);
             g_free(substituted_filename);
             return false;
@@ -590,33 +585,30 @@ static bool parse_include_file(SnortConfig_t *snort_config, const char *line, co
 /* Process an individual option - i.e. the elements found between '(' and ')' */
 static void process_rule_option(Rule_t *rule, char *options, int option_start_offset, int options_end_offset, int colon_offset)
 {
-    static char name[STR_BUF_SIZE], value[STR_BUF_SIZE];
+    static char name[1024], value[1024];
     name[0] = '\0';
     value[0] = '\0';
-    size_t value_length = 0;
-    int32_t value_i32 = 0;
-    uint32_t value_u32 = 0;
-    uint16_t value_u16 = 0;
-    const char *endptr; // Just to ignore trailing whitespace
+    int value_length = 0;
+    uint32_t value32 = 0;
     int spaces_after_colon = 0;
 
     if (colon_offset != 0) {
         /* Name and value */
-        (void) g_strlcpy(name, options+option_start_offset, STR_BUF_SIZE);
-        // colon_offset is the offset *after* the colon
+        (void) g_strlcpy(name, options+option_start_offset, colon_offset-option_start_offset);
         if (options[colon_offset] == ' ') {
             spaces_after_colon = 1;
         }
-        value_length = g_strlcpy(value, options+colon_offset+spaces_after_colon, STR_BUF_SIZE);
-        if (value_length >= STR_BUF_SIZE) {
-            // XXX - Should we do anything on truncation?
-            value_length = STR_BUF_SIZE - 1;
-        }
+        (void) g_strlcpy(value, options+colon_offset+spaces_after_colon, options_end_offset-spaces_after_colon-colon_offset);
+        value_length = (int)strlen(value);
     }
     else {
         /* Just name */
-        (void) g_strlcpy(name, options+option_start_offset, STR_BUF_SIZE);
+        (void) g_strlcpy(name, options+option_start_offset, options_end_offset-option_start_offset);
     }
+
+    /* Some rule options expect a number, parse it now. Note that any space
+     * after the value will currently result in the number being ignored. */
+    ws_strtoi32(value, NULL, &value32);
 
     /* Think this is space at end of all options - don't compare with option names */
     if (name[0] == '\0') {
@@ -628,18 +620,10 @@ static void process_rule_option(Rule_t *rule, char *options, int option_start_of
         rule->msg = g_strdup(value);
     }
     else if (strcmp(name, "sid") == 0) {
-        if (!ws_strtou32(value, &endptr, &value_u32)) {
-            ws_info("failed to parse %s argument", name);
-            return;
-        }
-        rule->sid = value_u32;
+        rule->sid = value32;
     }
     else if (strcmp(name, "rev") == 0) {
-        if (!ws_strtou32(value, &endptr, &value_u32)) {
-            ws_info("failed to parse %s argument", name);
-            return;
-        }
-        rule->rev = value_u32;
+        rule->rev = value32;
     }
     else if (strcmp(name, "content") == 0) {
         int value_start = 0;
@@ -698,36 +682,16 @@ static void process_rule_option(Rule_t *rule, char *options, int option_start_of
         rule_set_content_nocase(rule);
     }
     else if (strcmp(name, "offset") == 0) {
-        // Allows values from -65535 to 65535
-        if (!ws_strtoi32(value, &endptr, &value_i32)) {
-            ws_info("failed to parse %s argument", name);
-            return;
-        }
-        rule_set_content_offset(rule, value_i32);
+        rule_set_content_offset(rule, value32);
     }
     else if (strcmp(name, "depth") == 0) {
-        // Max value is 65535
-        if (!ws_strtou16(value, &endptr, &value_u16)) {
-            ws_info("failed to parse %s argument", name);
-            return;
-        }
-        rule_set_content_depth(rule, value_u16);
+        rule_set_content_depth(rule, value32);
     }
     else if (strcmp(name, "within") == 0) {
-        // Max value is 65535
-        if (!ws_strtou16(value, &endptr, &value_u16)) {
-            ws_info("failed to parse %s argument", name);
-            return;
-        }
-        rule_set_content_within(rule, value_u16);
+        rule_set_content_within(rule, value32);
     }
     else if (strcmp(name, "distance") == 0) {
-        // Allows values from -65535 to 65535
-        if (!ws_strtoi32(value, &endptr, &value_i32)) {
-            ws_info("failed to parse %s argument", name);
-            return;
-        }
-        rule_set_content_distance(rule, value_i32);
+        rule_set_content_distance(rule, value32);
     }
     else if (strcmp(name, "fast_pattern") == 0) {
         rule_set_content_fast_pattern(rule);
@@ -777,7 +741,7 @@ static bool parse_rule(SnortConfig_t *snort_config, char *line, const char *file
     /* Allocate the rule itself */
     rule = g_new(Rule_t, 1);
 
-    ws_debug("looks like a rule: %s", line);
+    snort_debug_printf("looks like a rule: %s\n", line);
     memset(rule, 0, sizeof(Rule_t));
 
     rule->rule_string = g_strdup(line);
@@ -790,9 +754,7 @@ static bool parse_rule(SnortConfig_t *snort_config, char *line, const char *file
     /* Find start of options. */
     options_start = strstr(line, "(");
     if (options_start == NULL) {
-        ws_debug("start of options not found");
-        g_free(rule->rule_string);
-        g_free(rule->file);
+        snort_debug_printf("start of options not found\n");
         g_free(rule);
         return false;
     }
@@ -800,8 +762,6 @@ static bool parse_rule(SnortConfig_t *snort_config, char *line, const char *file
 
     /* To make parsing simpler, replace final ')' with ';' */
     if (line[line_length-1] != ')') {
-        g_free(rule->rule_string);
-        g_free(rule->file);
         g_free(rule);
         return false;
     }
@@ -825,16 +785,10 @@ static bool parse_rule(SnortConfig_t *snort_config, char *line, const char *file
         if (!in_quotes) {
             if (c == ':') {
                 colon_offset = options_index;
-                options[colon_offset - 1] = '\0';
             }
             if (c == ';') {
                 /* End of current option - add to rule. */
-                options[options_index - 1] = '\0';
                 process_rule_option(rule, options, options_start_index, options_index, colon_offset);
-                options[options_index - 1] = ';';
-                if (colon_offset) {
-                    options[colon_offset - 1] = ':';
-                }
 
                 /* Skip any spaces before next option */
                 while (options[options_index] == ' ') options_index++;
@@ -849,7 +803,7 @@ static bool parse_rule(SnortConfig_t *snort_config, char *line, const char *file
 
     /* Add rule to map of rules. */
     g_hash_table_insert(snort_config->rules, GUINT_TO_POINTER((unsigned)rule->sid), rule);
-    ws_debug("Snort rule with SID=%u added to table", rule->sid);
+    snort_debug_printf("Snort rule with SID=%u added to table\n", rule->sid);
 
     return true;
 }
@@ -878,7 +832,7 @@ static gboolean delete_rule(void *    key _U_,
         g_free(rule->references[n]);
     }
 
-    ws_debug("Freeing rule at :%p", rule);
+    snort_debug_printf("Freeing rule at :%p\n", rule);
     g_free(rule);
     return TRUE;
 }
@@ -891,10 +845,11 @@ static gboolean delete_rule(void *    key _U_,
 static void parse_config_file(SnortConfig_t *snort_config, FILE *config_file_fd,
                               const char *filename, const char *dirname, int recursion_level)
 {
+    #define MAX_LINE_LENGTH 4096
     char line[MAX_LINE_LENGTH];
     int  line_number = 0;
 
-    ws_debug("parse_config_file(filename=%s, recursion_level=%d)", filename, recursion_level);
+    snort_debug_printf("parse_config_file(filename=%s, recursion_level=%d)\n", filename, recursion_level);
 
     if (recursion_level > MAX_CONFIG_FILE_RECURSE_DEPTH) {
         return;
@@ -944,9 +899,10 @@ static void parse_config_file(SnortConfig_t *snort_config, FILE *config_file_fd,
 void create_config(SnortConfig_t **snort_config, const char *snort_config_file)
 {
     char* dirname;
+    char* basename;
     FILE *config_file_fd;
 
-    ws_debug("create_config (%s)", snort_config_file);
+    snort_debug_printf("create_config (%s)\n", snort_config_file);
 
     *snort_config = g_new(SnortConfig_t, 1);
     memset(*snort_config, 0, sizeof(SnortConfig_t));
@@ -964,11 +920,12 @@ void create_config(SnortConfig_t **snort_config, const char *snort_config_file)
 
     /* Extract separate directory and filename. */
     dirname =  g_path_get_dirname(snort_config_file);
+    basename =  g_path_get_basename(snort_config_file);
 
     /* Attempt to open the config file */
     config_file_fd = ws_fopen(snort_config_file, "r");
     if (config_file_fd == NULL) {
-        ws_debug("Failed to open config file %s", snort_config_file);
+        snort_debug_printf("Failed to open config file %s\n", snort_config_file);
         report_failure("Snort dissector: Failed to open config file %s\n", snort_config_file);
     }
     else {
@@ -978,13 +935,14 @@ void create_config(SnortConfig_t **snort_config, const char *snort_config_file)
     }
 
     g_free(dirname);
+    g_free(basename);
 }
 
 
 /* Delete the entire config */
 void delete_config(SnortConfig_t **snort_config)
 {
-    ws_debug("delete_config()");
+    snort_debug_printf("delete_config()\n");
 
     /* Iterate over all rules, freeing each one! */
     g_hash_table_foreach_remove((*snort_config)->rules, delete_rule, NULL);
@@ -1072,7 +1030,7 @@ static unsigned char content_get_nibble_value(char c)
 
     if (!values_set) {
         /* Set table once and for all */
-        unsigned ch;
+        unsigned char ch;
         for (ch='a'; ch <= 'f'; ch++) {
             values[ch] = 0xa + (ch-'a');
         }
@@ -1098,16 +1056,12 @@ unsigned content_convert_to_binary(content_t *content)
     char c;
     int n;
     bool have_backslash = false;
-    static char binary_str[STR_BUF_SIZE];
+    static char binary_str[1024];
 
     /* Just return length if have previously translated in binary string. */
     if (content->translated) {
         return content->translated_length;
     }
-
-    /* content->str was set by rule_add_content, strdup'd from a substring of
-     * value, which, null-terminated, fit in an array of STR_BUF_SIZE. */
-    ws_assert(strlen(content->str) < STR_BUF_SIZE);
 
     /* Walk over each character, work out what needs to be written into output */
     for (n=0; content->str[n] != '\0'; n++) {
@@ -1226,7 +1180,7 @@ bool content_convert_pcre_for_regex(content_t *content)
                     /* TODO: handle other modifiers that will get seen? */
                     /* N.B. 'U' (match in decoded URI buffers) can't be handled, so don't store in flag. */
                     /* N.B. not sure if/how to handle 'R' (effectively distance:0) */
-                    ws_debug("Unhandled pcre modifier '%c'", content->str[i]);
+                    snort_debug_printf("Unhandled pcre modifier '%c'\n", content->str[i]);
                     break;
             }
         }

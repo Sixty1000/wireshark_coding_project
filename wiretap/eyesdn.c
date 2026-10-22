@@ -8,13 +8,11 @@
 
 #include "config.h"
 #include "eyesdn.h"
-#include "wtap_module.h"
+#include "wtap-int.h"
 #include "file_wrappers.h"
 
 #include <stdlib.h>
 #include <string.h>
-
-#include <wsutil/pint.h>
 
 static int eyesdn_file_type_subtype = -1;
 
@@ -82,17 +80,6 @@ static bool esc_read(FILE_T fh, uint8_t *buf, int len, int *err, char **err_info
 	return true;
 }
 
-static bool esc_read_append_buffer(FILE_T fh, Buffer *buf, int len, int *err, char **err_info)
-{
-	/* Make sure we have enough room for the data */
-	ws_buffer_assure_space(buf, len);
-
-	if (!esc_read(fh, ws_buffer_end_ptr(buf), len, err, err_info))
-		return false;
-	ws_buffer_increase_length(buf, len);
-	return true;
-}
-
 /* Magic text to check for eyesdn-ness of file */
 static const unsigned char eyesdn_hdr_magic[]  =
 { 'E', 'y', 'e', 'S', 'D', 'N'};
@@ -101,11 +88,11 @@ static const unsigned char eyesdn_hdr_magic[]  =
 /* Size of a record header */
 #define EYESDN_HDR_LENGTH		12
 
-static bool eyesdn_read(wtap *wth, wtap_rec *rec,
+static bool eyesdn_read(wtap *wth, wtap_rec *rec, Buffer *buf,
 	int *err, char **err_info, int64_t *data_offset);
 static bool eyesdn_seek_read(wtap *wth, int64_t seek_off,
-	wtap_rec *rec, int *err, char **err_info);
-static bool read_eyesdn_rec(FILE_T fh, wtap_rec *rec,
+	wtap_rec *rec, Buffer *buf, int *err, char **err_info);
+static bool read_eyesdn_rec(FILE_T fh, wtap_rec *rec, Buffer* buf,
 	int *err, char **err_info);
 
 /* Seeks to the beginning of the next packet, and returns the
@@ -156,7 +143,7 @@ wtap_open_return_val eyesdn_open(wtap *wth, int *err, char **err_info)
 }
 
 /* Find the next record and parse it; called from wtap_read(). */
-static bool eyesdn_read(wtap *wth, wtap_rec *rec,
+static bool eyesdn_read(wtap *wth, wtap_rec *rec, Buffer *buf,
     int *err, char **err_info, int64_t *data_offset)
 {
 	int64_t	offset;
@@ -168,23 +155,24 @@ static bool eyesdn_read(wtap *wth, wtap_rec *rec,
 	*data_offset = offset;
 
 	/* Parse the record */
-	return read_eyesdn_rec(wth->fh, rec, err, err_info);
+	return read_eyesdn_rec(wth->fh, rec, buf, err, err_info);
 }
 
 /* Used to read packets in random-access fashion */
 static bool
 eyesdn_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
-	int *err, char **err_info)
+	Buffer *buf, int *err, char **err_info)
 {
 	if (file_seek(wth->random_fh, seek_off, SEEK_SET, err) == -1)
 		return false;
 
-	return read_eyesdn_rec(wth->random_fh, rec, err, err_info);
+	return read_eyesdn_rec(wth->random_fh, rec, buf, err, err_info);
 }
 
 /* Parses a record. */
 static bool
-read_eyesdn_rec(FILE_T fh, wtap_rec *rec, int *err, char **err_info)
+read_eyesdn_rec(FILE_T fh, wtap_rec *rec, Buffer *buf, int *err,
+    char **err_info)
 {
 	union wtap_pseudo_header *pseudo_header = &rec->rec_header.packet_header.pseudo_header;
 	uint8_t		hdr[EYESDN_HDR_LENGTH];
@@ -192,6 +180,7 @@ read_eyesdn_rec(FILE_T fh, wtap_rec *rec, int *err, char **err_info)
 	int		usecs;
 	unsigned	pkt_len;
 	uint8_t		channel, direction;
+	uint8_t		*pd;
 
 	/* Our file pointer should be at the summary information header
 	 * for a packet. Read in that header and extract the useful
@@ -200,16 +189,21 @@ read_eyesdn_rec(FILE_T fh, wtap_rec *rec, int *err, char **err_info)
 	if (!esc_read(fh, hdr, EYESDN_HDR_LENGTH, err, err_info))
 		return false;
 
-	wtap_setup_packet_rec(rec, WTAP_ENCAP_UNKNOWN);
-	rec->block = wtap_block_create(WTAP_BLOCK_PACKET);
-
 	/* extract information from header */
-	usecs = pntohu24(&hdr[0]);
-	secs = pntohu40(&hdr[3]);
+	usecs = pntoh24(&hdr[0]);
+#ifdef TV64BITS
+	secs = hdr[3];
+#else
+	secs = 0;
+#endif
+	secs = (secs << 8) | hdr[4];
+	secs = (secs << 8) | hdr[5];
+	secs = (secs << 8) | hdr[6];
+	secs = (secs << 8) | hdr[7];
 
 	channel = hdr[8];
 	direction = hdr[9];
-	pkt_len = pntohu16(&hdr[10]);
+	pkt_len = pntoh16(&hdr[10]);
 
 	switch(direction >> 1) {
 
@@ -303,13 +297,21 @@ read_eyesdn_rec(FILE_T fh, wtap_rec *rec, int *err, char **err_info)
 		return false;
 	}
 
+	rec->rec_type = REC_TYPE_PACKET;
+	rec->block = wtap_block_create(WTAP_BLOCK_PACKET);
 	rec->presence_flags = WTAP_HAS_TS;
 	rec->ts.secs = secs;
 	rec->ts.nsecs = usecs * 1000;
 	rec->rec_header.packet_header.caplen = pkt_len;
 	rec->rec_header.packet_header.len = pkt_len;
 
-	return esc_read_append_buffer(fh, &rec->data, pkt_len, err, err_info);
+	/* Make sure we have enough room for the packet */
+	ws_buffer_assure_space(buf, pkt_len);
+
+	pd = ws_buffer_start_ptr(buf);
+	if (!esc_read(fh, pd, pkt_len, err, err_info))
+		return false;
+	return true;
 }
 
 
@@ -336,8 +338,9 @@ esc_write(wtap_dumper *wdh, const uint8_t *buf, int len, int *err)
 	return true;
 }
 
-static bool eyesdn_dump(wtap_dumper *wdh, const wtap_rec *rec,
-			int *err, char **err_info);
+static bool eyesdn_dump(wtap_dumper *wdh,
+			    const wtap_rec *rec,
+			    const uint8_t *pd, int *err, char **err_info);
 
 static bool eyesdn_dump_open(wtap_dumper *wdh, int *err, char **err_info _U_)
 {
@@ -370,8 +373,9 @@ static int eyesdn_dump_can_write_encap(int encap)
 
 /* Write a record for a packet to a dump file.
  *    Returns true on success, false on failure. */
-static bool eyesdn_dump(wtap_dumper *wdh, const wtap_rec *rec,
-			int *err, char **err_info _U_)
+static bool eyesdn_dump(wtap_dumper *wdh,
+			    const wtap_rec *rec,
+			    const uint8_t *pd, int *err, char **err_info _U_)
 {
 	static const uint8_t start_flag = 0xff;
 	const union wtap_pseudo_header *pseudo_header = &rec->rec_header.packet_header.pseudo_header;
@@ -386,7 +390,6 @@ static bool eyesdn_dump(wtap_dumper *wdh, const wtap_rec *rec,
 	/* We can only write packet records. */
 	if (rec->rec_type != REC_TYPE_PACKET) {
 		*err = WTAP_ERR_UNWRITABLE_REC_TYPE;
-		*err_info = wtap_unwritable_rec_type_err_string(rec);
 		return false;
 	}
 
@@ -450,18 +453,24 @@ static bool eyesdn_dump(wtap_dumper *wdh, const wtap_rec *rec,
 		return false;
 	}
 
-	phtonu24(&buf[0], usecs);				/* 0-2 */
-	phtonu40(&buf[3], secs);					/* 3-7 */
-	phtonu8(&buf[8], channel);				/* 8 */
-	phtonu8(&buf[9], (origin?1:0) + (protocol << 1));	/* 9 */
-	phtonu16(&buf[10], size);				/* 10-11 */
+	phton24(&buf[0], usecs);
+
+	buf[3] = (uint8_t)0;
+	buf[4] = (uint8_t)(0xff & (secs >> 24));
+	buf[5] = (uint8_t)(0xff & (secs >> 16));
+	buf[6] = (uint8_t)(0xff & (secs >> 8));
+	buf[7] = (uint8_t)(0xff & (secs >> 0));
+
+	buf[8] = (uint8_t) channel;
+	buf[9] = (uint8_t) (origin?1:0) + (protocol << 1);
+	phtons(&buf[10], size);
 
 	/* start flag */
 	if (!wtap_dump_file_write(wdh, &start_flag, sizeof start_flag, err))
 		return false;
 	if (!esc_write(wdh, buf, 12, err))
 		return false;
-	if (!esc_write(wdh, ws_buffer_start_ptr(&rec->data), size, err))
+	if (!esc_write(wdh, pd, size, err))
 		return false;
 	return true;
 }

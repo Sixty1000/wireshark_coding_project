@@ -12,10 +12,7 @@
 #include "visual.h"
 
 #include <string.h>
-
-#include <wsutil/pint.h>
-
-#include "wtap_module.h"
+#include "wtap-int.h"
 #include "file_wrappers.h"
 
 /*
@@ -148,14 +145,14 @@ struct visual_write_info
 
 
 /* Local functions to handle file reads and writes */
-static bool visual_read(wtap *wth, wtap_rec *rec, int *err,
-    char **err_info, int64_t *data_offset);
-static bool visual_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
-    int *err, char **err_info);
-static bool visual_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
-    int *err, char **err_info);
+static bool visual_read(wtap *wth, wtap_rec *rec, Buffer *buf,
+    int *err, char **err_info, int64_t *data_offset);
+static bool visual_seek_read(wtap *wth, int64_t seek_off,
+    wtap_rec *rec, Buffer *buf, int *err, char **err_info);
+static bool visual_read_packet(wtap *wth, FILE_T fh,
+    wtap_rec *rec, Buffer *buf, int *err, char **err_info);
 static bool visual_dump(wtap_dumper *wdh, const wtap_rec *rec,
-    int *err, char **err_info);
+    const uint8_t *pd, int *err, char **err_info);
 static bool visual_dump_finish(wtap_dumper *wdh, int *err,
     char **err_info);
 static void visual_dump_free(wtap_dumper *wdh);
@@ -192,7 +189,7 @@ wtap_open_return_val visual_open(wtap *wth, int *err, char **err_info)
     }
 
     /* Verify the file version is known */
-    vfile_hdr.file_version = pletohu16(&vfile_hdr.file_version);
+    vfile_hdr.file_version = pletoh16(&vfile_hdr.file_version);
     if (vfile_hdr.file_version != 1)
     {
         *err = WTAP_ERR_UNSUPPORTED;
@@ -208,7 +205,7 @@ wtap_open_return_val visual_open(wtap *wth, int *err, char **err_info)
        the first packet is read.
 
        XXX - should we use WTAP_ENCAP_PER_PACKET for that? */
-    switch (pletohu16(&vfile_hdr.media_type))
+    switch (pletoh16(&vfile_hdr.media_type))
     {
     case  6:    /* ethernet-csmacd */
         encap = WTAP_ENCAP_ETHERNET;
@@ -245,7 +242,7 @@ wtap_open_return_val visual_open(wtap *wth, int *err, char **err_info)
     /* Fill in the wiretap struct with data from the file header */
     wth->file_type_subtype = visual_file_type_subtype;
     wth->file_encap = encap;
-    wth->snapshot_length = pletohu16(&vfile_hdr.max_length);
+    wth->snapshot_length = pletoh16(&vfile_hdr.max_length);
 
     /* Set up the pointers to the handlers for this file type */
     wth->subtype_read = visual_read;
@@ -255,8 +252,8 @@ wtap_open_return_val visual_open(wtap *wth, int *err, char **err_info)
     /* Add Visual-specific information to the wiretap struct for later use. */
     visual = g_new(struct visual_read_info, 1);
     wth->priv = (void *)visual;
-    visual->num_pkts = pletohu32(&vfile_hdr.num_pkts);
-    visual->start_time = pletohu32(&vfile_hdr.start_time);
+    visual->num_pkts = pletoh32(&vfile_hdr.num_pkts);
+    visual->start_time = pletoh32(&vfile_hdr.start_time);
     visual->current_pkt = 1;
 
     /*
@@ -275,8 +272,8 @@ wtap_open_return_val visual_open(wtap *wth, int *err, char **err_info)
    in a loop to sequentially read the entire file one time.  After
    the file has been read once, any Future access to the packets is
    done through seek_read. */
-static bool visual_read(wtap *wth, wtap_rec *rec, int *err,
-    char **err_info, int64_t *data_offset)
+static bool visual_read(wtap *wth, wtap_rec *rec, Buffer *buf,
+    int *err, char **err_info, int64_t *data_offset)
 {
     struct visual_read_info *visual = (struct visual_read_info *)wth->priv;
 
@@ -292,19 +289,19 @@ static bool visual_read(wtap *wth, wtap_rec *rec, int *err,
 
     *data_offset = file_tell(wth->fh);
 
-    return visual_read_packet(wth, wth->fh, rec, err, err_info);
+    return visual_read_packet(wth, wth->fh, rec, buf, err, err_info);
 }
 
 /* Read packet header and data for random access. */
-static bool visual_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
-    int *err, char **err_info)
+static bool visual_seek_read(wtap *wth, int64_t seek_off,
+    wtap_rec *rec, Buffer *buf, int *err, char **err_info)
 {
     /* Seek to the packet header */
     if (file_seek(wth->random_fh, seek_off, SEEK_SET, err) == -1)
         return false;
 
     /* Read the packet. */
-    if (!visual_read_packet(wth, wth->random_fh, rec, err, err_info)) {
+    if (!visual_read_packet(wth, wth->random_fh, rec, buf, err, err_info)) {
         if (*err == 0)
             *err = WTAP_ERR_SHORT_READ;
         return false;
@@ -312,8 +309,9 @@ static bool visual_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
     return true;
 }
 
-static bool visual_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
-    int *err, char **err_info)
+static bool
+visual_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
+        Buffer *buf, int *err, char **err_info)
 {
     struct visual_read_info *visual = (struct visual_read_info *)wth->priv;
     struct visual_pkt_hdr vpkt_hdr;
@@ -321,7 +319,7 @@ static bool visual_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
     struct visual_atm_hdr vatm_hdr;
     uint32_t relmsecs;
     uint32_t packet_status;
-    const uint8_t *pd;
+    uint8_t *pd;
 
     /* Read the packet header. */
     if (!wtap_read_bytes_or_eof(fh, &vpkt_hdr, (unsigned int)sizeof vpkt_hdr, err, err_info))
@@ -330,20 +328,20 @@ static bool visual_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
     }
 
     /* Get the included length of data. This includes extra headers + payload */
-    packet_size = pletohu16(&vpkt_hdr.incl_len);
+    packet_size = pletoh16(&vpkt_hdr.incl_len);
 
-    wtap_setup_packet_rec(rec, wth->file_encap);
+    rec->rec_type = REC_TYPE_PACKET;
     rec->block = wtap_block_create(WTAP_BLOCK_PACKET);
     rec->presence_flags = WTAP_HAS_TS|WTAP_HAS_CAP_LEN;
 
     /* Set the packet time and length. */
-    relmsecs = pletohu32(&vpkt_hdr.ts_delta);
+    relmsecs = pletoh32(&vpkt_hdr.ts_delta);
     rec->ts.secs = visual->start_time + relmsecs/1000;
     rec->ts.nsecs = (relmsecs % 1000)*1000000;
 
-    rec->rec_header.packet_header.len = pletohu16(&vpkt_hdr.orig_len);
+    rec->rec_header.packet_header.len = pletoh16(&vpkt_hdr.orig_len);
 
-    packet_status = pletohu32(&vpkt_hdr.status);
+    packet_status = pletoh32(&vpkt_hdr.status);
 
     /* Do encapsulation-specific processing.
 
@@ -355,7 +353,7 @@ static bool visual_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
        payload save to fail since then captured len != orig len.
 
        We adjust the original length to remove the FCS bytes we counted based
-       on the file encapsulation type.  The only downside to this fix is
+       on the file encapsualtion type.  The only downside to this fix is
        throughput calculations will be slightly lower as it won't include
        the FCS bytes.  However, as noted, that problem also exists with
        other capture formats.
@@ -481,7 +479,7 @@ static bool visual_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
         case VN_AAL5:
             rec->rec_header.packet_header.pseudo_header.atm.aal = AAL_5;
             rec->rec_header.packet_header.pseudo_header.atm.type = TRAF_LLCMX;
-            rec->rec_header.packet_header.pseudo_header.atm.aal5t_len = pntohu32(&vatm_hdr.data_length);
+            rec->rec_header.packet_header.pseudo_header.atm.aal5t_len = pntoh32(&vatm_hdr.data_length);
             break;
 
         case VN_OAM:
@@ -497,9 +495,9 @@ static bool visual_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
             rec->rec_header.packet_header.pseudo_header.atm.aal = AAL_UNKNOWN;
             break;
         }
-        rec->rec_header.packet_header.pseudo_header.atm.vpi = pntohu16(&vatm_hdr.vpi) & 0x0FFF;
-        rec->rec_header.packet_header.pseudo_header.atm.vci = pntohu16(&vatm_hdr.vci);
-        rec->rec_header.packet_header.pseudo_header.atm.cells = pntohu16(&vatm_hdr.cell_count);
+        rec->rec_header.packet_header.pseudo_header.atm.vpi = pntoh16(&vatm_hdr.vpi) & 0x0FFF;
+        rec->rec_header.packet_header.pseudo_header.atm.vci = pntoh16(&vatm_hdr.vci);
+        rec->rec_header.packet_header.pseudo_header.atm.cells = pntoh16(&vatm_hdr.cell_count);
 
         /* Using bit value of 1 (DCE -> DTE) to indicate From Network */
         rec->rec_header.packet_header.pseudo_header.atm.channel = vatm_hdr.info & FROM_NETWORK;
@@ -507,13 +505,8 @@ static bool visual_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
 
     /* Not sure about token ring. Just leaving alone for now. */
     case WTAP_ENCAP_TOKEN_RING:
-        break;
-
     default:
-        *err = WTAP_ERR_INTERNAL;
-        *err_info = ws_strdup_printf("visual: Unknown per-file encapsulation %d",
-                    wth->file_encap);
-        return false;
+        break;
     }
 
     rec->rec_header.packet_header.caplen = packet_size;
@@ -530,7 +523,7 @@ static bool visual_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
     }
 
     /* Read the packet data */
-    if (!wtap_read_bytes_buffer(fh, &rec->data, packet_size, err, err_info))
+    if (!wtap_read_packet_bytes(fh, buf, packet_size, err, err_info))
         return false;
 
     if (wth->file_encap == WTAP_ENCAP_CHDLC_WITH_PHDR)
@@ -551,7 +544,7 @@ static bool visual_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
            be configured for auto-detect, in which case the encapsulation
            hint is 13, and the encapsulation must be guessed from the
            packet contents.  Auto-detect is the default. */
-        pd = ws_buffer_start_ptr(&rec->data);
+        pd = ws_buffer_start_ptr(buf);
 
         /* If PPP is specified in the encap hint, then use that */
         if (vpkt_hdr.encap_hint == 14)
@@ -644,7 +637,7 @@ static bool visual_dump_open(wtap_dumper *wdh, int *err, char **err_info _U_)
 /* Write a packet to a Visual dump file.
    Returns true on success, false on failure. */
 static bool visual_dump(wtap_dumper *wdh, const wtap_rec *rec,
-    int *err, char **err_info _U_)
+    const uint8_t *pd, int *err, char **err_info _U_)
 {
     const union wtap_pseudo_header *pseudo_header = &rec->rec_header.packet_header.pseudo_header;
     struct visual_write_info * visual = (struct visual_write_info *)wdh->priv;
@@ -656,7 +649,6 @@ static bool visual_dump(wtap_dumper *wdh, const wtap_rec *rec,
     /* We can only write packet records. */
     if (rec->rec_type != REC_TYPE_PACKET) {
         *err = WTAP_ERR_UNWRITABLE_REC_TYPE;
-        *err_info = wtap_unwritable_rec_type_err_string(rec);
         return false;
     }
 
@@ -762,7 +754,7 @@ static bool visual_dump(wtap_dumper *wdh, const wtap_rec *rec,
         return false;
 
     /* Write the packet data */
-    if (!wtap_dump_file_write(wdh, ws_buffer_start_ptr(&rec->data), rec->rec_header.packet_header.caplen, err))
+    if (!wtap_dump_file_write(wdh, pd, rec->rec_header.packet_header.caplen, err))
         return false;
 
     /* Store the frame offset in the index table. */

@@ -382,6 +382,24 @@ static const value_string gsm_dtap_elem_strings[] = {
 };
 value_string_ext gsm_dtap_elem_strings_ext = VALUE_STRING_EXT_INIT(gsm_dtap_elem_strings);
 
+const char *gsm_a_pd_str[] = {
+    "Group Call Control",
+    "Broadcast Call Control",
+    "EPS session management messages",
+    "Call Control; call related SS messages",
+    "GPRS Transparent Transport Protocol (GTTP)",
+    "Mobility Management messages",
+    "Radio Resources Management messages",
+    "EPS mobility management messages",
+    "GPRS Mobility Management messages",
+    "SMS messages",
+    "GPRS Session Management messages",
+    "Non call related SS messages",
+    "Location services specified in 3GPP TS 44.071",
+    "Unknown",
+    "Reserved for extension of the PD to one octet length",
+    "Special conformance testing functions"
+};
 /* L3 Protocol discriminator values according to TS 24 007 (6.4.0)  */
 const value_string protocol_discriminator_vals[] = {
     {0x0,       "Group call control"},
@@ -1153,7 +1171,7 @@ de_day_saving_time(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t
 /*
  * 10.5.3.13 Emergency Number List
  */
-uint16_t
+static uint16_t
 de_emerg_num_list(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string _U_, int string_len _U_)
 {
     uint32_t    curr_offset;
@@ -1183,9 +1201,7 @@ de_emerg_num_list(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t 
          *       Table 10.5.135d/3GPP TS 24.008
          * Table 10.5.135d/3GPP TS 24.008: Service Category information element
          */
-        proto_tree_add_bits_item(subtree, hf_gsm_a_spare_bits, tvb, curr_offset<<3, 1, ENC_BIG_ENDIAN);
-        proto_tree_add_item(subtree, hf_gsm_a_dtap_serv_cat_b7, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-        proto_tree_add_item(subtree, hf_gsm_a_dtap_serv_cat_b6, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
+        proto_tree_add_bits_item(subtree, hf_gsm_a_spare_bits, tvb, curr_offset<<3, 3, ENC_BIG_ENDIAN);
         proto_tree_add_item(subtree, hf_gsm_a_dtap_serv_cat_b5, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
         proto_tree_add_item(subtree, hf_gsm_a_dtap_serv_cat_b4, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
         proto_tree_add_item(subtree, hf_gsm_a_dtap_serv_cat_b3, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
@@ -2288,7 +2304,7 @@ de_sub_addr(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset
 {
     uint32_t    curr_offset, ia5_string_len, i;
     uint8_t     type_of_sub_addr, afi, dig1, dig2, oct;
-    uint8_t    *ia5_string;
+    char       *ia5_string;
     bool        invalid_ia5_char;
     proto_item *item;
 
@@ -2306,7 +2322,8 @@ de_sub_addr(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset
 
     if (!type_of_sub_addr)
     {
-        proto_tree_add_item_ret_uint8(tree, hf_gsm_a_dtap_afi, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &afi);
+        afi = tvb_get_uint8(tvb, curr_offset);
+        proto_tree_add_item(tree, hf_gsm_a_dtap_afi, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
         curr_offset++;
 
         NO_MORE_DATA_CHECK(len);
@@ -2329,7 +2346,7 @@ de_sub_addr(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset
 
             }
 
-            IA5_7BIT_decode((uint8_t*)*extracted_address, ia5_string, ia5_string_len);
+            IA5_7BIT_decode(*extracted_address, ia5_string, ia5_string_len);
 
             item = proto_tree_add_string(tree, hf_gsm_a_dtap_subaddress, tvb, curr_offset, len - (curr_offset - offset), *extracted_address);
 
@@ -2386,7 +2403,7 @@ de_cld_party_sub_addr(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint3
 /* 3GPP TS 24.008
  * [3] 10.5.4.9 Calling party BCD number
  */
-uint16_t
+static uint16_t
 de_clg_party_bcd_num(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string, int string_len)
 {
     char *extr_addr;
@@ -3039,7 +3056,7 @@ de_u2u(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, uns
     proto_tree_add_item(subtree, hf_gsm_a_dtap_data, tvb, curr_offset, len - 1, ENC_NA);
 
     u2u_tvb = tvb_new_subset_length(tvb, curr_offset, len - 1);
-    dissector_try_uint_with_data(u2u_dissector_table, proto_discr, u2u_tvb, pinfo, proto_tree_get_root(tree), true, NULL);
+    dissector_try_uint_new(u2u_dissector_table, proto_discr, u2u_tvb, pinfo, proto_tree_get_root(tree), true, NULL);
 
 
     return (len);
@@ -3228,7 +3245,8 @@ de_sup_codec_list(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint3
         proto_tree_add_item(tree, hf_gsm_a_dtap_sysid, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
         curr_offset++;
         /*  Length Of Bitmap for SysID */
-        proto_tree_add_item_ret_uint8(tree, hf_gsm_a_dtap_bitmap_length, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &length);
+        proto_tree_add_item(tree, hf_gsm_a_dtap_bitmap_length, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
+        length = tvb_get_uint8(tvb,curr_offset);
         curr_offset++;
         if (length > 0)
         {
@@ -3531,7 +3549,7 @@ static const value_string gsm_tp_tested_device_vals[] = {
 };
 
 static uint16_t
-de_tp_tested_device(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len _U_, char *add_string _U_, int string_len _U_)
+de_tp_tested_device(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len _U_, char *add_string _U_, int string_len _U_)
 {
     uint32_t curr_offset;
     unsigned char  oct;
@@ -3540,7 +3558,7 @@ de_tp_tested_device(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_
 
     oct = tvb_get_uint8(tvb, curr_offset);
     proto_tree_add_uint_format_value(tree, hf_gsm_a_dtap_tp_tested_device, tvb, curr_offset, 1,
-        oct, "%s", val_to_str(pinfo->pool, oct, gsm_tp_tested_device_vals, "Reserved (%d)"));
+        oct, "%s", val_to_str(oct, gsm_tp_tested_device_vals, "Reserved (%d)"));
     curr_offset+= 1;
 
     return (curr_offset - offset);
@@ -3611,7 +3629,7 @@ static const value_string gsm_positioning_technology_vals[] = {
 };
 
 static uint16_t
-de_tp_ms_positioning_technology(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len _U_, char *add_string _U_, int string_len _U_)
+de_tp_ms_positioning_technology(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len _U_, char *add_string _U_, int string_len _U_)
 {
     uint32_t curr_offset;
     unsigned char  oct;
@@ -3620,7 +3638,7 @@ de_tp_ms_positioning_technology(tvbuff_t *tvb, proto_tree *tree, packet_info *pi
 
     oct = tvb_get_uint8(tvb, curr_offset);
     proto_tree_add_uint_format_value(tree, hf_gsm_a_dtap_ms_positioning_technology, tvb, curr_offset, 1,
-        oct, "%s", val_to_str(pinfo->pool, oct, gsm_positioning_technology_vals, "Reserved (%d)"));
+        oct, "%s", val_to_str(oct, gsm_positioning_technology_vals, "Reserved (%d)"));
     curr_offset+= 1;
 
     return (curr_offset - offset);
@@ -3675,7 +3693,7 @@ de_tp_ue_test_loop_mode(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_,
 }
 
 static uint16_t
-de_tp_ue_positioning_technology(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len _U_, char *add_string _U_, int string_len _U_)
+de_tp_ue_positioning_technology(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len _U_, char *add_string _U_, int string_len _U_)
 {
     uint32_t curr_offset;
     unsigned char  oct;
@@ -3685,7 +3703,7 @@ de_tp_ue_positioning_technology(tvbuff_t *tvb, proto_tree *tree, packet_info *pi
     oct = tvb_get_uint8(tvb, curr_offset);
 
     proto_tree_add_uint_format_value(tree, hf_gsm_a_dtap_ue_positioning_technology, tvb, curr_offset, 1,
-        oct, "%s", val_to_str(pinfo->pool, oct, gsm_positioning_technology_vals, "Reserved (%d)"));
+        oct, "%s", val_to_str(oct, gsm_positioning_technology_vals, "Reserved (%d)"));
     curr_offset+= 1;
 
     return (curr_offset - offset);
@@ -4008,13 +4026,13 @@ de_gcc_call_ref(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_
     proto_tree_add_item(tree, hf_gsm_a_dtap_gcc_call_ref, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
 
     if (value & 0x10){
-        proto_tree_add_item(tree, hf_gsm_a_dtap_gcc_call_ref_has_priority, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item(tree, hf_gsm_a_dtap_gcc_call_ref_has_priority, tvb, curr_offset, 4, ENC_NA);
         proto_tree_add_item(tree, hf_gsm_a_dtap_gcc_call_priority, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
-        proto_tree_add_item(tree, hf_gsm_a_dtap_gcc_spare_1, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item(tree, hf_gsm_a_dtap_gcc_spare_1, tvb, curr_offset, 4, ENC_NA);
     }
     else{
-        proto_tree_add_item(tree, hf_gsm_a_dtap_gcc_call_ref_has_priority, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
-        proto_tree_add_item(tree, hf_gsm_a_dtap_gcc_spare_4, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item(tree, hf_gsm_a_dtap_gcc_call_ref_has_priority, tvb, curr_offset, 4, ENC_NA);
+        proto_tree_add_item(tree, hf_gsm_a_dtap_gcc_spare_4, tvb, curr_offset, 4, ENC_NA);
     }
 
     curr_offset += 4;
@@ -4188,13 +4206,13 @@ de_bcc_call_ref(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_
     proto_tree_add_item(tree, hf_gsm_a_dtap_bcc_call_ref, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
 
     if (value & 0x10){
-        proto_tree_add_item(tree, hf_gsm_a_dtap_bcc_call_ref_has_priority, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item(tree, hf_gsm_a_dtap_bcc_call_ref_has_priority, tvb, curr_offset, 4, ENC_NA);
         proto_tree_add_item(tree, hf_gsm_a_dtap_bcc_call_priority, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
-        proto_tree_add_item(tree, hf_gsm_a_dtap_bcc_spare_1, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item(tree, hf_gsm_a_dtap_bcc_spare_1, tvb, curr_offset, 4, ENC_NA);
     }
     else{
-        proto_tree_add_item(tree, hf_gsm_a_dtap_bcc_call_ref_has_priority, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
-        proto_tree_add_item(tree, hf_gsm_a_dtap_bcc_spare_4, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item(tree, hf_gsm_a_dtap_bcc_call_ref_has_priority, tvb, curr_offset, 4, ENC_NA);
+        proto_tree_add_item(tree, hf_gsm_a_dtap_bcc_spare_4, tvb, curr_offset, 4, ENC_NA);
     }
 
     curr_offset += 4;
@@ -4348,7 +4366,7 @@ de_bcc_compr_otdi(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint3
     return len;
 }
 
-uint16_t (* const dtap_elem_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len, char *add_string, int string_len) = {
+uint16_t (*dtap_elem_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len, char *add_string, int string_len) = {
     /* Mobility Management Information Elements 10.5.3 */
     de_auth_param_rand,                  /* Authentication Parameter RAND */
     de_auth_param_autn,                  /* Authentication Parameter AUTN (UMTS and EPS authentication challenge) */
@@ -6631,7 +6649,7 @@ dtap_tp_epc_update_ue_location_information(tvbuff_t *tvb, proto_tree *tree, pack
 
 #define NUM_GSM_DTAP_MSG_GCC array_length(gsm_a_dtap_msg_gcc_strings)
 static int ett_gsm_dtap_msg_gcc[NUM_GSM_DTAP_MSG_GCC];
-static void (* const dtap_msg_gcc[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len) = {
+static void (*dtap_msg_gcc[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len) = {
     dtap_gcc_imm_setup,         /* IMMEDIATE SETUP */
     dtap_gcc_setup,             /* SETUP */
     dtap_gcc_connect,           /* CONNECT */
@@ -6646,7 +6664,7 @@ static void (* const dtap_msg_gcc[])(tvbuff_t *tvb, proto_tree *tree, packet_inf
 
 #define NUM_GSM_DTAP_MSG_BCC array_length(gsm_a_dtap_msg_bcc_strings)
 static int ett_gsm_dtap_msg_bcc[NUM_GSM_DTAP_MSG_BCC];
-static void (* const dtap_msg_bcc[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len) = {
+static void (*dtap_msg_bcc[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len) = {
     dtap_bcc_imm_setup,         /* IMMEDIATE SETUP */
     dtap_bcc_setup,             /* SETUP */
     dtap_bcc_connect,           /* CONNECT */
@@ -6662,7 +6680,7 @@ static void (* const dtap_msg_bcc[])(tvbuff_t *tvb, proto_tree *tree, packet_inf
 
 #define NUM_GSM_DTAP_MSG_MM array_length(gsm_a_dtap_msg_mm_strings)
 static int ett_gsm_dtap_msg_mm[NUM_GSM_DTAP_MSG_MM];
-static void (* const dtap_msg_mm_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len) = {
+static void (*dtap_msg_mm_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len) = {
     dtap_mm_imsi_det_ind,       /* IMSI Detach Indication */
     dtap_mm_loc_upd_acc,        /* Location Updating Accept */
     dtap_mm_loc_upd_rej,        /* Location Updating Reject */
@@ -6691,7 +6709,7 @@ static void (* const dtap_msg_mm_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_
 
 #define NUM_GSM_DTAP_MSG_CC array_length(gsm_a_dtap_msg_cc_strings)
 static int ett_gsm_dtap_msg_cc[NUM_GSM_DTAP_MSG_CC];
-static void (* const dtap_msg_cc_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len) = {
+static void (*dtap_msg_cc_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len) = {
     dtap_cc_alerting,           /* Alerting */
     dtap_cc_call_conf,          /* Call Confirmed */
     dtap_cc_call_proceed,       /* Call Proceeding */
@@ -6732,7 +6750,7 @@ static void (* const dtap_msg_cc_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_
 
 #define NUM_GSM_DTAP_MSG_SMS array_length(gsm_a_dtap_msg_sms_strings)
 static int ett_gsm_dtap_msg_sms[NUM_GSM_DTAP_MSG_SMS];
-static void (* const dtap_msg_sms_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len) = {
+static void (*dtap_msg_sms_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len) = {
     dtap_sms_cp_data,  /* CP-DATA */
     NULL               /* no associated data */,    /* CP-ACK */
     dtap_sms_cp_error, /* CP-ERROR */
@@ -6741,7 +6759,7 @@ static void (* const dtap_msg_sms_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet
 
 #define NUM_GSM_DTAP_MSG_SS array_length(gsm_a_dtap_msg_ss_strings)
 static int ett_gsm_dtap_msg_ss[NUM_GSM_DTAP_MSG_SS];
-static void (* const dtap_msg_ss_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len) = {
+static void (*dtap_msg_ss_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len) = {
     dtap_cc_release_complete, /* Release Complete */
     dtap_cc_facility,         /* Facility */
     dtap_ss_register,         /* Register */
@@ -6750,7 +6768,7 @@ static void (* const dtap_msg_ss_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_
 
 #define NUM_GSM_DTAP_MSG_TP array_length(gsm_a_dtap_msg_tp_strings)
 static int ett_gsm_dtap_msg_tp[NUM_GSM_DTAP_MSG_TP];
-static void (* const dtap_msg_tp_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len) = {
+static void (*dtap_msg_tp_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len) = {
     dtap_tp_close_tch_loop_cmd,                                /* CLOSE TCH LOOP CMD */
     NULL,                                                      /* CLOSE TCH LOOP ACK */
     dtap_tp_open_loop_cmd,                                     /* OPEN LOOP CMD */
@@ -8396,7 +8414,7 @@ proto_register_gsm_a_dtap(void)
         { &ei_gsm_a_dtap_end_mark_unexpected, { "gsm_a.dtap.end_mark_unexpected", PI_MALFORMED, PI_WARN, "\'f\' end mark present in unexpected position", EXPFILL }},
         { &ei_gsm_a_dtap_invalid_ia5_character, { "gsm_a.dtap.invalid_ia5_character", PI_MALFORMED, PI_WARN, "Invalid IA5 character(s) in string (value > 127)", EXPFILL }},
         { &ei_gsm_a_dtap_keypad_info_not_dtmf_digit, { "gsm_a.dtap.keypad_info_not_dtmf_digit", PI_MALFORMED, PI_WARN, "Keypad information contains character that is not a DTMF digit", EXPFILL }},
-        { &ei_gsm_a_dtap_extraneous_data, { "gsm_a.dtap.extraneous_data", PI_PROTOCOL, PI_NOTE, "Extraneous Data, dissector bug or later version spec (report to wireshark.org)", EXPFILL }},
+        { &ei_gsm_a_dtap_extraneous_data, { "gsm_a.dtap.extraneous_data", PI_PROTOCOL, PI_NOTE, "Extraneous Data, dissector bug or later version spec(report to wireshark.org)", EXPFILL }},
         { &ei_gsm_a_dtap_missing_mandatory_element, { "gsm_a.dtap.missing_mandatory_element", PI_PROTOCOL, PI_ERROR, "Missing Mandatory element, rest of dissection is suspect", EXPFILL }},
         { &ei_gsm_a_dtap_coding_scheme, { "gsm_a.dtap.coding_scheme.unknown", PI_PROTOCOL, PI_WARN, "Text string encoded according to an unknown Coding Scheme", EXPFILL } },
         { &ei_gsm_a_dtap_ti_not_valid,{ "gsm_a.dtap.ti_not_valid", PI_PROTOCOL, PI_ERROR, "If TI bits = 7, length must be > 2", EXPFILL } },

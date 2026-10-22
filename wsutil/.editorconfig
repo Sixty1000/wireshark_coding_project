@@ -11,6 +11,10 @@ indent_size = 2
 indent_style = tab
 indent_size = tab
 
+[dot11decrypt_wep.[ch]]
+indent_style = tab
+indent_size = tab
+
 [base64.[ch]]
 indent_style = tab
 indent_size = tab

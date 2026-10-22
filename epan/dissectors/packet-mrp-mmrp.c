@@ -1,4 +1,4 @@
-/* packet-mrp-mmrp.c
+/* packet-mrp_mmrp.c
  * Routines for MMRP (MRP Multiple Mac Registration Protocol) dissection
  * Copyright 2011, Johannes Jochen <johannes.jochen[AT]belden.com>
  *

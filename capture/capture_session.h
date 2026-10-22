@@ -17,12 +17,12 @@
 #include <stdint.h>
 #endif
 
-#include "ui/capture_opts.h"
+#include "capture_opts.h"
 
 #include <epan/fifo_string_cache.h>
 #include <wsutil/processes.h>
 
-#include <epan/cfile.h>
+#include "cfile.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -64,24 +64,18 @@ typedef void (*drops_fn)(capture_session *cap_session, uint32_t dropped,
                          const char *interface_name);
 
 /**
- * Capture child told us that a warning or error has occurred while
- * starting or running the capture.
+ * Capture child told us that an error has occurred while starting
+ * the capture.
  */
-typedef void (*message_fn)(capture_session *cap_session, char *error_msg,
+typedef void (*error_fn)(capture_session *cap_session, char *error_msg,
                          char *secondary_error_msg);
 
 /**
  * Capture child told us that an error has occurred while parsing a
- * capture filter when starting or running the capture.
+ * capture filter when starting/running the capture.
  */
 typedef void (*cfilter_error_fn)(capture_session *cap_session, unsigned i,
                                  const char *error_message);
-
-/**
- * Capture child sent a toolbar control message.
- */
-typedef void (*toolbar_control_fn)(capture_session *cap_session,
-                                   const char *interface_name);
 
 /**
  * Capture child closed its side of the pipe, report any error and
@@ -105,21 +99,18 @@ struct _capture_session {
     gid_t     group;                      /**< group of the cfile */
 #endif
     bool  session_will_restart;       /**< Set when session will restart */
-    uint64_t   count;                      /**< Total number of frames captured */
+    uint32_t   count;                      /**< Total number of frames captured */
     uint32_t   count_pending;              /**< Number of frames captured but not yet read */
     capture_options *capture_opts;        /**< options for this capture */
     capture_file *cf;                     /**< handle to cfile */
-    wtap_rec rec;                         /**< record we're reading packet information into */
+    wtap_rec rec;                         /**< record we're reading packet metadata into */
+    Buffer buf;                           /**< Buffer we're reading packet data into */
     struct wtap *wtap;                    /**< current wtap file */
     struct _info_data *cap_data_info;     /**< stats for this capture */
 
     // If the user wants to ignore duplicate frames, we need these.
     fifo_string_cache_t frame_dup_cache;
     GChecksum           *frame_cksum;
-
-    // For storing pending toolbar control messages
-    GQueue toolbar_queue;
-    GMutex toolbar_mutex;
 
     /*
      * Routines supplied by our caller; we call them back to notify them
@@ -128,34 +119,22 @@ struct _capture_session {
     new_file_fn new_file;
     new_packets_fn new_packets;
     drops_fn drops;
-    message_fn error;
+    error_fn error;
     cfilter_error_fn cfilter_error;
-    message_fn warning;
-    toolbar_control_fn toolbar;
     closed_fn closed;
 };
 
 extern void
 capture_session_init(capture_session *cap_session, capture_file *cf,
                      new_file_fn new_file, new_packets_fn new_packets,
-                     drops_fn drops, message_fn error,
-                     cfilter_error_fn cfilter_error,
-                     message_fn warning, toolbar_control_fn toolbar,
-                     closed_fn closed);
+                     drops_fn drops, error_fn error,
+                     cfilter_error_fn cfilter_error, closed_fn closed);
 
 void capture_process_finished(capture_session *cap_session);
 #else
 
-/**
- * @brief Opaque handle representing an active or pending capture session.
- *
- * @note The @p dummy member exists solely to satisfy C compilers (e.g. clang)
- *       that reject empty structs; in C an empty struct has size 0 whereas in
- *       C++ it has size 1.  The field carries no semantic meaning.
- */
-typedef struct _capture_session {
-    int dummy; /**< Padding member to ensure a non-zero struct size in C */
-} capture_session;
+/* dummy is needed because clang throws the error: empty struct has size 0 in C, size 1 in C++ */
+typedef struct _capture_session {int dummy;} capture_session;
 
 #endif /* HAVE_LIBPCAP */
 

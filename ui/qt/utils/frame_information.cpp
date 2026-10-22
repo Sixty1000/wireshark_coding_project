@@ -16,9 +16,11 @@
 
 #include "wiretap/wtap.h"
 
-#include <epan/cfile.h>
+#include "cfile.h"
 #include "file.h"
 #include <ui/qt/capture_file.h>
+
+#include "frame_tvbuff.h"
 
 #include <stdint.h>
 
@@ -30,7 +32,8 @@ FrameInformation::FrameInformation(CaptureFile * capfile, frame_data * fi, QObje
  cap_file_(capfile),
  edt_(Q_NULLPTR)
 {
-    wtap_rec_init(&rec_, DEFAULT_INIT_BUFFER_SIZE_2048);
+    wtap_rec_init(&rec_);
+    ws_buffer_init(&buf_, 1514);
     loadFrameTree();
 }
 
@@ -39,7 +42,7 @@ void FrameInformation::loadFrameTree()
     if (! fi_ || ! cap_file_ || !cap_file_->capFile())
         return;
 
-    if (!cf_read_record(cap_file_->capFile(), fi_, &rec_))
+    if (!cf_read_record(cap_file_->capFile(), fi_, &rec_, &buf_))
         return;
 
     edt_ = g_new0(epan_dissect_t, 1);
@@ -49,6 +52,7 @@ void FrameInformation::loadFrameTree()
     col_custom_prime_edt(edt_, &(cap_file_->capFile()->cinfo));
 
     epan_dissect_run(edt_, cap_file_->capFile()->cd_t, &rec_,
+                     frame_tvbuff_new_buffer(&cap_file_->capFile()->provider, fi_, &buf_),
                      fi_, &(cap_file_->capFile()->cinfo));
     epan_dissect_fill_in_columns(edt_, true, true);
 }
@@ -60,6 +64,7 @@ FrameInformation::~FrameInformation()
         g_free(edt_);
     }
     wtap_rec_cleanup(&rec_);
+    ws_buffer_free(&buf_);
 }
 
 bool FrameInformation::isValid()

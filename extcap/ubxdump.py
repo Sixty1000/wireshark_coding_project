@@ -19,14 +19,8 @@ Extcap for UBX messages from an u-blox GNSS receiver.
 Tested with UBX protocol version 18. 
 """
 
-import argparse
-import struct
-import sys
-import time
+import argparse, serial.tools.list_ports, serial, struct, sys, time
 from threading import Thread
-
-import serial
-import serial.tools.list_ports
 
 VERSION  = "0.1"
 
@@ -320,6 +314,8 @@ def control_write(arg, typ, payload):
 
 def extcap_capture(interface, fifo, control_in, control_out):
     global fn_out
+    
+    counter = 1
 
     with open(fifo, 'wb', 0) as fh:
 

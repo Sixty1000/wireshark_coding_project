@@ -20,19 +20,15 @@
 #include <epan/packet.h>
 #include <epan/address_types.h>
 #include <epan/prefs.h>
+#include <epan/sctpppids.h>
 #include <epan/tap.h>
 #include <epan/to_str.h>
-#include <epan/tfs.h>
 
-#include <wsutil/array.h>
 #include <wsutil/str_util.h>
 #include <wsutil/ws_roundup.h>
 
 #include "packet-mtp3.h"
 #include "packet-sccp.h"
-#include "packet-sctp.h"
-
-
 void proto_register_sua(void);
 void proto_reg_handoff_sua(void);
 
@@ -210,7 +206,7 @@ static const value_string message_class_type_acro_values[] = {
   { MESSAGE_CLASS_RKM_MESSAGE   * 256 + MESSAGE_TYPE_DEREG_RSP ,    "DEREG_RSP" },
   { 0,                           NULL } };
 
-static const value_string sua_co_class_type_acro_values[] = {
+const value_string sua_co_class_type_acro_values[] = {
   { MESSAGE_TYPE_CORE ,         "CORE" },
   { MESSAGE_TYPE_COAK ,         "COAK" },
   { MESSAGE_TYPE_COREF ,        "COREF" },
@@ -432,8 +428,8 @@ sua_assoc(packet_info* pinfo, address* opc, address* dpc, unsigned src_rn, unsig
             return &no_sua_assoc;
     }
 
-    opck = opc->type == ss7pc_address_type ? mtp3_pc_hash((const mtp3_addr_pc_t *)opc->data) : g_str_hash(address_to_str(pinfo->pool, opc));
-    dpck = dpc->type == ss7pc_address_type ? mtp3_pc_hash((const mtp3_addr_pc_t *)dpc->data) : g_str_hash(address_to_str(pinfo->pool, dpc));
+    opck = opc->type == ss7pc_address_type ? mtp3_pc_hash((const mtp3_addr_pc_t *)opc->data) : g_str_hash(address_to_str(wmem_packet_scope(), opc));
+    dpck = dpc->type == ss7pc_address_type ? mtp3_pc_hash((const mtp3_addr_pc_t *)dpc->data) : g_str_hash(address_to_str(wmem_packet_scope(), dpc));
 
     switch (message_type) {
         case MESSAGE_TYPE_CORE:
@@ -753,11 +749,12 @@ static const value_string status_type_info_values[] = {
 static void
 dissect_status_type_parameter(tvbuff_t *parameter_tvb, proto_tree *parameter_tree, proto_item *parameter_item)
 {
-  uint32_t status_type, status_info;
+  uint16_t status_type, status_info;
 
+  status_type = tvb_get_ntohs(parameter_tvb, STATUS_TYPE_OFFSET);
   status_info = tvb_get_ntohs(parameter_tvb, STATUS_INFO_OFFSET);
 
-  proto_tree_add_item_ret_uint(parameter_tree, hf_sua_status_type, parameter_tvb, STATUS_TYPE_OFFSET, STATUS_TYPE_LENGTH, ENC_BIG_ENDIAN, &status_type);
+  proto_tree_add_item(parameter_tree, hf_sua_status_type, parameter_tvb, STATUS_TYPE_OFFSET, STATUS_TYPE_LENGTH, ENC_BIG_ENDIAN);
   proto_tree_add_uint_format_value(parameter_tree, hf_sua_status_info, parameter_tvb, STATUS_INFO_OFFSET, STATUS_INFO_LENGTH,
                              status_info, "%s (%u)", val_to_str_const(status_type * 256 * 256 + status_info, status_type_info_values, "unknown"), status_info);
 
@@ -782,7 +779,7 @@ dissect_asp_identifier_parameter(tvbuff_t *parameter_tvb, proto_tree *parameter_
 #define AFFECTED_DPC_OFFSET  1
 
 static void
-dissect_affected_destinations_parameter(tvbuff_t *parameter_tvb, packet_info* pinfo, proto_tree *parameter_tree, proto_item *parameter_item)
+dissect_affected_destinations_parameter(tvbuff_t *parameter_tvb, proto_tree *parameter_tree, proto_item *parameter_item)
 {
   uint16_t number_of_destinations, destination_number;
   int destination_offset;
@@ -794,7 +791,7 @@ dissect_affected_destinations_parameter(tvbuff_t *parameter_tvb, packet_info* pi
     proto_tree_add_item(parameter_tree, hf_sua_mask, parameter_tvb, destination_offset + AFFECTED_MASK_OFFSET, AFFECTED_MASK_LENGTH, ENC_BIG_ENDIAN);
     dpc_item = proto_tree_add_item(parameter_tree, hf_sua_dpc,  parameter_tvb, destination_offset + AFFECTED_DPC_OFFSET,  AFFECTED_DPC_LENGTH,  ENC_BIG_ENDIAN);
     if (mtp3_pc_structured())
-      proto_item_append_text(dpc_item, " (%s)", mtp3_pc_to_str(pinfo->pool, tvb_get_ntoh24(parameter_tvb, destination_offset + AFFECTED_DPC_OFFSET)));
+      proto_item_append_text(dpc_item, " (%s)", mtp3_pc_to_str(tvb_get_ntoh24(parameter_tvb, destination_offset + AFFECTED_DPC_OFFSET)));
     destination_offset += AFFECTED_DESTINATION_LENGTH;
   }
   proto_item_append_text(parameter_item, " (%u destination%s)", number_of_destinations, plurality(number_of_destinations, "", "s"));
@@ -971,7 +968,8 @@ dissect_destination_address_parameter(tvbuff_t *parameter_tvb, packet_info *pinf
 static void
 dissect_source_reference_number_parameter(tvbuff_t *parameter_tvb, proto_tree *parameter_tree, proto_item *parameter_item)
 {
-  proto_tree_add_item_ret_uint(parameter_tree, hf_sua_source_reference_number, parameter_tvb, SOURCE_REFERENCE_NUMBER_OFFSET, SOURCE_REFERENCE_NUMBER_LENGTH, ENC_BIG_ENDIAN, &srn);
+  srn = tvb_get_ntohl(parameter_tvb, SOURCE_REFERENCE_NUMBER_OFFSET);
+  proto_tree_add_item(parameter_tree, hf_sua_source_reference_number, parameter_tvb, SOURCE_REFERENCE_NUMBER_OFFSET, SOURCE_REFERENCE_NUMBER_LENGTH, ENC_BIG_ENDIAN);
   proto_item_append_text(parameter_item, " (%u)", tvb_get_ntohl(parameter_tvb, SOURCE_REFERENCE_NUMBER_OFFSET));
 }
 
@@ -981,7 +979,8 @@ dissect_source_reference_number_parameter(tvbuff_t *parameter_tvb, proto_tree *p
 static void
 dissect_destination_reference_number_parameter(tvbuff_t *parameter_tvb, proto_tree *parameter_tree, proto_item *parameter_item)
 {
-  proto_tree_add_item_ret_uint(parameter_tree, hf_sua_destination_reference_number, parameter_tvb, DESTINATION_REFERENCE_NUMBER_OFFSET, DESTINATION_REFERENCE_NUMBER_LENGTH, ENC_BIG_ENDIAN, &drn);
+  drn = tvb_get_ntohl(parameter_tvb, DESTINATION_REFERENCE_NUMBER_OFFSET);
+  proto_tree_add_item(parameter_tree, hf_sua_destination_reference_number, parameter_tvb, DESTINATION_REFERENCE_NUMBER_OFFSET, DESTINATION_REFERENCE_NUMBER_LENGTH, ENC_BIG_ENDIAN);
   proto_item_append_text(parameter_item, " (%u)", tvb_get_ntohl(parameter_tvb, DESTINATION_REFERENCE_NUMBER_OFFSET));
 }
 
@@ -1012,8 +1011,10 @@ dissect_sccp_cause_parameter(tvbuff_t *parameter_tvb, proto_tree *parameter_tree
   const char *cause_string;
 
   proto_tree_add_item(parameter_tree, hf_sua_cause_reserved, parameter_tvb, PARAMETER_VALUE_OFFSET, RESERVED_2_LENGTH,  ENC_NA);
-  proto_tree_add_item_ret_uint8(parameter_tree, hf_sua_cause_type, parameter_tvb, CAUSE_TYPE_OFFSET, CAUSE_TYPE_LENGTH, ENC_BIG_ENDIAN, &cause_type);
-  pi = proto_tree_add_item_ret_uint8(parameter_tree, hf_sua_cause_value, parameter_tvb, CAUSE_VALUE_OFFSET, CAUSE_VALUE_LENGTH, ENC_BIG_ENDIAN, &cause);
+  proto_tree_add_item(parameter_tree, hf_sua_cause_type,     parameter_tvb, CAUSE_TYPE_OFFSET,      CAUSE_TYPE_LENGTH,  ENC_BIG_ENDIAN);
+  cause_type = tvb_get_uint8(parameter_tvb, CAUSE_TYPE_OFFSET);
+  pi = proto_tree_add_item(parameter_tree, hf_sua_cause_value, parameter_tvb, CAUSE_VALUE_OFFSET,   CAUSE_VALUE_LENGTH, ENC_BIG_ENDIAN);
+  cause = tvb_get_uint8(parameter_tvb, CAUSE_VALUE_OFFSET);
 
   switch (cause_type) {
   case CAUSE_TYPE_RETURN:
@@ -1387,7 +1388,7 @@ static const value_string nature_of_address_values[] = {
   { 0,                                             NULL } };
 
 static void
-dissect_global_title_parameter(tvbuff_t *parameter_tvb, packet_info* pinfo, proto_tree *parameter_tree, bool source)
+dissect_global_title_parameter(tvbuff_t *parameter_tvb, proto_tree *parameter_tree, bool source)
 {
   uint16_t global_title_length;
   uint16_t offset;
@@ -1396,7 +1397,7 @@ dissect_global_title_parameter(tvbuff_t *parameter_tvb, packet_info* pinfo, prot
   uint8_t number_of_digits;
   char *gt_digits;
 
-  gt_digits = (char *)wmem_alloc0(pinfo->pool, GT_MAX_SIGNALS+1);
+  gt_digits = (char *)wmem_alloc0(wmem_packet_scope(), GT_MAX_SIGNALS+1);
 
   global_title_length = tvb_get_ntohs(parameter_tvb, PARAMETER_LENGTH_OFFSET) -
                         (PARAMETER_HEADER_LENGTH + RESERVED_3_LENGTH + GTI_LENGTH + NO_OF_DIGITS_LENGTH + TRANSLATION_TYPE_LENGTH + NUMBERING_PLAN_LENGTH + NATURE_OF_ADDRESS_LENGTH);
@@ -1445,7 +1446,7 @@ dissect_global_title_parameter(tvbuff_t *parameter_tvb, packet_info* pinfo, prot
 #define POINT_CODE_OFFSET PARAMETER_VALUE_OFFSET
 
 static void
-dissect_point_code_parameter(tvbuff_t *parameter_tvb, packet_info* pinfo, proto_tree *parameter_tree, proto_item *parameter_item, bool source)
+dissect_point_code_parameter(tvbuff_t *parameter_tvb, proto_tree *parameter_tree, proto_item *parameter_item, bool source)
 {
   uint32_t pc;
 
@@ -1462,7 +1463,7 @@ dissect_point_code_parameter(tvbuff_t *parameter_tvb, packet_info* pinfo, proto_
   }
 
   proto_tree_add_item(parameter_tree, source ? hf_sua_source_point_code : hf_sua_dest_point_code, parameter_tvb, POINT_CODE_OFFSET, POINT_CODE_LENGTH, ENC_BIG_ENDIAN);
-  proto_item_append_text(parameter_item, " (%s)", mtp3_pc_to_str(pinfo->pool, pc));
+  proto_item_append_text(parameter_item, " (%s)", mtp3_pc_to_str(pc));
 }
 
 #define SSN_LENGTH 1
@@ -1485,33 +1486,33 @@ dissect_ssn_parameter(tvbuff_t *parameter_tvb, proto_tree *parameter_tree, proto
 #define IPV4_ADDRESS_OFFSET PARAMETER_VALUE_OFFSET
 
 static void
-dissect_ipv4_parameter(tvbuff_t *parameter_tvb, packet_info* pinfo, proto_tree *parameter_tree, proto_item *parameter_item, bool source)
+dissect_ipv4_parameter(tvbuff_t *parameter_tvb, proto_tree *parameter_tree, proto_item *parameter_item, bool source)
 {
   proto_tree_add_item(parameter_tree, source ? hf_sua_source_ipv4 : hf_sua_dest_ipv4, parameter_tvb, IPV4_ADDRESS_OFFSET, IPV4_ADDRESS_LENGTH, ENC_BIG_ENDIAN);
-  proto_item_append_text(parameter_item, " (%s)", tvb_ip_to_str(pinfo->pool, parameter_tvb, IPV4_ADDRESS_OFFSET));
+  proto_item_append_text(parameter_item, " (%s)", tvb_ip_to_str(wmem_packet_scope(), parameter_tvb, IPV4_ADDRESS_OFFSET));
 }
 
 #define HOSTNAME_OFFSET PARAMETER_VALUE_OFFSET
 
 static void
-dissect_hostname_parameter(tvbuff_t *parameter_tvb, packet_info* pinfo, proto_tree *parameter_tree, proto_item *parameter_item, bool source)
+dissect_hostname_parameter(tvbuff_t *parameter_tvb, proto_tree *parameter_tree, proto_item *parameter_item, bool source)
 {
   uint16_t hostname_length;
 
   hostname_length = tvb_get_ntohs(parameter_tvb, PARAMETER_LENGTH_OFFSET) - PARAMETER_HEADER_LENGTH;
   proto_tree_add_item(parameter_tree, source ? hf_sua_source_hostname : hf_sua_dest_hostname, parameter_tvb, HOSTNAME_OFFSET, hostname_length, ENC_ASCII);
   proto_item_append_text(parameter_item, " (%s)",
-                         tvb_format_text(pinfo->pool, parameter_tvb, HOSTNAME_OFFSET, hostname_length));
+                         tvb_format_text(wmem_packet_scope(), parameter_tvb, HOSTNAME_OFFSET, hostname_length));
 }
 
 #define IPV6_ADDRESS_LENGTH 16
 #define IPV6_ADDRESS_OFFSET PARAMETER_VALUE_OFFSET
 
 static void
-dissect_ipv6_parameter(tvbuff_t *parameter_tvb, packet_info* pinfo, proto_tree *parameter_tree, proto_item *parameter_item, bool source)
+dissect_ipv6_parameter(tvbuff_t *parameter_tvb, proto_tree *parameter_tree, proto_item *parameter_item, bool source)
 {
   proto_tree_add_item(parameter_tree, source ? hf_sua_source_ipv6 : hf_sua_dest_ipv6, parameter_tvb, IPV6_ADDRESS_OFFSET, IPV6_ADDRESS_LENGTH, ENC_NA);
-  proto_item_append_text(parameter_item, " (%s)", tvb_ip6_to_str(pinfo->pool, parameter_tvb, IPV6_ADDRESS_OFFSET));
+  proto_item_append_text(parameter_item, " (%s)", tvb_ip6_to_str(wmem_packet_scope(), parameter_tvb, IPV6_ADDRESS_OFFSET));
 }
 
 static void
@@ -1681,7 +1682,7 @@ dissect_v8_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *tr
     dissect_asp_identifier_parameter(parameter_tvb, parameter_tree, parameter_item);
     break;
   case V8_AFFECTED_POINT_CODE_PARAMETER_TAG:
-    dissect_affected_destinations_parameter(parameter_tvb, pinfo, parameter_tree, parameter_item);
+    dissect_affected_destinations_parameter(parameter_tvb, parameter_tree, parameter_item);
     break;
   case V8_SS7_HOP_COUNTER_PARAMETER_TAG:
     dissect_ss7_hop_counter_parameter(parameter_tvb, parameter_tree, parameter_item);
@@ -1760,11 +1761,11 @@ dissect_v8_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *tr
     break;
   case V8_GLOBAL_TITLE_PARAMETER_TAG:
     /* Reuse whether we have source_ssn or not to determine which address we're looking at */
-    dissect_global_title_parameter(parameter_tvb, pinfo, parameter_tree, (source_ssn != NULL));
+    dissect_global_title_parameter(parameter_tvb, parameter_tree, (source_ssn != NULL));
     break;
   case V8_POINT_CODE_PARAMETER_TAG:
     /* Reuse whether we have source_ssn or not to determine which address we're looking at */
-    dissect_point_code_parameter(parameter_tvb, pinfo, parameter_tree, parameter_item, (source_ssn != NULL));
+    dissect_point_code_parameter(parameter_tvb, parameter_tree, parameter_item, (source_ssn != NULL));
     break;
   case V8_SUBSYSTEM_NUMBER_PARAMETER_TAG:
     /* Reuse whether we have source_ssn or not to determine which address we're looking at */
@@ -1780,15 +1781,15 @@ dissect_v8_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *tr
     break;
   case V8_IPV4_ADDRESS_PARAMETER_TAG:
     /* Reuse whether we have source_ssn or not to determine which address we're looking at */
-    dissect_ipv4_parameter(parameter_tvb, pinfo, parameter_tree, parameter_item, (source_ssn != NULL));
+    dissect_ipv4_parameter(parameter_tvb, parameter_tree, parameter_item, (source_ssn != NULL));
     break;
   case V8_HOSTNAME_PARAMETER_TAG:
     /* Reuse whether we have source_ssn or not to determine which address we're looking at */
-    dissect_hostname_parameter(parameter_tvb, pinfo, parameter_tree, parameter_item, (source_ssn != NULL));
+    dissect_hostname_parameter(parameter_tvb, parameter_tree, parameter_item, (source_ssn != NULL));
     break;
   case V8_IPV6_ADDRESS_PARAMETER_TAG:
     /* Reuse whether we have source_ssn or not to determine which address we're looking at */
-    dissect_ipv6_parameter(parameter_tvb, pinfo, parameter_tree, parameter_item, (source_ssn != NULL));
+    dissect_ipv6_parameter(parameter_tvb, parameter_tree, parameter_item, (source_ssn != NULL));
     break;
   default:
     dissect_unknown_parameter(parameter_tvb, parameter_tree, parameter_item);
@@ -1980,7 +1981,7 @@ dissect_parameter(tvbuff_t *parameter_tvb,  packet_info *pinfo, proto_tree *tree
     dissect_asp_identifier_parameter(parameter_tvb, parameter_tree, parameter_item);
     break;
   case AFFECTED_POINT_CODE_PARAMETER_TAG:
-    dissect_affected_destinations_parameter(parameter_tvb, pinfo, parameter_tree, parameter_item);
+    dissect_affected_destinations_parameter(parameter_tvb, parameter_tree, parameter_item);
     break;
   case REGISTRATION_STATUS_PARAMETER_TAG:
     dissect_registration_status_parameter(parameter_tvb, parameter_tree, parameter_item);
@@ -2068,11 +2069,11 @@ dissect_parameter(tvbuff_t *parameter_tvb,  packet_info *pinfo, proto_tree *tree
     break;
   case GLOBAL_TITLE_PARAMETER_TAG:
     /* Reuse whether we have source_ssn or not to determine which address we're looking at */
-    dissect_global_title_parameter(parameter_tvb, pinfo, parameter_tree, (source_ssn != NULL));
+    dissect_global_title_parameter(parameter_tvb, parameter_tree, (source_ssn != NULL));
     break;
   case POINT_CODE_PARAMETER_TAG:
     /* Reuse whether we have source_ssn or not to determine which address we're looking at */
-    dissect_point_code_parameter(parameter_tvb, pinfo, parameter_tree, parameter_item, (source_ssn != NULL));
+    dissect_point_code_parameter(parameter_tvb, parameter_tree, parameter_item, (source_ssn != NULL));
     break;
   case SUBSYSTEM_NUMBER_PARAMETER_TAG:
     /* Reuse whether we have source_ssn or not to determine which address we're looking at */
@@ -2088,15 +2089,15 @@ dissect_parameter(tvbuff_t *parameter_tvb,  packet_info *pinfo, proto_tree *tree
     break;
   case IPV4_ADDRESS_PARAMETER_TAG:
     /* Reuse whether we have source_ssn or not to determine which address we're looking at */
-    dissect_ipv4_parameter(parameter_tvb, pinfo, parameter_tree, parameter_item, (source_ssn != NULL));
+    dissect_ipv4_parameter(parameter_tvb, parameter_tree, parameter_item, (source_ssn != NULL));
     break;
   case HOSTNAME_PARAMETER_TAG:
     /* Reuse whether we have source_ssn or not to determine which address we're looking at */
-    dissect_hostname_parameter(parameter_tvb, pinfo, parameter_tree, parameter_item, (source_ssn != NULL));
+    dissect_hostname_parameter(parameter_tvb, parameter_tree, parameter_item, (source_ssn != NULL));
     break;
   case IPV6_ADDRESS_PARAMETER_TAG:
     /* Reuse whether we have source_ssn or not to determine which address we're looking at */
-    dissect_ipv6_parameter(parameter_tvb, pinfo, parameter_tree, parameter_item, (source_ssn != NULL));
+    dissect_ipv6_parameter(parameter_tvb, parameter_tree, parameter_item, (source_ssn != NULL));
     break;
   default:
     dissect_unknown_parameter(parameter_tvb, parameter_tree, parameter_item);
@@ -2263,9 +2264,9 @@ dissect_sua_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *sua_t
   {
     /* Try subdissectors (if we found a valid SSN on the current message) */
     if ((dest_ssn == INVALID_SSN ||
-       !dissector_try_uint_with_data(sccp_ssn_dissector_table, dest_ssn, data_tvb, pinfo, tree, true, sccp_info))
+       !dissector_try_uint_new(sccp_ssn_dissector_table, dest_ssn, data_tvb, pinfo, tree, true, sccp_info))
        && (source_ssn == INVALID_SSN ||
-       !dissector_try_uint_with_data(sccp_ssn_dissector_table, source_ssn, data_tvb, pinfo, tree, true, sccp_info)))
+       !dissector_try_uint_new(sccp_ssn_dissector_table, source_ssn, data_tvb, pinfo, tree, true, sccp_info)))
     {
       /* try heuristic subdissector list to see if there are any takers */
       if (dissector_try_heuristic(heur_subdissector_list, data_tvb, pinfo, tree, &hdtbl_entry, sccp_info)) {
@@ -2477,8 +2478,6 @@ proto_register_sua(void)
   sua_tap = register_tap("sua");
 
   assocs = wmem_tree_new_autoreset(wmem_epan_scope(), wmem_file_scope());
-
-  register_external_value_string("sua_co_class_type_acro_values", sua_co_class_type_acro_values);
 }
 
 void

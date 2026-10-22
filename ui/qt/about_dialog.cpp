@@ -13,6 +13,7 @@
 #include <ui_about_dialog.h>
 
 #include "main_application.h"
+#include <wsutil/filesystem.h>
 
 #include <QDesktopServices>
 #include <QUrl>
@@ -31,25 +32,22 @@
 #include "ui/util.h"
 
 #include "wsutil/filesystem.h"
-#include "app/application_flavor.h"
 #include "wsutil/plugins.h"
 #include "wsutil/version_info.h"
-#include "wsutil/path_config.h"
+
+#include "ui/capture_globals.h"
 
 #include "extcap.h"
 
-#include <ui/qt/main_window.h>
-
 #include <ui/qt/utils/color_utils.h>
 #include <ui/qt/utils/qt_ui_utils.h>
-#include <ui/qt/utils/theme_manager.h>
 #include <ui/qt/utils/variant_pointer.h>
-#include <ui/qt/utils/workspace_state.h>
 
 #include <ui/qt/models/astringlist_list_model.h>
 #include <ui/qt/models/url_link_delegate.h>
 
 #include <QFontMetrics>
+#include <QKeySequence>
 #include <QTextStream>
 #include <QUrl>
 #include <QRegularExpression>
@@ -68,18 +66,21 @@ AStringListListModel(parent)
     QFile f_authors;
 
     f_authors.setFileName(":/about/authors.csv");
-    if (!f_authors.open(QFile::ReadOnly | QFile::Text)) {
-        // "Cannot fail" because the file is in the resource system,
-        // unless something went wrong during building.
-        Q_ASSERT(false);
-        return;
-    }
+    f_authors.open(QFile::ReadOnly | QFile::Text);
     QTextStream ReadFile_authors(&f_authors);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     ReadFile_authors.setEncoding(QStringConverter::Utf8);
+#else
+    ReadFile_authors.setCodec("UTF-8");
+#endif
 
     while (!ReadFile_authors.atEnd()) {
         QString line = ReadFile_authors.readLine();
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
         QStringList entry = line.split(",", Qt::SkipEmptyParts);
+#else
+        QStringList entry = QStringList() << line.section(',', 0, 0) << line.section(',', 1, 1);
+#endif
         if (entry.size() == 2) {
             appendRow(entry);
         }
@@ -103,21 +104,19 @@ static void plugins_add_description(const char *name, const char *version,
     QList<QStringList> *plugin_data = (QList<QStringList> *)user_data;
     QStringList plugin_types;
     if (flags & WS_PLUGIN_DESC_DISSECTOR)
-        plugin_types << QObject::tr("Dissector");
+        plugin_types << "dissector";
     if (flags & WS_PLUGIN_DESC_FILE_TYPE)
-        plugin_types << QObject::tr("File Type");
+        plugin_types << "file type";
     if (flags & WS_PLUGIN_DESC_CODEC)
-        plugin_types << QObject::tr("Codec");
+        plugin_types << "codec";
     if (flags & WS_PLUGIN_DESC_EPAN)
-        plugin_types << QObject::tr("Analysis");
+        plugin_types << "epan";
     if (flags & WS_PLUGIN_DESC_TAP_LISTENER)
-        plugin_types << QObject::tr("Tap Listener");
+        plugin_types << "tap listener";
     if (flags & WS_PLUGIN_DESC_DFILTER)
-        plugin_types << QObject::tr("Display Filter");
-    if (flags & WS_PLUGIN_DESC_UI)
-        plugin_types << QObject::tr("User Interface");
+        plugin_types << "dfilter";
     if (plugin_types.empty())
-        plugin_types << QObject::tr("Unknown");
+        plugin_types << "unknown";
     QStringList plugin_row = QStringList() << name << version << plugin_types.join(", ") << filename;
     *plugin_data << plugin_row;
 }
@@ -167,59 +166,84 @@ QStringList PluginListModel::headerColumns() const
     return QStringList() << tr("Name") << tr("Version") << tr("Type") << tr("Path");
 }
 
+ShortcutListModel::ShortcutListModel(QObject * parent):
+        AStringListListModel(parent)
+{
+    QMap<QString, QPair<QString, QString> > shortcuts; // name -> (shortcut, description)
+    foreach (const QWidget *child, mainApp->mainWindow()->findChildren<QWidget *>()) {
+        // Recent items look funny here.
+        if (child->objectName().compare("menuOpenRecentCaptureFile") == 0) continue;
+        foreach (const QAction *action, child->actions()) {
+
+            if (!action->shortcut().isEmpty()) {
+                QString name = action->text();
+                name.replace('&', "");
+                shortcuts[name] = QPair<QString, QString>(action->shortcut().toString(QKeySequence::NativeText), action->toolTip());
+            }
+        }
+    }
+
+    QStringList names = shortcuts.keys();
+    names.sort();
+    foreach (const QString &name, names) {
+        QStringList row;
+        row << shortcuts[name].first << name << shortcuts[name].second;
+        appendRow(row);
+    }
+}
+
+QStringList ShortcutListModel::headerColumns() const
+{
+    return QStringList() << tr("Shortcut") << tr("Name") << tr("Description");
+}
+
 FolderListModel::FolderListModel(QObject * parent):
         AStringListListModel(parent)
 {
-    const char* env_prefix = application_configuration_environment_prefix();
-    const char* extcap_dir = application_extcap_dir();
-
     /* "file open" */
     appendRow(QStringList() << tr("\"File\" dialog location") << get_open_dialog_initial_dir() << tr("Capture files"));
 
     /* temp */
-    appendRow(QStringList() << tr("Temp") << tempPath()
+    appendRow(QStringList() << tr("Temp") << (global_capture_opts.temp_dir && global_capture_opts.temp_dir[0] ? global_capture_opts.temp_dir : g_get_tmp_dir())
                             << tr("Untitled capture files"));
 
     /* pers conf */
     appendRow(QStringList() << tr("Personal configuration")
-            << gchar_free_to_qstring(get_persconffile_path("", false, env_prefix))
+            << gchar_free_to_qstring(get_persconffile_path("", false))
             << tr("Preferences, profiles, manuf, …"));
 
     /* global conf */
-    QString dirPath = get_datafile_dir(env_prefix);
+    QString dirPath = get_datafile_dir();
     if (! dirPath.isEmpty()) {
         appendRow (QStringList() << tr("Global configuration") << dirPath
                 << tr("Preferences, profiles, manuf, …"));
     }
 
     /* system */
-    appendRow(QStringList() << tr("System") << get_systemfile_dir(env_prefix) << tr("ethers, ipxnets"));
+    appendRow(QStringList() << tr("System") << get_systemfile_dir() << tr("ethers, ipxnets"));
 
     /* program */
     appendRow(QStringList() << tr("Program") << get_progfile_dir() << tr("Program files"));
 
 #ifdef HAVE_PLUGINS
     /* pers plugins */
-    appendRow(QStringList() << tr("Personal Plugins") << get_plugins_pers_dir_with_version(env_prefix) << tr("Binary plugins"));
+    appendRow(QStringList() << tr("Personal Plugins") << get_plugins_pers_dir_with_version() << tr("Binary plugins"));
 
     /* global plugins */
-    appendRow(QStringList() << tr("Global Plugins") << get_plugins_dir_with_version(env_prefix) << tr("Binary plugins"));
+    appendRow(QStringList() << tr("Global Plugins") << get_plugins_dir_with_version() << tr("Binary plugins"));
 #endif
 
 #ifdef HAVE_LUA
     /* pers plugins */
-    appendRow(QStringList() << tr("Personal Lua Plugins") << get_plugins_pers_dir(env_prefix) << tr("Lua scripts"));
+    appendRow(QStringList() << tr("Personal Lua Plugins") << get_plugins_pers_dir() << tr("Lua scripts"));
 
     /* global plugins */
-    appendRow(QStringList() << tr("Global Lua Plugins") << get_plugins_dir(env_prefix) << tr("Lua scripts"));
+    appendRow(QStringList() << tr("Global Lua Plugins") << get_plugins_dir() << tr("Lua scripts"));
 #endif
 
     /* Extcap */
-    appendRow(QStringList() << tr("Personal Extcap path") << QString(get_extcap_pers_dir(env_prefix)) << tr("External capture (extcap) plugins"));
-    appendRow(QStringList() << tr("Global Extcap path") << QString(get_extcap_dir(env_prefix, extcap_dir)) << tr("External capture (extcap) plugins"));
-
-    /* Personal themes */
-    appendRow(QStringList() << tr("Personal Themes") << WorkspaceState::instance()->personalThemesPath() << tr("User-installed theme files (*.jsonc)"));
+    appendRow(QStringList() << tr("Personal Extcap path") << QString(get_extcap_pers_dir()) << tr("External capture (extcap) plugins"));
+    appendRow(QStringList() << tr("Global Extcap path") << QString(get_extcap_dir()) << tr("External capture (extcap) plugins"));
 
 #ifdef HAVE_MAXMINDDB
     /* MaxMind DB */
@@ -230,16 +254,16 @@ FolderListModel::FolderListModel(QObject * parent):
 
 #ifdef HAVE_LIBSMI
     /* SMI MIBs/PIBs */
-    char *default_mib_path = oid_get_default_mib_path(application_configuration_environment_prefix());
-    QStringList smiPaths = QString(default_mib_path).split(G_SEARCHPATH_SEPARATOR_S, Qt::SkipEmptyParts);
+    char *default_mib_path = oid_get_default_mib_path();
+    QStringList smiPaths = QString(default_mib_path).split(G_SEARCHPATH_SEPARATOR_S);
     g_free(default_mib_path);
     foreach(QString path, smiPaths)
         appendRow(QStringList() << tr("MIB/PIB path") << path.trimmed() << tr("SMI MIB/PIB search path"));
 #endif
 
-#ifdef Q_OS_MACOS
+#ifdef Q_OS_MAC
     /* Mac Extras */
-    QString extras_path = QStringLiteral("%1/../Resources/Extras").arg(mainApp->applicationDirPath());
+    QString extras_path = mainApp->applicationDirPath() + "/../Resources/Extras";
     appendRow(QStringList() << tr("macOS Extras") << QDir::cleanPath(extras_path) << tr("Extra macOS packages"));
 
 #endif
@@ -262,10 +286,21 @@ AboutDialog::AboutDialog(QWidget *parent) :
     QFile f_acknowledgements;
     QFile f_license;
 
+    if (!is_packet_configuration_namespace()) {
+        setWindowTitle(tr("About Logray"));
+        ui->tabWidget->setTabText(ui->tabWidget->indexOf(ui->tab_wireshark), tr("Logray"));
+    }
+
     /* Wireshark tab */
     updateWiresharkText();
-    connect(ThemeManager::instance(), &ThemeManager::themeChanged,
-            this, &AboutDialog::updateWiresharkText);
+
+    ui->pte_wireshark->setFrameStyle(QFrame::NoFrame);
+    ui->pte_wireshark->viewport()->setAutoFillBackground(false);
+
+/* Check if it is a dev release... (VERSION_MINOR is odd in dev release) */
+#if VERSION_MINOR & 1
+        ui->label_logo->setPixmap(QPixmap(":/about/wssplash_dev.png"));
+#endif
 
     /* Authors */
     AuthorListModel * authorModel = new AuthorListModel(this);
@@ -319,7 +354,7 @@ AboutDialog::AboutDialog(QWidget *parent) :
     ui->tblPlugins->setModel(pluginTypeModel);
     ui->tblPlugins->setRootIsDecorated(false);
     UrlLinkDelegate *plugin_delegate = new UrlLinkDelegate(this);
-    script_pattern = QStringLiteral("\\.(lua|py)$");
+    script_pattern = QString("\\.(lua|py)$");
     plugin_delegate->setColCheck(3, script_pattern);
     ui->tblPlugins->setItemDelegateForColumn(3, plugin_delegate);
     ui->cmbType->addItems(pluginModel->typeNames());
@@ -339,35 +374,51 @@ AboutDialog::AboutDialog(QWidget *parent) :
         ui->label_no_plugins->show();
     }
 
+    /* Shortcuts */
+    ShortcutListModel * shortcutModel = new ShortcutListModel(this);
+    AStringListListSortFilterProxyModel * shortcutProxyModel = new AStringListListSortFilterProxyModel(this);
+    shortcutProxyModel->setSourceModel(shortcutModel);
+    shortcutProxyModel->setFilterCaseSensitivity(Qt::CaseInsensitive);
+    shortcutProxyModel->setColumnToFilter(0);
+    shortcutProxyModel->setColumnToFilter(1);
+    shortcutProxyModel->setColumnToFilter(2);
+    ui->tblShortcuts->setModel(shortcutProxyModel);
+    ui->tblShortcuts->setRootIsDecorated(false);
+    ui->tblShortcuts->setContextMenuPolicy(Qt::CustomContextMenu);
+    ui->tblShortcuts->setSortingEnabled(true);
+    ui->tblShortcuts->sortByColumn(1, Qt::AscendingOrder);
+    connect(ui->tblShortcuts, &QTreeView::customContextMenuRequested, this, &AboutDialog::handleCopyMenu);
+    connect(ui->searchShortcuts, &QLineEdit::textChanged, shortcutProxyModel, &AStringListListSortFilterProxyModel::setFilter);
+
     /* Acknowledgements */
     f_acknowledgements.setFileName(":/about/Acknowledgements.md");
 
-    QTextBrowser *textBrowserAcks = new QTextBrowser();
-    if (f_acknowledgements.open(QFile::ReadOnly | QFile::Text)) {
-        QTextStream ReadFile_acks(&f_acknowledgements);
-        textBrowserAcks->setMarkdown(ReadFile_acks.readAll());
-    } else {
-        // "Cannot fail" because the file is in the resource system,
-        // unless something went wrong during building.
-        Q_ASSERT(false);
-    }
+    f_acknowledgements.open(QFile::ReadOnly | QFile::Text);
+    QTextStream ReadFile_acks(&f_acknowledgements);
 
+    /* QTextBrowser markdown support added in 5.14. */
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+    QTextBrowser *textBrowserAcks = new QTextBrowser();
+    textBrowserAcks->setMarkdown(ReadFile_acks.readAll());
     textBrowserAcks->setReadOnly(true);
     textBrowserAcks->setOpenExternalLinks(true);
     textBrowserAcks->moveCursor(QTextCursor::Start);
     ui->ackVerticalLayout->addWidget(textBrowserAcks);
+#else
+    QPlainTextEdit *pte = new QPlainTextEdit();
+    pte->setPlainText(ReadFile_acks.readAll());
+    pte->setReadOnly(true);
+    pte->moveCursor(QTextCursor::Start);
+    ui->ackVerticalLayout->addWidget(pte);
+#endif
 
     /* License */
     f_license.setFileName(":/about/gpl-2.0-standalone.html");
 
-    if (f_license.open(QFile::ReadOnly | QFile::Text)) {
-        QTextStream ReadFile_license(&f_license);
-        ui->textBrowserLicense->setHtml(ReadFile_license.readAll());
-    } else {
-        // "Cannot fail" because the file is in the resource system,
-        // unless something went wrong during building.
-        Q_ASSERT(false);
-    }
+    f_license.open(QFile::ReadOnly | QFile::Text);
+    QTextStream ReadFile_license(&f_license);
+
+    ui->textBrowserLicense->setHtml(ReadFile_license.readAll());
     ui->textBrowserLicense->moveCursor(QTextCursor::Start);
 }
 
@@ -375,27 +426,6 @@ AboutDialog::~AboutDialog()
 {
     delete ui;
 }
-
-QLabel* AboutDialog::labelLogo() const
-{
-    return ui->label_logo;
-}
-
-QLabel* AboutDialog::labelTitle() const
-{
-    return ui->label_title;
-}
-
-QTabWidget* AboutDialog::tabWidget() const
-{
-    return ui->tabWidget;
-}
-
-QWidget* AboutDialog::tabWireshark() const
-{
-    return ui->tab_wireshark;
-}
-
 
 bool AboutDialog::event(QEvent *event)
 {
@@ -433,18 +463,18 @@ void AboutDialog::showEvent(QShowEvent * event)
         ui->tblPlugins->resizeColumnToContents(col);
     }
 
+    // Contents + 2 em-widths
+    ui->tblShortcuts->resizeColumnToContents(0);
+    ui->tblShortcuts->setColumnWidth(0, ui->tblShortcuts->columnWidth(0) + (one_em * 2));
+    ui->tblShortcuts->setColumnWidth(1, one_em * 12);
+    ui->tblShortcuts->resizeColumnToContents(2);
+
     QDialog::showEvent(event);
 }
 
-const char* AboutDialog::getVCSVersion()
-{
-    return application_get_vcs_version_info();
-}
-
-
 void AboutDialog::updateWiresharkText()
 {
-    QString vcs_version_info_str = getVCSVersion();
+    QString vcs_version_info_str = is_packet_configuration_namespace() ? get_ws_vcs_version_info() : get_lr_vcs_version_info();
     QString copyright_info_str = get_copyright_info();
     QString license_info_str = get_license_info();
     QString comp_info_str = gstring_free_to_qbytearray(get_compiled_version_info(gather_wireshark_qt_compiled_info));
@@ -452,17 +482,12 @@ void AboutDialog::updateWiresharkText()
 
     QString message = ColorUtils::themeLinkStyle();
 
-    /* Convert newlines in the version strings to html <br/>*/
-    //comp_info_str = html_escape(comp_info_str);
-    //comp_info_str.replace("\n", "<br/>");
-    //runtime_info_str = html_escape(runtime_info_str);
-    //runtime_info_str.replace("\n", "<br/>");
     /* Construct the message string */
     message += "<p>Version " + html_escape(vcs_version_info_str) + ".</p>\n";
     message += "<p>" + html_escape(copyright_info_str) + "</p>\n";
     message += "<p>" + html_escape(license_info_str) + "</p>\n";
-    message += "<pre>" + html_escape(comp_info_str) + "</pre>\n";
-    message += "<pre>" + html_escape(runtime_info_str) + "</pre>\n";
+    message += "<p>" + html_escape(comp_info_str) + "</p>\n";
+    message += "<p>" + html_escape(runtime_info_str) + "</p>\n";
     message += "<p>Check the man page and <a href=https://www.wireshark.org>www.wireshark.org</a> "
                "for more information.</p>\n";
     ui->pte_wireshark->setHtml(message);
@@ -506,12 +531,12 @@ void AboutDialog::urlDoubleClicked(const QModelIndex &idx)
     if (! QDir(urlText).exists())
     {
         if (QMessageBox::question(this, tr("The directory does not exist"),
-                          tr("Should the directory %1 be created?").arg(urlText)) == QMessageBox::Yes)
+                          QString(tr("Should the directory %1 be created?").arg(urlText))) == QMessageBox::Yes)
         {
             if (! QDir().mkpath(urlText))
             {
                 QMessageBox::warning(this, tr("The directory could not be created"),
-                                     tr("The directory %1 could not be created.").arg(urlText));
+                                     QString(tr("The directory %1 could not be created.").arg(urlText)));
             }
         }
     }
@@ -539,7 +564,7 @@ void AboutDialog::handleCopyMenu(QPoint pos)
 
     if (ui->tabWidget->currentWidget() == ui->tab_plugins)
     {
-#ifdef Q_OS_MACOS
+#ifdef Q_OS_MAC
         QString show_in_str = tr("Show in Finder");
 #else
         QString show_in_str = tr("Show in Folder");
@@ -634,7 +659,7 @@ void AboutDialog::copyActionTriggered(bool copyRow)
                 row << tree->model()->data(dataIdx).toString();
             }
 
-            clipdata.append(row.join("\t").append("\n"));
+            clipdata.append(row.join("\t\t").append("\n"));
 
             visitedRows << index.row();
         }

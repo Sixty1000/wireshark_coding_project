@@ -17,8 +17,7 @@
 #include <epan/prefs.h>
 #include <epan/tap.h>
 #include <epan/proto_data.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
+
 #include "packet-mac-lte.h"
 #include "packet-rlc-lte.h"
 #include "packet-rlc-3gpp-common.h"
@@ -89,10 +88,10 @@ static wmem_tree_t *ue_parameters_tree;
 
 /**************************************************/
 /* Initialize the protocol and registered fields. */
-static int proto_rlc_lte;
+int proto_rlc_lte;
 
-static int proto_mac_lte;
-static int proto_pdcp_lte;
+extern int proto_mac_lte;
+extern int proto_pdcp_lte;
 
 static dissector_handle_t pdcp_lte_handle;
 static dissector_handle_t ip_handle;
@@ -475,7 +474,7 @@ static void reassembly_destroy(channel_sequence_analysis_status *status)
 /* Add a new segment to the accumulating segmented SDU */
 static void reassembly_add_segment(channel_sequence_analysis_status *status,
                                    uint16_t SN, uint32_t frame,
-                                   tvbuff_t *tvb, unsigned offset, int length)
+                                   tvbuff_t *tvb, int offset, int length)
 {
     int segment_number =  status->reassembly_info->number_of_segments;
     uint8_t *segment_data;
@@ -541,7 +540,7 @@ static tvbuff_t* reassembly_get_reassembled_tvb(rlc_channel_reassembly_info *rea
 
 /* Show where the segments came from for a reassembled SDU */
 static void reassembly_show_source(rlc_channel_reassembly_info *reassembly_info,
-                                   proto_tree *tree, tvbuff_t *tvb, unsigned offset)
+                                   proto_tree *tree, tvbuff_t *tvb, int offset)
 {
     int n;
     proto_item *source_ti, *ti;
@@ -683,7 +682,7 @@ static void write_pdu_label_and_info_literal(proto_item *pdu_ti, proto_item *sub
 /* Dissect extension headers (common to both UM and AM) */
 static int dissect_rlc_lte_extension_header(tvbuff_t *tvb, packet_info *pinfo _U_,
                                             proto_tree *tree,
-                                            unsigned offset,
+                                            int offset,
                                             rlc_lte_info *p_rlc_lte_info)
 {
     uint8_t isOdd;
@@ -787,7 +786,7 @@ static void show_PDU_in_info(packet_info *pinfo,
 
 
 /* Show an SDU. If configured, pass to PDCP/RRC/IP dissector */
-static void show_PDU_in_tree(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, unsigned offset, int length,
+static void show_PDU_in_tree(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb, int offset, int length,
                              rlc_lte_info *rlc_info, bool whole_pdu, rlc_channel_reassembly_info *reassembly_info,
                              sequence_analysis_state state)
 {
@@ -2010,7 +2009,7 @@ static void checkChannelACKWindow(uint16_t ack_sn,
 /* Transparent mode PDU. Call RRC if configured to */
 static void dissect_rlc_lte_tm(tvbuff_t *tvb, packet_info *pinfo,
                                proto_tree *tree,
-                               unsigned offset,
+                               int offset,
                                rlc_lte_info *p_rlc_lte_info,
                                proto_item *top_ti)
 {
@@ -2087,7 +2086,7 @@ static void dissect_rlc_lte_tm(tvbuff_t *tvb, packet_info *pinfo,
 /* Unacknowledged mode PDU                         */
 static void dissect_rlc_lte_um(tvbuff_t *tvb, packet_info *pinfo,
                                proto_tree *tree,
-                               unsigned offset,
+                               int offset,
                                rlc_lte_info *p_rlc_lte_info,
                                proto_item *top_ti,
                                rlc_3gpp_tap_info *tap_info)
@@ -2097,7 +2096,7 @@ static void dissect_rlc_lte_um(tvbuff_t *tvb, packet_info *pinfo,
     bool last_includes_end;
     uint64_t fixed_extension;
     uint64_t sn;
-    unsigned start_offset = offset;
+    int     start_offset = offset;
     proto_item *um_ti;
     proto_tree *um_header_tree;
     proto_item *um_header_ti;
@@ -2305,7 +2304,7 @@ static void dissect_rlc_lte_am_status_pdu(tvbuff_t *tvb,
                                           packet_info *pinfo,
                                           proto_tree *tree,
                                           proto_item *status_ti,
-                                          unsigned offset,
+                                          int offset,
                                           proto_item *top_ti,
                                           rlc_lte_info *p_rlc_lte_info,
                                           rlc_3gpp_tap_info *tap_info)
@@ -2487,7 +2486,7 @@ static void dissect_rlc_lte_am_status_pdu(tvbuff_t *tvb,
 /* Acknowledged mode PDU                           */
 static void dissect_rlc_lte_am(tvbuff_t *tvb, packet_info *pinfo,
                                proto_tree *tree,
-                               unsigned offset,
+                               int offset,
                                rlc_lte_info *p_rlc_lte_info,
                                proto_item *top_ti,
                                rlc_3gpp_tap_info *tap_info)
@@ -2927,7 +2926,7 @@ static void dissect_rlc_lte_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 
     /* Can't dissect anything without it... */
     if (p_rlc_lte_info == NULL) {
-        proto_tree_add_expert_remaining(rlc_lte_tree, pinfo, &ei_rlc_lte_no_per_frame_info, tvb, offset);
+        proto_tree_add_expert(rlc_lte_tree, pinfo, &ei_rlc_lte_no_per_frame_info, tvb, offset, -1);
         return;
     }
 
@@ -3783,9 +3782,6 @@ void proto_reg_handoff_rlc_lte(void)
     lte_rrc_bcch_bch_nb    = find_dissector_add_dependency("lte_rrc.bcch_bch.nb", proto_rlc_lte);
     lte_rrc_bcch_dl_sch_nb = find_dissector_add_dependency("lte_rrc.bcch_dl_sch.nb", proto_rlc_lte);
     lte_rrc_pcch_nb        = find_dissector_add_dependency("lte_rrc.pcch.nb", proto_rlc_lte);
-
-    proto_mac_lte = proto_get_id_by_filter_name("mac-lte");
-    proto_pdcp_lte = proto_get_id_by_filter_name("pdcp-lte");
 }
 
 /*

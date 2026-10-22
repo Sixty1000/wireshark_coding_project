@@ -13,8 +13,6 @@
 
 #include <epan/packet.h>
 #include <epan/reassemble.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 
 /* Bitmasks for the bits in the address field
 */

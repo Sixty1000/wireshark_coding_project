@@ -59,11 +59,6 @@
 /* Security Get_Authentication_Level Response */
 #define ZBEE_TLV_TYPE_GET_AUTH_LEVEL                                 0
 
-/* Route Request */
-#define ZBEE_TLV_TYPE_EXTENDED_ROUTE_INFO                            0
-#define ZBEE_TLV_TYPE_CONCENTRATOR_INFO                              1
-#define ZBEE_TLV_TYPE_SOURCE_ROUTE_SOLICIT_INFO                      2
-
 /* ZigBee Direct Communication Service */
 #define ZBEE_TLV_TYPE_COMM_EXT_PAN_ID       0              /* Extended PAN ID */
 #define ZBEE_TLV_TYPE_COMM_SHORT_PAN_ID     1              /* Short PAN ID */
@@ -189,8 +184,6 @@
 
 #define ZBEE_TLV_TYPE_LINK_KEY_FLAG_PERMANENT   0
 #define ZBEE_TLV_TYPE_LINK_KEY_FLAG_PROVISIONAL 1
-
-#define ZBEE_TLV_LK_FEATURES_CAPABILITIES_FC_SYNC_SUPPORTED     0b00000001
 
 unsigned dissect_zbee_tlvs(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, void *data, uint8_t source_type, unsigned cmd_id);
 

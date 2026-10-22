@@ -21,7 +21,6 @@
 
 #include <epan/packet.h>
 #include <epan/prefs.h>
-#include <wsutil/array.h>
 #include "packet-tcp.h"
 
 #define TALI_SYNC_LENGTH    4
@@ -102,7 +101,7 @@ dissect_tali_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
 
   if (length > 0) {
     payload_tvb = tvb_new_subset_remaining(tvb, TALI_HEADER_LENGTH);
-    if (payload_tvb != NULL && !dissector_try_string_with_data(tali_dissector_table, opcode, payload_tvb, pinfo, tree, true, NULL)) {
+    if (payload_tvb != NULL && !dissector_try_string(tali_dissector_table, opcode, payload_tvb, pinfo, tree, NULL)) {
       call_data_dissector(payload_tvb, pinfo, tree);
     }
   }

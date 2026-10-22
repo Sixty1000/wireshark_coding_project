@@ -27,7 +27,7 @@ LabelStack::LabelStack(QWidget *parent) :
     temporary_ctx_(-1),
     shrinkable_(false)
 {
-#ifdef Q_OS_MACOS
+#ifdef Q_OS_MAC
     setAttribute(Qt::WA_MacSmallSize, true);
 #endif
     fillLabel();
@@ -55,7 +55,7 @@ void LabelStack::fillLabel() {
     si = labels_.first();
 
     if (si.ctx == temporary_ctx_) {
-        style_sheet += QStringLiteral(
+        style_sheet += QString(
                     "  border-radius: 0.25em;"
                     "  background-color: %2;"
                     )
@@ -105,7 +105,11 @@ void LabelStack::setShrinkable(bool shrinkable)
 void LabelStack::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0 ,0)
         emit mousePressedAt(event->globalPosition().toPoint(), Qt::LeftButton);
+#else
+        emit mousePressedAt(event->globalPos(), Qt::LeftButton);
+#endif
     }
 }
 

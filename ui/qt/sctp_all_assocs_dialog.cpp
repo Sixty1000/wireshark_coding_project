@@ -133,6 +133,6 @@ void SCTPAllAssocsDialog::on_analyseButton_clicked()
 
 void SCTPAllAssocsDialog::on_setFilterButton_clicked()
 {
-    QString newFilter = QStringLiteral("sctp.assoc_index==%1").arg(selected_assoc_id);
+    QString newFilter = QString("sctp.assoc_index==%1").arg(selected_assoc_id);
     emit filterPackets(newFilter, false);
 }

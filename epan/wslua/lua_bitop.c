@@ -135,7 +135,7 @@ static const struct luaL_Reg bit_funcs[] = {
 */
 #define BAD_SAR		(bsar(-8, 2) != (SBits)-2)
 
-extern int luaopen_bit(lua_State *L)
+LUALIB_API int luaopen_bit(lua_State *L)
 {
   UBits b;
 #if LUA_VERSION_NUM < 503
@@ -162,6 +162,7 @@ DIAG_ON(unreachable-code)
   }
 
   luaL_newlib(L, bit_funcs);
-  return 1;
+  lua_setglobal(L, "bit"); /* added for wireshark */
+  return 0; /* changed from 1 to 0 for wireshark, since lua_setglobal now pops the table */
 }
 

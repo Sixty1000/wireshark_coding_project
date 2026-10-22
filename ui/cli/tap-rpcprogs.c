@@ -23,11 +23,12 @@
 #include <epan/packet_info.h>
 #include <epan/tap.h>
 #include <epan/stat_tap_ui.h>
-#include <epan/uuid_types.h>
 #include <epan/dissectors/packet-rpc.h>
 
 #include <wsutil/cmdarg_err.h>
-#include <wsutil/nstime.h>
+
+#define MICROSECS_PER_SEC   1000000
+#define NANOSECS_PER_SEC    1000000000
 
 void register_tap_listener_rpcprogs(void);
 
@@ -42,19 +43,17 @@ typedef struct _rpc_program_t {
 	nstime_t tot;
 } rpc_program_t;
 
-typedef struct _rpc_tapdata_t {
-	rpc_program_t *prog_list;
-} rpc_tapdata_t;
+static rpc_program_t *prog_list;
+static int already_enabled;
 
 static tap_packet_status
-rpcprogs_packet(void *tapdata, packet_info *pinfo, epan_dissect_t *edt _U_, const void *pri, tap_flags_t flags _U_)
+rpcprogs_packet(void *dummy1 _U_, packet_info *pinfo, epan_dissect_t *edt _U_, const void *pri, tap_flags_t flags _U_)
 {
-	rpc_tapdata_t *rtd = (rpc_tapdata_t *)tapdata;
 	const rpc_call_info_value *ri = (const rpc_call_info_value *)pri;
 	nstime_t delta;
 	rpc_program_t *rp = NULL;
 
-	if (!rtd->prog_list) {
+	if (!prog_list) {
 		/* the list was empty */
 		rp = g_new(rpc_program_t, 1);
 		rp->next      =	NULL;
@@ -67,15 +66,15 @@ rpcprogs_packet(void *tapdata, packet_info *pinfo, epan_dissect_t *edt _U_, cons
 		rp->max.nsecs =	0;
 		rp->tot.secs  =	0;
 		rp->tot.nsecs =	0;
-		rtd->prog_list = rp;
-	} else if ((ri->prog == rtd->prog_list->program)
-		&& (ri->vers == rtd->prog_list->version)) {
-		rp = rtd->prog_list;
-	} else if ( (ri->prog < rtd->prog_list->program)
-		|| ((ri->prog == rtd->prog_list->program) && (ri->vers < rtd->prog_list->version))) {
+		prog_list = rp;
+	} else if ((ri->prog == prog_list->program)
+		&& (ri->vers == prog_list->version)) {
+		rp = prog_list;
+	} else if ( (ri->prog < prog_list->program)
+		|| ((ri->prog == prog_list->program) && (ri->vers < prog_list->version))) {
 		/* we should be first entry in list */
 		rp = g_new(rpc_program_t, 1);
-		rp->next      = rtd->prog_list;
+		rp->next      = prog_list;
 		rp->program   = ri->prog;
 		rp->version   = ri->vers;
 		rp->num	      = 0;
@@ -85,10 +84,10 @@ rpcprogs_packet(void *tapdata, packet_info *pinfo, epan_dissect_t *edt _U_, cons
 		rp->max.nsecs =	0;
 		rp->tot.secs  =	0;
 		rp->tot.nsecs =	0;
-		rtd->prog_list = rp;
+		prog_list = rp;
 	} else {
 		/* we go somewhere else in the list */
-		for (rp=rtd->prog_list; rp; rp=rp->next) {
+		for (rp=prog_list; rp; rp=rp->next) {
 			if ((rp->next)
 			 && (rp->next->program == ri->prog)
 		         && (rp->next->version == ri->vers)) {
@@ -155,8 +154,8 @@ rpcprogs_packet(void *tapdata, packet_info *pinfo, epan_dissect_t *edt _U_, cons
 
 	rp->tot.secs  += delta.secs;
 	rp->tot.nsecs += delta.nsecs;
-	if (rp->tot.nsecs > WS_NSECS_PER_SEC) {
-		rp->tot.nsecs -= WS_NSECS_PER_SEC;
+	if (rp->tot.nsecs > NANOSECS_PER_SEC) {
+		rp->tot.nsecs -= NANOSECS_PER_SEC;
 		rp->tot.secs++;
 	}
 	rp->num++;
@@ -166,9 +165,8 @@ rpcprogs_packet(void *tapdata, packet_info *pinfo, epan_dissect_t *edt _U_, cons
 
 
 static void
-rpcprogs_draw(void *tapdata)
+rpcprogs_draw(void *dummy _U_)
 {
-	rpc_tapdata_t *rtd = (rpc_tapdata_t *)tapdata;
 	uint64_t td;
 	rpc_program_t *rp;
 	char str[64];
@@ -177,66 +175,46 @@ rpcprogs_draw(void *tapdata)
 	printf("==========================================================\n");
 	printf("ONC-RPC Program Statistics:\n");
 	printf("Program    Version  Calls    Min SRT    Max SRT    Avg SRT\n");
-	for (rp = rtd->prog_list; rp; rp = rp->next) {
+	for (rp = prog_list;rp;rp = rp->next) {
 		/* Only display procs with non-zero calls */
 		if (rp->num == 0) {
 			continue;
 		}
-		/* Scale the average SRT in units of 1 ns */
-		td = ((uint64_t)(rp->tot.secs)) * WS_NSECS_PER_SEC + rp->tot.nsecs;
-		/* Convert to us, rounded to the nearest us. */
-		td = ((td / rp->num) + (WS_NSECS_PER_USEC/2)) / WS_NSECS_PER_USEC;
+		/* Scale the average SRT in units of 1us and round to the nearest us. */
+		td = ((uint64_t)(rp->tot.secs)) * NANOSECS_PER_SEC + rp->tot.nsecs;
+		td = ((td / rp->num) + 500) / 1000;
 
-		snprintf(str, sizeof(str), "%s(%d)", uuid_type_get_uuid_name("rpc", GUINT_TO_POINTER(rp->program), NULL), rp->program);
+		snprintf(str, sizeof(str), "%s(%d)", rpc_prog_name(rp->program), rp->program);
 		printf("%-15s %2u %6d %3d.%06d %3d.%06d %3" PRIu64 ".%06" PRIu64 "\n",
 		       str,
 		       rp->version,
 		       rp->num,
-		       (int)(rp->min.secs), (rp->min.nsecs+(WS_NSECS_PER_USEC/2))/WS_NSECS_PER_USEC,
-		       (int)(rp->max.secs), (rp->max.nsecs+(WS_NSECS_PER_USEC/2))/WS_NSECS_PER_USEC,
-		       td/WS_USECS_PER_SEC, td%WS_USECS_PER_SEC
+		       (int)(rp->min.secs), (rp->min.nsecs+500)/1000,
+		       (int)(rp->max.secs), (rp->max.nsecs+500)/1000,
+		       td/MICROSECS_PER_SEC, td%MICROSECS_PER_SEC
 		);
 	}
 	printf("===================================================================\n");
 }
 
-static void
-rpcprogs_reset(void *tapdata)
-{
-	rpc_tapdata_t *rtd = (rpc_tapdata_t *)tapdata;
-	rpc_program_t *rp = rtd->prog_list;
-	while (rp != NULL) {
-		rpc_program_t *next = rp->next;
-		g_free(rp);
-		rp = next;
-	}
-	rtd->prog_list = NULL;
-}
 
 static void
-rpcprogs_finish(void *tapdata)
-{
-	rpcprogs_reset(tapdata);
-	g_free((rpc_tapdata_t *)tapdata);
-}
-
-static bool
 rpcprogs_init(const char *opt_arg _U_, void *userdata _U_)
 {
 	GString *error_string;
 
-	rpc_tapdata_t *tapdata = g_new0(rpc_tapdata_t, 1);
+	if (already_enabled) {
+		return;
+	}
+	already_enabled = 1;
 
-	error_string = register_tap_listener("rpc", tapdata, NULL, TL_REQUIRES_NOTHING,
-					rpcprogs_reset, rpcprogs_packet, rpcprogs_draw, rpcprogs_finish);
+	error_string = register_tap_listener("rpc", NULL, NULL, 0, NULL, rpcprogs_packet, rpcprogs_draw, NULL);
 	if (error_string) {
 		cmdarg_err("Couldn't register rpc,programs tap: %s",
 			error_string->str);
 		g_string_free(error_string, TRUE);
-		return false;
+		exit(1);
 	}
-
-	return true;
 }
 
 static stat_tap_ui rpcprogs_ui = {

@@ -23,10 +23,10 @@
 #include "globals.h"
 
 #include <string.h>
+#include <epan/rtp_pt.h>
 #include <epan/addr_resolv.h>
 #include <epan/proto_data.h>
 #include <epan/dissectors/packet-rtp.h>
-#include <epan/dissectors/packet-rtp_pt.h>
 #include "rtp_stream.h"
 #include "tap-rtp-common.h"
 #include "tap-rtp-analysis.h"
@@ -315,7 +315,7 @@ rtppacket_analyse(tap_rtp_stat_t *statinfo,
     } else { /* Dynamic PT */
         if ( rtpinfo->info_payload_type_str != NULL ) {
             /* Is it a "telephone-event" ?
-             * Timestamp is not increased for telephone-event packets impacting
+             * Timestamp is not increased for telepone-event packets impacting
              * calculation of Jitter Skew and clock drift.
              * see 2.2.1 of RFC 4733
              */

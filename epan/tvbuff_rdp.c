@@ -74,7 +74,7 @@ bitstream_getbits(bitstream_t *b, uint8_t nbits, bool *ok) {
 }
 
 static bool
-bitstream_copyraw(bitstream_t *b, uint8_t *dest, unsigned nbytes)
+bitstream_copyraw(bitstream_t *b, uint8_t *dest, int nbytes)
 {
 	if (tvb_captured_length_remaining(b->input, b->offset) < nbytes)
 		return false;
@@ -157,8 +157,7 @@ static const zgfx_token_t ZGFX_MATCH_TABLE[] = {
 	{ 9, 382, 24, 17094304 }, // 101111110
 };
 
-/* Limits from [MS-RDPEGFX] 3.1.9.1.2 (So failures here are malformed
- * packets, not limitations of the implementation.) */
+
 struct _zgfx_context_t{
 	uint8_t historyBuffer[2500000];
 	uint32_t historyIndex;
@@ -253,7 +252,7 @@ zgfx_write_raw(zgfx_context_t *zgfx, bitstream_t *b, uint32_t count)
 	uint32_t rest, tocopy;
 
 	/* first copy in the output buffer */
-	if (count > 65535 - zgfx->outputCount)
+	if (zgfx->outputCount > 65535 - count)
 		return false;
 
 	if (!bitstream_copyraw(b, &(zgfx->outputSegment[zgfx->outputCount]), count))
@@ -289,7 +288,7 @@ zgfx_write_from_history(zgfx_context_t *zgfx, uint32_t distance, uint32_t count)
 	uint32_t remainingCount, copyTemplateSize, toCopy;
 	uint8_t *outputPtr;
 
-	if (count > 65535 - zgfx->outputCount)
+	if (zgfx->outputCount > 65535 - count)
 		return false;
 
 	remainingCount = count;
@@ -339,9 +338,6 @@ rdp8_decompress_segment(zgfx_context_t *zgfx, tvbuff_t *tvb)
 	len--;
 
 	if (!(flags & ZGX_PACKET_COMPRESSED)) {
-		if (len > 65535) {
-			return false;
-		}
 		tvbuff_t *raw = tvb_new_subset_remaining(tvb, 1);
 		zgfx_write_history_buffer_tvb(zgfx, raw, len);
 
@@ -513,15 +509,12 @@ rdp8_decompress(zgfx_context_t *zgfx, wmem_allocator_t *allocator, tvbuff_t *tvb
 			offset += 4;
 
 			zgfx->outputCount = 0;
-			if (!rdp8_decompress_segment(zgfx, tvb_new_subset_length(tvb, offset, segment_size))) {
-				wmem_free(allocator, output);
+			if (!rdp8_decompress_segment(zgfx, tvb_new_subset_length(tvb, offset, segment_size)))
 				return NULL;
-			}
 
 			output_consumed += zgfx->outputCount;
 			if (output_consumed > uncompressed_size) {
 				// TODO: error message ?
-				wmem_free(allocator, output);
 				return NULL;
 			}
 			memcpy(output_ptr, zgfx->outputSegment, zgfx->outputCount);

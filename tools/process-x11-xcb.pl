@@ -303,19 +303,19 @@ eot
             print $decl "static int ${regname};\n";
             print $reg "{ &$regname, { \"$fieldname\", \"x11.glx.render.$name.$fieldname\", FT_NONE, BASE_NONE, NULL, 0, NULL, HFILL }},\n";
             print $decl "static int ${regname}_signed;\n";
-            print $reg "{ &${regname}_signed, { \"$fieldname\", \"x11.glx.render.$name.$fieldname.signed\", FT_INT8, BASE_DEC, NULL, 0, NULL, HFILL }},\n";
+            print $reg "{ &${regname}_signed, { \"$fieldname\", \"x11.glx.render.$name.$fieldname\", FT_INT8, BASE_DEC, NULL, 0, NULL, HFILL }},\n";
             print $decl "static int ${regname}_unsigned;\n";
-            print $reg "{ &${regname}_unsigned, { \"$fieldname\", \"x11.glx.render.$name.$fieldname.unsigned\", FT_UINT8, BASE_DEC, NULL, 0, NULL, HFILL }},\n";
+            print $reg "{ &${regname}_unsigned, { \"$fieldname\", \"x11.glx.render.$name.$fieldname\", FT_UINT8, BASE_DEC, NULL, 0, NULL, HFILL }},\n";
             print $decl "static int ${regname}_item_card16;\n";
-            print $reg "{ &${regname}_item_card16, { \"$fieldname\", \"x11.glx.render.$name.$fieldname.card16\", FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL }},\n";
+            print $reg "{ &${regname}_item_card16, { \"$fieldname\", \"x11.glx.render.$name.$fieldname\", FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL }},\n";
             print $decl "static int ${regname}_item_int16;\n";
-            print $reg "{ &${regname}_item_int16, { \"$fieldname\", \"x11.glx.render.$name.$fieldname.int16\", FT_INT16, BASE_DEC, NULL, 0, NULL, HFILL }},\n";
+            print $reg "{ &${regname}_item_int16, { \"$fieldname\", \"x11.glx.render.$name.$fieldname\", FT_INT16, BASE_DEC, NULL, 0, NULL, HFILL }},\n";
             print $decl "static int ${regname}_item_card32;\n";
-            print $reg "{ &${regname}_item_card32, { \"$fieldname\", \"x11.glx.render.$name.$fieldname.card32\", FT_UINT32, BASE_DEC, NULL, 0, NULL, HFILL }},\n";
+            print $reg "{ &${regname}_item_card32, { \"$fieldname\", \"x11.glx.render.$name.$fieldname\", FT_UINT32, BASE_DEC, NULL, 0, NULL, HFILL }},\n";
             print $decl "static int ${regname}_item_int32;\n";
-            print $reg "{ &${regname}_item_int32, { \"$fieldname\", \"x11.glx.render.$name.$fieldname.int32\", FT_INT32, BASE_DEC, NULL, 0, NULL, HFILL }},\n";
+            print $reg "{ &${regname}_item_int32, { \"$fieldname\", \"x11.glx.render.$name.$fieldname\", FT_INT32, BASE_DEC, NULL, 0, NULL, HFILL }},\n";
             print $decl "static int ${regname}_item_float;\n";
-            print $reg "{ &${regname}_item_float, { \"$fieldname\", \"x11.glx.render.$name.$fieldname.float\", FT_FLOAT, BASE_NONE, NULL, 0, NULL, HFILL }},\n";
+            print $reg "{ &${regname}_item_float, { \"$fieldname\", \"x11.glx.render.$name.$fieldname\", FT_FLOAT, BASE_NONE, NULL, 0, NULL, HFILL }},\n";
         } else {
             print $decl "static int $regname;\n";
             if ($list and $info->{'size'} > 1) {
@@ -765,12 +765,15 @@ sub dissect_element($$$$$;$$)
                 print $impl $indent."*offsetp += $bytes;\n";
                 $length += $bytes;
             } else {
-                say $impl $indent.'pad_to_'.$align.'_bytes(tvb, offsetp, t);';
+                say $impl $indent.'if (*offsetp % '.$align.') {';
+                say $impl $indent."    proto_tree_add_item(t, hf_x11_unused, tvb, *offsetp, ($align - *offsetp % $align), ENC_NA);";
+                say $impl $indent."    *offsetp += ($align - *offsetp % $align);";
+                say $impl $indent."}";
                 if ($length % $align != 0) {
                     $length += $align - $length % $align;
                 }
                 if ($adjustlength) {
-                    say $impl $indent.'length = WS_ROUNDUP_'.$align.'(length);';
+                    say $impl $indent.'length = ((length + '.($align-1).') & ~'.($align-1).');';
                 }
             }
         }
@@ -1707,7 +1710,7 @@ static void dispatch_$header(tvbuff_t *tvb, packet_info *pinfo, int *offsetp, pr
     length = REQUEST_LENGTH();
 
     col_append_fstr(pinfo->cinfo, COL_INFO, "-%s",
-                          val_to_str(pinfo->pool, minor, $lookup_name,
+                          val_to_str(minor, $lookup_name,
                                      "<Unknown opcode %d>"));
     switch (minor) {
 eot
@@ -1807,7 +1810,6 @@ if (-e "$mesadir/gl_API.xml") {
             or die ("Cannot open $srcdir/x11-glx-render-enum.h for writing\n");
     add_generated_header($enum, $srcdir . '/mesa');
     print $enum "static const value_string mesa_enum[] = {\n";
-    print $impl '#include <wsutil/ws_roundup.h>'."\n\n";
     print $impl '#include "x11-glx-render-enum.h"'."\n\n";
 
     print("Mesa glRender:\n");

@@ -3,17 +3,12 @@
  * By Maxim Kropp <maxim.kropp@hotmail.de>
  * Copyright 2017 Maxim Kropp
  *
- * Improvement of Audio dissection, fixes and StageFeed dissection
- * By Roman Lichnock
- *
  * Supervised by Matthias Frank <matthew@cs.uni-bonn.de>
- * Copyright 2017-2026 Matthias Frank, Institute of Computer Science 4,
- * University of Bonn
+ * Copyright 2017 Matthias Frank, Institute of Computer Science 4, University of Bonn
  *
  * Stream Specification: https://www.ilda.com/resources/StandardsDocs/ILDA_IDN-Stream_rev001.pdf
  * This specification only defines IDN messages, the other packet commands
  * are part of the hello specification which is not released yet.
- * All ILDA Technical Standards can be found at https://www.ilda.com/technical.htm
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
@@ -25,7 +20,6 @@
 #include <config.h>
 #include <epan/packet.h>
 #include <epan/conversation.h>
-#include <epan/expert.h>
 
 #include <wsutil/array.h>
 
@@ -57,7 +51,6 @@
 #define IDNCT_OCTET_SEGMENT		0x10
 #define IDNCT_OCTET_STRING		0x11
 #define IDNCT_DIMMER_LEVELS		0x18
-#define IDNCT_AUDIO_WAVE_SAMPLE		0x20
 
 /* Service Modes (CONT = continuous stream, DISC = discrete stream) */
 #define IDNSM_VOID				0x00
@@ -67,7 +60,6 @@
 #define IDNSM_LP_EFFECTS_DISC	0x04
 #define IDNSM_DMX512_CONT		0x05
 #define IDNSM_DMX512_DISC		0x06
-#define IDNSM_AUDIO_WAVE_SEGMENTS	0x0C
 
 /* Dictionary Tags */
 #define IDNTAG_PRECISION			0x4010
@@ -102,35 +94,22 @@
 /* Other */
 #define IDNO_VOID_AREA	0xF
 
-/* StageFeed commands */
-#define STAGEFEED_START 0x70
-#define STAGEFEED_STOP 0x71
-#define STAGEFEED_DRAINROUTE_REQUEST 0x78
-#define STAGEFEED_DRAINROUTE_RESPONSE 0x79
-
 typedef struct {
 	bool has_config_header;
 	bool is_dmx;
 	uint16_t total_size;
 	uint8_t channel_id;
 	uint8_t chunk_type;
-	/* uint8_t stagefeed_command; */
-	float audio_freq;
-	uint16_t max_samples;
 } message_info;
 
 typedef struct {
 	uint8_t word_count;
 	uint8_t sdm;
 	char *dic_precision;
-	wmem_strbuf_t *sample_column_string;
+	char *sample_column_string;
 	int sample_size;
 	int *count;
 	int *base;
-	uint8_t audio_format;
-	uint8_t audio_channels;
-	uint8_t audio_layout;
-	uint8_t audio_category;
 } configuration_info;
 
 void proto_register_idn(void);
@@ -142,11 +121,9 @@ static int proto_idn;
 
 static int ett_idn;
 static int ett_idn_header_tree;
-static int ett_idn_hello_flags;
 static int ett_idn_scanreply_header_tree;
 static int ett_idn_channel_message_header_tree;
 static int ett_protocol_version;
-static int ett_unit_id;
 static int ett_status;
 static int ett_idn_cnl;
 static int ett_configuration_header;
@@ -158,24 +135,10 @@ static int ett_dic_tree;
 static int ett_data;
 static int ett_subdata;
 static int ett_dmx_subtree;
-static int ett_audio_header;
-static int ett_audio_samples;
-static int ett_audio_samples_subtree;
-static int ett_stagefeed_subtree;
-static int ett_stagefeed_drainroute_flags;
-
-static expert_field ei_idn_no_config;
-static expert_field ei_idn_scwc_unknown;
-static expert_field ei_idn_channels_over;
-static expert_field ei_idn_scm_mismatch;
-static expert_field ei_idn_audio_sample_size_mismatch;
-static expert_field ei_idn_stagefeed_command;
 
 /* IDN-Header */
 static int hf_idn_command;
 static int hf_idn_flags;
-static int hf_client_group;
-static int hf_idn_hello_four_bits_reserved;
 static int hf_idn_sequence;
 static int hf_idn_total_size;
 
@@ -192,9 +155,6 @@ static int hf_idn_ocpd;
 static int hf_idn_rt;
 static int hf_idn_reserved8;
 static int hf_idn_unit_id;
-static int hf_idn_uid_length;
-static int hf_idn_uid_category;
-static int hf_idn_uid;
 static int hf_idn_name;
 
 /* Service Map Response */
@@ -234,28 +194,6 @@ static int hf_idn_offset;
 static int hf_idn_dlim;
 static int hf_idn_reserved;
 
-/* Audio Dictionary Tags */
-static int hf_idn_audio_dictionary_tag;
-static int hf_idn_category;
-static int hf_idn_format;
-static int hf_idn_subcategory;
-static int hf_idn_parameter;
-static int hf_idn_suffix_length;
-static int hf_idn_layout;
-static int hf_idn_4bit_channels;
-static int hf_idn_8bit_channels;
-
-/* Audio Header */
-static int hf_idn_audio_flags;
-static int hf_idn_audio_duration;
-static int hf_idn_audio_flags_two_bits_reserved;
-static int hf_idn_audio_flags_four_bits_reserved;
-static int hf_idn_audio_flags_scm;
-
-/* Audio Samples */
-static int hf_idn_audio_sample_format_zero;
-static int hf_idn_audio_sample_format_one;
-static int hf_idn_audio_sample_format_two;
 /* Tags */
 static int hf_idn_gts;
 static int hf_idn_gts_void;
@@ -296,29 +234,9 @@ static int hf_idn_dmx_count;
 static int hf_idn_dmx_dls;
 static int hf_idn_dmx_unknown;
 
-/* StageFeed */
-static int hf_stagefeed_command;
-static int hf_stagefeed_flags;
-static int hf_stagefeed_sequence;
-static int hf_stagefeed_struct_size;
-static int hf_stagefeed_status_cmd;
-static int hf_stagefeed_capture_id;
-static int hf_stagefeed_service_id;
-static int hf_stagefeed_bridge_type;
-static int hf_stagefeed_port;
-static int hf_stagefeed_address;
-static int hf_stagefeed_result;
-static int hf_stagefeed_reserved;
-static int hf_drainroute_flag_persist;
-static int hf_drainroute_flag_capture_id_wildcard;
-static int hf_drainroute_flag_service_id_wildcard;
-
 /* Acknowledgement */
 static int hf_idn_result_code;
 static int hf_idn_event_flags;
-
-/* Long Bitmasks that need defining */
-
 
 static const value_string command_code[] = {
 	{ IDNCMD_VOID, "VOID" },
@@ -344,16 +262,6 @@ static const value_string chunk_type[] = {
 	{ IDNCT_OCTET_STRING, "Octet String" },
 	{ IDNCT_DIMMER_LEVELS, "Dimmer Levels" },
 	{ IDNCT_LP_FRAME_SF, "Laser Projector Frame Samples (sequel fragment)" },
-	{ IDNCT_AUDIO_WAVE_SAMPLE, "Audio Wave Samples"},
-	{ 0, NULL}
-};
-static const value_string chunk_type_header[] = {
-	{ IDNCT_LP_WAVE_SAMPLE, "Wave Sample" },
-	{ IDNCT_LP_FRAME_CHUNK, "Frame Sample" },
-	{ IDNCT_LP_FRAME_FF, "Frame Sample" },
-	{ IDNCT_OCTET_SEGMENT, "Octet Segment" },
-	{ IDNCT_OCTET_STRING, "Octet String" },
-	{ IDNCT_DIMMER_LEVELS, "Dimmer Levels" },
 	{ 0, NULL}
 };
 static const value_string cfl_string[] = {
@@ -370,7 +278,6 @@ static const value_string service_mode_string[] = {
 	{ IDNSM_LP_EFFECTS_DISC, "Laser Projector Effects (Discrete)" },
 	{ IDNSM_DMX512_CONT, "DMX512 (Continuous)" },
 	{ IDNSM_DMX512_DISC, "DMX512 (Discrete)" },
-	{ IDNSM_AUDIO_WAVE_SEGMENTS, "Audio: Stream of waveform segments"},
 	{ 0, NULL}
 };
 static const value_string gts_glin[] = {
@@ -410,15 +317,6 @@ static const value_string idn_color[] = {
 	{ 488, "Optional(U3), used as cyan" },
 	{ 0, NULL}
 };
-static const value_string idn_cat_color[] = {
-	{ IDNTAG_OPTIONAL_U1, "U1" },
-	{ IDNTAG_COLOR_BLUE, "B" },
-	{ IDNTAG_OPTIONAL_U3, "U3" },
-	{ IDNTAG_COLOR_GREEN, "G" },
-	{ IDNTAG_OPTIONAL_U2, "U2" },
-	{ IDNTAG_COLOR_RED, "R" },
-	{ 0, NULL}
-};
 static const value_string result_code[] = {
 	{ 0x00, "Message successfully received and passed to the IDN session" },
 	{ 0xEB, "Empty (no message) close command without established connection" },
@@ -427,45 +325,6 @@ static const value_string result_code[] = {
 	{ 0xEE, "Invalid payload" },
 	{ 0xEF, "Any other processing error" },
 	{ 0, NULL}
-};
-
-static const value_string category[] _U_= {
-	{ 0x0, "Decoder modifiers with suffix" },
-	{ 0x1, "Decoder modifiers with parameter" },
-	{ 0x4, "Sample word descriptors" },
-	{ 0x6, "Common channel layout descriptors" },
-	{ 0x8, "Multichannel layout descriptors" },
-	{ 0, NULL }
-};
-
-static const value_string format[] = {
-	{ 0x0, "8 Bit signed integer (one octet)" },
-	{ 0x1, "16 Bit signed integer (two octets)" },
-	{ 0x2, "24 Bit signed integer (three octets)" },
-	{ 0, NULL }
-};
-
-static const value_string drainroute_response[] = {
-	{ 0x00, "Successful, but empty request" },
-	{ 0xFF, "General Error" },
-	{ 0xFE, "Packet Length Mismatch"} ,
-	{ 0xFD, "Invalid Struct Size" },
-	{ 0xFC, "Invalid Parameter" },
-	{ 0xFB, "Invalid Route Command" },
-	{ 0xFA, "Invalid Flags" },
-	{ 0xF9, "Invalid Bridge Type" },
-	{ 0xF8, "Verification Mismatch" },
-	{ 0xEF, "Invalid Capture ID" },
-	{ 0xEE, "Resource Allocation Error" },
-	{ 0, NULL}
-};
-
-static const value_string stagefeed_command[] = {
-	{ STAGEFEED_START, "Start" },
-	{ STAGEFEED_STOP, "Stop" },
-	{ STAGEFEED_DRAINROUTE_REQUEST, "Drainroute Request"},
-	{ STAGEFEED_DRAINROUTE_RESPONSE, "Drainroute Response"},
-	{ 0, NULL }
 };
 
 static int get_service_match(uint8_t flags) {
@@ -506,13 +365,36 @@ static void determine_message_type(packet_info *pinfo, message_info *minfo) {
 				col_append_str(pinfo->cinfo, COL_INFO, "-SEQ");
 			}
 			break;
-		case IDNCT_AUDIO_WAVE_SAMPLE:
-			col_append_str(pinfo->cinfo, COL_INFO, "-AUDIO");
-			break;
 		default:
 			col_append_str(pinfo->cinfo, COL_INFO, "-UNKNOWN");
 	}
-	return;
+}
+
+static void determine_color(uint16_t catsub, configuration_info *config) {
+	char *column_str = config->sample_column_string;
+	const int l = (const int)strlen(column_str);
+	switch(catsub) {
+		case IDNTAG_COLOR_RED:
+			snprintf(column_str+l, MAX_BUFFER-l, " R");
+			break;
+		case IDNTAG_COLOR_GREEN:
+			snprintf(column_str+l, MAX_BUFFER-l, " G");
+			break;
+		case IDNTAG_COLOR_BLUE:
+			snprintf(column_str+l, MAX_BUFFER-l, " B");
+			break;
+		case IDNTAG_OPTIONAL_U1:
+			snprintf(column_str+l, MAX_BUFFER-l, " U1");
+			break;
+		case IDNTAG_OPTIONAL_U2:
+			snprintf(column_str+l, MAX_BUFFER-l, " U2");
+			break;
+		case IDNTAG_OPTIONAL_U3:
+			snprintf(column_str+l, MAX_BUFFER-l, " U3");
+			break;
+		default:
+			snprintf(column_str+l, MAX_BUFFER-l, " C");
+	}
 }
 
 static int dissect_idn_message_acknowledgement(tvbuff_t *tvb, int offset, proto_tree *idn_tree) {
@@ -550,80 +432,80 @@ static configuration_info *get_configuration_info(packet_info *pinfo, int channe
 			config = (configuration_info *)wmem_tree_lookup32_le(config_tree, pinfo->num);
 		}
 	}
-
+	if(!config)
+		col_append_str(pinfo->cinfo, COL_INFO, ", no valid Configuration");
 	return config;
 }
 
-static int dissect_idn_dmx_sample_values(tvbuff_t *tvb, packet_info* pinfo, int offset, proto_tree *idn_dmx_subtree, uint16_t data_size, int base) {
-	int i, j;
+static int dissect_idn_dmx_sample_values(tvbuff_t *tvb, int offset, proto_tree *idn_dmx_subtree, uint16_t data_size, int base) {
+	int i, j, l;
 	short int rest;
-	wmem_strbuf_t* values;
+	char values[MAX_BUFFER];
 
 	for(i=0; i+16<=data_size; i+=16) {
-		values = wmem_strbuf_new(pinfo->pool, "");
+		l = 0;
 		for(j=1; j<16; j++){
-			wmem_strbuf_append_printf(values, " %3u", tvb_get_uint8(tvb, offset+j));
+			l += snprintf(values+l, MAX_BUFFER-l, " %3d", tvb_get_uint8(tvb, offset+j));
 		}
-		proto_tree_add_bytes_format(idn_dmx_subtree, hf_idn_gts_sample, tvb, offset, 16, NULL, "%3d: %s", base+i+1, wmem_strbuf_get_str(values));
+		proto_tree_add_int_format(idn_dmx_subtree, hf_idn_gts_sample, tvb, offset, 16, 16, "%3d: %s", base+i, values);
 		offset += 16;
 	}
 	rest = data_size - i;
 	if(rest > 0) {
-		values = wmem_strbuf_new(pinfo->pool, "");
+		l = 0;
 		for(j=0; j<rest; j++){
-			wmem_strbuf_append_printf(values, " %3u", tvb_get_uint8(tvb, offset+j));
+			l += snprintf(values+l, MAX_BUFFER-l, " %3d", tvb_get_uint8(tvb, offset+j));
 		}
-		proto_tree_add_bytes_format(idn_dmx_subtree, hf_idn_gts_sample, tvb, offset, rest, NULL, "%3d: %s", base+i+1, wmem_strbuf_get_str(values));
+		proto_tree_add_int_format(idn_dmx_subtree, hf_idn_gts_sample, tvb, offset, rest, rest, "%3d: %s", base+i, values);
 		offset += rest;
 	}
 	return offset;
 }
 
-static void set_laser_sample_values_string(tvbuff_t *tvb, int offset, configuration_info *config, wmem_strbuf_t* values) {
-        /* XXX - The specification says that tags can be "followed by precision
-         * tag to extend the numeric range to 16 bit *or higher*." (emphasis
-         * added), so presumably this should handle higher precision. Make sure
-         * to change the size of dic_precision (or test it) when doing so. */
+static void set_laser_sample_values_string(tvbuff_t *tvb, int offset, configuration_info *config, char *values) {
 	int i;
-	if((config->dic_precision)[1] == 1)
-		wmem_strbuf_append_printf(values, "%5d", tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN));
-	else
-		wmem_strbuf_append_printf(values, "%5d", tvb_get_uint8(tvb, offset));
+	int l = 0;
 
-	for(i=1; i<config->sample_size; i++){
-		if((config->dic_precision)[i] == 1) {
+	if((config->dic_precision)[2] == 1)
+		l += snprintf(values, MAX_BUFFER, "%5d", tvb_get_uint16(tvb, offset, 2));
+	else
+		l += snprintf(values, MAX_BUFFER, "%5d", tvb_get_uint8(tvb, offset));
+
+	for(i=1; i<config->sample_size && (l < MAX_BUFFER-100); i++){
+		if((config->dic_precision)[i+1] == 1) {
 			//do nothing
-		}else if((config->dic_precision)[i+1] == 1) {
-			wmem_strbuf_append_printf(values, " %5d", tvb_get_uint16(tvb, offset+i, ENC_BIG_ENDIAN));
+		}else if((config->dic_precision)[i+2] == 1) {
+			l += snprintf(values+l, MAX_BUFFER-l, " %5d", tvb_get_uint16(tvb, offset+i, 2));
 			i++;
 		}else {
-			wmem_strbuf_append_printf(values, " %5d", tvb_get_uint8(tvb, offset+i));
+			l += snprintf(values+l, MAX_BUFFER-l, " %5d", tvb_get_uint8(tvb, offset+i));
 		}
 	}
 }
 
-static int dissect_idn_octet_segment(tvbuff_t *tvb, packet_info* pinfo, int offset, proto_tree *idn_tree) {
-	int i, j;
+static int dissect_idn_octet_segment(tvbuff_t *tvb, int offset, proto_tree *idn_tree) {
+	int i, j, l;
 	short int rest;
-	wmem_strbuf_t* values;
+	char values[MAX_BUFFER];
+	values[0] = '\0';
 	int data_size = tvb_reported_length_remaining(tvb, offset);
 	proto_tree *idn_samples_tree = proto_tree_add_subtree(idn_tree, tvb, offset, data_size, ett_data, NULL, "Octets");
 
 	for(i=0; i+16<=data_size; i+=16) {
-		values = wmem_strbuf_new(pinfo->pool, "");
-		for(j=0; j<16; j++){
-			wmem_strbuf_append_printf(values, " %3d", tvb_get_uint8(tvb, offset+j));
+		l = 0;
+		for(j=0; j<16 && (l < MAX_BUFFER-100); j++){
+			l += snprintf(values+l, MAX_BUFFER-l, " %3d", tvb_get_int8(tvb, offset+j));
 		}
-		proto_tree_add_bytes_format(idn_samples_tree, hf_idn_gts_sample, tvb, offset, 16, NULL, "%s", wmem_strbuf_get_str(values));
+		proto_tree_add_int_format(idn_samples_tree, hf_idn_gts_sample, tvb, offset, 16, 16, "%s", values);
 		offset += 16;
 	}
 	rest = data_size - i;
 	if(rest > 0) {
-		values = wmem_strbuf_new(pinfo->pool, "");
-		for(j=0; j<rest; j++){
-			wmem_strbuf_append_printf(values, " %3d", tvb_get_uint8(tvb, offset+j));
+		l = 0;
+		for(j=0; j<rest && (l < MAX_BUFFER-100); j++){
+			l += snprintf(values+l, MAX_BUFFER-l, " %3d", tvb_get_int8(tvb, offset+j));
 		}
-		proto_tree_add_bytes_format(idn_samples_tree, hf_idn_gts_sample, tvb, offset, rest, NULL, "%s", wmem_strbuf_get_str(values));
+		proto_tree_add_int_format(idn_samples_tree, hf_idn_gts_sample, tvb, offset, rest, rest, "%s", values);
 		offset += rest;
 	}
 	return offset;
@@ -645,7 +527,7 @@ static int dissect_idn_dmx_data(tvbuff_t *tvb, packet_info *pinfo, int offset, p
 		if(count[i] != -1) {
 			data_size = count[i];
 			if(data_size + base_value > MAX_CHANNELS) {
-				expert_add_info_format(pinfo, idn_samples_tree, &ei_idn_channels_over, "Over %5d Channels", MAX_CHANNELS);
+				col_append_fstr(pinfo->cinfo, COL_INFO, " (Error: over %5d Channels)", MAX_CHANNELS);
 				return offset;
 			}
 			idn_dmx_subtree = proto_tree_add_subtree_format(idn_samples_tree, tvb, offset, data_size, ett_dmx_subtree, NULL, "Range: %3d - %3d", base[i], base_value+data_size);
@@ -660,23 +542,24 @@ static int dissect_idn_dmx_data(tvbuff_t *tvb, packet_info *pinfo, int offset, p
 			}
 			idn_dmx_subtree = proto_tree_add_subtree_format(idn_samples_tree, tvb, offset, data_size, ett_dmx_subtree, NULL, "Range: %3d - %3d", base[i], base_value+data_size);
 		}
-		offset = dissect_idn_dmx_sample_values(tvb, pinfo, offset, idn_dmx_subtree, data_size, base_value);
+		offset = dissect_idn_dmx_sample_values(tvb, offset, idn_dmx_subtree, data_size, base_value);
 	}
 	return offset;
 }
 
-static int dissect_idn_laser_data(tvbuff_t *tvb, packet_info* pinfo, int offset, proto_tree *idn_tree, configuration_info *config) {
+static int dissect_idn_laser_data(tvbuff_t *tvb, int offset, proto_tree *idn_tree, configuration_info *config) {
+	char values[MAX_BUFFER];
+	values[0] = '\0';
 	int i;
 	int laser_data_size = tvb_reported_length_remaining(tvb, offset);
-	wmem_strbuf_t* values;
 
 	if (config->sample_size == 0) {
-		/* TODO: log expert info error? */
-		return 0;
+	    /* TODO: log expert info error? */
+	    return 0;
 	}
 
 	int sample_size = laser_data_size/config->sample_size;
-	proto_tree *idn_samples_tree = proto_tree_add_subtree_format(idn_tree, tvb, offset, laser_data_size, ett_data, NULL, "Samples %s", wmem_strbuf_get_str(config->sample_column_string));
+	proto_tree *idn_samples_tree = proto_tree_add_subtree_format(idn_tree, tvb, offset, laser_data_size, ett_data, NULL, "Samples %s", config->sample_column_string);
 	proto_tree *idn_samples_subtree = NULL;
 
 	for(i=1; i<=sample_size; i++) {
@@ -685,36 +568,61 @@ static int dissect_idn_laser_data(tvbuff_t *tvb, packet_info* pinfo, int offset,
 		}else if((i-1)%10 == 0) {
 			idn_samples_subtree = proto_tree_add_subtree_format(idn_samples_tree, tvb, offset, config->sample_size*10, ett_subdata, NULL, "Samples %3d - %3d", i, i+9);
 		}
-		values = wmem_strbuf_new(pinfo->pool, "");
 		set_laser_sample_values_string(tvb, offset, config, values);
-		proto_tree_add_bytes_format(idn_samples_subtree, hf_idn_gts_sample, tvb, offset, config->sample_size, NULL,  "Sample %3d: %s", i, wmem_strbuf_get_str(values));
+		proto_tree_add_int_format(idn_samples_subtree, hf_idn_gts_sample, tvb, offset, config->sample_size, config->sample_size,  "Sample %3d: %s", i, values);
 		offset += config->sample_size;
 	}
 	return offset;
 }
 
-static int dissect_idn_dimmer_levels_chunk_header(tvbuff_t *tvb, int offset, proto_tree* chunk_header_tree, proto_tree* flag_tree) {
-
-	proto_tree_add_item(flag_tree, hf_idn_four_bits_reserved, tvb, offset, 1, ENC_BIG_ENDIAN);
+static int dissect_idn_dimmer_levels_chunk_header(tvbuff_t *tvb, int offset, proto_tree *idn_tree) {
+	static int * const dimmer_levels_chunk_flags[] = {
+		&hf_idn_two_bits_reserved_1,
+		&hf_idn_scm,
+		&hf_idn_four_bits_reserved,
+		NULL
+	};
+	proto_tree *chunk_header_tree = proto_tree_add_subtree(idn_tree, tvb, offset, 4, ett_chunk_header_tree, NULL, "Dimmer Levels Chunk Header");
+	proto_tree_add_bitmask(chunk_header_tree, tvb, offset, hf_idn_chunk_header_flags, ett_chunk_header_flags, dimmer_levels_chunk_flags, ENC_BIG_ENDIAN);
 	offset += 1;
-	proto_tree_add_item(chunk_header_tree, hf_idn_reserved, tvb, offset, 3, ENC_NA);
-	offset += 3;
+	proto_tree_add_item(chunk_header_tree, hf_idn_reserved, tvb, offset, 1, ENC_BIG_ENDIAN);
+	offset += 1;
+	proto_tree_add_item(chunk_header_tree, hf_idn_reserved, tvb, offset, 1, ENC_BIG_ENDIAN);
+	offset += 1;
+	proto_tree_add_item(chunk_header_tree, hf_idn_reserved, tvb, offset, 1, ENC_BIG_ENDIAN);
+	offset += 1;
 	return offset;
 }
 
-static int dissect_idn_octet_string_chunk_header(tvbuff_t *tvb, int offset, proto_tree* chunk_header_tree, proto_tree* flag_tree) {
-
-	proto_tree_add_item(flag_tree, hf_idn_four_bits_reserved, tvb, offset, 1, ENC_BIG_ENDIAN);
+static int dissect_idn_octet_string_chunk_header(tvbuff_t *tvb, int offset, proto_tree *idn_tree) {
+	static int * const octet_string_chunk_flags[] = {
+		&hf_idn_two_bits_reserved_1,
+		&hf_idn_scm,
+		&hf_idn_four_bits_reserved,
+		NULL
+	};
+	proto_tree *chunk_header_tree = proto_tree_add_subtree(idn_tree, tvb, offset, 4, ett_chunk_header_tree, NULL, "Octet String Chunk Header");
+	proto_tree_add_bitmask(chunk_header_tree, tvb, offset, hf_idn_chunk_header_flags, ett_chunk_header_flags, octet_string_chunk_flags, ENC_BIG_ENDIAN);
 	offset += 1;
-	proto_tree_add_item(chunk_header_tree, hf_idn_reserved, tvb, offset, 3, ENC_NA);
-	offset += 3;
+	proto_tree_add_item(chunk_header_tree, hf_idn_reserved, tvb, offset, 1, ENC_BIG_ENDIAN);
+	offset += 1;
+	proto_tree_add_item(chunk_header_tree, hf_idn_reserved, tvb, offset, 1, ENC_BIG_ENDIAN);
+	offset += 1;
+	proto_tree_add_item(chunk_header_tree, hf_idn_reserved, tvb, offset, 1, ENC_BIG_ENDIAN);
+	offset += 1;
 	return offset;
 }
 
-static int dissect_idn_octet_segment_chunk_header(tvbuff_t *tvb, int offset, proto_tree* chunk_header_tree, proto_tree* flag_tree) {
-
-	proto_tree_add_item(flag_tree, hf_idn_three_bits_reserved, tvb, offset, 1, ENC_BIG_ENDIAN);
-	proto_tree_add_item(flag_tree, hf_idn_dlim, tvb, offset, 1, ENC_BIG_ENDIAN);
+static int dissect_idn_octet_segment_chunk_header(tvbuff_t *tvb, int offset, proto_tree *idn_tree) {
+	static int * const octet_segment_chunk_flags[] = {
+		&hf_idn_two_bits_reserved_1,
+		&hf_idn_scm,
+		&hf_idn_three_bits_reserved,
+		&hf_idn_dlim,
+		NULL
+	};
+	proto_tree *chunk_header_tree = proto_tree_add_subtree(idn_tree, tvb, offset, 4, ett_chunk_header_tree, NULL, "Octet Segment Chunk Header");
+	proto_tree_add_bitmask(chunk_header_tree, tvb, offset, hf_idn_chunk_header_flags, ett_chunk_header_flags, octet_segment_chunk_flags, ENC_BIG_ENDIAN);
 	offset += 1;
 	proto_tree_add_item(chunk_header_tree, hf_idn_chunk_data_sequence, tvb, offset, 1, ENC_BIG_ENDIAN);
 	offset += 1;
@@ -723,66 +631,56 @@ static int dissect_idn_octet_segment_chunk_header(tvbuff_t *tvb, int offset, pro
 	return offset;
 }
 
-static int dissect_idn_frame_chunk_header(tvbuff_t *tvb, int offset, proto_tree* chunk_header_tree, proto_tree* flag_tree) {
-
-	proto_tree_add_item(flag_tree, hf_idn_three_bits_reserved, tvb, offset, 1, ENC_BIG_ENDIAN);
-	proto_tree_add_item(flag_tree, hf_idn_once, tvb, offset, 1, ENC_BIG_ENDIAN);
+static int dissect_idn_frame_chunk_header(tvbuff_t *tvb, int offset, proto_tree *idn_tree) {
+	static int * const frame_sample_chunk_flags[] = {
+		&hf_idn_two_bits_reserved_1,
+		&hf_idn_scm,
+		&hf_idn_three_bits_reserved,
+		&hf_idn_once,
+		NULL
+	};
+	proto_tree *chunk_header_tree = proto_tree_add_subtree(idn_tree, tvb, offset, 4, ett_chunk_header_tree, NULL, "Frame Sample Chunk Header");
+	proto_tree_add_bitmask(chunk_header_tree, tvb, offset, hf_idn_chunk_header_flags, ett_chunk_header_flags, frame_sample_chunk_flags, ENC_BIG_ENDIAN);
 	offset += 1;
 	proto_tree_add_item(chunk_header_tree, hf_idn_duration, tvb, offset, 3, ENC_BIG_ENDIAN);
 	offset += 3;
 	return offset;
 }
 
-static int dissect_idn_wave_chunk_header(tvbuff_t *tvb, int offset, proto_tree* chunk_header_tree, proto_tree* flag_tree) {
-
-	proto_tree_add_item(flag_tree, hf_idn_four_bits_reserved, tvb, offset, 1, ENC_BIG_ENDIAN);
+static int dissect_idn_wave_chunk_header(tvbuff_t *tvb, int offset, proto_tree *idn_tree) {
+	static int * const wave_sample_chunk_flags[] = {
+		&hf_idn_two_bits_reserved_1,
+		&hf_idn_scm,
+		&hf_idn_four_bits_reserved,
+		NULL
+	};
+	proto_tree *chunk_header_tree = proto_tree_add_subtree(idn_tree, tvb, offset, 4, ett_chunk_header_tree, NULL, "Wave Sample Chunk Header");
+	proto_tree_add_bitmask(chunk_header_tree, tvb, offset, hf_idn_chunk_header_flags, ett_chunk_header_flags, wave_sample_chunk_flags, ENC_BIG_ENDIAN);
 	offset += 1;
 	proto_tree_add_item(chunk_header_tree, hf_idn_duration, tvb, offset, 3, ENC_BIG_ENDIAN);
 	offset += 3;
 	return offset;
 }
 
-static int dissect_idn_chunk_header(tvbuff_t* tvb, packet_info* pinfo, int offset, proto_tree* idn_tree, message_info* minfo, configuration_info* config) {
-
-	proto_tree *chunk_header_tree, *flag_tree;
-	proto_item *flag_item, *scm_item;
-	uint32_t scm;
-
-	switch (minfo->chunk_type) {
+static int dissect_idn_chunk_header(tvbuff_t *tvb, int offset, proto_tree *idn_tree, message_info *minfo) {
+	switch(minfo->chunk_type) {
 		case IDNCT_LP_WAVE_SAMPLE:
+			offset = dissect_idn_wave_chunk_header(tvb, offset, idn_tree);
+			break;
 		case IDNCT_LP_FRAME_CHUNK:
+			offset = dissect_idn_frame_chunk_header(tvb, offset, idn_tree);
+			break;
 		case IDNCT_LP_FRAME_FF:
+			offset = dissect_idn_frame_chunk_header(tvb, offset, idn_tree);
+			break;
 		case IDNCT_OCTET_SEGMENT:
+			offset = dissect_idn_octet_segment_chunk_header(tvb, offset, idn_tree);
+			break;
 		case IDNCT_OCTET_STRING:
+			offset = dissect_idn_octet_string_chunk_header(tvb, offset, idn_tree);
+			break;
 		case IDNCT_DIMMER_LEVELS:
-			chunk_header_tree = proto_tree_add_subtree_format(idn_tree, tvb, offset, 4, ett_chunk_header_tree, NULL, "%s Chunk Header", val_to_str_const(minfo->chunk_type, chunk_type_header, "Unknown"));
-			flag_item = proto_tree_add_item(chunk_header_tree, hf_idn_chunk_header_flags, tvb, offset, 1, ENC_BIG_ENDIAN);
-			flag_tree = proto_item_add_subtree(flag_item, ett_chunk_header_flags);
-			proto_tree_add_item(flag_tree, hf_idn_two_bits_reserved_1, tvb, offset, 1, ENC_BIG_ENDIAN);
-			scm_item = proto_tree_add_item_ret_uint(flag_tree, hf_idn_scm, tvb, offset, 1, ENC_BIG_ENDIAN, &scm);
-			if (config->sdm != scm) {
-				expert_add_info(pinfo, scm_item, &ei_idn_scm_mismatch);
-				return offset;
-			}
-
-			switch (minfo->chunk_type) {
-			case IDNCT_LP_WAVE_SAMPLE:
-				offset = dissect_idn_wave_chunk_header(tvb, offset, chunk_header_tree, flag_tree);
-				break;
-			case IDNCT_LP_FRAME_CHUNK:
-			case IDNCT_LP_FRAME_FF:
-				offset = dissect_idn_frame_chunk_header(tvb, offset, chunk_header_tree, flag_tree);
-				break;
-			case IDNCT_OCTET_SEGMENT:
-				offset = dissect_idn_octet_segment_chunk_header(tvb, offset, chunk_header_tree, flag_tree);
-				break;
-			case IDNCT_OCTET_STRING:
-				offset = dissect_idn_octet_string_chunk_header(tvb, offset, chunk_header_tree, flag_tree);
-				break;
-			case IDNCT_DIMMER_LEVELS:
-				offset = dissect_idn_dimmer_levels_chunk_header(tvb, offset, chunk_header_tree, flag_tree);
-				break;
-			}
+			offset = dissect_idn_dimmer_levels_chunk_header(tvb, offset, idn_tree);
 			break;
 		default:
 			return offset;
@@ -810,7 +708,7 @@ static int dissect_idn_dimmer_level_subset(tvbuff_t *tvb, int offset, proto_tree
 
 	if(dls & 2) {
 		proto_tree_add_item(gts_tree, hf_idn_dmx_base, tvb, offset, 2, ENC_BIG_ENDIAN);
-		config->base[i-1] = tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN);
+		config->base[i-1] = tvb_get_uint16(tvb, offset, 2);
 		offset += 2;
 		(*dictionary_size) += 2;
 		if(dls & 1) {
@@ -830,7 +728,7 @@ static int dissect_idn_dmx_dictionary(tvbuff_t *tvb, int offset, proto_tree *idn
 	int i, j, curr_size;
 	bool words_found = 0;
 	int dictionary_size = 0;
-	uint8_t idepar; /* identifier + parameter */
+	uint8_t idepar; /* idetifier + parameter */
 	proto_tree *gts_tree = proto_tree_add_subtree(idn_tree, tvb, offset, -1, ett_dic_tree, NULL, "Dictionary");
 
 	for(i=1; i<=config->word_count; i++) {
@@ -895,11 +793,15 @@ static int dissect_idn_laser_gts(tvbuff_t *tvb, int offset, proto_tree *gts_tree
 }
 
 static int dissect_idn_x_area(tvbuff_t *tvb, int offset, proto_tree *gts_tree, uint16_t catsub, int *dictionary_size, configuration_info *config) {
+	char *column_str = config->sample_column_string;
+	const int l = (const int)strlen(column_str);
 
 	if(catsub == IDNTAG_OPTIONAL_U4) {
 		offset = dissect_idn_laser_gts(tvb, offset, gts_tree, hf_idn_gts_u4, dictionary_size, config, 1);
+		snprintf(column_str+l, MAX_BUFFER-l, " U4");
 	}else {
 		offset = dissect_idn_laser_gts(tvb, offset, gts_tree, hf_idn_gts_x, dictionary_size, config, 1);
+		snprintf(column_str+l, MAX_BUFFER-l, " X");
 	}
 
 	return offset;
@@ -908,14 +810,14 @@ static int dissect_idn_x_area(tvbuff_t *tvb, int offset, proto_tree *gts_tree, u
 static int dissect_idn_laser_dictionary(tvbuff_t *tvb, int offset, proto_tree *idn_tree, configuration_info *config) {
 	int i, j;
 	int dictionary_size = 0;
+	char *column_str = config->sample_column_string;
 	uint16_t catsub; /* category + subcategory */
 	proto_tree *gts_tree = proto_tree_add_subtree(idn_tree, tvb, offset, -1, ett_dic_tree, NULL, "Dictionary");
 
-	/* Reset the sample column data */
-	config->sample_column_string = wmem_strbuf_new_len(wmem_file_scope(), "", 0);
-	wmem_strbuf_append(config->sample_column_string, "(");
-	for(i=0; i < config->word_count*2; i++) {
-		catsub = tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN);
+	snprintf(column_str, MAX_BUFFER, "(");
+	for(i=1; i<=config->word_count*2; i++) {
+		catsub = tvb_get_uint16(tvb, offset, 2);
+		const int l = (const int)strlen(column_str);
 
 		if(catsub <= IDNO_VOID_AREA) {
 			offset = dissect_idn_laser_gts(tvb, offset, gts_tree, hf_idn_gts_void, &dictionary_size, config, 0);
@@ -933,38 +835,38 @@ static int dissect_idn_laser_dictionary(tvbuff_t *tvb, int offset, proto_tree *i
 			offset = dissect_idn_laser_gts(tvb, offset, gts_tree, hf_idn_gts_space_modifier, &dictionary_size, config, 0);
 		}else if(catsub == IDNTAG_NOP) {
 			offset = dissect_idn_laser_gts(tvb, offset, gts_tree, hf_idn_gts_nop, &dictionary_size, config, 1);
-			wmem_strbuf_append(config->sample_column_string, " NOP");
+			snprintf(column_str+l, MAX_BUFFER-l, " NOP");
 		}else if(catsub >= IDNTAG_HINT0 && catsub <= IDNTAG_HINT1) {
 			offset = dissect_idn_laser_gts(tvb, offset, gts_tree, hf_idn_gts_hint, &dictionary_size, config, 1);
-			wmem_strbuf_append(config->sample_column_string, " H");
+			snprintf(column_str+l, MAX_BUFFER-l, " H");
 		}else if(catsub >= IDNTAG_COORD_X && catsub <= IDNTAG_COORD_X_END) {
 			offset = dissect_idn_x_area(tvb, offset, gts_tree, catsub, &dictionary_size, config);
-			wmem_strbuf_append(config->sample_column_string, (catsub == IDNTAG_OPTIONAL_U4) ? " U4" : " X");
 		}else if(catsub >= IDNTAG_COORD_Y && catsub <= IDNTAG_COORD_Y_END) {
 			offset = dissect_idn_laser_gts(tvb, offset, gts_tree, hf_idn_gts_y, &dictionary_size, config, 1);
-			wmem_strbuf_append(config->sample_column_string, " Y");
+			snprintf(column_str+l, MAX_BUFFER-l, " Y");
 		}else if(catsub >= IDNTAG_COORD_Z && catsub <= IDNTAG_COORD_Z_END) {
 			offset = dissect_idn_laser_gts(tvb, offset, gts_tree, hf_idn_gts_z, &dictionary_size, config, 1);
-			wmem_strbuf_append(config->sample_column_string, " Z");
+			snprintf(column_str+l, MAX_BUFFER-l, " Z");
 		}else if(catsub >= IDNTAG_COLOR_START && catsub <= IDNTAG_COLOR_END) {
 			offset = dissect_idn_laser_gts(tvb, offset, gts_tree, hf_idn_gts_color, &dictionary_size, config, 1);
-			wmem_strbuf_append_printf(config->sample_column_string, " %s", val_to_str_const(catsub, idn_cat_color, "C"));
+			determine_color(catsub, config);
 		}else if(catsub == IDNTAG_WAVELENGTH_PREFIX) {
 			offset = dissect_idn_laser_gts(tvb, offset, gts_tree, hf_idn_gts_wavelength_prefix, &dictionary_size, config, 1);
-			wmem_strbuf_append(config->sample_column_string, " WP");
+			snprintf(column_str+l, MAX_BUFFER-l, " WP");
 		}else if(catsub == IDNTAG_INTENSITY) {
 			offset = dissect_idn_laser_gts(tvb, offset, gts_tree, hf_idn_gts_intensity, &dictionary_size, config, 1);
-			wmem_strbuf_append(config->sample_column_string, " I");
+			snprintf(column_str+l, MAX_BUFFER-l, " I");
 		}else if(catsub == IDNTAG_BEAM_BRUSH) {
 			offset = dissect_idn_laser_gts(tvb, offset, gts_tree, hf_idn_gts_beam_brush, &dictionary_size, config, 1);
-			wmem_strbuf_append(config->sample_column_string, " BB");
+			snprintf(column_str+l, MAX_BUFFER-l, " BB");
 		}else {
 			offset = dissect_idn_laser_gts(tvb, offset, gts_tree, hf_idn_gts, &dictionary_size, config, 1);
-			wmem_strbuf_append(config->sample_column_string, " U/R");
+			snprintf(column_str+l, MAX_BUFFER-l, " U/R");
 		}
 	}
 	proto_item_set_len(gts_tree, dictionary_size);
-	wmem_strbuf_append(config->sample_column_string, " )");
+	const int l = (const int)strlen(column_str);
+	snprintf(column_str+l, MAX_BUFFER-l, " )");
 
 	return offset;
 }
@@ -1037,12 +939,8 @@ static int dissect_idn_channel_configuration_header(tvbuff_t *tvb, packet_info *
 		config->word_count = word_count;
 		config->sdm = sdm;
 		config->sample_size = 0;
-                /* When getting a sample, the next tag is checked to see if it
-                 * is a precision tag. As a quick hack, just allocate an extra
-                 * array entry that is always 0. (XXX - Change if higher than
-                 * 16-bit precision is supported.) */
-		config->dic_precision = wmem_alloc0_array(wmem_file_scope(), char, (word_count*2)+1);
-		config->sample_column_string = wmem_strbuf_new(wmem_file_scope(), "");
+		config->dic_precision = wmem_alloc0_array(wmem_file_scope(), char, (255*2)+1);
+		config->sample_column_string = wmem_alloc0_array(wmem_file_scope(), char, MAX_BUFFER);
 		config->count = wmem_alloc0_array(wmem_file_scope(), int, word_count+1);
 		config->base = wmem_alloc0_array(wmem_file_scope(), int, word_count+1);
 		wmem_tree_insert32(config_tree, pinfo->num, config);
@@ -1058,7 +956,7 @@ static int dissect_idn_channel_configuration(tvbuff_t *tvb, packet_info *pinfo, 
 
 	configuration_info *config = *config_p;
 	if(config->word_count > 0) {
-		if(minfo->chunk_type == IDNCT_OCTET_SEGMENT || minfo->chunk_type == IDNCT_AUDIO_WAVE_SAMPLE) {
+		if(minfo->chunk_type == IDNCT_OCTET_SEGMENT) {
 			return offset;
 		}else if(minfo->is_dmx) {
 			offset = dissect_idn_dmx_dictionary(tvb, offset, idn_tree, config);
@@ -1081,7 +979,7 @@ static int dissect_idn_message_header(tvbuff_t *tvb, int offset, proto_tree *idn
 
 	proto_tree *idn_channel_message_header_tree = proto_tree_add_subtree(idn_tree, tvb, offset, 8, ett_idn_channel_message_header_tree, NULL, "Channel Message Header");
 	proto_tree_add_item(idn_channel_message_header_tree, hf_idn_total_size, tvb, offset, 2, ENC_BIG_ENDIAN);
-	minfo->total_size = tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN);
+	minfo->total_size = tvb_get_uint16(tvb, offset, 2);
 	offset += 2;
 	proto_tree_add_bitmask(idn_channel_message_header_tree, tvb, offset, hf_idn_cnl, ett_idn_cnl, cnl_data, ENC_BIG_ENDIAN);
 
@@ -1099,390 +997,64 @@ static int dissect_idn_message_header(tvbuff_t *tvb, int offset, proto_tree *idn
 	return offset;
 }
 
-static int dissect_idn_audio_category_0(tvbuff_t *tvb, packet_info *pinfo _U_, int offset, proto_tree *idn_tree){
-	static int * const audio_cat_0[] = {
-		&hf_idn_category,
-		&hf_idn_subcategory,
-		&hf_idn_parameter,
-		&hf_idn_suffix_length,
-		NULL
-	};
-	proto_tree_add_bitmask(idn_tree, tvb, offset, hf_idn_audio_dictionary_tag, ett_audio_header, audio_cat_0, ENC_BIG_ENDIAN);
-	return offset;
-}
-
-static int dissect_idn_audio_category_8(tvbuff_t *tvb, int offset, proto_tree *idn_tree, configuration_info *cinfo){
-
-	static int * const audio_cat_8[] = {
-		&hf_idn_category,
-		&hf_idn_format,
-		&hf_idn_8bit_channels,
-		NULL
-	};
-	uint8_t audio_format = tvb_get_uint8(tvb, offset);
-	uint8_t channels = tvb_get_uint8(tvb, offset + 1);
-	cinfo->audio_format = audio_format & 0x0F;
-	cinfo->audio_channels = channels;
-
-	proto_tree_add_bitmask(idn_tree, tvb, offset, hf_idn_audio_dictionary_tag, ett_audio_header, audio_cat_8, ENC_BIG_ENDIAN);
-
-	return offset;
-}
-
-static int dissect_idn_audio_category_6(tvbuff_t *tvb, int offset, proto_tree *idn_tree, configuration_info *cinfo){
-	//proto_tree_add_item(idn_tree, hf_idn_category, tvb, offset, 1, ENC_BIG_ENDIAN);
-	//offset += 1;
-	static int * const audio_cat_6[] = {
-		&hf_idn_category,
-		&hf_idn_format,
-		&hf_idn_layout,
-		&hf_idn_4bit_channels,
-		NULL
-	};
-	uint8_t audio_format = tvb_get_int8(tvb, offset);
-	uint8_t channels = tvb_get_int8(tvb, offset + 1);
-	uint8_t layout = channels & 0xF0;
-	audio_format = audio_format & 0x0F;
-	cinfo->audio_format = audio_format;
-	channels &= 0x0F;
-	cinfo->audio_channels = channels;
-	cinfo->audio_layout = layout;
-
-	proto_tree_add_bitmask(idn_tree, tvb, offset, hf_idn_audio_dictionary_tag, ett_audio_header, audio_cat_6, ENC_BIG_ENDIAN);
-	return offset;
-}
-
-static int dissect_idn_audio_dictionary(tvbuff_t *tvb, packet_info *pinfo _U_, int offset, proto_tree *idn_tree, configuration_info *config){
-	uint8_t det_category;
-	uint16_t current_tag;
-	int tag_count = config->word_count * 2;
-	proto_item *dictionary_tree = proto_tree_add_subtree(idn_tree, tvb, offset, tag_count, ett_dic_tree, NULL, "Dictionary");
-
-	for(int i = 0; i < tag_count; i++){
-		current_tag = tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN);
-		switch (current_tag) {
-			case 0x0000:
-				//add void tag
-				proto_tree_add_item(dictionary_tree, hf_idn_gts_void, tvb, offset, 2, ENC_BIG_ENDIAN);
-				offset += 2;
-				break;
-			default:
-				//determing category
-				det_category = tvb_get_uint8(tvb, offset);
-				det_category = det_category >> 4;
-				config->audio_category = det_category;
-				//dissect depending on category
-				switch (det_category) {
-					case 0x0:
-						dissect_idn_audio_category_0(tvb, pinfo, offset, dictionary_tree);
-						break;
-					case 0x6:
-						dissect_idn_audio_category_6(tvb, offset, dictionary_tree, config);
-						break;
-					case 0x8:
-						dissect_idn_audio_category_8(tvb, offset, dictionary_tree, config);
-						break;
-					default:
-						proto_item_append_text(dictionary_tree, "  Unknown Category: %u", det_category);
-				}
-				offset += 2;
-				break;
-		}
-	}
-	return offset;
-}
-
-static int dissect_idn_audio_header(tvbuff_t *tvb, int offset, proto_tree *idn_tree, message_info *minfo, configuration_info *config){
-
-	uint32_t duration;
-	int max_samples;
-	float freq;
-	uint16_t channels = config->audio_channels;
-
-	static int * const audio_flags[] = {
-		&hf_idn_audio_flags_two_bits_reserved,
-		&hf_idn_audio_flags_scm,
-		&hf_idn_audio_flags_four_bits_reserved,
-		NULL
-	};
-
-	proto_item *audio_header_tree = proto_tree_add_subtree(idn_tree, tvb, offset, 4, ett_audio_header, NULL, "Audio Header");
-
-	proto_tree_add_bitmask(audio_header_tree, tvb, offset, hf_idn_audio_flags, ett_audio_header, audio_flags, ENC_BIG_ENDIAN);
-	offset +=1;
-
-	duration = tvb_get_uint24(tvb, offset, ENC_BIG_ENDIAN);
-	proto_tree_add_item(audio_header_tree, hf_idn_audio_duration, tvb, offset, 3, ENC_BIG_ENDIAN);
-	offset+= 3;
-
-	// calculating sample count
-	max_samples = minfo->total_size;
-	max_samples -= 8;							// idn message header
-	max_samples -= 4;							// audio header
-	if (minfo->has_config_header) {				// configuration header
-		max_samples -= 4;
-		max_samples -= (config->word_count * 4);//dictionary
-	}
-	switch (config->audio_format) {
-		case 0x01:
-			max_samples /= 2;
-			break;
-		case 0x02:
-			max_samples /= 3;
-			break;
-		default: // nothing to be done for format 0, as it is 1 byte per sample
-			break;
-	}
-	// catching 0 channels case
-	if (channels == 0) {
-		channels = 1;
-	}
-	max_samples /= channels; // one sample covers all channels
-	minfo->max_samples = max_samples;
-
-	// calculating frequency
-	if (duration == 0) {
-		minfo->audio_freq = 0;
-	} else {
-		freq = (float)max_samples / (float)duration;
-		freq *= 1000; // duration is in milliseconds, so multiply by 1000 to get frequency in Hz
-	minfo->audio_freq = freq;
-	}
-	return offset;
-}
-
-static void add_audio_sample_description(proto_item *audio_samples_tree, configuration_info *config){
-	uint8_t audio_category = config->audio_category;
-	uint8_t channels = config->audio_channels;
-	uint8_t layout;
-
-	switch(audio_category){
-		case 0x6:
-			layout = config->audio_layout;
-			switch(layout){
-				case 0x1:
-					switch(channels){
-						case 0x06:
-							proto_item_append_text(audio_samples_tree, "Channel:	FL	FR	FC	LFE	BL	BR");
-							break;
-						case 0x08:
-							proto_item_append_text(audio_samples_tree, "Channel: FL FR FC LFE BL SL SR");
-							break;
-						default:
-							proto_item_append_text(audio_samples_tree, "Unknown category 6 layout: %u, channels %u", layout, channels);
-					}break;
-				case 0x3:
-					proto_item_append_text(audio_samples_tree, "Channel: FL FR FC LFE BL BR FLC FRC");
-					break;
-				case 0x0:
-					switch(channels){
-						case 0x01:
-							proto_item_append_text(audio_samples_tree, "  Channel: FC");
-							break;
-						case 0x02:
-							proto_item_append_text(audio_samples_tree, "  Channel: FL  FR");
-							break;
-						case 0x03:
-							proto_item_append_text(audio_samples_tree, "  Channel: FL  FR  FC");
-							break;
-						case 0x04:
-							proto_item_append_text(audio_samples_tree, "  Channel: FL  FR  BL  BR");
-							break;
-						case 0x05:
-							proto_item_append_text(audio_samples_tree, "Channel: FL FR FC BL BR");
-							break;
-						case 0x07:
-							proto_item_append_text(audio_samples_tree, "Channel: FL  FR  FC  BL  BR  SL  SR");
-							break;
-						default:
-							proto_item_append_text(audio_samples_tree, "Unknown Mapping: category %u, channels %u", audio_category, channels);
-							break;
-					}break;
-				default:
-					proto_item_append_text(audio_samples_tree, "Unknown category 6 layout: %u, channels: %u", layout, channels);
-			}break;
-		case 0x8:
-			proto_item_append_text(audio_samples_tree, "Channel:");
-			for(int i = 0; i < (int)channels; i++){
-				proto_item_append_text(audio_samples_tree, "  %u", (i + 1));
-			}
-			break;
-		default:
-			proto_item_append_text(audio_samples_tree, "Unknown Category %u", audio_category);
-	}
-	return;
-}
-
-static int dissect_idn_formatted_audio_samples(tvbuff_t *tvb, int offset, proto_tree *idn_tree, configuration_info *config, message_info *minfo, int byte_len){
-	uint16_t max_samples = minfo->max_samples;
-	uint8_t channels = config->audio_channels;
-	int sample_group_counter = 1;
-	wmem_strbuf_t *values;
-	wmem_strbuf_t *group_numbers;
-
-	uint16_t expected_length = max_samples * byte_len * channels;
-	if(expected_length != tvb_reported_length_remaining(tvb, offset)) {
-		expert_add_info_format(NULL, idn_tree, &ei_idn_audio_sample_size_mismatch, "Audio sample size mismatch: expected %u bytes, got %u bytes (max_samples:%u, channels %u, byte_len: %d)",expected_length, tvb_reported_length_remaining(tvb, offset), max_samples, channels, byte_len);
-	}
-	//add samples in groups of 10
-	while (max_samples >= 10){
-		group_numbers = wmem_strbuf_new_len(wmem_file_scope(), "", 0);
-		wmem_strbuf_append_printf(group_numbers, "Samples %d-%d ", sample_group_counter, sample_group_counter + 9);
-		proto_tree *subtree = proto_tree_add_subtree(idn_tree, tvb, offset, 10 * channels * byte_len, ett_audio_samples_subtree, NULL, wmem_strbuf_get_str(group_numbers));
-		//adding description of layout and channels
-		add_audio_sample_description(subtree, config);
-		for(int j = 0; j < 10; j++) {
-			values = wmem_strbuf_new_len(wmem_file_scope(), "", 0);
-			for(int i = 0; i < (int)channels; i++) {
-				switch(byte_len){
-					case 1:
-						wmem_strbuf_append_printf(values, "%5d  ", tvb_get_uint8(tvb, offset));
-						break;
-					case 2:
-						wmem_strbuf_append_printf(values, "%5d  ", tvb_get_ntohis(tvb, offset));
-						break;
-					case 3:
-						wmem_strbuf_append_printf(values, "%5d  ", tvb_get_ntohi24(tvb, offset));
-						break;
-					default:
-						break;
-				}
-				offset += byte_len;
-			}
-			proto_tree_add_uint_format(subtree, hf_idn_audio_sample_format_one, tvb, offset - channels * byte_len, byte_len * channels, channels, "Sample %4d:  %s", sample_group_counter + j, wmem_strbuf_get_str(values));
-			max_samples --;
-		}
-		sample_group_counter += 10;
-	}
-	if(max_samples > 0){//add any remaining samples
-		group_numbers = wmem_strbuf_new_len(wmem_file_scope(), "", 0);
-		wmem_strbuf_append_printf(group_numbers, "Samples %d-%d ", sample_group_counter, sample_group_counter + max_samples - 1);
-		proto_tree *subtree = proto_tree_add_subtree(idn_tree, tvb, offset, max_samples * channels * byte_len, ett_audio_samples_subtree, NULL, wmem_strbuf_get_str(group_numbers));
-
-		while(max_samples > 0){
-			int remaining_samples = max_samples;
-			max_samples--;
-			values = wmem_strbuf_new_len(wmem_file_scope(), "", 0);
-			for (int i = 0; i < (int)channels; i++) {
-				switch(byte_len){
-					case 1:
-						wmem_strbuf_append_printf(values, "%5d  ", tvb_get_uint8(tvb, offset));
-						break;
-					case 2:
-						wmem_strbuf_append_printf(values, "%5d  ", tvb_get_ntohis(tvb, offset));
-						break;
-					case 3:
-						wmem_strbuf_append_printf(values, "%5d  ", tvb_get_ntohi24(tvb, offset));
-						break;
-					default:
-						break;
-				}
-				offset += byte_len;
-			}
-			proto_tree_add_uint_format(subtree, hf_idn_audio_sample_format_one, tvb, offset - channels * byte_len, byte_len * channels, channels, "Sample %4d:  %s", sample_group_counter + remaining_samples, wmem_strbuf_get_str(values));
-		}
-
-	}
-	return offset;
-}
-
-static int dissect_idn_audio_samples(tvbuff_t *tvb, int offset, proto_tree *idn_tree, configuration_info  * config, message_info *minfo){
-	proto_item *audio_samples_tree = proto_tree_add_subtree(idn_tree, tvb, offset, 4, ett_audio_samples, NULL, "Audio Samples");
-	uint8_t audio_format = config->audio_format;
-	uint16_t sample_count = minfo->max_samples;
-	float freq = minfo->audio_freq;
-	int byte_len;
-
-	proto_item_append_text(audio_samples_tree, " %u Samples, %.2f kHz", sample_count, freq);
-
-	//get interger value for audio_format that matches its byte length to calculate with later
-	switch(audio_format){
-		case 0x0:
-			byte_len =1;
-			proto_item_append_text(audio_samples_tree, ", format 0x0(8 Bit Words)");
-			break;
-		case 0x1:
-			byte_len = 2;
-			proto_item_append_text(audio_samples_tree, ", format 0x1(16 Bit Words)");
-			break;
-		case 0x2:
-			byte_len = 3;
-			proto_item_append_text(audio_samples_tree, ", format 0x2(24 Bit Words)");
-			break;
-		default:
-			byte_len = 1;
-			proto_item_append_text(audio_samples_tree, ", unknown format");
-			break;
-	}
-	offset = dissect_idn_formatted_audio_samples(tvb, offset, audio_samples_tree, config, minfo, byte_len);
-	return offset;
-}
-
-
-static int dissect_idn_audio(tvbuff_t *tvb, packet_info *pinfo, int offset, proto_tree *idn_tree, configuration_info  * config, message_info *minfo){
-	if(minfo->has_config_header){
-	offset = dissect_idn_audio_dictionary(tvb, pinfo, offset, idn_tree, config);
-	}
-	offset = dissect_idn_audio_header(tvb, offset, idn_tree, minfo, config);
-	offset = dissect_idn_audio_samples(tvb, offset, idn_tree, config, minfo);
-	return offset;
-}
-
 static int dissect_idn_message(tvbuff_t *tvb, packet_info *pinfo, int offset, proto_tree *idn_tree) {
-
+	int scm;
 	configuration_info *config = NULL;
-	message_info minfo;
+	message_info *minfo = wmem_new(pinfo->pool, message_info);
 
-	offset = dissect_idn_message_header(tvb, offset, idn_tree, &minfo);
-	determine_message_type(pinfo, &minfo);
-	if(minfo.total_size == 8)
+	offset = dissect_idn_message_header(tvb, offset, idn_tree, minfo);
+	determine_message_type(pinfo, minfo);
+	if(minfo->total_size == 8)
 		return offset;
 
-	if(minfo.has_config_header && minfo.chunk_type != IDNCT_LP_FRAME_SF) {
-		offset = dissect_idn_channel_configuration(tvb, pinfo, offset, idn_tree, &minfo, &config);
-	}else if(minfo.chunk_type != IDNCT_VOID) {
-		config = get_configuration_info(pinfo, minfo.channel_id);
+	if(minfo->has_config_header && minfo->chunk_type != IDNCT_LP_FRAME_SF) {
+		offset = dissect_idn_channel_configuration(tvb, pinfo, offset, idn_tree, minfo, &config);
+	}else if(minfo->chunk_type != IDNCT_VOID) {
+		config = get_configuration_info(pinfo, minfo->channel_id);
 	}
 
-	if (config == NULL) {
-		expert_add_info(pinfo, idn_tree, &ei_idn_no_config);
-		return offset;
-	}
+	if(config) {
+		if(config->word_count == 0 && minfo->chunk_type != IDNCT_OCTET_SEGMENT) {
+			col_append_str(pinfo->cinfo, COL_INFO, ", SCWC is zero/unknown");
+			return offset;
+		}
 
-	if (config->word_count == 0 && minfo.chunk_type != IDNCT_OCTET_SEGMENT) {
-		expert_add_info(pinfo, idn_tree, &ei_idn_scwc_unknown);
-		return offset;
-	}
+		if(minfo->chunk_type != IDNCT_VOID && minfo->chunk_type != IDNCT_LP_FRAME_SF) {
+			scm = get_service_match(tvb_get_uint8(tvb, offset));
 
-	if(minfo.chunk_type != IDNCT_VOID && minfo.chunk_type != IDNCT_LP_FRAME_SF && minfo.chunk_type != IDNCT_AUDIO_WAVE_SAMPLE) {
-		offset = dissect_idn_chunk_header(tvb, pinfo, offset, idn_tree, &minfo, config);
-	}else if(minfo.chunk_type == IDNCT_VOID) {
-		return offset;
-	}
+			offset = dissect_idn_chunk_header(tvb, offset, idn_tree, minfo);
 
-	if(minfo.chunk_type == IDNCT_OCTET_SEGMENT) {
-		offset = dissect_idn_octet_segment(tvb, pinfo, offset, idn_tree);
-	}else if(minfo.is_dmx) {
-		offset = dissect_idn_dmx_data(tvb, pinfo, offset, idn_tree, config);
-	}else if(minfo.chunk_type == IDNCT_AUDIO_WAVE_SAMPLE){
-		offset = dissect_idn_audio(tvb, pinfo, offset, idn_tree, config, &minfo);
-	}else {
-		offset = dissect_idn_laser_data(tvb, pinfo, offset, idn_tree, config);
-	}
+			if(config->sdm != scm) {
+				col_append_str(pinfo->cinfo, COL_INFO, ", SCM doesn't match SDM");
+				return offset;
+			}
+		}else if(minfo->chunk_type == IDNCT_VOID) {
+			return offset;
+		}
 
+		if(minfo->chunk_type == IDNCT_OCTET_SEGMENT) {
+			offset = dissect_idn_octet_segment(tvb, offset, idn_tree);
+		}else if(minfo->is_dmx) {
+			offset = dissect_idn_dmx_data(tvb, pinfo, offset, idn_tree, config);
+		}else {
+			offset = dissect_idn_laser_data(tvb, offset, idn_tree, config);
+		}
+	}
 	return offset;
 }
 
-static int dissect_idn_servicemap_entry(tvbuff_t *tvb, packet_info* pinfo, int offset, proto_tree *idn_tree) {
+static int dissect_idn_servicemap_entry(tvbuff_t *tvb, int offset, proto_tree *idn_tree) {
 	uint8_t service_id = tvb_get_uint8(tvb, offset);
 	proto_tree *idn_servicemap_entry_tree = NULL;
-	proto_item *entry_item;
-	const uint8_t* name;
+	char *name = (char *)tvb_get_string_enc(wmem_file_scope(), tvb, offset+4, 20, ENC_ASCII);
 
+	char tree_title[MAX_BUFFER];
 	if(service_id == 0) {
-		idn_servicemap_entry_tree = proto_tree_add_subtree(idn_tree, tvb, offset, 24, ett_idn_header_tree, &entry_item, "Relay Entry");
+		snprintf(tree_title, MAX_BUFFER, "Relay Entry - %s", name);
+		idn_servicemap_entry_tree = proto_tree_add_subtree(idn_tree, tvb, offset, 24, ett_idn_header_tree, NULL, tree_title);
 	}else {
-		idn_servicemap_entry_tree = proto_tree_add_subtree(idn_tree, tvb, offset, 24, ett_idn_header_tree, &entry_item, "Service Entry");
+		snprintf(tree_title, MAX_BUFFER, "Service Entry - %s", name);
+		idn_servicemap_entry_tree = proto_tree_add_subtree(idn_tree, tvb, offset, 24, ett_idn_header_tree, NULL, tree_title);
 	}
 
 	proto_tree_add_item(idn_servicemap_entry_tree, hf_idn_service_id, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -1493,8 +1065,7 @@ static int dissect_idn_servicemap_entry(tvbuff_t *tvb, packet_info* pinfo, int o
 	offset += 1;
 	proto_tree_add_item(idn_servicemap_entry_tree, hf_idn_relay_number, tvb, offset, 1, ENC_BIG_ENDIAN);
 	offset += 1;
-	proto_tree_add_item_ret_string(idn_servicemap_entry_tree, hf_idn_name, tvb, offset, 20, ENC_ASCII, pinfo->pool, &name);
-	proto_item_append_text(entry_item, " - %s", name);
+	proto_tree_add_item(idn_servicemap_entry_tree, hf_idn_name, tvb, offset, 20, ENC_ASCII);
 	offset += 20;
 	return offset;
 }
@@ -1514,7 +1085,7 @@ static int dissect_idn_servicemap_response_header(tvbuff_t *tvb, int offset, pro
 	return offset;
 }
 
-static int dissect_idn_servicemap_response(tvbuff_t *tvb, packet_info* pinfo, int offset, proto_tree *idn_tree) {
+static int dissect_idn_servicemap_response(tvbuff_t *tvb, int offset, proto_tree *idn_tree) {
 	uint8_t relay_count, service_count;
 	uint16_t map_entries_size;
 
@@ -1522,7 +1093,7 @@ static int dissect_idn_servicemap_response(tvbuff_t *tvb, packet_info* pinfo, in
 	map_entries_size = relay_count + service_count;
 	proto_tree *idn_servicemap_entries_tree = proto_tree_add_subtree(idn_tree, tvb, offset, map_entries_size*24, ett_idn_header_tree, NULL, "Service Map Entries");
 	for(int i=0; i<map_entries_size; i++)
-		offset = dissect_idn_servicemap_entry(tvb, pinfo, offset, idn_servicemap_entries_tree);
+		offset = dissect_idn_servicemap_entry(tvb, offset, idn_servicemap_entries_tree);
 
 	return offset;
 }
@@ -1543,7 +1114,6 @@ static int dissect_idn_scan_response(tvbuff_t *tvb, int offset, proto_tree *idn_
 			NULL
 	};
 
-
 	proto_tree *idn_scanreply_header_tree = proto_tree_add_subtree(idn_tree, tvb, offset, 40, ett_idn_header_tree, NULL, "Scan Response");
 	proto_tree_add_item(idn_scanreply_header_tree, hf_idn_struct_size, tvb, offset, 1, ENC_BIG_ENDIAN);
 	offset += 1;
@@ -1553,155 +1123,38 @@ static int dissect_idn_scan_response(tvbuff_t *tvb, int offset, proto_tree *idn_
 	offset += 1;
 	proto_tree_add_item(idn_scanreply_header_tree, hf_idn_reserved8, tvb, offset, 1, ENC_BIG_ENDIAN);
 	offset += 1;
-	proto_tree *uid_tree = proto_tree_add_subtree(idn_scanreply_header_tree, tvb, offset, 16, ett_unit_id, NULL, "Unit ID");
-	proto_tree_add_item(uid_tree, hf_idn_uid_length, tvb, offset, 1, ENC_BIG_ENDIAN);
-	offset += 1;
-	proto_tree_add_item(uid_tree, hf_idn_uid_category, tvb, offset, 1, ENC_BIG_ENDIAN);
-	offset += 1;
-	proto_tree_add_item(uid_tree, hf_idn_unit_id, tvb, offset, 14, ENC_NA);
-	offset += 14;
-
+	proto_tree_add_item(idn_scanreply_header_tree, hf_idn_unit_id, tvb, offset, 16, ENC_NA);
+	offset += 16;
 	proto_tree_add_item(idn_scanreply_header_tree, hf_idn_name, tvb, offset, 20, ENC_ASCII);
 	offset += 20;
 	return offset;
 }
 
 static int dissect_idn_header(tvbuff_t *tvb, int offset, proto_tree *idn_tree, uint8_t packet_type) {
-	int header_len = (packet_type == IDNCMD_VOID || packet_type == IDNCMD_PING_RESPONSE) ? 1 : 4;
-	proto_tree *idn_header_tree = proto_tree_add_subtree(idn_tree, tvb, offset, header_len, ett_idn_header_tree, NULL, "IDN Header");
+	proto_tree *idn_header_tree = proto_tree_add_subtree(idn_tree, tvb, offset, -1, ett_idn_header_tree, NULL, "IDN Header");
 	proto_tree_add_item(idn_header_tree, hf_idn_command, tvb, offset, 1, ENC_BIG_ENDIAN);
 	offset += 1;
-	if (packet_type == IDNCMD_VOID || packet_type == IDNCMD_PING_RESPONSE) {
+	if(packet_type == IDNCMD_VOID || packet_type == IDNCMD_PING_RESPONSE) {
+		proto_item_set_len(idn_header_tree, offset);
 		return offset;
 	}
 	proto_tree_add_item(idn_header_tree, hf_idn_flags, tvb, offset, 1, ENC_BIG_ENDIAN);
 	offset += 1;
 	proto_tree_add_item(idn_header_tree, hf_idn_sequence, tvb, offset, 2, ENC_BIG_ENDIAN);
 	offset += 2;
-	return offset;
-}
-
-static bool add_stagefeed_info(tvbuff_t *tvb, int offset, packet_info *pinfo) {
-	uint8_t first_byte = tvb_get_uint8(tvb, offset);
-	switch (first_byte) {
-	case 0x70:
-		expert_add_info_format(NULL, NULL, &ei_idn_stagefeed_command, "StageFeed Command: 0x%02x: Start", first_byte);
-		 col_set_str(pinfo->cinfo, COL_INFO, "StageFeed Command 0x70: Start");
-		return true;
-		break;
-	case 0x71:
-		expert_add_info_format(NULL, NULL, &ei_idn_stagefeed_command, "StageFeed Command: 0x%02x: Stop", first_byte);
-		col_set_str(pinfo->cinfo, COL_INFO, "StageFeed Command 0x71: Stop");
-		return true;
-		break;
-	case 0x78:
-		expert_add_info_format(NULL, NULL, &ei_idn_stagefeed_command, "StageFeed Command: 0x%02x: Drainroute Request", first_byte);
-		col_set_str(pinfo->cinfo, COL_INFO, "StageFeed Command 0x78: Drainroute Request");
-		return true;
-		break;
-	case 0x79:
-		expert_add_info_format(NULL, NULL, &ei_idn_stagefeed_command, "StageFeed Command: 0x%02x: Drainroute Response", first_byte);
-		col_set_str(pinfo->cinfo, COL_INFO, "StageFeed Command 0x79: Drainroute Response");
-		return true;
-		break;
-	default:
-		return false;
-		break;
-	}
-	return false;
-}
-
-static int dissect_stagefeed_drainroute_request(tvbuff_t *tvb, int offset, proto_tree *drainroute_request_tree) {
-
-	static int *const drainroute_flags[] = {
-		&hf_drainroute_flag_persist,
-		&hf_drainroute_flag_capture_id_wildcard,
-		&hf_drainroute_flag_service_id_wildcard,
-		NULL};
-
-	static int *const hello_flags[] = {
-		&hf_idn_hello_four_bits_reserved,
-		&hf_client_group,
-		NULL};
-
-	proto_tree_add_item(drainroute_request_tree, hf_stagefeed_command, tvb, offset, 1, ENC_BIG_ENDIAN);
-	offset += 1;
-	proto_tree_add_bitmask(drainroute_request_tree, tvb, offset, hf_idn_flags, ett_idn_hello_flags, hello_flags, ENC_BIG_ENDIAN);
-	offset += 1;
-	proto_tree_add_item(drainroute_request_tree, hf_stagefeed_sequence, tvb, offset, 2, ENC_BIG_ENDIAN);
-	offset += 2;
-	proto_tree_add_item(drainroute_request_tree, hf_stagefeed_struct_size, tvb, offset, 1, ENC_BIG_ENDIAN);
-	offset += 1;
-	proto_tree_add_item(drainroute_request_tree, hf_stagefeed_status_cmd, tvb, offset, 1, ENC_BIG_ENDIAN);
-	offset += 1;
-	proto_tree_add_bitmask(drainroute_request_tree, tvb, offset, hf_stagefeed_flags, ett_stagefeed_drainroute_flags, drainroute_flags, ENC_BIG_ENDIAN);
-	offset += 1;
-	proto_tree_add_item(drainroute_request_tree, hf_stagefeed_capture_id, tvb, offset, 1, ENC_BIG_ENDIAN);
-	offset += 1;
-	proto_tree_add_item(drainroute_request_tree, hf_stagefeed_service_id, tvb, offset, 1, ENC_BIG_ENDIAN);
-	offset += 1;
-	proto_tree_add_item(drainroute_request_tree, hf_stagefeed_bridge_type, tvb, offset, 1, ENC_BIG_ENDIAN);
-	offset += 1;
-	proto_tree_add_item(drainroute_request_tree, hf_stagefeed_port, tvb, offset, 2, ENC_BIG_ENDIAN);
-	offset += 2;
-	proto_tree_add_item(drainroute_request_tree, hf_stagefeed_address, tvb, offset, 4, ENC_BIG_ENDIAN);
-	offset += 20;
-	return offset;
-}
-
-static int dissect_stagefeed_drainroute_response(tvbuff_t *tvb, int offset, proto_tree *stagefeed_tree) {
-	proto_tree_add_item(stagefeed_tree, hf_stagefeed_command, tvb, offset, 1, ENC_BIG_ENDIAN);
-	offset += 1;
-	proto_tree_add_item(stagefeed_tree, hf_idn_flags, tvb, offset, 1, ENC_BIG_ENDIAN);
-	offset += 1;
-	proto_tree_add_item(stagefeed_tree, hf_stagefeed_sequence, tvb, offset, 2, ENC_BIG_ENDIAN);
-	offset += 2;
-	proto_tree_add_item(stagefeed_tree, hf_stagefeed_struct_size, tvb, offset, 1, ENC_BIG_ENDIAN);
-	offset += 1;
-	proto_tree_add_item(stagefeed_tree, hf_stagefeed_result, tvb, offset, 1, ENC_BIG_ENDIAN);
-	offset += 1;
-	proto_tree_add_item(stagefeed_tree, hf_stagefeed_reserved, tvb, offset, 2, ENC_BIG_ENDIAN);
-	offset += 2;
-	return offset;
-}
-
-static int dissect_stagefeed(tvbuff_t *tvb, int offset, proto_tree *idn_tree) {
-	uint8_t command = tvb_get_uint8(tvb, offset);
-	proto_tree *stagefeed_tree = proto_tree_add_subtree(idn_tree, tvb, offset, tvb_reported_length_remaining(tvb, offset), ett_stagefeed_subtree, NULL, "StageFeed Command");
-	switch (command) {
-		case STAGEFEED_START:
-			proto_tree_add_item(stagefeed_tree, hf_stagefeed_command, tvb, offset, 1, ENC_BIG_ENDIAN);
-			offset += 1;
-			break;
-		case STAGEFEED_STOP:
-			proto_tree_add_item(stagefeed_tree, hf_stagefeed_command, tvb, offset, 1, ENC_BIG_ENDIAN);
-			offset += 1;
-			break;
-		case STAGEFEED_DRAINROUTE_REQUEST:
-			offset = dissect_stagefeed_drainroute_request(tvb, offset, stagefeed_tree);
-			break;
-		case STAGEFEED_DRAINROUTE_RESPONSE:
-			offset = dissect_stagefeed_drainroute_response(tvb, offset, stagefeed_tree);
-		    break;
-		default:
-			break;
-		}
+	proto_item_set_len(idn_header_tree, offset);
 	return offset;
 }
 
 static int dissect_idn(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_) {
-	unsigned offset = 0;
+	int offset = 0;
+	uint8_t packet_type = tvb_get_uint8(tvb, 0);
 	proto_item *ti = proto_tree_add_item(tree, proto_idn, tvb, 0, -1, ENC_NA);
 	proto_tree *idn_tree = proto_item_add_subtree(ti, ett_idn);
-	uint8_t packet_type = tvb_get_uint8(tvb, 0);
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "IDN");
 	col_clear(pinfo->cinfo, COL_INFO);
-	if(add_stagefeed_info(tvb, offset, pinfo)){
-		offset = dissect_stagefeed(tvb, offset, idn_tree);
-		return offset;
-	}
-	col_add_str(pinfo->cinfo, COL_INFO, val_to_str(pinfo->pool, packet_type, command_code, "Unknown (0x%02x)"));
+	col_add_str(pinfo->cinfo, COL_INFO, val_to_str(packet_type, command_code, "Unknown (0x%02x)"));
 
 	offset = dissect_idn_header(tvb, offset, idn_tree, packet_type);
 
@@ -1710,7 +1163,7 @@ static int dissect_idn(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 			dissect_idn_scan_response(tvb, offset, idn_tree);
 			break;
 		case IDNCMD_SERVICEMAP_RESPONSE:
-			offset = dissect_idn_servicemap_response(tvb, pinfo, offset, idn_tree);
+			offset = dissect_idn_servicemap_response(tvb, offset, idn_tree);
 			break;
 		case IDNCMD_MESSAGE:
 		case IDNCMD_MESSAGE_ACKREQ:
@@ -1822,24 +1275,6 @@ void proto_register_idn(void) {
 		},
 		{ &hf_idn_unit_id,
 			{ "Unit ID", "idn.unit_id",
-			FT_BYTES, SEP_SPACE,
-			NULL, 0x0,
-			NULL, HFILL }
-		},
-		{ &hf_idn_uid_length,
-			{ "Length", "idn.unit_id_length",
-			FT_UINT8, BASE_HEX,
-			NULL, 0x0,
-			NULL, HFILL }
-		},
-		{ &hf_idn_uid_category,
-			{ "Caregory", "idn.unit_id_category",
-			FT_UINT8, BASE_HEX,
-			NULL, 0x0,
-			NULL, HFILL }
-		},
-		{ &hf_idn_uid,
-			{ "Unit ID", "idn.unit_id_number",
 			FT_BYTES, SEP_SPACE,
 			NULL, 0x0,
 			NULL, HFILL }
@@ -2020,7 +1455,7 @@ void proto_register_idn(void) {
 		},
 		{ &hf_idn_reserved,
 			{ "Reserved", "idn.reserved",
-			FT_BYTES, BASE_NONE,
+			FT_UINT8, BASE_HEX,
 			NULL, 0x0,
 			NULL, HFILL }
 		},
@@ -2194,7 +1629,7 @@ void proto_register_idn(void) {
 		},
 		{ &hf_idn_gts_sample,
 			{ "Sample", "idn.gts_sample",
-			FT_BYTES, BASE_NONE,
+			FT_INT8, BASE_DEC,
 			NULL, 0x0,
 			NULL, HFILL }
 		},
@@ -2263,230 +1698,15 @@ void proto_register_idn(void) {
 			FT_UINT16, BASE_HEX,
 			NULL, 0x0,
 			NULL, HFILL }
-		},
-		{ &hf_idn_audio_dictionary_tag,
-			{ "Audio Dictionary Tag", "idn.audioheader",
-			FT_UINT16, BASE_HEX,
-			NULL, 0x0,
-			NULL, HFILL
-			}
-		},
-		{ &hf_idn_category,
-			{ "Category", "idn.category",
-			FT_UINT16, BASE_HEX,
-			VALS(category), 0xF000,
-			NULL, HFILL
-			}
-		},
-		{ &hf_idn_format,
-			{ "Format", "idn.format",
-			FT_UINT16, BASE_DEC,
-			VALS(format), 0x0F00,
-			NULL, HFILL
-			}
-		},
-		{ &hf_idn_layout,
-			{ "Layout", "idn.layout",
-			FT_UINT16, BASE_DEC,
-			NULL, 0x00F0,
-			NULL, HFILL
-			}
-		},
-		{ &hf_idn_4bit_channels,
-			{ "Channels", "idn.category6channels",
-			FT_UINT16, BASE_DEC,
-			NULL, 0x000F,
-			NULL, HFILL
-			}
-		},
-		{ &hf_idn_subcategory,
-			{ "Subcategory", "idn.subcategory",
-			FT_UINT16, BASE_DEC,
-			NULL, 0x0F00,
-			NULL, HFILL
-			}
-		},
-		{ &hf_idn_parameter,
-			{ "Format", "idn.format",
-			FT_UINT16, BASE_DEC,
-			NULL, 0x00F0,
-			NULL, HFILL
-			}
-		},
-		{ &hf_idn_suffix_length,
-			{ "Suffix length", "idn.suffix_length",
-			FT_UINT16, BASE_DEC,
-			NULL, 0x000F,
-			NULL, HFILL
-			}
-		},
-		{ &hf_idn_8bit_channels,
-			{ "Channels", "idn.channel",
-			FT_UINT16, BASE_DEC,
-			NULL, 0x00FF,
-			NULL, HFILL
-			}
-		},
-		{ &hf_idn_audio_flags,
-			{ "Flags", "idn.audio_flags",
-			FT_UINT8, BASE_HEX,
-			NULL, 0x0,
-			NULL, HFILL}
-		},
-		{ &hf_idn_audio_duration,
-			{ "Duration in microseconds", "idn.audio_duration",
-			FT_UINT24, BASE_DEC,
-			NULL, 0x0,
-			NULL, HFILL}
-		},
-		{ &hf_idn_audio_flags_two_bits_reserved,
-			{ "Reserved", "idn.audio_2",
-			FT_UINT8, BASE_HEX,
-			NULL, 0xC0,
-			NULL, HFILL}
-		},
-		{ &hf_idn_audio_flags_four_bits_reserved,
-			{ "Reserved", "idn.audio_4",
-			FT_UINT8, BASE_HEX,
-			NULL, 0x0F,
-			NULL, HFILL}
-		},
-		{ &hf_idn_audio_flags_scm,
-			{ "Service configuration match", "idn.audio_scm",
-			FT_UINT8, BASE_HEX,
-			NULL, 0x30,
-			NULL, HFILL}
-		},
-		{ &hf_idn_audio_sample_format_zero,
-			{ "Audio Sample (format 0)", "idn.audio_sample_0",
-			FT_UINT8, BASE_HEX,
-			NULL, 0x0,
-			NULL, HFILL}
-		},
-		{ &hf_idn_audio_sample_format_one,
-			{ "Audio Sample (format 1)", "idn.audio_sample_1",
-			FT_UINT16, BASE_HEX,
-			NULL, 0x0,
-			NULL, HFILL}
-		},
-		{ &hf_idn_audio_sample_format_two,
-			{ "Audio Sample (format 2)", "idn.audio_sample_2",
-			FT_UINT24, BASE_HEX,
-			NULL, 0x0,
-			NULL, HFILL}
-		},
-		{ &hf_stagefeed_flags,
-			{"Stagefeed Flags", "idn.stagefeed_flags",
-			FT_UINT8, BASE_HEX,
-			NULL, 0x0,
-			NULL, HFILL}
-		},
-		{ &hf_stagefeed_sequence,
-			{"Sequence Number", "idn.stagefeed_sequence",
-			FT_UINT16, BASE_DEC,
-			NULL, 0x0,
-			NULL, HFILL}
-		},
-		{ &hf_stagefeed_struct_size,
-			{"Struct Size", "idn.stagefeed_struct_size",
-			FT_UINT8, BASE_DEC,
-			NULL, 0x0,
-			NULL, HFILL}
-		},
-		{ &hf_stagefeed_status_cmd,
-			{"Status Command", "idn.stagefeed_status_cmd",
-			FT_UINT8, BASE_HEX,
-			NULL, 0x0,
-			NULL, HFILL}
-		},
-		{ &hf_stagefeed_capture_id,
-			{"Capture ID", "idn.stagefeed_capture_id",
-			FT_UINT16, BASE_DEC,
-			NULL, 0x0,
-			NULL, HFILL}
-		},
-		{ &hf_stagefeed_service_id,
-			{"Service ID", "idn.stagefeed_service_id",
-			FT_UINT8, BASE_HEX,
-			NULL, 0x0,
-			NULL, HFILL}
-		},
-		{ &hf_stagefeed_bridge_type,
-			{"Bridge Type", "idn.stagefeed_bridge_type",
-			FT_UINT8, BASE_HEX,
-			NULL, 0x0,
-			NULL, HFILL}
-		},
-		{ &hf_stagefeed_port,
-			{"Port", "idn.stagefeed_port",
-			FT_UINT16, BASE_DEC,
-			NULL, 0x0,
-			NULL, HFILL}
-		},
-		{ &hf_stagefeed_address,
-			{"Address", "idn.stagefeed_address",
-			FT_IPv4, BASE_NONE,
-			NULL, 0x0,
-			NULL, HFILL}
-		},
-		{ &hf_stagefeed_result,
-			{"Drainrequest Result", "idn.stagefeed_result",
-			FT_UINT8, BASE_HEX,
-			VALS(drainroute_response), 0x0,
-			NULL, HFILL}
-		},
-		{ &hf_stagefeed_reserved,
-			{"Reserved", "idn.stagefeed_reserved",
-			FT_UINT16, BASE_HEX,
-			NULL, 0x0,
-			NULL, HFILL}
-		},
-		{ &hf_stagefeed_command,
-			{"Stagefeed Command", "idn.stagefeed_command",
-			FT_UINT8, BASE_HEX,
-			VALS(stagefeed_command), 0x0,
-			NULL, HFILL}
-		},
-		{ &hf_drainroute_flag_persist,
-			{"Persistent drain/route (stored in config)", "idn.drainroute_flag_persist",
-			FT_UINT8, BASE_HEX,
-			NULL, 0xFC,
-			NULL, HFILL}
-		},
-		{ &hf_drainroute_flag_capture_id_wildcard,
-			{"Cmd: Capture, startAll/verifyAll/stopAny", "idn.drainroute_flag_wildcard",
-			FT_UINT8, BASE_HEX,
-			NULL, 0x02,
-			NULL, HFILL}
-		},
-		{ &hf_drainroute_flag_service_id_wildcard,
-			{"Cmd: Service, verifyAny/stopAny", "idn.drainroute_flag_service_id_wildcard",
-			FT_UINT8, BASE_HEX,
-			NULL, 0x01,
-			NULL, HFILL}
-		},
-		{ &hf_client_group,
-			{"Client Group", "idn.stagefeed_client_group",
-			FT_UINT8, BASE_DEC,
-			NULL, 0x0F,
-			NULL, HFILL}
-		},
-		{ &hf_idn_hello_four_bits_reserved,
-			{"Reserved Bits", "idn.hello_reserved",
-			FT_UINT8, BASE_DEC,
-			NULL, 0xF0,
-			NULL, HFILL}
 		}
 	};
 
 	static int *ett[] = {
 		&ett_idn,
 		&ett_idn_header_tree,
-		&ett_idn_hello_flags,
 		&ett_idn_scanreply_header_tree,
 		&ett_idn_channel_message_header_tree,
 		&ett_protocol_version,
-		&ett_unit_id,
 		&ett_status,
 		&ett_idn_cnl,
 		&ett_cfl,
@@ -2497,37 +1717,17 @@ void proto_register_idn(void) {
 		&ett_dic_tree,
 		&ett_data,
 		&ett_subdata,
-		&ett_dmx_subtree,
-		&ett_audio_header,
-		&ett_audio_samples,
-		&ett_audio_samples_subtree,
-		&ett_stagefeed_subtree,
-		&ett_stagefeed_drainroute_flags
+		&ett_dmx_subtree
 	};
 
-	expert_module_t* expert_idn;
-	static ei_register_info ei[] = {
-		{ &ei_idn_no_config, { "idn.no_config", PI_UNDECODED, PI_NOTE,
-			"No configuration is associated with this message", EXPFILL } },
-		{ &ei_idn_scwc_unknown, { "idn.scwc.unknown", PI_SEQUENCE, PI_WARN,
-			"SCWC is zero/unknown", EXPFILL } },
-		{ &ei_idn_channels_over, { "idn.channel.over", PI_PROTOCOL, PI_ERROR,
-			"Over number of channels", EXPFILL } },
-		{ &ei_idn_scm_mismatch, { "idn.scm.mismatch", PI_PROTOCOL, PI_ERROR,
-			"SCM doesn't match configured SDM", EXPFILL } },
-		{ &ei_idn_audio_sample_size_mismatch, { "idn.audio.sample_size_mismatch", PI_SEQUENCE, PI_WARN,
-			"Audio sample size doesn't match the expected size", EXPFILL } },
-		{ &ei_idn_stagefeed_command, { "idn.stagefeed.command", PI_SEQUENCE, PI_NOTE,
-			"StageFeed Command", EXPFILL } }
-	};
-
-	proto_idn = proto_register_protocol ("ILDA Digital Network Protocol", "IDN", "idn");
+	proto_idn = proto_register_protocol (
+		"Ilda Digital Network Protocol",
+		"IDN",
+		"idn"
+	);
 
 	proto_register_field_array(proto_idn, hf, array_length(hf));
 	proto_register_subtree_array(ett, array_length(ett));
-
-	expert_idn = expert_register_protocol(proto_idn);
-	expert_register_field_array(expert_idn, ei, array_length(ei));
 
 	idn_handle = register_dissector("idn", dissect_idn, proto_idn);
 }

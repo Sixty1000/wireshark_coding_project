@@ -7,7 +7,7 @@
 
 #include "config.h"
 #include "pppdump.h"
-#include "wtap_module.h"
+#include "wtap-int.h"
 #include "file_wrappers.h"
 
 #include <stdlib.h>
@@ -16,7 +16,6 @@
 
 #include <wsutil/array.h>
 #include <wsutil/ws_assert.h>
-#include <wsutil/pint.h>
 
 /*
 pppdump records
@@ -41,11 +40,11 @@ Daniel Thompson (STMicroelectronics) <daniel.thompson@st.com>
 +------+------+------+------+
 
 +------+
-| 0x04 |                              Receive delimiter (not seen in practice)
+| 0x04 |                              Receive deliminator (not seen in practice)
 +------+
 
 +------+
-| 0x03 |                              Send delimiter (not seen in practice)
+| 0x03 |                              Send deliminator (not seen in practice)
 +------+
 
 +------+
@@ -87,10 +86,10 @@ typedef enum {
 	DIRECTION_RECV
 } direction_enum;
 
-static bool pppdump_read(wtap *wth, wtap_rec *rec,
+static bool pppdump_read(wtap *wth, wtap_rec *rec, Buffer *buf,
 	int *err, char **err_info, int64_t *data_offset);
-static bool pppdump_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
-        int *err, char **err_info);
+static bool pppdump_seek_read(wtap *wth, int64_t seek_off,
+	wtap_rec *rec, Buffer *buf, int *err, char **err_info);
 
 static int pppdump_file_type_subtype = -1;
 
@@ -201,11 +200,11 @@ typedef struct _pppdump_t {
 } pppdump_t;
 
 static int
-process_data(pppdump_t *state, FILE_T fh, pkt_t *pkt, int n, Buffer *buf,
+process_data(pppdump_t *state, FILE_T fh, pkt_t *pkt, int n, uint8_t *pd,
     int *err, char **err_info, pkt_id *pid);
 
 static bool
-collate(pppdump_t *state, FILE_T fh, int *err, char **err_info, Buffer *buf,
+collate(pppdump_t *state, FILE_T fh, int *err, char **err_info, uint8_t *pd,
 		int *num_bytes, direction_enum *direction, pkt_id *pid,
 		int64_t num_bytes_to_skip);
 
@@ -279,7 +278,7 @@ pppdump_open(wtap *wth, int *err, char **err_info)
 
 	state = g_new(pppdump_t, 1);
 	wth->priv = (void *)state;
-	state->timestamp = pntohu32(&buffer[1]);
+	state->timestamp = pntoh32(&buffer[1]);
 	state->tenths = 0;
 
 	init_state(state);
@@ -318,19 +317,21 @@ pppdump_open(wtap *wth, int *err, char **err_info)
 
 /* Set part of the struct wtap_rec. */
 static void
-pppdump_set_phdr(wtap *wth, wtap_rec *rec, int num_bytes, direction_enum direction)
+pppdump_set_phdr(wtap_rec *rec, int num_bytes,
+    direction_enum direction)
 {
-	wtap_setup_packet_rec(rec, wth->file_encap);
+	rec->rec_type = REC_TYPE_PACKET;
 	rec->block = wtap_block_create(WTAP_BLOCK_PACKET);
 	rec->rec_header.packet_header.len = num_bytes;
 	rec->rec_header.packet_header.caplen = num_bytes;
+	rec->rec_header.packet_header.pkt_encap	= WTAP_ENCAP_PPP_WITH_PHDR;
 
 	rec->rec_header.packet_header.pseudo_header.p2p.sent = (direction == DIRECTION_SENT ? true : false);
 }
 
 /* Find the next packet and parse it; called from wtap_read(). */
 static bool
-pppdump_read(wtap *wth, wtap_rec *rec, int *err, char **err_info,
+pppdump_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err, char **err_info,
     int64_t *data_offset)
 {
 	int		num_bytes;
@@ -352,8 +353,8 @@ pppdump_read(wtap *wth, wtap_rec *rec, int *err, char **err_info,
 	} else
 		pid = NULL;	/* sequential only */
 
-	ws_buffer_assure_space(&rec->data, PPPD_BUF_SIZE);
-	if (!collate(state, wth->fh, err, err_info, &rec->data,
+	ws_buffer_assure_space(buf, PPPD_BUF_SIZE);
+	if (!collate(state, wth->fh, err, err_info, ws_buffer_start_ptr(buf),
 	    &num_bytes, &direction, pid, 0)) {
 		g_free(pid);
 		return false;
@@ -368,7 +369,7 @@ pppdump_read(wtap *wth, wtap_rec *rec, int *err, char **err_info,
 	*data_offset = state->pkt_cnt;
 	state->pkt_cnt++;
 
-	pppdump_set_phdr(wth, rec, num_bytes, direction);
+	pppdump_set_phdr(rec, num_bytes, direction);
 	rec->presence_flags = WTAP_HAS_TS;
 	rec->ts.secs = state->timestamp;
 	rec->ts.nsecs = state->tenths * 100000000;
@@ -382,7 +383,7 @@ pppdump_read(wtap *wth, wtap_rec *rec, int *err, char **err_info,
  * comes with the ppp distribution.
  */
 static int
-process_data(pppdump_t *state, FILE_T fh, pkt_t *pkt, int n, Buffer *buf,
+process_data(pppdump_t *state, FILE_T fh, pkt_t *pkt, int n, uint8_t *pd,
     int *err, char **err_info, pkt_id *pid)
 {
 	int	c;
@@ -438,7 +439,7 @@ process_data(pppdump_t *state, FILE_T fh, pkt_t *pkt, int n, Buffer *buf,
 						return -1;
 					}
 
-					ws_buffer_append(buf, pkt->buf, num_written);
+					memcpy(pd, pkt->buf, num_written);
 
 					/*
 					 * Remember the offset of the
@@ -543,7 +544,7 @@ process_data(pppdump_t *state, FILE_T fh, pkt_t *pkt, int n, Buffer *buf,
 
 /* Returns true if packet data copied, false if error occurred or EOF (no more records). */
 static bool
-collate(pppdump_t* state, FILE_T fh, int *err, char **err_info, Buffer *buf,
+collate(pppdump_t* state, FILE_T fh, int *err, char **err_info, uint8_t *pd,
 		int *num_bytes, direction_enum *direction, pkt_id *pid,
 		int64_t num_bytes_to_skip)
 {
@@ -552,7 +553,7 @@ collate(pppdump_t* state, FILE_T fh, int *err, char **err_info, Buffer *buf,
 	int		byte0, byte1;
 	int		n, num_written = 0;
 	int64_t		start_offset;
-	uint32_t	time_long;
+	uint32_t		time_long;
 	uint8_t		time_short;
 
 	/*
@@ -563,7 +564,7 @@ collate(pppdump_t* state, FILE_T fh, int *err, char **err_info, Buffer *buf,
 		ws_assert(num_bytes_to_skip == 0);
 		pkt = state->pkt;
 		num_written = process_data(state, fh, pkt, state->num_bytes,
-		    buf, err, err_info, pid);
+		    pd, err, err_info, pid);
 
 		if (num_written < 0) {
 			return false;
@@ -643,7 +644,7 @@ collate(pppdump_t* state, FILE_T fh, int *err, char **err_info, Buffer *buf,
 					n--;
 				}
 				num_written = process_data(state, fh, pkt, n,
-				    buf, err, err_info, pid);
+				    pd, err, err_info, pid);
 
 				if (num_written < 0) {
 					return false;
@@ -665,7 +666,7 @@ collate(pppdump_t* state, FILE_T fh, int *err, char **err_info, Buffer *buf,
 				if (!wtap_read_bytes(fh, &time_long, sizeof(uint32_t), err, err_info))
 					return false;
 				state->offset += sizeof(uint32_t);
-				state->timestamp = pntohu32(&time_long);
+				state->timestamp = pntoh32(&time_long);
 				state->tenths = 0;
 				break;
 
@@ -673,7 +674,7 @@ collate(pppdump_t* state, FILE_T fh, int *err, char **err_info, Buffer *buf,
 				if (!wtap_read_bytes(fh, &time_long, sizeof(uint32_t), err, err_info))
 					return false;
 				state->offset += sizeof(uint32_t);
-				state->tenths += pntohu32(&time_long);
+				state->tenths += pntoh32(&time_long);
 
 				if (state->tenths >= 10) {
 					state->timestamp += state->tenths / 10;
@@ -726,10 +727,12 @@ static bool
 pppdump_seek_read(wtap *wth,
 		 int64_t seek_off,
 		 wtap_rec *rec,
+		 Buffer *buf,
 		 int *err,
 		 char **err_info)
 {
 	int		num_bytes;
+	uint8_t		*pd;
 	direction_enum	direction;
 	pppdump_t	*state;
 	pkt_id		*pid;
@@ -750,7 +753,8 @@ pppdump_seek_read(wtap *wth,
 	init_state(state->seek_state);
 	state->seek_state->offset = pid->offset;
 
-	ws_buffer_assure_space(&rec->data, PPPD_BUF_SIZE);
+	ws_buffer_assure_space(buf, PPPD_BUF_SIZE);
+	pd = ws_buffer_start_ptr(buf);
 
 	/*
 	 * We'll start reading at the first record containing data from
@@ -766,12 +770,12 @@ pppdump_seek_read(wtap *wth,
 	num_bytes_to_skip = pid->num_bytes_to_skip;
 	do {
 		if (!collate(state->seek_state, wth->random_fh, err, err_info,
-		    &rec->data, &num_bytes, &direction, NULL, num_bytes_to_skip))
+		    pd, &num_bytes, &direction, NULL, num_bytes_to_skip))
 			return false;
 		num_bytes_to_skip = 0;
 	} while (direction != pid->dir);
 
-	pppdump_set_phdr(wth, rec, num_bytes, pid->dir);
+	pppdump_set_phdr(rec, num_bytes, pid->dir);
 
 	return true;
 }

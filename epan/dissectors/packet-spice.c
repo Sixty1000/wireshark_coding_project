@@ -661,12 +661,7 @@ static int hf_agent_monitor_x;
 static int hf_agent_monitor_y;
 static int hf_multi_media_time;
 static int hf_ram_hint;
-static int hf_button;
-static int hf_buttons_state;
-static int hf_button_mask_left;
-static int hf_button_mask_middle;
-static int hf_button_mask_right;
-static int hf_button_mask_reserved_bits;
+static int hf_button_state;
 static int hf_mouse_display_id;
 static int hf_display_text_fore_mode;
 static int hf_display_text_back_mode;
@@ -737,7 +732,6 @@ static int hf_resource_type;
 static int hf_resource_id;
 static int hf_ref_image;
 static int hf_ref_string;
-static int hf_vd_agent_buttons;
 static int hf_vd_agent_caps_request;
 static int hf_vd_agent_cap_mouse_state;
 static int hf_vd_agent_cap_monitors_config;
@@ -882,11 +876,14 @@ dissect_Pixmap(tvbuff_t *tvb, proto_tree *tree, uint32_t offset)
     offset += 1;
     proto_tree_add_item(Pixmap_tree, hf_pixmap_width, tvb, offset, 4, ENC_LITTLE_ENDIAN);
     offset += 4;
-    proto_tree_add_item_ret_uint(Pixmap_tree, hf_pixmap_height, tvb, offset, 4, ENC_LITTLE_ENDIAN, &height);
+    height = tvb_get_letohl(tvb, offset);
+    proto_tree_add_item(Pixmap_tree, hf_pixmap_height, tvb, offset, 4, ENC_LITTLE_ENDIAN);
     offset += 4;
-    proto_tree_add_item_ret_uint(Pixmap_tree, hf_pixmap_stride, tvb, offset, 4, ENC_LITTLE_ENDIAN, &strides);
+    strides = tvb_get_letohl(tvb, offset);
+    proto_tree_add_item(Pixmap_tree, hf_pixmap_stride, tvb, offset, 4, ENC_LITTLE_ENDIAN);
     offset += 4;
-    proto_tree_add_item_ret_uint(Pixmap_tree, hf_pixmap_address, tvb, offset, 4, ENC_LITTLE_ENDIAN, &palette_ptr);
+    palette_ptr = tvb_get_letohl(tvb, offset);
+    proto_tree_add_item(Pixmap_tree, hf_pixmap_address, tvb, offset, 4, ENC_LITTLE_ENDIAN);
     offset += 4;
     PixmapSize = height * strides;
     proto_item_set_len(ti, 18 + PixmapSize);
@@ -1057,6 +1054,7 @@ dissect_ImageLZ_common_header(tvbuff_t *tvb, proto_tree *tree, const uint32_t of
 static uint32_t
 dissect_ImageLZ_common(tvbuff_t *tvb, proto_tree *tree, uint32_t offset, const bool IsLZ, const uint32_t size)
 {
+
     uint8_t type;
     uint32_t end_offset = offset + size;
 
@@ -1065,9 +1063,10 @@ dissect_ImageLZ_common(tvbuff_t *tvb, proto_tree *tree, uint32_t offset, const b
     if (IsLZ)
        offset +=3; /* alignment in LZ? Does not exist in GLZ?*/
 
-    proto_tree_add_item_ret_uint8(tree, hf_LZ_RGB_type, tvb, offset, 1, ENC_NA, &type);
+    proto_tree_add_item(tree, hf_LZ_RGB_type, tvb, offset, 1, ENC_NA);
+    type = tvb_get_uint8(tvb, offset);
     offset += 1;
-    switch (type) {
+    switch (type & 0xf) { /* 0xf is the MASK */
         case LZ_IMAGE_TYPE_RGB16:
         case LZ_IMAGE_TYPE_RGB24:
         case LZ_IMAGE_TYPE_RGB32:
@@ -1342,7 +1341,7 @@ dissect_Image(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offs
             ImageSize = dissect_ImageJPEG_Alpha(tvb, tree, pinfo, offset);
             break;
         default:
-            proto_tree_add_expert_remaining(tree, pinfo, &ei_spice_unknown_image_type, tvb, offset);
+            proto_tree_add_expert(tree, pinfo, &ei_spice_unknown_image_type, tvb, offset, -1);
     }
 
     return sizeof_ImageDescriptor + ImageSize;
@@ -1469,7 +1468,8 @@ dissect_Mask(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, uint32_t offse
     offset += 1;
     point_item = dissect_POINT32(tvb, Mask_tree, offset);
     offset += (int)sizeof(point32_t);
-    proto_tree_add_item_ret_uint(Mask_tree, hf_ref_image, tvb, offset, 4, ENC_LITTLE_ENDIAN, &bitmap);
+    bitmap = tvb_get_letohl(tvb, offset);
+    proto_tree_add_item(Mask_tree, hf_ref_image, tvb, offset, 4, ENC_LITTLE_ENDIAN);
     offset += 4;
 
     if (bitmap != 0) {
@@ -1749,7 +1749,8 @@ dissect_spice_common_server_messages(tvbuff_t *tvb, packet_info *pinfo, proto_tr
             /*TODO: based on severity, dissect the error code */
             proto_tree_add_item(tree, hf_notify_code, tvb, offset, 4, ENC_LITTLE_ENDIAN);
             offset += 4;
-            proto_tree_add_item_ret_uint(tree, hf_notify_message_len, tvb, offset, 4, ENC_LITTLE_ENDIAN, &message_len);
+            message_len = tvb_get_letohl(tvb, offset);
+            proto_tree_add_item(tree, hf_notify_message_len, tvb, offset, 4, ENC_LITTLE_ENDIAN);
             offset += 4;
             proto_tree_add_item(tree, hf_notify_message, tvb, offset, message_len + 1, ENC_ASCII);
             offset += (message_len + 1);
@@ -1830,7 +1831,8 @@ dissect_spice_display_server(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo
             proto_tree_add_item(tree, hf_spice_display_reset_message, tvb, offset, 0, ENC_NA);
             break;
         case SPICE_MSG_DISPLAY_INVAL_LIST:
-            proto_tree_add_item_ret_uint16(tree, hf_display_inval_list_count, tvb, offset, 2, ENC_LITTLE_ENDIAN, &count);
+            proto_tree_add_item(tree, hf_display_inval_list_count, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+            count = tvb_get_letohs(tvb, offset);
             offset += 2;
             for (i = 0; i < count; i++) {
                 offset += dissect_SpiceResourceId(tvb, tree, offset, i + 1);
@@ -2062,7 +2064,8 @@ dissect_spice_display_server(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo
             offset += 4;
             break;
         case SPICE_MSG_DISPLAY_MONITORS_CONFIG:
-            proto_tree_add_item_ret_uint16(tree, hf_display_monitor_config_count, tvb, offset, 2, ENC_LITTLE_ENDIAN, &count);
+            proto_tree_add_item(tree, hf_display_monitor_config_count, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+            count = tvb_get_letohs(tvb, offset);
             offset += 2;
             proto_tree_add_item(tree, hf_display_monitor_config_max_allowed, tvb, offset, 2, ENC_LITTLE_ENDIAN);
             offset += 2;
@@ -2240,8 +2243,8 @@ dissect_spice_agent_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         case VD_AGENT_MOUSE_STATE:
             dissect_POINT32(tvb, tree, offset);
             offset += (int)sizeof(point32_t);
-            proto_tree_add_item(tree, hf_vd_agent_buttons, tvb, offset, 4, ENC_LITTLE_ENDIAN);
-            offset += 4;
+            proto_tree_add_item(tree, hf_button_state, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+            offset += 2;
             proto_tree_add_item(tree, hf_mouse_display_id, tvb, offset, 1, ENC_NA);
             offset += 1;
             break;
@@ -2383,7 +2386,8 @@ dissect_spice_main_server(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, c
             offset += 4;
             break;
         case SPICE_MSG_MAIN_CHANNELS_LIST:
-            proto_tree_add_item_ret_uint(tree, hf_main_num_channels, tvb, offset, 4, ENC_LITTLE_ENDIAN, &num_channels);
+            num_channels = tvb_get_letohl(tvb, offset);
+            proto_tree_add_item(tree, hf_main_num_channels, tvb, offset, 4, ENC_LITTLE_ENDIAN);
             offset += 4;
             subtree = proto_tree_add_subtree(tree, tvb, offset, 2 * num_channels, ett_main_client, NULL, "Channel Array");
             for (i = 0; i < num_channels; i++ ) {
@@ -2431,7 +2435,8 @@ dissect_spice_main_server(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, c
             offset += 4;
             break;
         case SPICE_MSG_MAIN_NAME:
-            proto_tree_add_item_ret_uint(tree, hf_main_name_len, tvb, offset, 4, ENC_LITTLE_ENDIAN, &name_len);
+            name_len = tvb_get_letohl(tvb, offset);
+            proto_tree_add_item(tree, hf_main_name_len, tvb, offset, 4, ENC_LITTLE_ENDIAN);
             offset += 4;
             proto_tree_add_item(tree, hf_main_name, tvb, offset, name_len, ENC_ASCII);
             offset += name_len;
@@ -2507,28 +2512,6 @@ dissect_spice_keyboard_modifiers(tvbuff_t *tvb, proto_tree *tree, uint32_t offse
     return 2;
 }
 
-static int
-dissect_buttons_state(tvbuff_t *tvb, proto_tree *tree, uint32_t offset)
-{
-    proto_item* ti;
-    proto_tree *subtree;
-
-    ti = proto_tree_add_item(tree, hf_buttons_state, tvb, offset, 2, ENC_LITTLE_ENDIAN);
-    subtree = proto_item_add_subtree(ti, ett_inputs_client);
-
-    static int *const hf_buttons_mask[] = {
-        &hf_button_mask_left,
-        &hf_button_mask_middle,
-        &hf_button_mask_right,
-        &hf_button_mask_reserved_bits,
-        NULL
-    };
-
-    proto_tree_add_bitmask_list(subtree, tvb, offset, 2, hf_buttons_mask, ENC_LITTLE_ENDIAN);
-
-    return 2;
-}
-
 static uint32_t
 dissect_spice_inputs_client(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, const uint16_t message_type, proto_item* msgtype_item, uint32_t offset)
 {
@@ -2552,7 +2535,8 @@ dissect_spice_inputs_client(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             inputs_tree = proto_tree_add_subtree(tree, tvb, offset, sizeof(point32_t) + 3, ett_inputs_client, NULL, "Client MOUSE_POSITION message");
             dissect_POINT32(tvb, inputs_tree, offset);
             offset += (int)sizeof(point32_t);
-            offset += dissect_buttons_state(tvb, inputs_tree, offset);
+            proto_tree_add_item(inputs_tree, hf_button_state, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+            offset += 2;
             proto_tree_add_item(inputs_tree, hf_mouse_display_id, tvb, offset, 1, ENC_LITTLE_ENDIAN);
             offset += 1;
             break;
@@ -2560,19 +2544,22 @@ dissect_spice_inputs_client(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             inputs_tree = proto_tree_add_subtree(tree, tvb, offset, sizeof(point32_t) + 2, ett_inputs_client, NULL, "Client MOUSE_MOTION message");
             dissect_POINT32(tvb, inputs_tree, offset);
             offset += (int)sizeof(point32_t);
-            offset += dissect_buttons_state(tvb, inputs_tree, offset);
+            proto_tree_add_item(inputs_tree, hf_button_state, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+            offset += 2;
             break;
         case SPICE_MSGC_INPUTS_MOUSE_PRESS:
             inputs_tree = proto_tree_add_subtree(tree, tvb, offset, 3, ett_inputs_client, NULL, "Client MOUSE_PRESS message");
-            proto_tree_add_item(inputs_tree, hf_button, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+            proto_tree_add_item(inputs_tree, hf_button_state, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+            offset += 2;
+            proto_tree_add_item(inputs_tree, hf_mouse_display_id, tvb, offset, 1, ENC_NA);
             offset += 1;
-            offset += dissect_buttons_state(tvb, inputs_tree, offset);
             break;
         case SPICE_MSGC_INPUTS_MOUSE_RELEASE:
             inputs_tree = proto_tree_add_subtree(tree, tvb, offset, 3, ett_inputs_client, NULL, "Client MOUSE_RELEASE message");
-            proto_tree_add_item(inputs_tree, hf_button, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+            proto_tree_add_item(inputs_tree, hf_button_state, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+            offset += 2;
+            proto_tree_add_item(inputs_tree, hf_mouse_display_id, tvb, offset, 1, ENC_NA);
             offset += 1;
-            offset += dissect_buttons_state(tvb, inputs_tree, offset);
             break;
         default:
             expert_add_info_format(pinfo, msgtype_item, &ei_spice_unknown_message, "Unknown inputs client message - cannot dissect");
@@ -2808,7 +2795,7 @@ dissect_spice_data_server_pdu(tvbuff_t *tvb, proto_tree *tree, packet_info *pinf
     }
 
     if ((offset - old_offset) != message_size) {
-        proto_tree_add_expert_format_remaining(tree, pinfo, &ei_spice_not_dissected, tvb, offset,
+        proto_tree_add_expert_format(tree, pinfo, &ei_spice_not_dissected, tvb, offset, -1,
             "message type %s (%u) not fully dissected", get_message_type_string(message_type, spice_info, false), message_type);
         offset = old_offset + message_size;
     }
@@ -3027,7 +3014,7 @@ dissect_spice_link_capabilities(tvbuff_t *tvb, packet_info* pinfo, proto_tree *t
                 }
                 break;
             default:
-                proto_tree_add_expert_remaining(tree, pinfo, &ei_spice_unknown_channel, tvb, offset);
+                proto_tree_add_expert(tree, pinfo, &ei_spice_unknown_channel, tvb, offset, -1);
                 return;
         }
         offset += 4;
@@ -3243,7 +3230,7 @@ dissect_spice(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
             proto_item_set_len(ti, pdu_len);
             proto_tree_add_uint(spice_tree, hf_spice_supported_authentication_mechanisms_list_length, tvb, offset, 4, pdu_len - 4);
             offset += 4;
-            proto_tree_add_item(spice_tree, hf_spice_supported_authentication_mechanisms_list, tvb, offset, pdu_len - 4, ENC_ASCII);
+            proto_tree_add_item(spice_tree, hf_spice_supported_authentication_mechanisms_list, tvb, offset, pdu_len - 4, ENC_NA|ENC_ASCII);
             offset += (pdu_len - 4);
             spice_info->next_state = SPICE_SASL_START_TO_SERVER;
             return offset;
@@ -3270,13 +3257,13 @@ dissect_spice(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
                         col_set_str(pinfo->cinfo, COL_INFO, "Client selected SASL authentication mechanism (start to server)");
                         proto_tree_add_uint(spice_tree, hf_spice_selected_authentication_mechanism_length, tvb, offset, 4, pdu_len - 4);
                         offset += 4;
-                        proto_tree_add_item(spice_tree, hf_spice_selected_authentication_mechanism, tvb, offset, pdu_len - 4, ENC_ASCII);
+                        proto_tree_add_item(spice_tree, hf_spice_selected_authentication_mechanism, tvb, offset, pdu_len - 4, ENC_NA|ENC_ASCII);
                     } else {
                         /* this is the client out list, ending the start from client message */
                          col_set_str(pinfo->cinfo, COL_INFO, "Client out mechanism (start to server)");
                          proto_tree_add_uint(spice_tree, hf_spice_client_out_mechanism_length, tvb, offset, 4, pdu_len - 4);
                          offset += 4;
-                         proto_tree_add_item(spice_tree, hf_spice_selected_client_out_mechanism, tvb, offset, pdu_len - 4, ENC_ASCII);
+                         proto_tree_add_item(spice_tree, hf_spice_selected_client_out_mechanism, tvb, offset, pdu_len - 4, ENC_NA|ENC_ASCII);
                          spice_info->next_state = SPICE_SASL_START_FROM_SERVER;
                     }
                     offset += (pdu_len - 4);
@@ -3315,7 +3302,8 @@ dissect_spice(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
             avail = tvb_reported_length_remaining(tvb, offset);
             if (avail >= 1) {
                 proto_item_set_len(ti, 1);
-                proto_tree_add_item_ret_uint8(spice_tree, hf_spice_sasl_auth_result, tvb, offset, 1, ENC_NA, &sasl_auth_result);
+                sasl_auth_result = tvb_get_uint8(tvb, offset);
+                proto_tree_add_item(spice_tree, hf_spice_sasl_auth_result, tvb, offset, 1, ENC_NA);
 
                 if (per_packet_info->state == SPICE_SASL_START_FROM_SERVER_CONT) {
                     /* if we are in the sasl start, and can continue */
@@ -3352,7 +3340,7 @@ dissect_spice(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
                     col_set_str(pinfo->cinfo, COL_INFO, "Clientout (step to server)");
                     proto_tree_add_uint(spice_tree, hf_spice_clientout_length, tvb, offset, 4, pdu_len - 4);
                     offset += 4;
-                    proto_tree_add_item(spice_tree, hf_spice_clientout_list, tvb, offset, pdu_len - 4, ENC_ASCII);
+                    proto_tree_add_item(spice_tree, hf_spice_clientout_list, tvb, offset, pdu_len - 4, ENC_NA|ENC_ASCII);
                     spice_info->next_state = SPICE_SASL_STEP_FROM_SERVER;
                     offset += (pdu_len - 4);
                 }
@@ -4129,35 +4117,10 @@ proto_register_spice(void)
             FT_UINT32, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
         },
-        { &hf_button,
-          { "Mouse button ID", "spice.button",
-            FT_UINT8, BASE_DEC, VALS(spice_mouse_button_vs), 0x0,
+        { &hf_button_state, /*FIXME - bitmask */
+          { "Mouse button state", "spice.button_state",
+            FT_UINT32, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
-        },
-        { &hf_buttons_state,
-          { "Mouse buttons state mask", "spice.buttons_state",
-            FT_UINT16, BASE_HEX, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_button_mask_left,
-          { "Left", "spice.button_mask_left",
-            FT_BOOLEAN, 16, TFS(&tfs_set_notset), SPICE_MOUSE_BUTTON_MASK_LEFT,
-            NULL, HFILL }
-        },
-        { &hf_button_mask_middle,
-          { "Middle", "spice.button_mask_middle",
-            FT_BOOLEAN, 16, TFS(&tfs_set_notset), SPICE_MOUSE_BUTTON_MASK_MIDDLE,
-            NULL, HFILL }
-        },
-        { &hf_button_mask_right,
-          { "Right", "spice.button_mask_right",
-            FT_BOOLEAN, 16, TFS(&tfs_set_notset), SPICE_MOUSE_BUTTON_MASK_RIGHT,
-            NULL, HFILL }
-        },
-        { &hf_button_mask_reserved_bits,
-          { "Reserved bits", "spice.button_mask_reserved_bits",
-            FT_UINT16, BASE_HEX, NULL, 0xFFF8,
-            "Must be zero", HFILL }
         },
         { &hf_mouse_display_id,
           { "Mouse display ID", "spice.mouse_display_id",
@@ -4527,11 +4490,6 @@ proto_register_spice(void)
         { &hf_agent_monitor_y,
           { "y", "spice.agent_monitor_y",
             FT_INT32, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_vd_agent_buttons,
-          { "Buttons", "spice.vd_agent_buttons",
-            FT_UINT32, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
         },
         { &hf_vd_agent_caps_request,

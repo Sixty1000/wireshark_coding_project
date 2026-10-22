@@ -1,7 +1,7 @@
 /* packet-ngap.c
  * Routines for NG-RAN NG Application Protocol (NGAP) packet dissection
  * Copyright 2018, Anders Broman <anders.broman@ericsson.com>
- * Copyright 2018-2026, Pascal Quantin <pascal@wireshark.org>
+ * Copyright 2018-2024, Pascal Quantin <pascal@wireshark.org>
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
@@ -9,7 +9,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * References: 3GPP TS 38.413 v19.3.0 (2026-06)
+ * References: 3GPP TS 38.413 v18.2.0 (2024-06)
  */
 
 #include "config.h"
@@ -19,6 +19,7 @@
 #include <epan/strutil.h>
 #include <epan/asn1.h>
 #include <epan/prefs.h>
+#include <epan/sctpppids.h>
 #include <epan/expert.h>
 #include <epan/proto_data.h>
 #include <epan/conversation.h>
@@ -44,12 +45,12 @@
 #include "packet-ntp.h"
 #include "packet-gsm_a_common.h"
 #include "packet-media-type.h"
-#include "packet-http2.h"
-#include "packet-gtp.h"
-#include "packet-sctp.h"
-#include "packet-lpp.h"
 
-/* Dissector will use SCTP PPID 60 or SCTP port. IANA assigned port = 38412 */
+#define PNAME  "NG Application Protocol"
+#define PSNAME "NGAP"
+#define PFNAME "ngap"
+
+/* Dissector will use SCTP PPID 18 or SCTP port. IANA assigned port = 36412 */
 #define SCTP_PORT_NGAP 38412
 
 void proto_register_ngap(void);
@@ -142,7 +143,6 @@ static int hf_ngap_GlobalCable_ID_str;
 static int hf_ngap_UpdateFeedback_CN_PDB_DL;
 static int hf_ngap_UpdateFeedback_CN_PDB_UL;
 static int hf_ngap_UpdateFeedback_reserved;
-static int hf_ngap_extensionValue_data;
 #include "packet-ngap-hf.c"
 
 /* Initialize the subtree pointers */
@@ -190,13 +190,9 @@ static int ett_ngap_GlobalCable_ID;
 static int ett_ngap_UpdateFeedback;
 static int ett_ngap_successfulHOReportContainer;
 static int ett_ngap_successfulPSCellChangeReportContainer;
-static int ett_ngap_IntendedServiceAreaCoordinates;
-static int ett_ngap_MDT_circle_reference_location;
-static int ett_ngap_MDT_polygon;
 #include "packet-ngap-ett.c"
 
 static expert_field ei_ngap_number_pages_le15;
-static expert_field ei_ngap_disable_nrppa_encapsulation;
 
 enum{
   INITIATING_MESSAGE,
@@ -208,8 +204,8 @@ enum{
 
 static void set_stats_message_type(packet_info *pinfo, int type);
 
-static const char *st_str_packets        = "Total Packets";
-static const char *st_str_packet_types   = "NGAP Packet Types";
+static const uint8_t *st_str_packets        = "Total Packets";
+static const uint8_t *st_str_packet_types   = "NGAP Packet Types";
 
 static int st_node_packets = -1;
 static int st_node_packet_types = -1;
@@ -286,85 +282,73 @@ struct ngap_tap_t {
 #define MTYPE_NG_SETUP_REQUEST                            65
 #define MTYPE_NG_SETUP_RESPONSE                           66
 #define MTYPE_NG_SETUP_FAILURE                            67
-#define MTYPE_NG_REMOVAL_REQUEST                          68
-#define MTYPE_NG_REMOVAL_RESPONSE                         69
-#define MTYPE_NG_REMOVAL_FAILURE                          70
-#define MTYPE_OVERLOAD_START                              71
-#define MTYPE_OVERLOAD_STOP                               72
-#define MTYPE_PAGING                                      73
-#define MTYPE_PATH_SWITCH_REQUEST                         74
-#define MTYPE_PATH_SWITCH_REQUEST_ACK                     75
-#define MTYPE_PATH_SWITCH_REQUEST_FAILURE                 76
-#define MTYPE_PDU_SESSION_RESOURCE_MODIFY_REQUEST         77
-#define MTYPE_PDU_SESSION_RESOURCE_MODIFY_RESPONSE        78
-#define MTYPE_PDU_SESSION_RESOURCE_MODIFY_IND             79
-#define MTYPE_PDU_SESSION_RESOURCE_MODIFY_CONFIRM         80
-#define MTYPE_PDU_SESSION_RESOURCE_NOTIFY                 81
-#define MTYPE_PDU_SESSION_RESOURCE_RELEASE_COMMAND        82
-#define MTYPE_PDU_SESSION_RESOURCE_RELEASE_RESPONSE       83
-#define MTYPE_PDU_SESSION_RESOURCE_SETUP_REQUEST          84
-#define MTYPE_PDU_SESSION_RESOURCE_SETUP_RESPONSE         85
-#define MTYPE_PRIVATE_MESSAGE                             86
-#define MTYPE_PWS_CANCEL_REQUEST                          87
-#define MTYPE_PWS_CANCEL_RESPONSE                         88
-#define MTYPE_PWS_FAILURE_INDICATION                      89
-#define MTYPE_PWS_RESTART_INDICATION                      90
-#define MTYPE_RAN_CONFIGURATION_UPDATE                    91
-#define MTYPE_RAN_CONFIGURATION_UPDATE_ACK                92
-#define MTYPE_RAN_CONFIGURATION_UPDATE_FAILURE            93
-#define MTYPE_RAN_CP_RELOCATION_IND                       94
-#define MTYPE_RAN_PAGING_REQUEST                          95
-#define MTYPE_REROUTE_NAS_REQUEST                         96
-#define MTYPE_RETRIEVE_UE_INFORMATION                     97
-#define MTYPE_RRC_INACTIVE_TRANSITION_REPORT              98
-#define MTYPE_SECONDARY_RAT_DATA_USAGE_REPORT             99
-#define MTYPE_TIMING_SYNCHRONISATION_STATUS_REQUEST       100
-#define MTYPE_TIMING_SYNCHRONISATION_STATUS_RESPONSE      101
-#define MTYPE_TIMING_SYNCHRONISATION_STATUS_FAILURE       102
-#define MTYPE_TIMING_SYNCHRONISATION_STATUS_REPORT        103
-#define MTYPE_TRACE_FAILURE_IND                           104
-#define MTYPE_TRACE_START                                 105
-#define MTYPE_UE_CONTEXT_MODIFICATION_REQUEST             106
-#define MTYPE_UE_CONTEXT_MODIFICATION_RESPONSE            107
-#define MTYPE_UE_CONTEXT_MODIFICATION_FAILURE             108
-#define MTYPE_UE_CONTEXT_RELEASE_COMMAND                  109
-#define MTYPE_UE_CONTEXT_RELEASE_COMPLETE                 110
-#define MTYPE_UE_CONTEXT_RELEASE_REQUEST                  111
-#define MTYPE_UE_CONTEXT_RESUME_REQUEST                   112
-#define MTYPE_UE_CONTEXT_RESUME_RESPONSE                  113
-#define MTYPE_UE_CONTEXT_RESUME_FAILURE                   114
-#define MTYPE_UE_CONTEXT_SUSPEND_REQUEST                  115
-#define MTYPE_UE_CONTEXT_SUSPEND_RESPONSE                 116
-#define MTYPE_UE_CONTEXT_SUSPEND_FAILURE                  117
-#define MTYPE_UE_INFORMATION_TRANSFER                     118
-#define MTYPE_UE_RADIO_CAPABILITY_CHECK_REQUEST           119
-#define MTYPE_UE_RADIO_CAPABILITY_CHECK_RESPONSE          120
-#define MTYPE_UE_RADIO_CAPABILITY_ID_MAPPING_REQUEST      121
-#define MTYPE_UE_RADIO_CAPABILITY_ID_MAPPING_RESPONSE     122
-#define MTYPE_UE_RADIO_CAPABILITY_INFO_IND                123
-#define MTYPE_UE_TN_LAB_BINDING_RELEASE_REQUEST           124
-#define MTYPE_UPLINK_NAS_TRANSPORT                        125
-#define MTYPE_UPLINK_NON_UE_ASSOCIATED_NR_PPA_TRANSPORT   126
-#define MTYPE_UPLINK_RAN_CONFIGURATION_TRANSFER           127
-#define MTYPE_UPLINK_RAN_EARLY_STATUS_TRANSFER            128
-#define MTYPE_UPLINK_RAN_STATUS_TRANSFER                  129
-#define MTYPE_UPLINK_UE_ASSOCIATED_NR_PPA_TRANSPORT       130
-#define MTYPE_WRITE_REPLACE_WARNING_REQUEST               131
-#define MTYPE_WRITE_REPLACE_WARNING_RESPONSE              132
-#define MTYPE_UPLINK_RIM_INFORMATION_TRANSFER             133
-#define MTYPE_DOWNLINK_RIM_INFORMATION_TRANSFER           134
-#define MTYPE_INVENTORY_REQUEST                           135
-#define MTYPE_INVENTORY_RESPONSE                          136
-#define MTYPE_INVENTORY_FAILURE                           137
-#define MTYPE_INVENTORY_REPORT                            138
-#define MTYPE_COMMAND_REQUEST                             139
-#define MTYPE_COMMAND_RESPONSE                            140
-#define MTYPE_COMMAND_FAILURE                             141
-#define MTYPE_AIOT_SESSION_RELEASE_COMMAND                142
-#define MTYPE_AIOT_SESSION_RELEASE_COMPLETE               143
-#define MTYPE_AIOT_SESSION_RELEASE_REQUEST                144
+#define MTYPE_OVERLOAD_START                              68
+#define MTYPE_OVERLOAD_STOP                               69
+#define MTYPE_PAGING                                      70
+#define MTYPE_PATH_SWITCH_REQUEST                         71
+#define MTYPE_PATH_SWITCH_REQUEST_ACK                     72
+#define MTYPE_PATH_SWITCH_REQUEST_FAILURE                 73
+#define MTYPE_PDU_SESSION_RESOURCE_MODIFY_REQUEST         74
+#define MTYPE_PDU_SESSION_RESOURCE_MODIFY_RESPONSE        75
+#define MTYPE_PDU_SESSION_RESOURCE_MODIFY_IND             76
+#define MTYPE_PDU_SESSION_RESOURCE_MODIFY_CONFIRM         77
+#define MTYPE_PDU_SESSION_RESOURCE_NOTIFY                 78
+#define MTYPE_PDU_SESSION_RESOURCE_RELEASE_COMMAND        79
+#define MTYPE_PDU_SESSION_RESOURCE_RELEASE_RESPONSE       80
+#define MTYPE_PDU_SESSION_RESOURCE_SETUP_REQUEST          81
+#define MTYPE_PDU_SESSION_RESOURCE_SETUP_RESPONSE         82
+#define MTYPE_PRIVATE_MESSAGE                             83
+#define MTYPE_PWS_CANCEL_REQUEST                          84
+#define MTYPE_PWS_CANCEL_RESPONSE                         85
+#define MTYPE_PWS_FAILURE_INDICATION                      86
+#define MTYPE_PWS_RESTART_INDICATION                      87
+#define MTYPE_RAN_CONFIGURATION_UPDATE                    88
+#define MTYPE_RAN_CONFIGURATION_UPDATE_ACK                89
+#define MTYPE_RAN_CONFIGURATION_UPDATE_FAILURE            90
+#define MTYPE_RAN_CP_RELOCATION_IND                       91
+#define MTYPE_RAN_PAGING_REQUEST                          92
+#define MTYPE_REROUTE_NAS_REQUEST                         93
+#define MTYPE_RETRIEVE_UE_INFORMATION                     94
+#define MTYPE_RRC_INACTIVE_TRANSITION_REPORT              95
+#define MTYPE_SECONDARY_RAT_DATA_USAGE_REPORT             96
+#define MTYPE_TIMING_SYNCHRONISATION_STATUS_REQUEST       97
+#define MTYPE_TIMING_SYNCHRONISATION_STATUS_RESPONSE      98
+#define MTYPE_TIMING_SYNCHRONISATION_STATUS_FAILURE       99
+#define MTYPE_TIMING_SYNCHRONISATION_STATUS_REPORT        100
+#define MTYPE_TRACE_FAILURE_IND                           101
+#define MTYPE_TRACE_START                                 102
+#define MTYPE_UE_CONTEXT_MODIFICATION_REQUEST             103
+#define MTYPE_UE_CONTEXT_MODIFICATION_RESPONSE            104
+#define MTYPE_UE_CONTEXT_MODIFICATION_FAILURE             105
+#define MTYPE_UE_CONTEXT_RELEASE_COMMAND                  106
+#define MTYPE_UE_CONTEXT_RELEASE_COMPLETE                 107
+#define MTYPE_UE_CONTEXT_RELEASE_REQUEST                  108
+#define MTYPE_UE_CONTEXT_RESUME_REQUEST                   109
+#define MTYPE_UE_CONTEXT_RESUME_RESPONSE                  110
+#define MTYPE_UE_CONTEXT_RESUME_FAILURE                   111
+#define MTYPE_UE_CONTEXT_SUSPEND_REQUEST                  112
+#define MTYPE_UE_CONTEXT_SUSPEND_RESPONSE                 113
+#define MTYPE_UE_CONTEXT_SUSPEND_FAILURE                  114
+#define MTYPE_UE_INFORMATION_TRANSFER                     115
+#define MTYPE_UE_RADIO_CAPABILITY_CHECK_REQUEST           116
+#define MTYPE_UE_RADIO_CAPABILITY_CHECK_RESPONSE          117
+#define MTYPE_UE_RADIO_CAPABILITY_ID_MAPPING_REQUEST      118
+#define MTYPE_UE_RADIO_CAPABILITY_ID_MAPPING_RESPONSE     119
+#define MTYPE_UE_RADIO_CAPABILITY_INFO_IND                120
+#define MTYPE_UE_TN_LAB_BINDING_RELEASE_REQUEST           121
+#define MTYPE_UPLINK_NAS_TRANSPORT                        122
+#define MTYPE_UPLINK_NON_UE_ASSOCIATED_NR_PPA_TRANSPORT   123
+#define MTYPE_UPLINK_RAN_CONFIGURATION_TRANSFER           124
+#define MTYPE_UPLINK_RAN_EARLY_STATUS_TRANSFER            125
+#define MTYPE_UPLINK_RAN_STATUS_TRANSFER                  126
+#define MTYPE_UPLINK_UE_ASSOCIATED_NR_PPA_TRANSPORT       127
+#define MTYPE_WRITE_REPLACE_WARNING_REQUEST               128
+#define MTYPE_WRITE_REPLACE_WARNING_RESPONSE              129
+#define MTYPE_UPLINK_RIM_INFORMATION_TRANSFER             130
+#define MTYPE_DOWNLINK_RIM_INFORMATION_TRANSFER           131
 
-/* Value Strings. */
+
+/* Value Strings. TODO: ext? */
 static const value_string mtype_names[] = {
     { MTYPE_AMF_CONFIGURATION_UPDATE,                    "AMFConfigurationUpdate" },
     { MTYPE_AMF_CONFIGURATION_UPDATE_ACK,                "AMFConfigurationUpdateAcknowledge" },
@@ -433,9 +417,6 @@ static const value_string mtype_names[] = {
     { MTYPE_NG_SETUP_REQUEST,                            "NGSetupRequest" },
     { MTYPE_NG_SETUP_RESPONSE,                           "NGSetupResponse" },
     { MTYPE_NG_SETUP_FAILURE,                            "NGSetupFailure" },
-    { MTYPE_NG_REMOVAL_REQUEST,                          "NGRemovalRequest" },
-    { MTYPE_NG_REMOVAL_RESPONSE,                         "NGRemovalResponse" },
-    { MTYPE_NG_REMOVAL_FAILURE,                          "NGRemovalFailure" },
     { MTYPE_OVERLOAD_START,                              "OverloadStart" },
     { MTYPE_OVERLOAD_STOP,                               "OverloadStop" },
     { MTYPE_PAGING,                                      "Paging" },
@@ -500,20 +481,8 @@ static const value_string mtype_names[] = {
     { MTYPE_WRITE_REPLACE_WARNING_RESPONSE,              "WriteReplaceWarningResponse" },
     { MTYPE_UPLINK_RIM_INFORMATION_TRANSFER,             "UplinkRIMInformationTransfer" },
     { MTYPE_DOWNLINK_RIM_INFORMATION_TRANSFER,           "DownlinkRIMInformationTransfer" },
-    { MTYPE_INVENTORY_REQUEST,                           "InventoryRequest" },
-    { MTYPE_INVENTORY_RESPONSE,                          "InventoryResponse" },
-    { MTYPE_INVENTORY_FAILURE,                           "InventoryFailure" },
-    { MTYPE_INVENTORY_REPORT,                            "InventoryReport" },
-    { MTYPE_COMMAND_REQUEST,                             "CommandRequest" },
-    { MTYPE_COMMAND_RESPONSE,                            "CommandResponse" },
-    { MTYPE_COMMAND_FAILURE,                             "CommandFailure" },
-    { MTYPE_AIOT_SESSION_RELEASE_COMMAND,                "AIOTSessionReleaseCommand" },
-    { MTYPE_AIOT_SESSION_RELEASE_COMPLETE,               "AIOTSessionReleaseComplete" },
-    { MTYPE_AIOT_SESSION_RELEASE_REQUEST,                "AIOTSessionReleaseRequest" },
     { 0,  NULL }
 };
-static value_string_ext mtype_names_ext = VALUE_STRING_EXT_INIT(mtype_names);
-
 
 
 typedef struct _ngap_ctx_t {
@@ -550,7 +519,6 @@ struct ngap_tai {
 };
 
 struct ngap_private_data {
-  proto_tree *top_tree;
   struct ngap_conv_info *ngap_conv;
   uint32_t procedure_code;
   uint32_t protocol_ie_id;
@@ -597,7 +565,6 @@ static const enum_val_t ngap_lte_container_vals[] = {
 /* Global variables */
 static range_t *gbl_ngapSctpRange;
 static bool ngap_dissect_container = true;
-static bool ngap_disable_nrppa_encapsulation = false;
 static int ngap_dissect_target_ng_ran_container_as = NGAP_NG_RAN_CONTAINER_AUTOMATIC;
 static int ngap_dissect_lte_container_as = NGAP_LTE_CONTAINER_AUTOMATIC;
 
@@ -611,32 +578,21 @@ static dissector_table_t ngap_proc_sout_dissector_table;
 static dissector_table_t ngap_proc_uout_dissector_table;
 static dissector_table_t ngap_n2_ie_type_dissector_table;
 
-static struct ngap_private_data*
-ngap_get_private_data(packet_info *pinfo)
-{
-  struct ngap_private_data *ngap_data = (struct ngap_private_data*)p_get_proto_data(pinfo->pool, pinfo, proto_ngap, 0);
-  if (!ngap_data) {
-    ngap_data = wmem_new0(pinfo->pool, struct ngap_private_data);
-    ngap_data->handover_type_value = -1;
-    ngap_data->qos_flow_add_info_rel_type = -1;
-    p_add_proto_data(pinfo->pool, pinfo, proto_ngap, 0, ngap_data);
-  }
-  return ngap_data;
-}
+static proto_tree *top_tree;
 
 static void set_message_label(asn1_ctx_t *actx, int type)
 {
-  const char *label = val_to_str_ext_const(type, &mtype_names_ext, "Unknown");
+  const char *label = val_to_str_const(type, mtype_names, "Unknown");
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, label);
-  struct ngap_private_data *ngap_data = ngap_get_private_data(actx->pinfo);
-  proto_item_append_text(ngap_data->top_tree, " (%s)", label);
+  /* N.B. would like to be able to use actx->subTree.top_tree, but not easy to set.. */
+  proto_item_append_text(top_tree, " (%s)", label);
 }
 
 
 static int dissect_ProtocolIEFieldValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *);
 /* Currently not used
-static unsigned dissect_ProtocolIEFieldPairFirstValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
-static unsigned dissect_ProtocolIEFieldPairSecondValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
+static int dissect_ProtocolIEFieldPairFirstValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
+static int dissect_ProtocolIEFieldPairSecondValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
 */
 static int dissect_ProtocolExtensionFieldExtensionValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *);
 static int dissect_InitiatingMessageValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *);
@@ -668,7 +624,7 @@ static int dissect_PDUSessionResourceReleaseCommandTransfer_PDU(tvbuff_t *tvb _U
 static int dissect_TargetNGRANNode_ToSourceNGRANNode_FailureTransparentContainer_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
 static int dissect_SecondaryRATDataUsageReportTransfer_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
 static int dissect_PDUSessionResourceModifyIndicationUnsuccessfulTransfer_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
-static unsigned dissect_ngap_AlternativeQoSParaSetNotifyIndex(tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+static int dissect_ngap_AlternativeQoSParaSetNotifyIndex(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
 static int dissect_UEContextResumeRequestTransfer_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
 static int dissect_UEContextResumeResponseTransfer_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
 static int dissect_UEContextSuspendRequestTransfer_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
@@ -676,12 +632,6 @@ static int dissect_MBSSessionSetupOrModRequestTransfer_PDU(tvbuff_t *tvb _U_, pa
 static int dissect_MBSSessionSetupOrModResponseTransfer_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
 static int dissect_MBSSessionSetupOrModFailureTransfer_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
 static int dissect_MBSSessionReleaseResponseTransfer_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
-static int dissect_BroadcastTransportRequestTransfer_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
-static int dissect_BroadcastTransportResponseTransfer_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
-static int dissect_BroadcastTransportFailureTransfer_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
-static int dissect_MulticastSessionActivationRequestTransfer_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
-static int dissect_MulticastSessionDeactivationRequestTransfer_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
-static int dissect_MulticastSessionUpdateRequestTransfer_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
 
 static const value_string ngap_serialNumber_gs_vals[] = {
   { 0, "Display mode immediate, cell wide"},
@@ -704,8 +654,7 @@ static void
 dissect_ngap_warningMessageContents(tvbuff_t *warning_msg_tvb, proto_tree *tree, packet_info *pinfo, uint8_t dcs, int hf_nb_pages, int hf_decoded_page)
 {
   uint32_t offset;
-  uint8_t nb_of_pages, length;
-  const char *str;
+  uint8_t nb_of_pages, length, *str;
   proto_item *ti;
   tvbuff_t *cb_data_page_tvb, *cb_data_tvb;
   int i;
@@ -722,7 +671,7 @@ dissect_ngap_warningMessageContents(tvbuff_t *warning_msg_tvb, proto_tree *tree,
     cb_data_page_tvb = tvb_new_subset_length(warning_msg_tvb, offset, length);
     cb_data_tvb = dissect_cbs_data(dcs, cb_data_page_tvb, tree, pinfo, 0);
     if (cb_data_tvb) {
-      str = (char*)tvb_get_string_enc(pinfo->pool, cb_data_tvb, 0, tvb_reported_length(cb_data_tvb), ENC_UTF_8|ENC_NA);
+      str = tvb_get_string_enc(pinfo->pool, cb_data_tvb, 0, tvb_reported_length(cb_data_tvb), ENC_UTF_8|ENC_NA);
       proto_tree_add_string_format(tree, hf_decoded_page, warning_msg_tvb, offset, 83,
                                    str, "Decoded Page %u: %s", i+1, str);
     }
@@ -743,7 +692,7 @@ ngap_PacketDelayBudget_fmt(char *s, uint32_t v)
 }
 
 static void
-ngap_tenth_seconds_fmt(char *s, uint32_t v)
+ngap_TimeUEStayedInCellEnhancedGranularity_fmt(char *s, uint32_t v)
 {
   snprintf(s, ITEM_LABEL_LENGTH, "%.1fs", ((float)v)/10);
 }
@@ -809,18 +758,17 @@ ngap_N6Jitter_fmt(char *s, uint32_t v)
   snprintf(s, ITEM_LABEL_LENGTH, "%.1fms (%d)", (float)v/2, (int32_t)v);
 }
 
-static void
-ngap_AIoT_timeInterval_fmt(char *s, uint32_t v)
+static struct ngap_private_data*
+ngap_get_private_data(packet_info *pinfo)
 {
-  snprintf(s, ITEM_LABEL_LENGTH, "%.2fs (%u)", (float)v/10, v);
-}
-
-static void
-ngap_50m_r19_fmt(char *s, uint32_t v)
-{
-  int32_t d = (int32_t)v;
-
-  snprintf(s, ITEM_LABEL_LENGTH, "%dm (%d)", d*50, d);
+  struct ngap_private_data *ngap_data = (struct ngap_private_data*)p_get_proto_data(pinfo->pool, pinfo, proto_ngap, 0);
+  if (!ngap_data) {
+    ngap_data = wmem_new0(pinfo->pool, struct ngap_private_data);
+    ngap_data->handover_type_value = -1;
+    ngap_data->qos_flow_add_info_rel_type = -1;
+    p_add_proto_data(pinfo->pool, pinfo, proto_ngap, 0, ngap_data);
+  }
+  return ngap_data;
 }
 
 static GlobalRANNodeID_enum
@@ -879,7 +827,7 @@ static int dissect_ProtocolIEFieldValue(tvbuff_t *tvb, packet_info *pinfo, proto
   ngap_ctx.ProtocolIE_ID       = ngap_data->protocol_ie_id;
   ngap_ctx.ProtocolExtensionID = ngap_data->protocol_extension_id;
 
-  return (dissector_try_uint_with_data(ngap_ies_dissector_table, ngap_data->protocol_ie_id, tvb, pinfo, tree, false, &ngap_ctx)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_new(ngap_ies_dissector_table, ngap_data->protocol_ie_id, tvb, pinfo, tree, false, &ngap_ctx)) ? tvb_captured_length(tvb) : 0;
 }
 /* Currently not used
 static int dissect_ProtocolIEFieldPairFirstValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
@@ -907,30 +855,28 @@ static int dissect_ProtocolExtensionFieldExtensionValue(tvbuff_t *tvb, packet_in
   ngap_ctx.ProtocolIE_ID       = ngap_data->protocol_ie_id;
   ngap_ctx.ProtocolExtensionID = ngap_data->protocol_extension_id;
 
-  if (!dissector_try_uint_with_data(ngap_extension_dissector_table, ngap_data->protocol_extension_id, tvb, pinfo, tree, true, &ngap_ctx))
-    proto_tree_add_item(tree, hf_ngap_extensionValue_data, tvb, 0, -1, ENC_NA);
-  return tvb_captured_length(tvb);
+  return (dissector_try_uint_new(ngap_extension_dissector_table, ngap_data->protocol_extension_id, tvb, pinfo, tree, true, &ngap_ctx)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_InitiatingMessageValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
   struct ngap_private_data *ngap_data = ngap_get_private_data(pinfo);
 
-  return (dissector_try_uint_with_data(ngap_proc_imsg_dissector_table, ngap_data->procedure_code, tvb, pinfo, tree, true, data)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_new(ngap_proc_imsg_dissector_table, ngap_data->procedure_code, tvb, pinfo, tree, true, data)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_SuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
   struct ngap_private_data *ngap_data = ngap_get_private_data(pinfo);
 
-  return (dissector_try_uint_with_data(ngap_proc_sout_dissector_table, ngap_data->procedure_code, tvb, pinfo, tree, true, data)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_new(ngap_proc_sout_dissector_table, ngap_data->procedure_code, tvb, pinfo, tree, true, data)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_UnsuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
   struct ngap_private_data *ngap_data = ngap_get_private_data(pinfo);
 
-  return (dissector_try_uint_with_data(ngap_proc_uout_dissector_table, ngap_data->procedure_code, tvb, pinfo, tree, true, data)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_new(ngap_proc_uout_dissector_table, ngap_data->procedure_code, tvb, pinfo, tree, true, data)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_QosFlowAdditionalInfoListRel_PDU(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
@@ -956,8 +902,8 @@ ngap_stats_tree_packet(stats_tree* st, packet_info* pinfo _U_,
 
     tick_stat_node(st, st_str_packets, 0, false);
     stats_tree_tick_pivot(st, st_node_packet_types,
-                          val_to_str_ext(pinfo->pool, pi->ngap_mtype, &mtype_names_ext,
-                                         "Unknown packet type (%d)"));
+                          val_to_str(pi->ngap_mtype, mtype_names,
+                                     "Unknown packet type (%d)"));
     return TAP_PACKET_REDRAW;
 }
 
@@ -988,14 +934,14 @@ dissect_ngap(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
   ngap_item = proto_tree_add_item(tree, proto_ngap, tvb, 0, -1, ENC_NA);
   ngap_tree = proto_item_add_subtree(ngap_item, ett_ngap);
 
-  ngap_data = ngap_get_private_data(pinfo);
-
   /* Store top-level tree */
-  ngap_data->top_tree = ngap_tree;
+  top_tree = ngap_tree;
 
   /* Add stats tap to private struct */
-  ngap_data->stats_tap = ngap_info;
+  struct ngap_private_data *priv_data = ngap_get_private_data(pinfo);
+  priv_data->stats_tap = ngap_info;
 
+  ngap_data = ngap_get_private_data(pinfo);
   conversation = find_or_create_conversation(pinfo);
   ngap_data->ngap_conv = (struct ngap_conv_info *)conversation_get_proto_data(conversation, proto_ngap);
   if (!ngap_data->ngap_conv) {
@@ -1035,18 +981,12 @@ find_n2_info_content(char *json_data, jsmntok_t *token, const char *n2_info_cont
   if (!str || strcmp(str, content_id))
     return false;
   str = json_get_string(json_data, n2_info_content_token, "ngapIeType");
-  if (str) {
-    if (!strcmp(str, "NRPPA_PDU") && ngap_disable_nrppa_encapsulation) {
-      *subdissector = nrppa_handle;
-    } else {
-      *subdissector = dissector_get_string_handle(ngap_n2_ie_type_dissector_table, str);
-    }
-  } else if (json_get_double(json_data, n2_info_content_token,
-                             "ngapMessageType", &ngap_msg_type)) {
+  if (str)
+    *subdissector = dissector_get_string_handle(ngap_n2_ie_type_dissector_table, str);
+  else if (json_get_double(json_data, n2_info_content_token, "ngapMessageType", &ngap_msg_type))
     *subdissector = ngap_handle;
-  } else {
+  else
     *subdissector = NULL;
-  }
   return true;
 }
 
@@ -1065,7 +1005,7 @@ dissect_ngap_media_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
   if (!json_tvb || !content_info || !content_info->content_id)
     return 0;
 
-  json_data = (char*)tvb_get_string_enc(pinfo->pool, json_tvb, 0, tvb_reported_length(json_tvb), ENC_UTF_8|ENC_NA);
+  json_data = tvb_get_string_enc(pinfo->pool, json_tvb, 0, tvb_reported_length(json_tvb), ENC_UTF_8|ENC_NA);
   ret = json_parse(json_data, NULL, 0);
   if (ret <= 0)
     return 0;
@@ -1125,10 +1065,10 @@ dissect_ngap_media_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
     goto found;
   cur_tok = json_get_array(json_data, tokens, "pduSessionList");
   if (cur_tok) {
-    const int count = json_get_array_len(cur_tok);
-    jsmntok_t* array_tok = json_get_array_index(cur_tok, 0);
-    for (int i = 0; i < count; i++, array_tok = json_get_next_object(array_tok)) {
-
+    int i, count;
+    count = json_get_array_len(cur_tok);
+    for (i = 0; i < count; i++) {
+      jsmntok_t *array_tok = json_get_array_index(cur_tok, i);
       if (find_n2_info_content(json_data, array_tok, "n2InfoContent",
                                content_info->content_id, &subdissector))
         goto found;
@@ -1146,12 +1086,6 @@ dissect_ngap_media_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
   if (find_n2_info_content(json_data, tokens, "ueRadioCapability",
                            content_info->content_id, &subdissector))
     goto found;
-  if (find_n2_info_content(json_data, tokens, "ueNbiotRadioCapability",
-                           content_info->content_id, &subdissector))
-    goto found;
-  if (find_n2_info_content(json_data, tokens, "ueRadioCapabilityForPaging",
-                           content_info->content_id, &subdissector))
-    goto found;
 
 found:
   if (subdissector) {
@@ -1163,9 +1097,6 @@ found:
     if (subdissector != ngap_handle) {
         ngap_item = proto_tree_add_item(tree, proto_ngap, tvb, 0, -1, ENC_NA);
         ngap_tree = proto_item_add_subtree(ngap_item, ett_ngap);
-        if (ngap_disable_nrppa_encapsulation && subdissector == nrppa_handle) {
-          expert_add_info(pinfo, ngap_item, &ei_ngap_disable_nrppa_encapsulation);
-        }
     } else {
         ngap_tree = tree;
     }
@@ -1498,10 +1429,6 @@ void proto_register_ngap(void) {
       { "Reserved", "ngap.UpdateFeedback.reserved",
         FT_UINT8, BASE_HEX, NULL, 0x3f,
         NULL, HFILL }},
-    { &hf_ngap_extensionValue_data,
-      { "Data", "ngap.extensionValue.data",
-        FT_BYTES, BASE_NONE|BASE_ALLOW_ZERO, NULL, 0,
-        NULL, HFILL }},
 #include "packet-ngap-hfarr.c"
   };
 
@@ -1551,24 +1478,18 @@ void proto_register_ngap(void) {
     &ett_ngap_UpdateFeedback,
     &ett_ngap_successfulHOReportContainer,
     &ett_ngap_successfulPSCellChangeReportContainer,
-    &ett_ngap_IntendedServiceAreaCoordinates,
-    &ett_ngap_MDT_circle_reference_location,
-    &ett_ngap_MDT_polygon,
 #include "packet-ngap-ettarr.c"
   };
 
   static ei_register_info ei[] = {
-    { &ei_ngap_number_pages_le15, { "ngap.number_pages_le15", PI_MALFORMED, PI_ERROR, "Number of pages should be <=15", EXPFILL }},
-    { &ei_ngap_disable_nrppa_encapsulation,
-      { "ngap.disable_nrppa_encapsulation", PI_PROTOCOL, PI_CHAT, "Encapsulation of NRPPa in NGAP is disabled", EXPFILL }
-    }
+    { &ei_ngap_number_pages_le15, { "ngap.number_pages_le15", PI_MALFORMED, PI_ERROR, "Number of pages should be <=15", EXPFILL }}
   };
 
   module_t *ngap_module;
   expert_module_t* expert_ngap;
 
   /* Register protocol */
-  proto_ngap = proto_register_protocol("NG Application Protocol", "NGAP", "ngap");
+  proto_ngap = proto_register_protocol(PNAME, PSNAME, PFNAME);
   /* Register fields and subtrees */
   proto_register_field_array(proto_ngap, hf, array_length(hf));
   proto_register_subtree_array(ett, array_length(ett));
@@ -1596,13 +1517,6 @@ void proto_register_ngap(void) {
                                  "Dissect TransparentContainer",
                                  "Dissect TransparentContainers that are opaque to NGAP",
                                  &ngap_dissect_container);
-  prefs_register_bool_preference(ngap_module, "disable_nrppa_encapsulation",
-                                 "Disable encapsulation of NRPPa in NGAP",
-                                 "The standard indicates that NRPPa PDU must "
-                                 "be encapsulated in ngap.NRPPa-PDU ASN1 type. "
-                                 "However, Huawei AMF use the NRPPa ASN1 type "
-                                 "directly.",
-                                 &ngap_disable_nrppa_encapsulation);
   prefs_register_enum_preference(ngap_module, "dissect_target_ng_ran_container_as",
                                  "Dissect target NG-RAN container as",
                                  "Select whether target NG-RAN container should be decoded automatically"

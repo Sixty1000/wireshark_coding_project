@@ -9,6 +9,8 @@
 
 #include <ui/qt/packet_list.h>
 
+#include "config.h"
+
 #include "file.h"
 
 #include <epan/epan.h>
@@ -16,6 +18,7 @@
 
 #include <epan/column.h>
 #include <epan/expert.h>
+#include <epan/ipproto.h>
 #include <epan/packet.h>
 #include <epan/prefs.h>
 #include <epan/proto.h>
@@ -24,19 +27,21 @@
 #include "ui/packet_list_utils.h"
 #include "ui/preference_utils.h"
 #include "ui/recent.h"
+#include "ui/recent_utils.h"
+#include "ui/ws_ui_util.h"
 #include "ui/simple_dialog.h"
 #include <wsutil/utf8_entities.h>
+#include "ui/util.h"
 
 #include "wiretap/wtap_opttypes.h"
-#include "app/application_flavor.h"
+#include "wsutil/filesystem.h"
 #include "wsutil/str_util.h"
 #include <wsutil/wslog.h>
 
+#include <epan/color_filters.h>
+#include "frame_tvbuff.h"
+
 #include <ui/qt/utils/color_utils.h>
-#include <ui/qt/utils/coloring_rule_utils.h>
-#include <ui/qt/utils/theme_manager.h>
-#include <ui/qt/utils/themes/color_math.h>
-#include <ui/qt/utils/font_manager.h>
 #include <ui/qt/widgets/overlay_scroll_bar.h>
 #include "proto_tree.h"
 #include <ui/qt/utils/qt_ui_utils.h>
@@ -47,7 +52,6 @@
 #include <ui/qt/utils/variant_pointer.h>
 #include <ui/qt/models/pref_models.h>
 #include <ui/qt/widgets/packet_list_header.h>
-#include <ui/qt/widgets/pinned_overlay_view.h>
 #include <ui/qt/utils/wireshark_mime_data.h>
 #include <ui/qt/widgets/drag_label.h>
 #include <ui/qt/filter_action.h>
@@ -57,22 +61,16 @@
 
 #include <QAction>
 #include <QActionGroup>
-#include <QApplication>
-#include <QDesktopServices>
-#include <QSet>
-#include <QUrl>
 #include <QClipboard>
 #include <QContextMenuEvent>
 #include <QtCore/qmath.h>
 #include <QElapsedTimer>
 #include <QFontMetrics>
 #include <QHeaderView>
-#include <QKeyEvent>
 #include <QMessageBox>
 #include <QPainter>
 #include <QScreen>
 #include <QScrollBar>
-#include <QWheelEvent>
 #include <QTabWidget>
 #include <QTextEdit>
 #include <QTimerEvent>
@@ -80,9 +78,6 @@
 #include <QWindow>
 #include <QJsonObject>
 #include <QJsonDocument>
-#include <QScopedValueRollback>
-
-#include <functional>
 
 #ifdef Q_OS_WIN
 #include "wsutil/file_util.h"
@@ -100,53 +95,8 @@
 // capture files against packet lists and models.
 static PacketList *gbl_cur_packet_list;
 
-namespace {
-
-/*
- * A selection model that calls a function before applying any selection
- * command that clears the current selection, so that the packet list's
- * selection and the pinned-row strip's selection can act as a single
- * selection: a plain click (or keyboard navigation, etc.) in one clears
- * the other as well, while Ctrl- and Shift-clicks extend across both.
- */
-class LinkedSelectionModel : public QItemSelectionModel
-{
-public:
-    LinkedSelectionModel(QAbstractItemModel *model, QObject *parent, std::function<void()> clearing) :
-        QItemSelectionModel(model, parent),
-        clearing_(std::move(clearing))
-    {}
-
-    using QItemSelectionModel::select;
-    // The QModelIndex overload, setCurrentIndex(), clearSelection(), and
-    // clear() all end up here.
-    void select(const QItemSelection &selection, QItemSelectionModel::SelectionFlags command) override
-    {
-        if (command & QItemSelectionModel::Clear) {
-            clearing_();
-        }
-        QItemSelectionModel::select(selection, command);
-    }
-
-private:
-    std::function<void()> clearing_;
-};
-
-} // namespace
-
 const int max_comments_to_fetch_ = 20000000; // Arbitrary
 const int overlay_update_interval_ = 100; // 250; // Milliseconds.
-// Turbo mode: If the user holds down the down or up key longer than the
-// activation delay, switch from the operating system's autorepeat rate to
-// our own, faster rate.
-const int turbo_activation_delay_ = 1500; // Milliseconds, somewhat arbitrary.
-// Our goal is to move to the next or previous packet as fast as possible
-// while still allowing the user to recognize changes in the hex view.
-// According to this paper on Rapid Serial Visual Presentation (RSVP), humans
-// can recognize images presented as fast as 13ms.
-// https://web.archive.org/web/20250216195443/https://mollylab-1.mit.edu/sites/default/files/documents/FastDetect2014withFigures.pdf
-// Hopefully 15ms is plenty.
-const int turbo_nav_interval_ = 15; // Milliseconds
 
 
 /*
@@ -160,9 +110,9 @@ packet_list_select_row_from_data(frame_data *fdata_needle)
     if (! gbl_cur_packet_list || ! gbl_cur_packet_list->model())
         return false;
 
-    PacketListProxyModel* model = qobject_cast<PacketListProxyModel*>(gbl_cur_packet_list->model());
+    PacketListModel * model = qobject_cast<PacketListModel *>(gbl_cur_packet_list->model());
 
-    if (!model)
+    if (! model)
         return false;
 
     model->flushVisibleRows();
@@ -269,9 +219,6 @@ PacketList::PacketList(QWidget *parent) :
     cap_file_(nullptr),
     ctx_column_(-1),
     overlay_timer_id_(0),
-    turbo_timer_id_(0),
-    turbo_key_(Qt::Key(0)),
-    held_key_(Qt::Key(0)),
     create_near_overlay_(true),
     create_far_overlay_(true),
     mouse_pressed_at_(QModelIndex()),
@@ -282,15 +229,6 @@ PacketList::PacketList(QWidget *parent) :
     set_style_sheet_(false),
     frozen_current_row_(QModelIndex()),
     frozen_selected_rows_(QModelIndexList()),
-    pinned_rows_model_(nullptr),
-    pinned_selection_model_(nullptr),
-    syncing_selection_(false),
-    pinned_column_boundary_(0),
-    saved_pinned_column_boundary_(0),
-    pinned_column_view_(nullptr),
-    pinned_row_view_(nullptr),
-    pinned_row_corner_view_(nullptr),
-    hovered_frame_num_(-1),
     cur_history_(-1),
     in_history_(false),
     finfo_array(nullptr),
@@ -300,17 +238,9 @@ PacketList::PacketList(QWidget *parent) :
     setRootIsDecorated(false);
     setSortingEnabled(prefs.gui_packet_list_sortable);
     setUniformRowHeights(true);
-    setFocusPolicy(Qt::StrongFocus);
-    // Needed so mouseMoveEvent() fires on a plain hover (no button held),
-    // to track hovered_frame_num_ for the cross-pane hover highlight.
-    setMouseTracking(true);
+    setAccessibleName("Packet list");
 
-#ifdef Q_OS_MACOS
-    setAttribute(Qt::WA_MacShowFocusRect, true);
-#endif
-
-    verticalScrollBar()->setFocusPolicy(Qt::NoFocus);
-    horizontalScrollBar()->setFocusPolicy(Qt::NoFocus);
+    proto_prefs_menus_.setTitle(tr("Protocol Preferences"));
 
     packet_list_header_ = new PacketListHeader(header()->orientation());
     connect(packet_list_header_, &PacketListHeader::resetColumnWidth, this, &PacketList::setRecentColumnWidth);
@@ -334,18 +264,15 @@ PacketList::PacketList(QWidget *parent) :
     header()->setSortIndicator(-1, Qt::AscendingOrder);
 
     packet_list_model_ = new PacketListModel(this, cap_file_);
-    packet_list_proxy_model_ = new PacketListProxyModel(this);
-    packet_list_proxy_model_->setSourceModel(packet_list_model_);
-    setModel(packet_list_proxy_model_);
+    setModel(packet_list_model_);
 
     Q_ASSERT(gbl_cur_packet_list == Q_NULLPTR);
     gbl_cur_packet_list = this;
 
-    connect(packet_list_proxy_model_, &PacketListProxyModel::goToPacket, this, [=](int packet) { goToPacket(packet); });
-    connect(ThemeManager::instance(), &ThemeManager::themeChanged,
-            this, &PacketList::colorsChanged);
-    connect(mainApp, &MainApplication::addressResolutionChanged, this, &PacketList::redrawVisiblePacketsDontSelectCurrent);
-    connect(mainApp, &MainApplication::columnDataChanged, this, &PacketList::redrawVisiblePacketsDontSelectCurrent);
+    connect(packet_list_model_, SIGNAL(goToPacket(int)), this, SLOT(goToPacket(int)));
+    connect(packet_list_model_, SIGNAL(itemHeightChanged(const QModelIndex&)), this, SLOT(updateRowHeights(const QModelIndex&)));
+    connect(mainApp, SIGNAL(addressResolutionChanged()), this, SLOT(redrawVisiblePacketsDontSelectCurrent()));
+    connect(mainApp, SIGNAL(columnDataChanged()), this, SLOT(redrawVisiblePacketsDontSelectCurrent()));
     connect(mainApp, &MainApplication::preferencesChanged, this, [=]() {
         /* The pref is a uint but QCache maxCost is a signed int (/
          * qsizetype in Qt 6). Note that QAbstractItemModel row numbers
@@ -358,125 +285,12 @@ PacketList::PacketList(QWidget *parent) :
         }
     });
 
-    connect(header(), &QHeaderView::sectionResized, this, &PacketList::sectionResized);
-    connect(header(), &QHeaderView::sectionMoved, this, &PacketList::sectionMoved);
-    // The frozen column view's own header is a separate QHeaderView and
-    // doesn't automatically follow this one's sort indicator (the arrow
-    // icon), so keep it mirrored whenever a click on the real header (not
-    // just sortByColumnFromOverlay()) changes it.
-    connect(header(), &QHeaderView::sortIndicatorChanged, this, [this](int column, Qt::SortOrder order) {
-        if (pinned_column_view_) {
-            pinned_column_view_->mirrorSortIndicator(column, order);
-        }
-    });
+    connect(header(), SIGNAL(sectionResized(int,int,int)),
+            this, SLOT(sectionResized(int,int,int)));
+    connect(header(), SIGNAL(sectionMoved(int,int,int)),
+            this, SLOT(sectionMoved(int,int,int)));
 
-    connect(verticalScrollBar(), &QScrollBar::actionTriggered, this, &PacketList::vScrollBarActionTriggered);
-
-    connect(packet_list_header_, &PacketListHeader::freezeColumnsToHere, this, &PacketList::setPinnedColumnBoundary);
-    // While the real header is being dragged, let it show through the
-    // frozen-column overlay so the drag is visible when crossing the freeze.
-    connect(packet_list_header_, &PacketListHeader::dragActiveChanged, this, [this](bool active) {
-        header_drag_active_ = active;
-        updateFrozenOverlayMask();
-    });
-    connect(packet_list_header_, &PacketListHeader::unfreezeColumns, this, [this]() { setPinnedColumnBoundary(0); });
-
-    pinned_rows_model_ = new PinnedRowsModel(this);
-    pinned_rows_model_->setSourceModel(packet_list_model_);
-    pinned_rows_model_->setSortModel(packet_list_proxy_model_);
-    pinned_selection_model_ = new LinkedSelectionModel(pinned_rows_model_, this, [this]() {
-        if (!syncing_selection_ && selectionModel()) {
-            QScopedValueRollback<bool> syncing(syncing_selection_, true);
-            selectionModel()->clearSelection();
-        }
-    });
-    connect(pinned_selection_model_, &QItemSelectionModel::selectionChanged, this, &PacketList::pinnedSelectionChanged);
-    connect(pinned_selection_model_, &QItemSelectionModel::currentChanged, this, &PacketList::pinnedCurrentChanged);
-    connect(pinned_rows_model_, &QAbstractItemModel::rowsInserted, this, &PacketList::pinnedRowsChanged);
-    connect(pinned_rows_model_, &QAbstractItemModel::rowsRemoved, this, &PacketList::pinnedRowsChanged);
-    connect(pinned_rows_model_, &QAbstractItemModel::modelReset, this, &PacketList::pinnedRowsChanged);
-    installSelectionModel();
-    // Filtering (modelReset) and sorting (layoutChanged) in the packet
-    // list both need the pinned set re-ordered and the two selections
-    // reconciled to match.
-    connect(packet_list_proxy_model_, &QAbstractItemModel::modelReset, this, &PacketList::updatePinnedRowVisibility);
-    connect(packet_list_proxy_model_, &QAbstractItemModel::layoutChanged, this, &PacketList::updatePinnedRowVisibility);
-
-    pinned_column_view_ = new PinnedColumnView(this, this);
-    pinned_column_view_->setModel(packet_list_proxy_model_);
-    pinned_column_view_->setSelectionModel(selectionModel());
-
-    connect(verticalScrollBar(), &QScrollBar::valueChanged, pinned_column_view_, &PinnedColumnView::setVerticalScrollValue);
-
-    // Own the font: seed it now and follow the FontManager for later changes.
-    connect(FontManager::instance(), &FontManager::monospaceFontChanged, this, &PacketList::setMonospaceFont);
-    connect(FontManager::instance(), &FontManager::applicationFontChanged, this, &PacketList::setRegularFont);
-    setMonospaceFont(FontManager::zoomedMonospaceFont());
-    setRegularFont(FontManager::zoomedFont());
-
-    // isActiveWindow()/QEvent::ActivationChange can lag behind the actual
-    // activation state on some platforms until the next event loop
-    // iteration, so also track focus moving to/from the application
-    // entirely to keep the pinned overlay views' selection color synced.
-    connect(qApp, &QApplication::focusChanged, this, &PacketList::applicationFocusChanged);
-}
-
-void PacketList::setPinnedRowViews(PinnedRowView *row_view, PinnedRowView *corner_view)
-{
-    pinned_row_view_ = row_view;
-    pinned_row_corner_view_ = corner_view;
-
-    if (pinned_row_view_) {
-        pinned_row_view_->setModel(pinned_rows_model_);
-        pinned_row_view_->setSelectionModel(pinned_selection_model_);
-        connect(horizontalScrollBar(), &QScrollBar::valueChanged, pinned_row_view_, &PinnedRowView::setHorizontalScrollValue);
-    }
-    if (pinned_row_corner_view_) {
-        pinned_row_corner_view_->setModel(pinned_rows_model_);
-        pinned_row_corner_view_->setSelectionModel(pinned_selection_model_);
-    }
-
-    // Push this view's already-computed column delegates (including the tag
-    // column's) onto the newly attached pinned views immediately, rather than
-    // waiting for the next setColumnVisibility() call (e.g. a column resize),
-    // which is the only other place delegates get propagated to
-    // pinnedOverlayViews().
-    setColumnDelegate();
-}
-
-QList<QTreeView *> PacketList::pinnedOverlayViews() const
-{
-    QList<QTreeView *> views;
-    if (pinned_column_view_) {
-        views << pinned_column_view_;
-    }
-    if (pinned_row_view_) {
-        views << pinned_row_view_;
-    }
-    if (pinned_row_corner_view_) {
-        views << pinned_row_corner_view_;
-    }
-    return views;
-}
-
-void PacketList::repaintPinnedOverlays()
-{
-    for (QTreeView *view : pinnedOverlayViews()) {
-        view->viewport()->update();
-    }
-}
-
-void PacketList::mirrorSectionWidthToOverlays(int column, int width)
-{
-    if (pinned_column_view_) {
-        pinned_column_view_->mirrorSectionWidth(column, width);
-    }
-    if (pinned_row_view_) {
-        pinned_row_view_->mirrorSectionWidth(column, width);
-    }
-    if (pinned_row_corner_view_) {
-        pinned_row_corner_view_->mirrorSectionWidth(column, width);
-    }
+    connect(verticalScrollBar(), SIGNAL(actionTriggered(int)), this, SLOT(vScrollBarActionTriggered(int)));
 }
 
 PacketList::~PacketList()
@@ -500,132 +314,106 @@ void PacketList::scrollTo(const QModelIndex &index, QAbstractItemView::ScrollHin
     setUpdatesEnabled(true);
 }
 
-// https://bugreports.qt.io/browse/QTBUG-122109
-// Affects Qt 6.5.4 and 6.5.5, and 6.6.1 and 6.6.2 (fixed in 6.5.6 and
-// 6.6.3). When a tree view's style sheet is set, all visible sections of
-// its header are reset to the minimum DefaultSectionSize (even if it hasn't
-// changed.)
-#if (QT_VERSION >= QT_VERSION_CHECK(6, 5, 4) && QT_VERSION < QT_VERSION_CHECK(6, 5, 6)) \
-    || (QT_VERSION >= QT_VERSION_CHECK(6, 6, 1) && QT_VERSION < QT_VERSION_CHECK(6, 6, 3))
-#define QTBUG_122109_WORKAROUND
-#endif
-
 void PacketList::colorsChanged()
 {
     const QString c_active   = "active";
     const QString c_inactive = "!active";
 
-    const QString flat_style_format =
+    QString flat_style_format =
         "QTreeView::item:selected:%1 {"
         "  color: %2;"
         "  background-color: %3;"
         "}";
 
-    // Same as flat_style_format but with no :active/:!active selector at
-    // all, for the overlay panes (see applyOverlayActiveState()).
-    const QString plain_style_format =
-        "QTreeView::item:selected {"
-        "  color: %1;"
-        "  background-color: %2;"
+    QString gradient_style_format =
+        "QTreeView::item:selected:%1 {"
+        "  color: %2;"
+        "  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1 stop: 0 %4, stop: 0.5 %3, stop: 1 %4);"
         "}";
 
-    ThemeManager *tm = ThemeManager::instance();
-    QColor active_bg   = tm->color(ThemeManager::PacketsSelection);
-    QColor inactive_bg = tm->color(ThemeManager::PacketsInactive);
-    QColor active_fg   = tm->color(ThemeManager::PacketsSelectionText);
-    QColor inactive_fg = tm->color(ThemeManager::PacketsInactiveText);
+    QString hover_style;
+#if !defined(Q_OS_WIN)
+    hover_style = QString(
+        "QTreeView:item:hover {"
+        "  background-color: %1;"
+        "  color: palette(text);"
+        "}").arg(ColorUtils::hoverBackground().name(QColor::HexArgb));
+#endif
 
-    QString active_style = flat_style_format.arg(
-                               c_active,
-                               active_fg.name(),
-                               active_bg.name());
-    QString inactive_style = flat_style_format.arg(
-                                 c_inactive,
-                                 inactive_fg.name(),
-                                 inactive_bg.name());
+    QString active_style   = QString();
+    QString inactive_style = QString();
 
-    // The QTreeView::item:selected rules above make Qt draw selected cells
-    // through its generic stylesheet path instead of the native style. That
-    // path draws a focus frame around the current cell, even after a mouse
-    // click, which the windows11 style (Qt 6.7+) renders as a prominent
-    // rounded double outline. Only the row should look selected, so
-    // suppress the outline. macOS draws no item focus frame either way.
-    const QString no_focus_outline = "QTreeView { outline: 0; }";
+    if (prefs.gui_active_style == COLOR_STYLE_DEFAULT) {
+        // ACTIVE = Default
+    } else if (prefs.gui_active_style == COLOR_STYLE_FLAT) {
+        // ACTIVE = Flat
+        QColor foreground = ColorUtils::fromColorT(prefs.gui_active_fg);
+        QColor background = ColorUtils::fromColorT(prefs.gui_active_bg);
 
-    // Hover highlighting is painted manually in drawRow() (driven by
-    // hovered_frame_num_) rather than through a :hover stylesheet
-    // selector, since the mouse hovering a pinned overlay view needs to
-    // highlight the corresponding row in every pane, not just the one
-    // widget Qt considers "hovered".
-    QString full_style = no_focus_outline + active_style + inactive_style;
+        active_style = flat_style_format.arg(
+                           c_active,
+                           foreground.name(),
+                           background.name());
+    } else if (prefs.gui_active_style == COLOR_STYLE_GRADIENT) {
+        // ACTIVE = Gradient
+        QColor foreground  = ColorUtils::fromColorT(prefs.gui_active_fg);
+        QColor background1 = ColorUtils::fromColorT(prefs.gui_active_bg);
+        QColor background2 = QColor::fromRgb(ColorUtils::alphaBlend(foreground, background1, COLOR_STYLE_ALPHA));
 
-    // Cache the plain flat colors (no :active/:!active selector -- see
-    // applyOverlayActiveState()) so window-activation changes can pick the
-    // right one without recomputing from ThemeManager every time.
-    overlay_active_flat_style_ = no_focus_outline + plain_style_format.arg(active_fg.name(), active_bg.name());
-    overlay_inactive_flat_style_ = no_focus_outline + plain_style_format.arg(inactive_fg.name(), inactive_bg.name());
+        active_style = gradient_style_format.arg(
+                           c_active,
+                           foreground.name(),
+                           background1.name(),
+                           background2.name());
+    }
 
+    // INACTIVE style sheet settings
+    if (prefs.gui_inactive_style == COLOR_STYLE_DEFAULT) {
+        // INACTIVE = Default
+    } else if (prefs.gui_inactive_style == COLOR_STYLE_FLAT) {
+        // INACTIVE = Flat
+        QColor foreground = ColorUtils::fromColorT(prefs.gui_inactive_fg);
+        QColor background = ColorUtils::fromColorT(prefs.gui_inactive_bg);
+
+        inactive_style = flat_style_format.arg(
+                             c_inactive,
+                             foreground.name(),
+                             background.name());
+    } else if (prefs.gui_inactive_style == COLOR_STYLE_GRADIENT) {
+        // INACTIVE = Gradient
+        QColor foreground  = ColorUtils::fromColorT(prefs.gui_inactive_fg);
+        QColor background1 = ColorUtils::fromColorT(prefs.gui_inactive_bg);
+        QColor background2 = QColor::fromRgb(ColorUtils::alphaBlend(foreground, background1, COLOR_STYLE_ALPHA));
+
+        inactive_style = gradient_style_format.arg(
+                             c_inactive,
+                             foreground.name(),
+                             background1.name(),
+                             background2.name());
+    }
+
+    // Set the style sheet
     set_style_sheet_ = true;
-    setStyleSheet(full_style);
+    if(prefs.gui_packet_list_hover_style) {
+        setStyleSheet(active_style + inactive_style + hover_style);
+    } else {
+        setStyleSheet(active_style + inactive_style);
+    }
     set_style_sheet_ = false;
-
-    applyOverlayActiveState();
-#ifdef QTBUG_122109_WORKAROUND
-    // Setting the style sheet reset the column widths (see above). Make sure
-    // the new widths aren't saved to recent and then restore from recent.
+#if \
+    ( \
+    (QT_VERSION >= QT_VERSION_CHECK(6, 5, 4) && QT_VERSION < QT_VERSION_CHECK(6, 6, 0)) \
+    || (QT_VERSION >= QT_VERSION_CHECK(6, 6, 1)) \
+    )
+    // https://bugreports.qt.io/browse/QTBUG-122109
+    // Affects Qt 6.5.4 and later, 6.6.1 and later.
+    // When setting the style sheet, all visible sections are set
+    // to the new minimum DefaultSectionSize (even if it hasn't
+    // changed.) So make sure the new widths aren't saved to recent
+    // and then restore from recent.
     applyRecentColumnWidths();
     setColumnVisibility();
 #endif
-}
-
-void PacketList::applyOverlayActiveState()
-{
-    // Match the plain flat_style_format(":active"/:!active") selectors
-    // applied to this view itself, which are keyed to whether THIS widget
-    // has focus (not just whether the window is active) -- Qt's
-    // :active/:!active tracks the same thing per-widget. Clicking into the
-    // packet details/bytes pane keeps the window active but moves focus
-    // away from PacketList, and the overlay panes should dim along with
-    // it, not stay "focused" on their own.
-    //
-    // This is called on every focus change in the application, and setting
-    // a style sheet repolishes the widget even if it hasn't changed, so only
-    // set it when it has.
-    const QString &style = selectionIsActive() ? overlay_active_flat_style_ : overlay_inactive_flat_style_;
-    bool changed = false;
-    for (QTreeView *view : pinnedOverlayViews()) {
-        if (view->styleSheet() != style) {
-            view->setStyleSheet(style);
-            changed = true;
-        }
-    }
-#ifdef QTBUG_122109_WORKAROUND
-    // Setting the style sheet reset the overlays' column widths; restore
-    // them from this view's.
-    if (changed) {
-        for (int column = 0; column < header()->count(); column++) {
-            if (!header()->isSectionHidden(column)) {
-                mirrorSectionWidthToOverlays(column, header()->sectionSize(column));
-            }
-        }
-    }
-#else
-    Q_UNUSED(changed);
-#endif
-}
-
-void PacketList::changeEvent(QEvent *event)
-{
-    QTreeView::changeEvent(event);
-
-    if (event->type() == QEvent::ActivationChange) {
-        applyOverlayActiveState();
-    }
-}
-
-void PacketList::applicationFocusChanged(QWidget *, QWidget *)
-{
-    applyOverlayActiveState();
 }
 
 QString PacketList::joinSummaryRow(QStringList col_parts, int row, SummaryCopyType type)
@@ -639,7 +427,7 @@ QString PacketList::joinSummaryRow(QStringList col_parts, int row, SummaryCopyTy
         break;
     case CopyAsYAML:
         copy_text = "----\n";
-        copy_text += QStringLiteral("# Packet %1 from %2\n").arg(row).arg(cap_file_->filename);
+        copy_text += QString("# Packet %1 from %2\n").arg(row).arg(cap_file_->filename);
         copy_text += "- ";
         copy_text += col_parts.join("\n- ");
         copy_text += "\n";
@@ -656,172 +444,49 @@ void PacketList::drawRow (QPainter *painter, const QStyleOptionViewItem &option,
 {
     QTreeView::drawRow(painter, option, index);
 
-    // The hover highlight is driven by hovered_frame_num_ rather than Qt's
-    // native per-widget hover state, since the mouse hovering a pinned
-    // overlay view needs to highlight this row here too -- native :hover
-    // styling only ever reacts to the mouse being over this specific
-    // widget.
-    if (prefs.gui_packet_list_hover_style && index.isValid()) {
-        frame_data *fdata = getFDataForRow(index.row());
-        if (fdata && (int)fdata->num == hovered_frame_num_) {
-            paintHoveredRow(painter, this, option, index);
-        }
-    }
-
     if (prefs.gui_packet_list_separator) {
         QRect rect = visualRect(index);
 
-        painter->setPen(ColorUtils::rowSeparatorColor(palette()));
+        painter->setPen(QColor(Qt::white));
         painter->drawLine(0, rect.y() + rect.height() - 1, width(), rect.y() + rect.height() - 1);
-    }
-}
-
-void PacketList::paintHoveredRow(QPainter *painter, const QTreeView *view,
-                                 const QStyleOptionViewItem &option, const QModelIndex &index) const
-{
-    // The hover fill is a tint of the selection color currently in use, so
-    // it follows focus like the selection does, and it is painted over a
-    // selected or colored row. Uses ColorUtils::paintFlatCell() rather than
-    // re-invoking each column's delegate with overridden palette roles --
-    // QStyledItemDelegate::paint() calls initStyleOption(), which
-    // re-fetches Qt::BackgroundRole from the model and clobbers any
-    // backgroundBrush/palette override made beforehand, so a colored,
-    // marked, or ignored row's own background always won that fight and
-    // showed through instead of the flat hover color.
-    const QColor selection = ThemeManager::instance()->color(
-            selectionIsActive() ? ThemeManager::PacketsSelection : ThemeManager::PacketsInactive);
-    const QPalette &pal = view->palette();
-    const QColor hover_bg = ColorMath::selectionHoverFill(pal.color(QPalette::Base), selection);
-    const QColor text_color = ColorMath::readableText(pal.color(QPalette::Text), hover_bg);
-
-    for (int visual_col = 0; visual_col < view->header()->count(); visual_col++) {
-        int logical_col = view->header()->logicalIndex(visual_col);
-        if (view->isColumnHidden(logical_col)) {
-            continue;
-        }
-        QModelIndex col_index = index.siblingAtColumn(logical_col);
-        QStyleOptionViewItem col_option = option;
-        col_option.rect = view->visualRect(col_index);
-        if (get_column_format(logical_col) == COL_TAG) {
-            // The tag column has its own delegate (emoji font, centered
-            // layout, per-segment links) that paintFlatCell()'s generic
-            // CE_ItemViewItem drawing can't reproduce. Fill the hover
-            // background here, then paint only the tag content on top
-            // (not the delegate's own background fill, which would
-            // clobber the hover color with the model's background role).
-            painter->save();
-            painter->fillRect(col_option.rect, hover_bg);
-            painter->restore();
-            tag_column_delegate_.paintContent(painter, col_option, col_index);
-            continue;
-        }
-        ColorUtils::paintFlatCell(painter, view, col_option, col_index, hover_bg, text_color);
     }
 }
 
 void PacketList::setProtoTree (ProtoTree *proto_tree) {
     proto_tree_ = proto_tree;
 
-    connect(proto_tree_, &ProtoTree::goToPacket, this, [=](int packet) { goToPacket(packet); });
-    connect(proto_tree_, &ProtoTree::relatedFrame,
-            &related_packet_delegate_, &RelatedPacketDelegate::addRelatedFrame);
+    connect(proto_tree_, SIGNAL(goToPacket(int)), this, SLOT(goToPacket(int)));
+    connect(proto_tree_, SIGNAL(relatedFrame(int,ft_framenum_type_t)),
+            &related_packet_delegate_, SLOT(addRelatedFrame(int,ft_framenum_type_t)));
 }
 
 bool PacketList::uniqueSelectActive()
 {
-    return selectedFrameCount(2) == 1;
+    return selectionModel()->selectedRows(0).count() == 1 ? true : false;
 }
 
 bool PacketList::multiSelectActive()
 {
-    return selectedFrameCount(2) > 1;
-}
-
-int PacketList::selectedFrameCount(int limit) const
-{
-    // Like selectedFrames(false).count(), but stops once limit packets
-    // have been found. selectedRows() builds an index for every selected
-    // row, which is slow when many packets are selected, so walk the
-    // selection ranges instead.
-    int count = 0;
-
-    // QAbstractItemModel is limited to ints for row numbers, thus this
-    // function uses ints instead of an unsigned type or qsizetype.
-    if (limit <= 0)
-        limit = INT_MAX;
-
-    if (selectionModel() && selectionModel()->hasSelection()) {
-        const QItemSelection selection = selectionModel()->selection();
-        const int last_column = model()->columnCount() - 1;
-        // A row can appear in more than one range (e.g., split by column),
-        // which can't happen if there's only one range.
-        const bool track_rows = selection.size() > 1;
-        QSet<int> rows;
-        for (const QItemSelectionRange &range : selection) {
-            if (range.parent().isValid()) {
-                continue;
-            }
-            // selectedRows() only counts rows that are selected in their
-            // entirety. That's always true for a range that spans every
-            // column, as with SelectRows; isRowSelected() is slow, as it
-            // copies and searches every range.
-            const bool whole_rows = range.left() <= 0 && range.right() >= last_column;
-            for (int row = range.top(); row <= range.bottom(); row++) {
-                if (!packet_list_proxy_model_->getRowFdata(row)) {
-                    continue;
-                }
-                if (!whole_rows && !selectionModel()->isRowSelected(row)) {
-                    continue;
-                }
-                if (track_rows) {
-                    if (rows.contains(row)) {
-                        continue;
-                    }
-                    rows.insert(row);
-                }
-                if (++count >= limit) {
-                    return limit;
-                }
-            }
-        }
-    }
-
-    // See selectedFrames(); the pinned-row strip is small.
-    if (pinned_selection_model_ && pinned_selection_model_->hasSelection()) {
-        foreach (QModelIndex idx, pinned_selection_model_->selectedRows(0)) {
-            PacketListRecord *record = static_cast<PacketListRecord *>(idx.internalPointer());
-            frame_data *fdata = record ? record->frameData() : nullptr;
-            if (!fdata) {
-                continue;
-            }
-            int row = packet_list_proxy_model_->rowOfPacket(fdata);
-            if (row >= 0 && selectionModel() && selectionModel()->isRowSelected(row)) {
-                continue;
-            }
-            if (++count >= limit) {
-                return limit;
-            }
-        }
-    }
-
-    return count;
+    return selectionModel()->selectedRows(0).count() > 1 ? true : false;
 }
 
 QList<int> PacketList::selectedRows(bool useFrameNum)
 {
     QList<int> rows;
-    if (useFrameNum) {
-        for (const frame_data *fdata : selectedFrames()) {
-            rows << fdata->num;
-        }
-    }
-    else if (selectionModel() && selectionModel()->hasSelection())
+    if (selectionModel() && selectionModel()->hasSelection())
     {
         foreach (QModelIndex idx, selectionModel()->selectedRows(0))
         {
             if (idx.isValid())
             {
-                rows << idx.row();
+                if (! useFrameNum)
+                    rows << idx.row();
+                else if (useFrameNum)
+                {
+                    frame_data * frame = getFDataForRow(idx.row());
+                    if (frame)
+                        rows << frame->num;
+                }
             }
         }
     }
@@ -831,323 +496,242 @@ QList<int> PacketList::selectedRows(bool useFrameNum)
         // XXX - will we ever have a current index but not a selection
         // model?
         //
-        rows << currentIndex().row();
+        if (! useFrameNum)
+            rows << currentIndex().row();
+        else
+        {
+            frame_data *frame = getFDataForRow(currentIndex().row());
+            if (frame)
+                rows << frame->num;
+        }
     }
 
     return rows;
-}
-
-QList<frame_data *> PacketList::selectedFrames(bool fall_back_to_current) const
-{
-    QList<frame_data *> frames;
-
-    if (selectionModel() && selectionModel()->hasSelection()) {
-        foreach (QModelIndex idx, selectionModel()->selectedRows(0)) {
-            frame_data *fdata = packet_list_proxy_model_->getRowFdata(idx);
-            if (fdata) {
-                frames << fdata;
-            }
-        }
-    }
-
-    // Pinned rows selected in the pinned-row strip that aren't already
-    // selected here, normally because they have no row of their own here
-    // (filtered out, or aggregated into another packet's row).
-    if (pinned_selection_model_ && pinned_selection_model_->hasSelection()) {
-        foreach (QModelIndex idx, pinned_selection_model_->selectedRows(0)) {
-            PacketListRecord *record = static_cast<PacketListRecord *>(idx.internalPointer());
-            frame_data *fdata = record ? record->frameData() : nullptr;
-            if (!fdata) {
-                continue;
-            }
-            int row = packet_list_proxy_model_->rowOfPacket(fdata);
-            if (row >= 0 && selectionModel() && selectionModel()->isRowSelected(row)) {
-                continue;
-            }
-            frames << fdata;
-        }
-    }
-
-    if (frames.isEmpty() && fall_back_to_current && currentIndex().isValid()) {
-        frame_data *fdata = packet_list_proxy_model_->getRowFdata(currentIndex());
-        if (fdata) {
-            frames << fdata;
-        }
-    }
-
-    return frames;
-}
-
-QModelIndexList PacketList::selectedSourceIndexes() const
-{
-    QModelIndexList source_indexes;
-    for (const frame_data *fdata : selectedFrames()) {
-        // The source model's rows are in frame number order.
-        source_indexes << packet_list_model_->index(static_cast<int>(fdata->num) - 1, 0);
-    }
-    return source_indexes;
-}
-
-void PacketList::installSelectionModel()
-{
-    QItemSelectionModel *old_selection_model = selectionModel();
-    setSelectionModel(new LinkedSelectionModel(model(), this, [this]() {
-        if (!syncing_selection_ && pinned_selection_model_) {
-            QScopedValueRollback<bool> syncing(syncing_selection_, true);
-            pinned_selection_model_->clearSelection();
-        }
-    }));
-    if (old_selection_model) {
-        old_selection_model->deleteLater();
-    }
-}
-
-void PacketList::reconcilePinnedSelection()
-{
-    if (!pinned_selection_model_ || !selectionModel() || !model() || syncing_selection_) {
-        return;
-    }
-
-    QItemSelection select_here, select_pinned;
-    for (int pinned_row = 0; pinned_row < pinned_rows_model_->rowCount(); pinned_row++) {
-        QModelIndex pinned_index = pinned_rows_model_->index(pinned_row, 0);
-        PacketListRecord *record = static_cast<PacketListRecord *>(pinned_index.internalPointer());
-        int row = (record && record->frameData()) ? packet_list_proxy_model_->rowOfPacket(record->frameData()) : -1;
-        if (row < 0) {
-            continue;
-        }
-        bool selected_here = selectionModel()->isRowSelected(row);
-        bool selected_pinned = pinned_selection_model_->isRowSelected(pinned_row);
-        if (selected_here && !selected_pinned) {
-            select_pinned.select(pinned_index, pinned_index);
-        } else if (selected_pinned && !selected_here) {
-            QModelIndex index = model()->index(row, 0);
-            select_here.select(index, index);
-        }
-    }
-
-    if (select_here.isEmpty() && select_pinned.isEmpty()) {
-        return;
-    }
-
-    {
-        QScopedValueRollback<bool> syncing(syncing_selection_, true);
-        selectionModel()->select(select_here, QItemSelectionModel::Select | QItemSelectionModel::Rows);
-        pinned_selection_model_->select(select_pinned, QItemSelectionModel::Select | QItemSelectionModel::Rows);
-    }
-    repaintPinnedOverlays();
-}
-
-void PacketList::syncPinnedSelection(bool to_pinned)
-{
-    if (!pinned_selection_model_ || !selectionModel() || !model()) {
-        return;
-    }
-
-    // There are at most PinnedRowsModel::kMaxPinnedRows pinned packets, so
-    // check each rather than mapping the (possibly huge) selection ranges.
-    QItemSelection select_here, deselect_here, select_pinned, deselect_pinned;
-    for (int pinned_row = 0; pinned_row < pinned_rows_model_->rowCount(); pinned_row++) {
-        QModelIndex pinned_index = pinned_rows_model_->index(pinned_row, 0);
-        PacketListRecord *record = static_cast<PacketListRecord *>(pinned_index.internalPointer());
-        int row = (record && record->frameData()) ? packet_list_proxy_model_->rowOfPacket(record->frameData()) : -1;
-        if (row < 0) {
-            // No row of its own here (filtered out, or aggregated into
-            // another packet's row); only selectable in the strip.
-            continue;
-        }
-        QModelIndex index = model()->index(row, 0);
-        bool selected_here = selectionModel()->isRowSelected(row);
-        bool selected_pinned = pinned_selection_model_->isRowSelected(pinned_row);
-        if (selected_here == selected_pinned) {
-            continue;
-        }
-        if (to_pinned) {
-            (selected_here ? select_pinned : deselect_pinned).select(pinned_index, pinned_index);
-        } else {
-            (selected_pinned ? select_here : deselect_here).select(index, index);
-        }
-    }
-
-    QScopedValueRollback<bool> syncing(syncing_selection_, true);
-    if (!deselect_here.isEmpty()) {
-        selectionModel()->select(deselect_here, QItemSelectionModel::Deselect | QItemSelectionModel::Rows);
-    }
-    if (!select_here.isEmpty()) {
-        selectionModel()->select(select_here, QItemSelectionModel::Select | QItemSelectionModel::Rows);
-    }
-    if (!deselect_pinned.isEmpty()) {
-        pinned_selection_model_->select(deselect_pinned, QItemSelectionModel::Deselect | QItemSelectionModel::Rows);
-    }
-    if (!select_pinned.isEmpty()) {
-        pinned_selection_model_->select(select_pinned, QItemSelectionModel::Select | QItemSelectionModel::Rows);
-    }
-}
-
-void PacketList::pinnedSelectionChanged(const QItemSelection &, const QItemSelection &)
-{
-    if (syncing_selection_) {
-        return;
-    }
-
-    // Make this view match for the pinned packets that have a row here.
-    syncPinnedSelection(false);
-
-    // Keep keyboard focus on this view so the selection highlight
-    // renders in its "active" color in every pane, and so keyboard
-    // navigation continues from here.
-    setFocus();
-    repaintPinnedOverlays();
-    drawCurrentPacket(false);
-}
-
-void PacketList::pinnedCurrentChanged(const QModelIndex &current)
-{
-    if (syncing_selection_ || !current.isValid() || !selectionModel() || !model()) {
-        return;
-    }
-
-    PacketListRecord *record = static_cast<PacketListRecord *>(current.internalPointer());
-    int row = (record && record->frameData()) ? packet_list_proxy_model_->rowOfPacket(record->frameData()) : -1;
-    if (row < 0) {
-        return;
-    }
-
-    // Selecting a pinned packet (the whole point of pinning it) shouldn't
-    // yank this view's scroll position to wherever that packet happens to
-    // be, which making it current here otherwise would.
-    int vert_scroll_value = verticalScrollBar()->value();
-    QScopedValueRollback<bool> syncing(syncing_selection_, true);
-    selectionModel()->setCurrentIndex(model()->index(row, 0), QItemSelectionModel::NoUpdate);
-    verticalScrollBar()->setValue(vert_scroll_value);
 }
 
 void PacketList::selectionChanged (const QItemSelection & selected, const QItemSelection & deselected)
 {
     QTreeView::selectionChanged(selected, deselected);
 
-    // The frozen-column overlay shares this view's selection model, but
-    // it is a separate QAbstractItemView with its own viewport; force a
-    // repaint there too so the highlight always shows on both sides of a
-    // freeze boundary, regardless of which view the selection change
-    // originated from.
-    repaintPinnedOverlays();
+    if (!cap_file_) return;
 
-    if (!model()) {
-        // Frozen (setModel(nullptr) installs a new, empty selection model).
+    int row = -1;
+    static bool multiSelect = false;
+
+    if (selectionModel())
+    {
+        QModelIndexList selRows = selectionModel()->selectedRows(0);
+        if (selRows.count() > 1)
+        {
+            QList<int> rows;
+            foreach (QModelIndex idx, selRows)
+            {
+                if (idx.isValid())
+                    rows << idx.row();
+            }
+
+            emit framesSelected(rows);
+            emit fieldSelected(0);
+            cf_unselect_packet(cap_file_);
+
+            /* We have to repaint the content while changing state, as some delegates react to multi-select */
+            if (! multiSelect)
+            {
+                related_packet_delegate_.clear();
+                viewport()->update();
+            }
+
+            multiSelect = true;
+
+            return;
+        }
+        else if (selRows.count() > 0 && selRows.at(0).isValid())
+        {
+            multiSelect = false;
+            row = selRows.at(0).row();
+        }
+
+        /* Handling empty selection */
+        if (selRows.count() <= 0)
+        {
+            /* Nothing selected, but multiSelect is still active */
+            if (multiSelect)
+            {
+                multiSelect = false;
+                if (currentIndex().isValid())
+                {
+                    selectionModel()->select(currentIndex(), QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows );
+                    return;
+                }
+            }
+            /* Nothing selected, so in WS <= 3.0 nothing was indicated as well */
+            else if (currentIndex().isValid())
+            {
+                setCurrentIndex(QModelIndex());
+            }
+        }
+    }
+
+    if (row < 0 || !packet_list_model_)
+        cf_unselect_packet(cap_file_);
+    else {
+        frame_data * fdata = packet_list_model_->getRowFdata(row);
+        cf_select_packet(cap_file_, fdata);
+    }
+
+    if (!in_history_ && cap_file_->current_frame) {
+        cur_history_++;
+        selection_history_.resize(cur_history_);
+        selection_history_.append(cap_file_->current_frame->num);
+    }
+
+    related_packet_delegate_.clear();
+
+    // The previous dissection state has been invalidated by cf_select_packet
+    // above, receivers must clear the previous state and apply the updated one.
+    emit framesSelected(QList<int>() << row);
+
+    if (!cap_file_->edt) {
+        viewport()->update();
+        emit fieldSelected(0);
         return;
     }
 
-    if (syncing_selection_ || !pinned_rows_model_ || !pinned_selection_model_) {
-        // Following a change in the pinned-row strip, whose handler
-        // updates the packet details once the whole change is done.
-        return;
+    if (cap_file_->edt->tree) {
+        packet_info *pi = &cap_file_->edt->pi;
+        related_packet_delegate_.setCurrentFrame(pi->num);
+        conversation_t *conv = find_conversation_pinfo_ro(pi, 0);
+        if (conv) {
+            related_packet_delegate_.setConversation(conv);
+        }
+        viewport()->update();
     }
 
-    // Make the pinned-row strip match for the pinned packets that also
-    // have a row here. (Not just the change: a command that cleared both
-    // selections can leave a row selected here, and so absent from the
-    // change, after the strip's was cleared.)
-    syncPinnedSelection(true);
+    if (cap_file_->search_in_progress) {
+        field_info *fi = NULL;
 
-    // We shouldn't need to scroll because QTreeView already does that if
-    // a single packet is newly selected. If we have a single selected packet
-    // because we just deselected the second to last packet, we probably don't
-    // want to scroll to the remaining frame.
-    drawCurrentPacket(false);
+        if (cap_file_->string && cap_file_->decode_data) {
+            // The tree where the target string matched one of the labels was discarded in
+            // match_protocol_tree() so we have to search again in the latest tree.
+            fi = cf_find_string_protocol_tree(cap_file_, cap_file_->edt->tree);
+        } else if (cap_file_->search_len != 0) {
+            // Find the finfo that corresponds to our byte.
+            // The match can span multiple fields (and a single byte can
+            // match more than one field.) Our behavior is to find the last
+            // field in the tree (so hopefully spanning fewer bytes) that
+            // matches the last byte in the search match.
+            // (regex search can find a zero length match not at the
+            // start of the frame if lookbehind is used, but
+            // proto_find_field_from_offset doesn't match such a field
+            // and it's not clear which field we would want to match.)
+            fi = proto_find_field_from_offset(cap_file_->edt->tree, cap_file_->search_pos + cap_file_->search_len - 1,
+                                              cap_file_->edt->tvb);
+        }
+
+        if (fi) {
+            FieldInformation finfo(fi, this);
+            emit fieldSelected(&finfo);
+        } else {
+            emit fieldSelected(0);
+        }
+    } else if (proto_tree_) {
+        proto_tree_->restoreSelectedField();
+    }
 }
 
 void PacketList::contextMenuEvent(QContextMenuEvent *event)
 {
-    // The right-click has already selected the row under the cursor, unless
-    // it was part of the selection, in which case the selection is kept so
-    // that the menu's actions apply to all of it.
+    // The challenge must target the right-clicked frame, including when it
+    // differs from the previous selection. An empty row is never a target.
     QModelIndex ctxIndex = indexAt(event->pos());
-    showContextMenuForSourceIndex(packet_list_proxy_model_->mapToSource(ctxIndex), event->globalPos());
-}
+    if (!ctxIndex.isValid()) return;
+    if (selectionModel())
+        selectionModel()->setCurrentIndex(ctxIndex, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
 
-void PacketList::showContextMenuForSourceIndex(const QModelIndex &source_index, const QPoint &global_pos,
-                                               bool from_pinned_row_strip)
-{
     const char *module_name = NULL;
 
-    PacketListRecord *ctx_record = source_index.isValid() ?
-        static_cast<PacketListRecord *>(source_index.internalPointer()) : nullptr;
-    frame_data *ctx_row_fdata = ctx_record ? ctx_record->frameData() : nullptr;
-    // Actions that act on the selected packets apply to all of them. Those
-    // that need a single dissected packet are disabled when more than one
-    // is selected.
-    const bool multi_select = multiSelectActive();
+    proto_prefs_menus_.clear();
 
     if (finfo_array)
     {
         g_ptr_array_free(finfo_array, true);
         finfo_array = NULL;
     }
+    if (cap_file_ && cap_file_->edt && cap_file_->edt->tree) {
+        finfo_array = proto_all_finfos(cap_file_->edt->tree);
+        QList<QString> added_proto_prefs;
+
+        for (unsigned i = 0; i < finfo_array->len; i++) {
+            field_info *fi = (field_info *)g_ptr_array_index (finfo_array, i);
+            const header_field_info *hfinfo =  fi->hfinfo;
+
+            if (prefs_is_registered_protocol(hfinfo->abbrev)) {
+                if (hfinfo->parent == -1) {
+                    module_name = hfinfo->abbrev;
+                } else {
+                    module_name = proto_registrar_get_abbrev(hfinfo->parent);
+                }
+
+                if (added_proto_prefs.contains(module_name)) {
+                    continue;
+                }
+
+                ProtocolPreferencesMenu *proto_prefs_menu = new ProtocolPreferencesMenu(hfinfo->name, module_name, &proto_prefs_menus_);
+
+                connect(proto_prefs_menu, SIGNAL(showProtocolPreferences(QString)),
+                        this, SIGNAL(showProtocolPreferences(QString)));
+                connect(proto_prefs_menu, SIGNAL(editProtocolPreference(preference*,pref_module*)),
+                        this, SIGNAL(editProtocolPreference(preference*,pref_module*)));
+
+                proto_prefs_menus_.addMenu(proto_prefs_menu);
+                added_proto_prefs << module_name;
+            }
+        }
+    }
+
+    if (selectionModel() && selectionModel()->selectedRows(0).count() > 1)
+        selectionModel()->select(ctxIndex, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
 
     // frameData will be owned by one of the submenus, see below.
     FrameInformation * frameData =
-            new FrameInformation(new CaptureFile(this, cap_file_), ctx_row_fdata);
+            new FrameInformation(new CaptureFile(this, cap_file_), packet_list_model_->getRowFdata(ctxIndex.row()));
 
     QMenu * ctx_menu = new QMenu(this);
     ctx_menu->setAttribute(Qt::WA_DeleteOnClose);
+    if (QAction *challenge = window()->findChild<QAction *>("actionMinesharkChallenge")) {
+        ctx_menu->addAction(challenge);
+        ctx_menu->addSeparator();
+    }
     // XXX We might want to reimplement setParent() and fill in the context
     // menu there.
     ctx_menu->addAction(window()->findChild<QAction *>("actionEditMarkSelected"));
     ctx_menu->addAction(window()->findChild<QAction *>("actionEditIgnoreSelected"));
     ctx_menu->addAction(window()->findChild<QAction *>("actionEditSetTimeReference"));
     ctx_menu->addAction(window()->findChild<QAction *>("actionEditTimeShift"));
-    frame_data *ctx_fdata = ctx_row_fdata;
-    if (ctx_fdata) {
-        ctx_menu->addAction(window()->findChild<QAction *>("actionViewPinSelectedRows"));
-    }
-
-    // Shown only for a context menu request that actually originated from
-    // the pinned-row strip (PinnedRowView) itself -- not the frozen-column
-    // overlay or a direct right-click on the primary view -- since
-    // scrolling the main view to a packet already visible there (or
-    // clearing every pinned row) doesn't make sense as an action offered
-    // from either of those.
-    if (from_pinned_row_strip && ctx_fdata) {
-        int ctx_frame_num = ctx_fdata->num;
-        QAction *goto_action = ctx_menu->addAction(tr("Go to Packet"));
-        connect(goto_action, &QAction::triggered, this, [this, ctx_frame_num]() {
-            goToPacket(ctx_frame_num);
-        });
-    }
-    if (from_pinned_row_strip && pinned_rows_model_->pinnedCount() > 0) {
-        ctx_menu->addAction(window()->findChild<QAction *>("actionViewUnpinAllRows"));
-    }
     ctx_menu->addMenu(window()->findChild<QMenu *>("menuPacketComment"));
 
     ctx_menu->addSeparator();
 
     // Code for custom context menus from Lua's register_packet_menu()
-    MainWindow * mainWindow = mainApp->mainWindow();
-    // N.B., will only call for a single frame selection,
-    if (cap_file_ && cap_file_->edt && cap_file_->edt->tree) {
-        finfo_array = proto_all_finfos(cap_file_->edt->tree);
-        if (mainWindow) {
-            bool insertedPacketMenu = mainWindow->addPacketMenus(ctx_menu, finfo_array);
-            if (insertedPacketMenu) {
-                ctx_menu->addSeparator();
-            }
+    MainWindow * mainWindow = qobject_cast<MainWindow *>(mainApp->mainWindow());
+    // N.B., Only want to call for a single frame selection.
+    // Testing finfo_array as a proxy, because mainWindow->hasUniqueSelection() doesn't detect multiple selections...
+    if (cap_file_ && cap_file_->edt && cap_file_->edt->tree && mainWindow && finfo_array) {
+        bool insertedPacketMenu = mainWindow->addPacketMenus(ctx_menu, finfo_array);
+        if (insertedPacketMenu) {
+            ctx_menu->addSeparator();
         }
     }
 
     ctx_menu->addAction(window()->findChild<QAction *>("actionViewEditResolvedName"));
-
     ctx_menu->addSeparator();
 
-    QString selectedfilter;
-    if (!multi_select) {
-        selectedfilter = getFilterFromRowAndColumn(currentIndex());
+    QString selectedfilter = getFilterFromRowAndColumn(currentIndex());
 
-        if (! hasFocus() && cap_file_ && cap_file_->finfo_selected) {
-            char *tmp_field = proto_construct_match_selected_string(cap_file_->finfo_selected, cap_file_->edt);
-            selectedfilter = QString(tmp_field);
-            wmem_free(NULL, tmp_field);
-        }
+    if (! hasFocus() && cap_file_ && cap_file_->finfo_selected) {
+        char *tmp_field = proto_construct_match_selected_string(cap_file_->finfo_selected, cap_file_->edt);
+        selectedfilter = QString(tmp_field);
+        wmem_free(NULL, tmp_field);
     }
 
     bool have_filter_expr = !selectedfilter.isEmpty();
@@ -1190,28 +774,6 @@ void PacketList::showContextMenuForSourceIndex(const QModelIndex &source_index, 
         }
     }
 
-    // "Links" submenu — one entry per matching tag rule that has a URL
-    if (!multi_select) {
-        PacketListRecord *record = ctx_record;
-        if (record) {
-            const TagSegmentList &links = record->tagLinkList();
-            if (!links.isEmpty()) {
-                QMenu *linkSubmenu = new QMenu(tr("Tag Links"), ctx_menu);
-                for (const auto &link : links) {
-                    QString displayUrl = link.second.length() > 50
-                        ? link.second.left(50) + "..." : link.second;
-                    QString label = link.first + ": " + displayUrl;
-                    QAction *linkAction = linkSubmenu->addAction(label);
-                    QString url = link.second;
-                    connect(linkAction, &QAction::triggered, this, [url]() {
-                        QDesktopServices::openUrl(QUrl(url));
-                    });
-                }
-                ctx_menu->addMenu(linkSubmenu);
-            }
-        }
-    }
-
     ctx_menu->addSeparator();
 
     main_menu_item = window()->findChild<QMenu *>("menuEditCopy");
@@ -1221,66 +783,27 @@ void PacketList::showContextMenuForSourceIndex(const QModelIndex &source_index, 
 
     QAction * action = submenu->addAction(tr("Summary as Text"));
     action->setData(CopyAsText);
-    connect(action, &QAction::triggered, this, &PacketList::copySummary);
+    connect(action, SIGNAL(triggered()), this, SLOT(copySummary()));
     action = submenu->addAction(tr("…as CSV"));
     action->setData(CopyAsCSV);
-    connect(action, &QAction::triggered, this, &PacketList::copySummary);
+    connect(action, SIGNAL(triggered()), this, SLOT(copySummary()));
     action = submenu->addAction(tr("…as YAML"));
     action->setData(CopyAsYAML);
-    connect(action, &QAction::triggered, this, &PacketList::copySummary);
-    action = submenu->addAction(tr("…as HTML"));
-    action->setData(CopyAsHTML);
-    connect(action, &QAction::triggered, this, &PacketList::copySummary);
+    connect(action, SIGNAL(triggered()), this, SLOT(copySummary()));
     submenu->addSeparator();
 
     submenu->addAction(window()->findChild<QAction *>("actionEditCopyAsFilter"));
     submenu->addSeparator();
 
     QActionGroup * copyEntries = DataPrinter::copyActions(this, frameData);
-    copyEntries->setEnabled(!multi_select);
     submenu->addActions(copyEntries->actions());
     copyEntries->setParent(submenu);
     frameData->setParent(submenu);
 
-    if (application_flavor_is_wireshark()) {
-        /* i.e., Wireshark only */
+    if (is_packet_configuration_namespace()) {
         ctx_menu->addSeparator();
-        QMenu *proto_prefs_menus = new QMenu(ProtocolPreferencesMenu::tr("Protocol Preferences"), ctx_menu);
-
-        if (cap_file_ && cap_file_->edt && cap_file_->edt->tree) {
-            QList<QString> added_proto_prefs;
-            // N.B. finfo_array will be assigned above
-            for (unsigned i = 0; i < finfo_array->len; i++) {
-                field_info *fi = (field_info *)g_ptr_array_index (finfo_array, i);
-                const header_field_info *hfinfo =  fi->hfinfo;
-
-                if (prefs_is_registered_protocol(hfinfo->abbrev)) {
-                    if (hfinfo->parent == -1) {
-                        module_name = hfinfo->abbrev;
-                    } else {
-                        module_name = proto_registrar_get_abbrev(hfinfo->parent);
-                    }
-
-                    if (added_proto_prefs.contains(module_name)) {
-                        continue;
-                    }
-
-                    ProtocolPreferencesMenu *proto_prefs_menu = new ProtocolPreferencesMenu(hfinfo->name, module_name, proto_prefs_menus);
-
-                    connect(proto_prefs_menu, &ProtocolPreferencesMenu::showProtocolPreferences,
-                            this, &PacketList::showProtocolPreferences);
-                    connect(proto_prefs_menu, SIGNAL(editProtocolPreference(pref_t*,module_t*)),
-                            this, SIGNAL(editProtocolPreference(pref_t*,module_t*)));
-
-                    proto_prefs_menus->addMenu(proto_prefs_menu);
-                    added_proto_prefs << module_name;
-                }
-            }
-        }
-        proto_prefs_menus->setEnabled(!multi_select);
-        ctx_menu->addMenu(proto_prefs_menus);
+        ctx_menu->addMenu(&proto_prefs_menus_);
         action = ctx_menu->addAction(tr("Decode As…"));
-        action->setEnabled(!multi_select);
         action->setProperty("create_new", QVariant(true));
         connect(action, &QAction::triggered, this, &PacketList::ctxDecodeAsDialog);
         // "Print" not ported intentionally
@@ -1289,12 +812,12 @@ void PacketList::showContextMenuForSourceIndex(const QModelIndex &source_index, 
     }
 
     // Set menu sensitivity for the current column and set action data.
-    if (ctx_row_fdata)
-        emit framesSelected(selectedRows(true));
+    if (frameData)
+        emit framesSelected(QList<int>() << frameData->frameNum());
     else
         emit framesSelected(QList<int>());
 
-    ctx_menu->popup(global_pos);
+    ctx_menu->popup(event->globalPos());
 }
 
 void PacketList::ctxDecodeAsDialog()
@@ -1305,7 +828,7 @@ void PacketList::ctxDecodeAsDialog()
     bool create_new = da_action->property("create_new").toBool();
 
     DecodeAsDialog *da_dialog = new DecodeAsDialog(this, cap_file_, create_new);
-    connect(da_dialog, &DecodeAsDialog::destroyed, mainApp, &MainApplication::flushAppSignals);
+    connect(da_dialog, SIGNAL(destroyed(QObject*)), mainApp, SLOT(flushAppSignals()));
     da_dialog->setWindowModality(Qt::ApplicationModal);
     da_dialog->setAttribute(Qt::WA_DeleteOnClose);
     da_dialog->show();
@@ -1314,13 +837,10 @@ void PacketList::ctxDecodeAsDialog()
 void PacketList::timerEvent(QTimerEvent *event)
 {
     if (event->timerId() == overlay_timer_id_) {
-        if (!capture_in_progress_ && model() != nullptr) {
+        if (!capture_in_progress_) {
             if (create_near_overlay_) drawNearOverlay();
             if (create_far_overlay_) drawFarOverlay();
         }
-    } else if (event->timerId() == turbo_timer_id_) {
-        QKeyEvent turbo_step(QEvent::KeyPress, turbo_key_, Qt::NoModifier, QString(), true);
-        QTreeView::keyPressEvent(&turbo_step);
     } else {
         QTreeView::timerEvent(event);
     }
@@ -1335,32 +855,28 @@ void PacketList::paintEvent(QPaintEvent *event)
     QTreeView::paintEvent(event);
 }
 
-void PacketList::mousePressEvent(QMouseEvent *event)
+void PacketList::mousePressEvent (QMouseEvent *event)
 {
     QTreeView::mousePressEvent(event);
 
     QModelIndex curIndex = indexAt(event->pos());
     mouse_pressed_at_ = curIndex;
 
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 15, 0))
     bool midButton = (event->buttons() & Qt::MiddleButton) == Qt::MiddleButton;
-    if (midButton)
+#else
+    bool midButton = (event->buttons() & Qt::MidButton) == Qt::MidButton;
+#endif
+    if (midButton && cap_file_ && packet_list_model_)
     {
-        toggleFrameMarkFromClick(packet_list_proxy_model_->mapToSource(curIndex));
+        packet_list_model_->toggleFrameMark(QModelIndexList() << curIndex);
+
+        // Make sure the packet list's frame.marked related field text is updated.
+        redrawVisiblePackets();
+
+        create_far_overlay_ = true;
+        packets_bar_update();
     }
-}
-
-void PacketList::toggleFrameMarkFromClick(const QModelIndex &source_index)
-{
-    if (!cap_file_ || !packet_list_model_ || !source_index.isValid())
-        return;
-
-    packet_list_model_->toggleFrameMark(QModelIndexList() << source_index);
-
-    // Make sure the packet list's frame.marked related field text is updated.
-    redrawVisiblePackets();
-
-    create_far_overlay_ = true;
-    packets_bar_update();
 }
 
 void PacketList::mouseReleaseEvent(QMouseEvent *event) {
@@ -1369,457 +885,115 @@ void PacketList::mouseReleaseEvent(QMouseEvent *event) {
     mouse_pressed_at_ = QModelIndex();
 }
 
-// The frozen-column overlay (PinnedColumnView) is a separate QTreeView that
-// only ever shows a slice of the real content, laid out independently of
-// the primary view. Translating pixel coordinates from an overlay's click
-// into this view's coordinate space is unreliable -- their row geometry can
-// drift by a row even when the two appear visually aligned (e.g. differing
-// sub-pixel scroll remainders). Instead, the overlay resolves the row
-// itself via its own (always-correct, since it's local) indexAt(), and
-// these entry points act on that row/index directly within this view,
-// exactly as a real click here would. (The pinned-row strip, PinnedRowView,
-// has its own model and selection model; see pinnedSelectionChanged().)
-void PacketList::selectRowFromOverlay(int row, int column, Qt::MouseButtons buttons,
-                                       Qt::KeyboardModifiers modifiers)
-{
-    QModelIndex index = model()->index(row, column);
-    if (!index.isValid()) {
-        return;
-    }
-
-    // A click in an overlay shouldn't scroll the primary view --
-    // setCurrentIndex() below scrolls to make the new current index
-    // visible (QAbstractItemView's normal behavior for e.g. arrow-key
-    // navigation). Save and restore the vertical scroll position around
-    // it, the same way scrollTo() already does for the horizontal one.
-    int vert_scroll_value = verticalScrollBar()->value();
-
-    mouse_pressed_at_ = index;
-
-    // Mirrors the same three cases native ExtendedSelection handles for a
-    // plain click (no modifier/Ctrl/Shift) -- this view's own
-    // mousePressEvent() can't be relied on here since the click actually
-    // landed in a different, overlay widget (PinnedColumnView), which
-    // forwards here instead of letting QAbstractItemView's native
-    // handling run.
-    //
-    // setCurrentIndex(QModelIndex) (the view-level convenience method) always
-    // re-applies its own ClearAndSelect internally, which would immediately
-    // clobber the Toggle/Select calls below -- moving "current" without
-    // touching the selection just made requires going through
-    // QItemSelectionModel::setCurrentIndex() directly with an explicit
-    // NoUpdate flag instead.
-    if ((buttons & Qt::RightButton) && selectionModel()->isRowSelected(row)) {
-        // Like a right-click directly on a selected row here: keep the
-        // selection, so that the context menu applies to all of it.
-        selectionModel()->setCurrentIndex(index, QItemSelectionModel::NoUpdate | QItemSelectionModel::Current);
-    } else if (modifiers & Qt::ShiftModifier) {
-        QModelIndex from = currentIndex().isValid() ? currentIndex() : index;
-        selectionModel()->select(QItemSelection(from, index),
-                                  QItemSelectionModel::Select | QItemSelectionModel::Rows);
-        selectionModel()->setCurrentIndex(index, QItemSelectionModel::NoUpdate | QItemSelectionModel::Current);
-    } else if (modifiers & Qt::ControlModifier) {
-        selectionModel()->select(index, QItemSelectionModel::Toggle | QItemSelectionModel::Rows);
-        selectionModel()->setCurrentIndex(index, QItemSelectionModel::NoUpdate | QItemSelectionModel::Current);
-    } else {
-        setCurrentIndex(index);
-        selectionModel()->select(index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
-    }
-
-    verticalScrollBar()->setValue(vert_scroll_value);
-    // Keep keyboard focus on the primary view so the selection highlight
-    // always renders in its "active" color, regardless of which pane the
-    // click that produced this selection landed in.
-    setFocus();
-
-    if (buttons & Qt::MiddleButton) {
-        toggleFrameMarkFromClick(packet_list_proxy_model_->mapToSource(index));
-    }
-}
-
-void PacketList::showContextMenuForRow(int row, const QPoint &global_pos)
-{
-    QModelIndex index = model()->index(row, 0);
-    if (!index.isValid()) {
-        return;
-    }
-
-    // Same as a right-click on that row here (see contextMenuEvent()).
-    showContextMenuForSourceIndex(packet_list_proxy_model_->mapToSource(index), global_pos);
-}
-
-// header_pos must already be in packet_list_header_'s (the real, primary
-// header's) own coordinate space by the time it reaches each forwarder
-// below -- every caller (PinnedColumnHeader, and PacketListPane's
-// duplicate_header_corner_/duplicate_header_main_ event filter) is
-// responsible for translating its own local position into that space
-// first, since each has a different relationship to it (PinnedColumnHeader
-// and duplicate_header_corner_ both start at the frozen boundary the same
-// way packet_list_header_'s own unscrolled columns [0, boundary) do;
-// duplicate_header_main_ instead starts at the boundary itself and must
-// add its own width). See PacketList::frozenHeaderPosToReal() for the
-// shared translation helper used by PinnedColumnHeader.
-QPoint PacketList::frozenHeaderPosToReal(const QPoint &frozen_pos) const
-{
-    int logical_index = pinned_column_view_->header()->logicalIndexAt(frozen_pos);
-    if (logical_index < 0) {
-        return frozen_pos;
-    }
-    int real_x = packet_list_header_->sectionViewportPosition(logical_index)
-        + (frozen_pos.x() - pinned_column_view_->header()->sectionViewportPosition(logical_index));
-    return QPoint(real_x, frozen_pos.y());
-}
-
-void PacketList::forwardHeaderContextMenu(QContextMenuEvent *event, const QPoint &header_pos)
-{
-    // event->globalPos() (from the original click, wherever it actually
-    // happened on screen) rather than packet_list_header_->mapToGlobal(
-    // header_pos): the latter assumes the real header is on-screen at its
-    // usual position, which isn't true when this request originated from
-    // duplicate_header_ (PacketListPane's stand-in header shown above the
-    // pinned-rows strip while the real one is hidden) -- that would pop
-    // the menu up at the real header's location instead of where the user
-    // actually right-clicked.
-    QContextMenuEvent translated(event->reason(), header_pos, event->globalPos(), event->modifiers());
-    packet_list_header_->showContextMenuAt(&translated);
-}
-
-void PacketList::forwardHeaderMousePress(QMouseEvent *event, const QPoint &header_pos)
-{
-    // Temporarily disable click-to-sort on the real header: forwarding
-    // press/release here is only meant to drive its resize-drag state
-    // machine (needed so a frozen column's resize actually changes the
-    // shared column width). QHeaderView's mouseReleaseEvent does its own
-    // native click-to-sort detection as a side effect of the same event,
-    // which would otherwise double up with the explicit
-    // sortByColumnFromOverlay() call and cancel it out.
-    packet_list_header_->setSectionsClickable(false);
-    QMouseEvent translated(event->type(), header_pos, packet_list_header_->mapToGlobal(header_pos),
-                            event->button(), event->buttons(), event->modifiers());
-    packet_list_header_->forwardMousePressEvent(&translated);
-}
-
-void PacketList::forwardHeaderMouseMove(QMouseEvent *event, const QPoint &header_pos)
-{
-    QMouseEvent translated(event->type(), header_pos, packet_list_header_->mapToGlobal(header_pos),
-                            event->button(), event->buttons(), event->modifiers());
-    packet_list_header_->forwardMouseMoveEvent(&translated);
-}
-
-void PacketList::forwardHeaderMouseRelease(QMouseEvent *event, const QPoint &header_pos)
-{
-    QMouseEvent translated(event->type(), header_pos, packet_list_header_->mapToGlobal(header_pos),
-                            event->button(), event->buttons(), event->modifiers());
-    packet_list_header_->forwardMouseReleaseEvent(&translated);
-    packet_list_header_->setSectionsClickable(true);
-}
-
-void PacketList::forwardWheelEvent(QWheelEvent *event)
-{
-    QTreeView::wheelEvent(event);
-}
-
-void PacketList::sortByColumnFromOverlay(int column)
-{
-    if (!isSortingEnabled()) {
-        return;
-    }
-
-    Qt::SortOrder order = Qt::AscendingOrder;
-    if (header()->sortIndicatorSection() == column) {
-        order = (header()->sortIndicatorOrder() == Qt::AscendingOrder) ? Qt::DescendingOrder : Qt::AscendingOrder;
-    }
-    header()->setSortIndicator(column, order);
-
-    // The frozen column view's own header is a separate QHeaderView, so it
-    // needs its sort indicator (the arrow icon) set explicitly to match --
-    // it doesn't automatically follow the primary header's indicator.
-    if (pinned_column_view_) {
-        pinned_column_view_->mirrorSortIndicator(column, order);
-    }
-}
-
 void PacketList::mouseMoveEvent (QMouseEvent *event)
 {
     QModelIndex curIndex = indexAt(event->pos());
-    frame_data *hovered_fdata = curIndex.isValid() ? getFDataForRow(curIndex.row()) : nullptr;
-    int new_hovered_frame_num = hovered_fdata ? (int)hovered_fdata->num : -1;
-    if (new_hovered_frame_num != hovered_frame_num_) {
-        hovered_frame_num_ = new_hovered_frame_num;
-        viewport()->update();
-        repaintPinnedOverlays();
-    }
-
     if (event->buttons() & Qt::LeftButton && curIndex.isValid() && curIndex == mouse_pressed_at_)
     {
-        startCellDrag(packet_list_model_ ? packet_list_proxy_model_->getRowFdata(curIndex.row()) : nullptr,
-                      curIndex.column(), model()->data(curIndex).toString());
-    }
-}
+        ctx_column_ = curIndex.column();
+        QMimeData * mimeData = new QMimeData();
+        QWidget * content = nullptr;
 
-void PacketList::startCellDragFromOverlay(int row, int column)
-{
-    QModelIndex idx = model()->index(row, column);
-    if (!idx.isValid() || !packet_list_model_) {
-        return;
-    }
-    startCellDrag(packet_list_proxy_model_->getRowFdata(row), column, model()->data(idx).toString());
-}
-
-void PacketList::startCellDragForSourceIndex(const QModelIndex &source_index)
-{
-    if (!source_index.isValid()) {
-        return;
-    }
-    PacketListRecord *record = static_cast<PacketListRecord *>(source_index.internalPointer());
-    startCellDrag(record ? record->frameData() : nullptr, source_index.column(),
-                  source_index.data().toString());
-}
-
-void PacketList::startCellDrag(frame_data *fdata, int column, const QString &cell_text)
-{
-    ctx_column_ = column;
-    QMimeData * mimeData = new QMimeData();
-    DragLabel * drag_label = nullptr;
-
-    QString filter = getFilterFromFdataAndColumn(fdata, column);
-    QList<int> frames = selectedRows(true);
-    if (frames.count() > 1)
-    {
-        QStringList entries;
-        foreach (int frame_num, frames)
+        QString filter = getFilterFromRowAndColumn(curIndex);
+        QList<int> rows = selectedRows();
+        if (rows.count() > 1)
         {
-            QString entry = createSummaryText(frame_num, CopyAsText);
-            entries << entry;
+            QStringList content;
+            foreach (int row, rows)
+            {
+                QModelIndex idx = model()->index(row, 0);
+                if (! idx.isValid())
+                    continue;
+
+                QString entry = createSummaryText(idx, CopyAsText);
+                content << entry;
+            }
+
+            if (content.count() > 0)
+                mimeData->setText(content.join("\n"));
+        }
+        else if (! filter.isEmpty())
+        {
+            QString abbrev;
+            QString name = model()->headerData(curIndex.column(), header()->orientation()).toString();
+
+            if (! filter.isEmpty())
+            {
+                abbrev = filter.left(filter.indexOf(' '));
+            }
+            else
+            {
+                filter = model()->data(curIndex).toString().toLower();
+                abbrev = filter;
+            }
+
+            mimeData->setText(filter);
+
+            QJsonObject filterData;
+            filterData["filter"] = filter;
+            filterData["name"] = abbrev;
+            filterData["description"] = name;
+
+            mimeData->setData(WiresharkMimeData::DisplayFilterMimeType, QJsonDocument(filterData).toJson());
+            content = new DragLabel(QString("%1\n%2").arg(name, abbrev), this);
+        }
+        else
+        {
+            QString text = model()->data(curIndex).toString();
+            if (! text.isEmpty())
+                mimeData->setText(text);
         }
 
-        if (entries.count() > 0)
-            mimeData->setText(entries.join("\n"));
-    }
-    else if (! filter.isEmpty())
-    {
-        QString name = model()->headerData(column, header()->orientation()).toString();
-        QString abbrev = filter.left(filter.indexOf(' '));
-
-        mimeData->setText(filter);
-
-        QJsonObject filterData;
-        filterData["filter"] = filter;
-        filterData["name"] = abbrev;
-        filterData["description"] = name;
-
-        mimeData->setData(WiresharkMimeData::DisplayFilterMimeType, QJsonDocument(filterData).toJson());
-        drag_label = new DragLabel(QStringLiteral("%1\n%2").arg(name, abbrev), this);
-    }
-    else if (! cell_text.isEmpty())
-    {
-        mimeData->setText(cell_text);
-    }
-
-    if (mimeData->hasText() || mimeData->hasFormat(WiresharkMimeData::DisplayFilterMimeType))
-    {
-        QDrag * drag = new QDrag(this);
-        drag->setMimeData(mimeData);
-        if (drag_label)
+        if (mimeData->hasText() || mimeData->hasFormat(WiresharkMimeData::DisplayFilterMimeType))
         {
-            qreal dpr = window()->windowHandle()->devicePixelRatio();
-            QPixmap pixmap= QPixmap(drag_label->size() * dpr);
-            pixmap.setDevicePixelRatio(dpr);
-            drag_label->render(&pixmap);
-            drag->setPixmap(pixmap);
-            delete drag_label;
+            QDrag * drag = new QDrag(this);
+            drag->setMimeData(mimeData);
+            if (content)
+            {
+                qreal dpr = window()->windowHandle()->devicePixelRatio();
+                QPixmap pixmap= QPixmap(content->size() * dpr);
+                pixmap.setDevicePixelRatio(dpr);
+                content->render(&pixmap);
+                drag->setPixmap(pixmap);
+            }
+
+            drag->exec(Qt::CopyAction);
         }
-
-        drag->exec(Qt::CopyAction);
+        else
+        {
+            delete mimeData;
+        }
     }
-    else
-    {
-        delete mimeData;
-    }
-}
-
-void PacketList::leaveEvent(QEvent *event)
-{
-    QTreeView::leaveEvent(event);
-
-    if (hovered_frame_num_ != -1) {
-        hovered_frame_num_ = -1;
-        viewport()->update();
-        repaintPinnedOverlays();
-    }
-}
-
-void PacketList::setHoveredRowFromOverlay(int row)
-{
-    frame_data *fdata = (row >= 0) ? getFDataForRow(row) : nullptr;
-    setHoveredFrameNum(fdata ? (int)fdata->num : -1);
-}
-
-void PacketList::setHoveredFrameNum(int frame_num)
-{
-    if (frame_num == hovered_frame_num_) {
-        return;
-    }
-
-    hovered_frame_num_ = frame_num;
-    viewport()->update();
-    repaintPinnedOverlays();
 }
 
 void PacketList::keyPressEvent(QKeyEvent *event)
 {
-    // XXX Add support for Qt::Key_F7 and Qt::Key_F8
-    bool nav_key = (event->key() == Qt::Key_Up || event->key() == Qt::Key_Down);
-
-    if (nav_key && event->isAutoRepeat()) {
-        Qt::Key key = static_cast<Qt::Key>(event->key());
-
-        if (turbo_timer_id_ != 0 && key == turbo_key_) {
-            // We're handling autorepeat ourselves.
-            event->accept();
-            return;
-        }
-
-        if (turbo_timer_id_ == 0 && key == held_key_ && key_hold_elapsed_.isValid() &&
-            key_hold_elapsed_.hasExpired(turbo_activation_delay_)) {
-            turbo_key_ = key;
-            turbo_timer_id_ = startTimer(turbo_nav_interval_);
-            event->accept();
-            return;
-        }
-    }
-
     QTreeView::keyPressEvent(event);
-
-    if (nav_key && !event->isAutoRepeat()) {
-        held_key_ = static_cast<Qt::Key>(event->key());
-        key_hold_elapsed_.start();
-    }
 
     if (event->matches(QKeySequence::Copy))
     {
-        QStringList content, htmlContent;
-        QList<int> frame_nums;
-        for (const frame_data *fdata : selectedFrames(false)) {
-            frame_nums << fdata->num;
-        }
-        if (model() && !frame_nums.isEmpty())
+        QStringList content;
+        if (model() && selectionModel() && selectionModel()->hasSelection())
         {
+            QList<int> rows;
+            QModelIndexList selRows = selectionModel()->selectedRows(0);
+            foreach(QModelIndex row, selRows)
+                rows.append(row.row());
 
-            QStringList hdr_parts;
-            QList<int> align_parts, size_parts;
-
-            switch (prefs.gui_packet_list_copy_format_options_for_keyboard_shortcut) {
-            case COPY_FORMAT_TEXT:
-            case COPY_FORMAT_HTML:
-                if (prefs.gui_packet_list_copy_text_with_aligned_columns) {
-                    hdr_parts = createHeaderPartsForAligned();
-                    align_parts = createAlignmentPartsForAligned();
-                    size_parts = createSizePartsForAligned(false, hdr_parts, frame_nums);
-                }
-                if (prefs.gui_packet_list_copy_format_options_for_keyboard_shortcut == COPY_FORMAT_HTML) {
-                    htmlContent << createDefaultStyleForHtml();
-                    htmlContent << createOpeningTagForHtml();
-                }
-                break;
-            case COPY_FORMAT_CSV:
-            case COPY_FORMAT_YAML:
-                break;
-            }
-
-            QList<QStringList> entries;
-            foreach(int frame_num, frame_nums)
+            foreach(int row, rows)
             {
-                switch (prefs.gui_packet_list_copy_format_options_for_keyboard_shortcut) {
-                case COPY_FORMAT_TEXT:
-                case COPY_FORMAT_HTML:
-                    if (prefs.gui_packet_list_copy_text_with_aligned_columns)
-                        content << createSummaryForAligned(frame_num, align_parts, size_parts);
-                    else
-                        content << createSummaryText(frame_num, CopyAsText);
-                    if (prefs.gui_packet_list_copy_format_options_for_keyboard_shortcut == COPY_FORMAT_HTML)
-                        htmlContent << createSummaryForHtml(frame_num);
-                    break;
-                case COPY_FORMAT_CSV:
-                    content << createSummaryText(frame_num, CopyAsCSV);
-                    break;
-                case COPY_FORMAT_YAML:
-                    content << createSummaryText(frame_num, CopyAsYAML);
-                    break;
-                }
+                QModelIndex idx = model()->index(row, 0);
+                if (! idx.isValid())
+                    continue;
+
+                QString entry = createSummaryText(idx, CopyAsText);
+                content << entry;
             }
         }
 
-        if (prefs.gui_packet_list_copy_format_options_for_keyboard_shortcut == COPY_FORMAT_HTML) {
-            // htmlContent will never be empty as they will always have style and table tags
-            QMimeData *mimeData = new QMimeData;
-            htmlContent << createClosingTagForHtml();
-            mimeData->setHtml(htmlContent.join('\n'));
-            mimeData->setText(content.join('\n').append("\n"));
-            mainApp->clipboard()->setMimeData(mimeData, QClipboard::Clipboard);
-        }
-        else {
-            if (content.count() > 0) {
-                QString copy_text;
-                if (prefs.gui_packet_list_copy_format_options_for_keyboard_shortcut == COPY_FORMAT_YAML) {
-                    copy_text = content.join("");
-                }
-                else {
-                    copy_text = content.join("\n");
-	                copy_text += "\n";
-                }
-                mainApp->clipboard()->setText(copy_text);
-            }
-        }
+        if (content.count() > 0)
+            mainApp->clipboard()->setText(content.join('\n'), QClipboard::Clipboard);
     }
-}
-
-void PacketList::keyReleaseEvent(QKeyEvent *event)
-{
-    if (!event->isAutoRepeat() && event->key() == held_key_) {
-        if (turbo_timer_id_ != 0 && event->key() == turbo_key_) {
-            killTimer(turbo_timer_id_);
-            turbo_timer_id_ = 0;
-        }
-        held_key_ = Qt::Key(0);
-        key_hold_elapsed_.invalidate();
-    }
-
-    QTreeView::keyReleaseEvent(event);
-}
-
-void PacketList::focusInEvent(QFocusEvent *event)
-{
-    QTreeView::focusInEvent(event);
-
-    if (event->reason() == Qt::TabFocusReason || event->reason() == Qt::BacktabFocusReason) {
-        if (model() && model()->rowCount() > 0 && selectionModel()) {
-            if (!selectionModel()->hasSelection()) {
-                QModelIndex first = model()->index(0, 0);
-                if (first.isValid()) {
-                    selectionModel()->setCurrentIndex(first, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
-                    setCurrentIndex(first);
-                }
-            }
-
-            // ALWAYS scroll to the current index if we have one
-            if (currentIndex().isValid()) {
-                scrollTo(currentIndex());
-            }
-        }
-    }
-}
-
-void PacketList::focusOutEvent(QFocusEvent *event)
-{
-    if (turbo_timer_id_ != 0) {
-        killTimer(turbo_timer_id_);
-        turbo_timer_id_ = 0;
-    }
-    held_key_ = Qt::Key(0);
-    key_hold_elapsed_.invalidate();
-
-    QTreeView::focusOutEvent(event);
 }
 
 void PacketList::resizeEvent(QResizeEvent *event)
@@ -1827,82 +1001,36 @@ void PacketList::resizeEvent(QResizeEvent *event)
     create_near_overlay_ = true;
     create_far_overlay_ = true;
     QTreeView::resizeEvent(event);
-    layoutPinnedOverlays();
 }
 
 void PacketList::setColumnVisibility()
 {
     set_column_visibility_ = true;
-    for (unsigned i = 0; i < prefs.num_cols; i++) {
-        bool hidden = get_column_visible(i) ? false : true;
-        bool frozen = isColumnFrozen((int)i, pinned_column_boundary_);
-        setColumnHidden(i, hidden);
-        if (pinned_column_view_) {
-            pinned_column_view_->setColumnHidden(i, hidden || !frozen);
-        }
-        if (pinned_row_view_) {
-            pinned_row_view_->setColumnHidden(i, hidden || frozen);
-        }
-        if (pinned_row_corner_view_) {
-            pinned_row_corner_view_->setColumnHidden(i, hidden || !frozen);
-        }
-        emit columnHiddenChanged(i, hidden);
+    for (int i = 0; i < prefs.num_cols; i++) {
+        setColumnHidden(i, get_column_visible(i) ? false : true);
     }
-    setColumnDelegate();
     set_column_visibility_ = false;
 }
 
-void PacketList::setColumnDelegate()
+int PacketList::sizeHintForColumn(int column) const
 {
-    for (unsigned i = 0; i < prefs.num_cols; i++) {
-        setItemDelegateForColumn(i, nullptr);   // Reset all delegates
-    }
+    int size_hint = 0;
 
-    // Multi-color delegate takes precedence over related packet delegate (row stripes only, not scrollbar-only mode)
-    if (prefs.gui_packet_list_multi_color_mode == PACKET_LIST_MULTI_COLOR_MODE_FULL ||
-        prefs.gui_packet_list_multi_color_mode == PACKET_LIST_MULTI_COLOR_MODE_SHIFT_RIGHT) {
-        for (unsigned i = 0; i < prefs.num_cols; i++) {
-            if (get_column_visible(i)) {
-                setItemDelegateForColumn(i, &multi_color_delegate_);
-            }
-        }
+    // This is a bit hacky but Qt does a fine job of column sizing and
+    // reimplementing QTreeView::sizeHintForColumn seems like a worse idea.
+    if (itemDelegateForColumn(column)) {
+        QStyleOptionViewItem option;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+        initViewItemOption(&option);
+#else
+        option = viewOptions();
+#endif
+        // In my (gcc) testing this results in correct behavior on Windows but adds extra space
+        // on macOS and Linux. We might want to add Q_OS_... #ifdefs accordingly.
+        size_hint = itemDelegateForColumn(column)->sizeHint(option, QModelIndex()).width();
     }
-    else if (prefs.gui_packet_list_show_related) {
-        for (unsigned i = 0; i < prefs.num_cols; i++) {
-            if (get_column_visible(i)) {
-                setItemDelegateForColumn(i, &related_packet_delegate_);
-                break;  // Set the delegate only on the first visible column
-            }
-        }
-    }
-
-    // Tag column delegate is installed on every COL_TAG column regardless of other delegates
-    for (unsigned i = 0; i < prefs.num_cols; i++) {
-        if (get_column_format(i) == COL_TAG) {
-            setItemDelegateForColumn(i, &tag_column_delegate_);
-        }
-    }
-
-    auto row_height = [this]() { return pinnedRowHeight(); };
-    for (QTreeView *view : pinnedOverlayViews()) {
-        for (unsigned i = 0; i < prefs.num_cols; i++) {
-            view->setItemDelegateForColumn(i, nullptr);
-        }
-        QList<QObject *> old_wrappers;
-        for (QObject *child : view->children()) {
-            if (dynamic_cast<PinnedOverlayView::FixedRowHeightDelegate *>(child)) {
-                old_wrappers << child;
-            }
-        }
-        view->setItemDelegate(new PinnedOverlayView::FixedRowHeightDelegate(nullptr, row_height, view));
-        qDeleteAll(old_wrappers);
-        for (unsigned i = 0; i < prefs.num_cols; i++) {
-            QAbstractItemDelegate *col_delegate = itemDelegateForColumn(i);
-            if (col_delegate) {
-                view->setItemDelegateForColumn(i, new PinnedOverlayView::FixedRowHeightDelegate(col_delegate, row_height, view));
-            }
-        }
-    }
+    size_hint += QTreeView::sizeHintForColumn(column); // Decoration padding
+    return size_hint;
 }
 
 void PacketList::setRecentColumnWidth(int col)
@@ -1913,10 +1041,7 @@ void PacketList::setRecentColumnWidth(int col)
         int fmt = get_column_format(col);
         const char *long_str = get_column_width_string(fmt, col);
 
-        // TODO: a column's natural width is model data, not a view concern.
-        // PacketListModel should hint it instead of the view measuring against
-        // the font here.
-        QFontMetrics fm = QFontMetrics(FontManager::monospaceFont());
+        QFontMetrics fm = QFontMetrics(mainApp->monospaceFont());
         if (long_str) {
             col_width = fm.horizontalAdvance(long_str);
         } else {
@@ -1925,13 +1050,11 @@ void PacketList::setRecentColumnWidth(int col)
         // Custom delegate padding
         if (itemDelegateForColumn(col)) {
             QStyleOptionViewItem option;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
             initViewItemOption(&option);
-            // This is adding "how much width hinted for an empty index, plus
-            // the decoration, plus any padding between the decoration and
-            // normal display?" Many styles however have a non zero hint for
-            // an empty index, so this isn't quite right. What we really want
-            // is a size hint for an index whose data is the string above, and
-            // to just use that for the width.
+#else
+            option = viewOptions();
+#endif
             col_width += itemDelegateForColumn(col)->sizeHint(option, QModelIndex()).width();
         }
     }
@@ -1939,167 +1062,22 @@ void PacketList::setRecentColumnWidth(int col)
     setColumnWidth(col, col_width);
 }
 
-void PacketList::drawCurrentPacket(bool scroll)
+void PacketList::drawCurrentPacket()
 {
-    // Update the dissection details for the current frame.
-    //
-    // It might make sense to call this from dataChanged if a single frame
-    // is selected and its index is among those changed, instead of, e.g.,
-    // markFrame() having to call this directly.  Note however that
-    // PacketListModel calls layoutChanged instead of dataChanged due
-    // to a Qt 6 bug (that appears to have been mitigated in Qt 6.9),
-    // so we perhaps have to listen to LayoutChanged as well.
-    if (!cap_file_) return;
-
-    frame_data *selected_fdata = nullptr;
-    static bool multiSelect = false;
-    QList<int> selected_frame_nums;
-
-    if (selectionModel())
-    {
-        // Includes pinned packets selected in the pinned-row strip that are
-        // filtered out of this view, which selRows doesn't.
-        const QList<frame_data *> frames = selectedFrames(false);
-        if (frames.count() > 1)
-        {
-            foreach (const frame_data *fdata, frames)
-            {
-                selected_frame_nums << fdata->num;
-            }
-
-            emit framesSelected(selected_frame_nums);
-            emit fieldSelected(0);
-            cf_unselect_packet(cap_file_);
-
-            /* We have to repaint the content while changing state, as some delegates react to multi-select */
-            if (! multiSelect)
-            {
-                related_packet_delegate_.clear();
-                viewport()->update();
-            }
-
-            multiSelect = true;
-
-            return;
-        }
-        else if (frames.count() > 0)
-        {
-            /* One packet selected. Note this is *not* necessarily the row of
-             * the currentIndex, if two rows were selected and one was
-             * deselected via Ctrl-Click. Then the currentIndex is the
-             * deselected row. It might not have a row here at all, if it's
-             * a pinned packet that's filtered out. */
-            multiSelect = false;
-            selected_fdata = frames.at(0);
-            // Only one packet, so this is cheap.
-            const QModelIndexList selRows = selectionModel()->selectedRows(0);
-            if (scroll && selRows.count() > 0 && selRows.at(0).isValid()) {
-                if (currentIndex().siblingAtColumn(0) != selRows.at(0)) {
-                    // Not the currentIndex. Set the current index, which will
-                    // scroll to it. Use NoUpdate to not change the selection
-                    // and possibly create a loop.
-                    selectionModel()->setCurrentIndex(selRows.at(0), QItemSelectionModel::NoUpdate);
-                } else {
-                    // The currentIndex. Scroll to it if necessary.
-                    scrollTo(currentIndex());
-                }
-            }
-        }
-
-        /* Handling empty selection */
-        if (frames.count() <= 0)
-        {
-            /* Nothing selected, but multiSelect is still active */
-            if (multiSelect)
-            {
-                multiSelect = false;
-                if (currentIndex().isValid())
-                {
-                    selectionModel()->select(currentIndex(), QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows );
-                    return;
-                }
-            }
-            /* Nothing selected, so in WS <= 3.0 nothing was indicated as well */
-            else if (currentIndex().isValid())
-            {
-                setCurrentIndex(QModelIndex());
-            }
-        }
-    }
-
-    if (!selected_fdata)
-        cf_unselect_packet(cap_file_);
-    else {
-        cf_select_packet(cap_file_, selected_fdata);
-        selected_frame_nums << selected_fdata->num;
-    }
-
-    if (cap_file_->current_frame) {
-        // Add this to the end of the history if it's not already
-        updateHistory(cap_file_->current_frame->num);
-    }
-
-    related_packet_delegate_.clear();
-
-    // The previous dissection state has been invalidated by cf_select_packet
-    // above, receivers must clear the previous state and apply the updated one.
-    emit framesSelected(selected_frame_nums);
-
-    if (!cap_file_->edt) {
-        viewport()->update();
-        emit fieldSelected(0);
-        return;
-    }
-
-    if (cap_file_->edt->tree) {
-        packet_info *pi = &cap_file_->edt->pi;
-        related_packet_delegate_.setCurrentFrame(pi->num);
-        conversation_t *conv = find_conversation_pinfo_ro(pi, 0);
-        if (conv) {
-            related_packet_delegate_.setConversation(conv);
-        }
-        viewport()->update();
-    }
-
-    // Figure out what field should be selected.
-    // XXX - All this should be done in ProtoTree in response to framesSelected
-    if (cap_file_->search_in_progress) {
-        field_info *fi = NULL;
-
-        if (cap_file_->string && cap_file_->decode_data) {
-            // The tree where the target string matched one of the labels was discarded in
-            // match_protocol_tree() so we have to search again in the latest tree.
-            fi = cf_find_string_protocol_tree(cap_file_, cap_file_->edt->tree);
-        } else if (cap_file_->search_len != 0) {
-            // Find the finfo that corresponds to our byte.
-            // The match can span multiple fields (and a single byte can
-            // match more than one field.) Our behavior is to find the last
-            // field in the tree (so hopefully spanning fewer bytes) that
-            // matches the last byte in the search match.
-            // (regex search can find a zero length match not at the
-            // start of the frame if lookbehind is used, but
-            // proto_find_field_from_offset doesn't match such a field
-            // and it's not clear which field we would want to match.)
-            fi = proto_find_field_from_offset(cap_file_->edt->tree, cap_file_->search_pos + cap_file_->search_len - 1,
-                                              cap_file_->edt->tvb);
-        }
-
-        if (fi) {
-            FieldInformation finfo(fi, this);
-            emit fieldSelected(&finfo);
-        } else {
-            emit fieldSelected(0);
-        }
-    } else if (proto_tree_) {
-        proto_tree_->restoreSelectedField();
+    // XXX - Update for multi-select? If more than one packet is Selected,
+    // this changes it so that only the Current packet is Selected.
+    QModelIndex current_index = currentIndex();
+    if (selectionModel() && current_index.isValid()) {
+        selectionModel()->clearSelection();
+        selectionModel()->setCurrentIndex(current_index, QItemSelectionModel::SelectCurrent | QItemSelectionModel::Rows);
     }
 }
 
-// Redraw the packet list and detail.
-// Causes the UI to scroll to the current packet.
+// Redraw the packet list and detail.  Re-selects the current packet (causes
+// the UI to scroll to that packet).
 // Called from many places.
 void PacketList::redrawVisiblePackets() {
-    packet_list_model_->invalidateAllColumnStrings();
+    redrawVisiblePacketsDontSelectCurrent();
     drawCurrentPacket();
 }
 
@@ -2107,7 +1085,6 @@ void PacketList::redrawVisiblePackets() {
 // Does not scroll back to the selected packet.
 void PacketList::redrawVisiblePacketsDontSelectCurrent() {
     packet_list_model_->invalidateAllColumnStrings();
-    drawCurrentPacket(false);
 }
 
 void PacketList::resetColumns()
@@ -2123,7 +1100,7 @@ bool PacketList::haveNextHistory(bool update_cur)
     }
 
     for (int i = cur_history_ + 1; i < selection_history_.size(); i++) {
-        if (packet_list_proxy_model_->packetNumberToRow(selection_history_.at(i)) >= 0) {
+        if (packet_list_model_->packetNumberToRow(selection_history_.at(i)) >= 0) {
             if (update_cur) {
                 cur_history_ = i;
             }
@@ -2141,7 +1118,7 @@ bool PacketList::havePreviousHistory(bool update_cur)
     }
 
     for (int i = cur_history_ - 1; i >= 0; i--) {
-        if (packet_list_proxy_model_->packetNumberToRow(selection_history_.at(i)) >= 0) {
+        if (packet_list_model_->packetNumberToRow(selection_history_.at(i)) >= 0) {
             if (update_cur) {
                 cur_history_ = i;
             }
@@ -2149,30 +1126,6 @@ bool PacketList::havePreviousHistory(bool update_cur)
         }
     }
     return false;
-}
-
-void PacketList::updateHistory(int frame_num)
-{
-    // We want to call this whenever cap_file_->current_frame changes.
-    // (We don't keep a history of frames that were selected as part of
-    // multiselect.) That is not the same thing as the currentIndex. First,
-    // because the pinned rows can set a frame as the current frame that
-    // isn't in the main view (and thus never becomes the currentIndex.)
-    // Secondly, because with ExtendedSelection an index can become the
-    // currentIndex by being in a multi-selection and then *deselected*
-    // with Ctrl-Click. (Also, if two frames were selected, the remaining
-    // frame then becomes cap_file_->current_frame but not CurrentIndex.)
-    if (in_history_)
-        return;
-
-    if (!selection_history_.isEmpty()) {
-        if (frame_num == selection_history_.constLast()) {
-            return;
-        }
-    }
-
-    cur_history_++;
-    selection_history_.append(frame_num);
 }
 
 void PacketList::setProfileSwitcher(ProfileSwitcher *profile_switcher)
@@ -2185,7 +1138,7 @@ void PacketList::setProfileSwitcher(ProfileSwitcher *profile_switcher)
 
 frame_data *PacketList::getFDataForRow(int row) const
 {
-    return packet_list_proxy_model_->getRowFdata(row);
+    return packet_list_model_->getRowFdata(row);
 }
 
 // prefs.col_list has changed.
@@ -2206,20 +1159,6 @@ void PacketList::columnsChanged()
     resetColumns();
     applyRecentColumnWidths();
     setColumnVisibility();
-    // Freezing is defined purely positionally ("the first N columns"), and
-    // this signal doesn't say which column(s) actually changed -- a
-    // removal, addition, or reorder can each change which logical columns
-    // now sit at positions [0, pinned_column_boundary_), so there's no way
-    // to tell from here whether the frozen set still means what the user
-    // last chose. Unfreezing unconditionally is conservative (it also
-    // clears a freeze that a change elsewhere in the column list didn't
-    // actually affect), but guarantees the frozen set is never silently
-    // wrong. setPinnedColumnBoundary() also re-syncs the pinned overlays
-    // and duplicate header pair to match.
-    if (pinned_column_boundary_ > 0) {
-        setPinnedColumnBoundary(0);
-    }
-    saved_pinned_column_boundary_ = 0;
     columns_changed_ = false;
 }
 
@@ -2256,22 +1195,24 @@ void PacketList::applyRecentColumnWidths()
     // Either we've just started up or a profile has changed. Read
     // the recent settings, apply them, and save the header state.
 
-    for (unsigned col = 0; col < prefs.num_cols; col++) {
+    for (int col = 0; col < prefs.num_cols; col++) {
         // The column must be shown before setting column width.
         // Visibility will be updated in setColumnVisibility().
         setColumnHidden(col, false);
         setRecentColumnWidth(col);
     }
+
+    column_state_ = header()->saveState();
 }
 
 void PacketList::preferencesChanged()
 {
-    // Previously driven by the separate MainApplication::colorsChanged
-    // signal, which has been removed — every colorsChanged emit was
-    // paired with a preferencesChanged emit anyway.  Rebuilding the
-    // selection stylesheet on every pref change is cheap (single
-    // setStyleSheet call) and idempotent.
-    colorsChanged();
+    // Related packet delegate
+    if (prefs.gui_packet_list_show_related) {
+        setItemDelegateForColumn(0, &related_packet_delegate_);
+    } else {
+        setItemDelegateForColumn(0, 0);
+    }
 
     // Intelligent scroll bar (minimap)
     if (prefs.gui_packet_list_show_minimap) {
@@ -2331,21 +1272,8 @@ void PacketList::setVerticalAutoScroll(bool enabled)
 // packets.
 void PacketList::captureFileReadFinished()
 {
-    packet_list_proxy_model_->flushVisibleRows();
-    packet_list_proxy_model_->dissectIdle(true);
-    // Redissection cleared the model; bring back the frozen columns and
-    // pinned packets.
-    if (saved_pinned_column_boundary_ > 0) {
-        int boundary = saved_pinned_column_boundary_;
-        saved_pinned_column_boundary_ = 0;
-        if (boundary < header()->count()) {
-            setPinnedColumnBoundary(boundary);
-        }
-    }
-    if (pinned_rows_model_ && pinned_rows_model_->restoreSavedPins()) {
-        updatePinnedRowVisibility();
-        reconcilePinnedSelection();
-    }
+    packet_list_model_->flushVisibleRows();
+    packet_list_model_->dissectIdle(true);
     // Invalidating the column strings picks up and request/response
     // tracking changes. We might just want to call it from flushVisibleRows.
     packet_list_model_->invalidateAllColumnStrings();
@@ -2367,15 +1295,7 @@ bool PacketList::freeze(bool keep_current_frame)
     setHeaderHidden(true);
     frozen_current_row_ = currentIndex();
     frozen_selected_rows_ = selectionModel()->selectedRows();
-    {
-        // Leave the pinned-row strip's selection alone; it is still valid
-        // after thawing, and thaw() reconciles the two selections.
-        QScopedValueRollback<bool> syncing(syncing_selection_, true);
-        selectionModel()->clear();
-    }
-    // What selectionChanged() does for an empty selection (it ignores the
-    // changes made above and by setModel() below).
-    cf_unselect_packet(cap_file_);
+    selectionModel()->clear();
     setModel(Q_NULLPTR);
     // It looks like GTK+ sends a cursor-changed signal at this point but Qt doesn't
     // call selectionChanged.
@@ -2402,19 +1322,7 @@ bool PacketList::thaw(bool restore_selection)
     // Note that if we have a current sort status set in the header,
     // this will automatically try to sort the model (we don't want
     // that to happen if we're in the middle of reading the file).
-    setModel(packet_list_proxy_model_);
-
-    // setModel() always creates a brand-new default selection model, even
-    // when passed the same model pointer, discarding the linked one we'd
-    // installed and shared with pinned_column_view_ back in the
-    // constructor. Install a new one and re-share it so its selection
-    // highlighting doesn't silently go stale. (The pinned-row overlays
-    // use a separate proxy model -- PinnedRowsModel -- with their own
-    // selection model, pinned_selection_model_.)
-    installSelectionModel();
-    if (pinned_column_view_) {
-        pinned_column_view_->setSelectionModel(selectionModel());
-    }
+    setModel(packet_list_model_);
 
     if (changing_profile_) {
         // When changing profile the new recent settings must be applied to the columns.
@@ -2428,53 +1336,27 @@ bool PacketList::thaw(bool restore_selection)
         header()->restoreState(column_state_);
     }
 
-    if (restore_selection && (frozen_selected_rows_.length() > 0 || pinned_selection_model_->hasSelection()) && selectionModel()) {
+    if (restore_selection && frozen_selected_rows_.length() > 0 && selectionModel()) {
         /* This updates our selection, which redissects the current packet,
          * which is needed when we're called from MainWindow::layoutPanes.
          * Also, this resets all ProtoTree and ByteView data */
-        if (frozen_selected_rows_.length() > 0) {
-            // Restoring this view's selection shouldn't clear the pinned-row
-            // strip's, which survived the freeze.
-            QScopedValueRollback<bool> syncing(syncing_selection_, true);
-            clearSelection();
-            setCurrentIndex(frozen_current_row_);
-            foreach (QModelIndex idx, frozen_selected_rows_) {
-                selectionModel()->select(idx, QItemSelectionModel::Select | QItemSelectionModel::Rows);
-            }
+        clearSelection();
+        setCurrentIndex(frozen_current_row_);
+        foreach (QModelIndex idx, frozen_selected_rows_) {
+            selectionModel()->select(idx, QItemSelectionModel::Select | QItemSelectionModel::Rows);
         }
-        reconcilePinnedSelection();
-        drawCurrentPacket(false);
         scrollTo(currentIndex(), PositionAtCenter);
     }
     frozen_current_row_ = QModelIndex();
     frozen_selected_rows_ = QModelIndexList();
 
-    // setHeaderHidden(false) above unconditionally re-shows the native
-    // header, but if rows are still pinned, PacketListPane needs the
-    // native header hidden again in favor of its duplicate header pair.
-    // Resync now so that invariant holds after every freeze/thaw cycle
-    // (filter apply, reload, retap), not just after pin/unpin.
-    updatePinnedRowVisibility();
-
     return true;
 }
 
 void PacketList::clear() {
-    // pinned_rows_model_ unpins everything itself when packet_list_model_
-    // is cleared below, remembering the pins so redissection can restore
-    // them (see captureFileReadFinished()). The frozen columns are handled
-    // the same way.
-    // cap_file_ is null when the file is being closed (setCaptureFile(NULL)
-    // precedes the clear), in which case there is nothing to restore later.
-    saved_pinned_column_boundary_ = cap_file_ ? pinned_column_boundary_ : 0;
-    setPinnedColumnBoundary(0);
-
     related_packet_delegate_.clear();
     selectionModel()->clear();
     packet_list_model_->clear();
-    if (!cap_file_) {
-        pinned_rows_model_->discardSavedPins();
-    }
     proto_tree_->clear();
     selection_history_.clear();
     cur_history_ = -1;
@@ -2485,16 +1367,14 @@ void PacketList::clear() {
     overlay_sb_->setMarkedPacketImage(overlay);
     create_near_overlay_ = true;
     create_far_overlay_ = true;
-
-    updatePinnedRowVisibility();
 }
 
 void PacketList::writeRecent(FILE *rf) {
-    int width, col_fmt;
+    int col, width, col_fmt;
     char xalign;
 
     fprintf (rf, "%s:\n", RECENT_KEY_COL_WIDTH);
-    for (unsigned col = 0; col < prefs.num_cols; col++) {
+    for (col = 0; col < prefs.num_cols; col++) {
         if (col > 0) {
             fprintf (rf, ",\n");
         }
@@ -2521,36 +1401,42 @@ bool PacketList::contextMenuActive()
 
 QString PacketList::getFilterFromRowAndColumn(QModelIndex idx)
 {
-    if (! idx.isValid() || !packet_list_model_)
-        return QString();
-
-    return getFilterFromFdataAndColumn(packet_list_proxy_model_->getRowFdata(idx.row()), idx.column());
-}
-
-QString PacketList::getFilterFromFdataAndColumn(frame_data *fdata, int column)
-{
+    frame_data *fdata;
     QString filter;
 
-    if (!cap_file_ || !packet_list_model_ || column < 0 || (unsigned)column >= cap_file_->cinfo.num_cols)
+    if (! idx.isValid())
         return filter;
+
+    int row = idx.row();
+    int column = idx.column();
+
+    if (!cap_file_ || !packet_list_model_ || column < 0 || column >= cap_file_->cinfo.num_cols)
+        return filter;
+
+    fdata = packet_list_model_->getRowFdata(row);
 
     if (fdata != NULL) {
         epan_dissect_t edt;
-        wtap_rec rec; /* Record information */
+        wtap_rec rec; /* Record metadata */
+        Buffer buf;   /* Record data */
 
-        wtap_rec_init(&rec, DEFAULT_INIT_BUFFER_SIZE_2048);
-        if (!cf_read_record(cap_file_, fdata, &rec)) {
+        wtap_rec_init(&rec);
+        ws_buffer_init(&buf, 1514);
+        if (!cf_read_record(cap_file_, fdata, &rec, &buf)) {
             wtap_rec_cleanup(&rec);
+            ws_buffer_free(&buf);
             return filter; /* error reading the record */
         }
         /* proto tree, visible. We need a proto tree if there's custom columns */
         epan_dissect_init(&edt, cap_file_->epan, have_custom_cols(&cap_file_->cinfo), false);
         col_custom_prime_edt(&edt, &cap_file_->cinfo);
 
-        epan_dissect_run(&edt, cap_file_->cd_t, &rec, fdata, &cap_file_->cinfo);
+        epan_dissect_run(&edt, cap_file_->cd_t, &rec,
+                         frame_tvbuff_new_buffer(&cap_file_->provider, fdata, &buf),
+                         fdata, &cap_file_->cinfo);
 
         if (cap_file_->cinfo.columns[column].col_fmt == COL_CUSTOM) {
-            filter.append(gchar_free_to_qstring(col_custom_get_filter(&edt, &cap_file_->cinfo, (unsigned)column)));
+            filter.append(gchar_free_to_qstring(col_custom_get_filter(&edt, &cap_file_->cinfo, column)));
         } else {
             /* We don't need to fill in the custom columns, as we get their
              * filters above.
@@ -2567,11 +1453,11 @@ QString PacketList::getFilterFromFdataAndColumn(frame_data *fdata, int column)
 
                 if (filter.isEmpty()) {
                     if (is_string_value) {
-                        filter.append(QStringLiteral("%1 == \"%2\"")
+                        filter.append(QString("%1 == \"%2\"")
                                       .arg(cap_file_->cinfo.col_expr.col_expr[column])
                                       .arg(cap_file_->cinfo.col_expr.col_expr_val[column]));
                     } else {
-                        filter.append(QStringLiteral("%1 == %2")
+                        filter.append(QString("%1 == %2")
                                       .arg(cap_file_->cinfo.col_expr.col_expr[column])
                                       .arg(cap_file_->cinfo.col_expr.col_expr_val[column]));
                     }
@@ -2581,6 +1467,7 @@ QString PacketList::getFilterFromFdataAndColumn(frame_data *fdata, int column)
 
         epan_dissect_cleanup(&edt);
         wtap_rec_cleanup(&rec);
+        ws_buffer_free(&buf);
     }
 
     return filter;
@@ -2594,6 +1481,7 @@ void PacketList::resetColorized()
 
 QString PacketList::getPacketComment(unsigned c_number)
 {
+    int row = currentIndex().row();
     const frame_data *fdata;
     char *pkt_comment;
     wtap_opttype_return_val result;
@@ -2601,8 +1489,7 @@ QString PacketList::getPacketComment(unsigned c_number)
 
     if (!cap_file_ || !packet_list_model_) return NULL;
 
-    const QList<frame_data *> frames = selectedFrames();
-    fdata = frames.count() == 1 ? frames.first() : nullptr;
+    fdata = packet_list_model_->getRowFdata(row);
 
     if (!fdata) return NULL;
 
@@ -2635,15 +1522,16 @@ void PacketList::addPacketComment(QString new_comment)
         return;
     }
 
-    QModelIndexList source_indexes = selectedSourceIndexes();
-    if (!source_indexes.isEmpty()) {
-        packet_list_model_->addFrameComment(source_indexes, ba);
+    if (selectionModel() && selectionModel()->hasSelection()) {
+        packet_list_model_->addFrameComment(selectionModel()->selectedRows(), ba);
         drawCurrentPacket();
     }
 }
 
 void PacketList::setPacketComment(unsigned c_number, QString new_comment)
 {
+    QModelIndex curIndex = currentIndex();
+
     if (!cap_file_ || !packet_list_model_) return;
 
     QByteArray ba = new_comment.toUtf8();
@@ -2660,11 +1548,7 @@ void PacketList::setPacketComment(unsigned c_number, QString new_comment)
         return;
     }
 
-    // The comment menu only offers editing when exactly one packet is selected.
-    QModelIndexList source_indexes = selectedSourceIndexes();
-    if (source_indexes.count() != 1) return;
-
-    packet_list_model_->setFrameComment(source_indexes.first(), ba, c_number);
+    packet_list_model_->setFrameComment(curIndex, ba, c_number);
     drawCurrentPacket();
 }
 
@@ -2686,9 +1570,9 @@ QString PacketList::allPacketComments()
             for (unsigned i = 0; i < n_comments; i++) {
                 char *comment_text;
                 if (WTAP_OPTTYPE_SUCCESS == wtap_block_get_nth_string_option_value(pkt_block, OPT_COMMENT, i, &comment_text)) {
-                    buf_str.append(tr("Frame %1: %2\n\n").arg(framenum).arg(comment_text));
+                    buf_str.append(QString(tr("Frame %1: %2\n\n")).arg(framenum).arg(comment_text));
                     if (buf_str.length() > max_comments_to_fetch_) {
-                        buf_str.append(tr("[ Comment text exceeds %1. Stopping. ]")
+                        buf_str.append(QString(tr("[ Comment text exceeds %1. Stopping. ]"))
                                 .arg(format_size(max_comments_to_fetch_, FORMAT_SIZE_UNIT_BYTES, FORMAT_SIZE_PREFIX_SI)));
                         return buf_str;
                     }
@@ -2703,9 +1587,8 @@ void PacketList::deleteCommentsFromPackets()
 {
     if (!cap_file_ || !packet_list_model_) return;
 
-    QModelIndexList source_indexes = selectedSourceIndexes();
-    if (!source_indexes.isEmpty()) {
-        packet_list_model_->deleteFrameComments(source_indexes);
+    if (selectionModel() && selectionModel()->hasSelection()) {
+        packet_list_model_->deleteFrameComments(selectionModel()->selectedRows());
         drawCurrentPacket();
     }
 }
@@ -2724,12 +1607,15 @@ void PacketList::deleteAllPacketComments()
 void PacketList::setCaptureFile(capture_file *cf)
 {
     cap_file_ = cf;
-    // A different file (or none) is being shown, not a redissection.
-    pinned_rows_model_->discardSavedPins();
-    saved_pinned_column_boundary_ = 0;
     packet_list_model_->setCaptureFile(cf);
-    if (cap_file_ && columns_changed_) {
-        columnsChanged();
+    if (cf) {
+        if (columns_changed_) {
+            columnsChanged();
+        } else {
+            // Restore columns widths and visibility.
+            header()->restoreState(column_state_);
+            setColumnVisibility();
+        }
     }
     create_near_overlay_ = true;
     changing_profile_ = false;
@@ -2739,29 +1625,12 @@ void PacketList::setCaptureFile(capture_file *cf)
 void PacketList::setMonospaceFont(const QFont &mono_font)
 {
     setFont(mono_font);
-    if (pinned_rows_model_) {
-        pinned_rows_model_->setBaseFont(mono_font);
-    }
-    for (QTreeView *view : pinnedOverlayViews()) {
-        view->setFont(mono_font);
-    }
-    layoutPinnedOverlays();
 }
 
 void PacketList::setRegularFont(const QFont &regular_font)
 {
     header()->setFont(regular_font);
     header()->viewport()->setFont(regular_font);
-    // pinned_column_view_'s own header isn't covered by setMonospaceFont()
-    // looping over pinnedOverlayViews() (that sets the *view's* font, for
-    // cell content -- QHeaderView doesn't automatically inherit a
-    // different font set on its own separately-headed QTreeView the way
-    // the primary view's header is explicitly given the regular font
-    // above), so without this it silently kept whatever font QHeaderView
-    // fell back to, differing from the primary header's.
-    if (pinned_column_view_) {
-        pinned_column_view_->header()->setFont(regular_font);
-    }
 }
 
 void PacketList::goNextPacket(void)
@@ -2806,16 +1675,16 @@ void PacketList::goPreviousPacket(void)
 }
 
 void PacketList::goFirstPacket(void) {
-    if (packet_list_proxy_model_->rowCount() < 1) return;
-    selectionModel()->setCurrentIndex(packet_list_proxy_model_->index(0, 0), QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+    if (packet_list_model_->rowCount() < 1) return;
+    selectionModel()->setCurrentIndex(packet_list_model_->index(0, 0), QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
     scrollTo(currentIndex());
 
     scrollViewChanged(false);
 }
 
 void PacketList::goLastPacket(void) {
-    if (packet_list_proxy_model_->rowCount() < 1) return;
-    selectionModel()->setCurrentIndex(packet_list_proxy_model_->index(packet_list_proxy_model_->rowCount() - 1, 0), QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+    if (packet_list_model_->rowCount() < 1) return;
+    selectionModel()->setCurrentIndex(packet_list_model_->index(packet_list_model_->rowCount() - 1, 0), QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
     scrollTo(currentIndex());
 
     scrollViewChanged(false);
@@ -2857,7 +1726,23 @@ void PacketList::markFrame()
 {
     if (!cap_file_ || !packet_list_model_) return;
 
-    packet_list_model_->toggleFrameMark(selectedSourceIndexes());
+    QModelIndexList frames;
+
+    if (selectionModel() && selectionModel()->hasSelection())
+    {
+        QModelIndexList selRows = selectionModel()->selectedRows(0);
+        foreach (QModelIndex idx, selRows)
+        {
+            if (idx.isValid())
+            {
+                frames << idx;
+            }
+        }
+    }
+    else
+        frames << currentIndex();
+
+    packet_list_model_->toggleFrameMark(frames);
 
     // Make sure the packet list's frame.marked related field text is updated.
     redrawVisiblePackets();
@@ -2870,7 +1755,7 @@ void PacketList::markAllDisplayedFrames(bool set)
 {
     if (!cap_file_ || !packet_list_model_) return;
 
-    packet_list_proxy_model_->setDisplayedFrameMark(set);
+    packet_list_model_->setDisplayedFrameMark(set);
 
     // Make sure the packet list's frame.marked related field text is updated.
     redrawVisiblePackets();
@@ -2883,7 +1768,23 @@ void PacketList::ignoreFrame()
 {
     if (!cap_file_ || !packet_list_model_) return;
 
-    packet_list_model_->toggleFrameIgnore(selectedSourceIndexes());
+    QModelIndexList frames;
+
+    if (selectionModel() && selectionModel()->hasSelection())
+    {
+        foreach (QModelIndex idx, selectionModel()->selectedRows(0))
+        {
+            if (idx.isValid())
+            {
+                frames << idx;
+            }
+        }
+    }
+    else
+        frames << currentIndex();
+
+
+    packet_list_model_->toggleFrameIgnore(frames);
     create_far_overlay_ = true;
     int sb_val = verticalScrollBar()->value(); // Surely there's a better way to keep our position?
     setUpdatesEnabled(false);
@@ -2896,7 +1797,7 @@ void PacketList::ignoreAllDisplayedFrames(bool set)
 {
     if (!cap_file_ || !packet_list_model_) return;
 
-    packet_list_proxy_model_->setDisplayedFrameIgnore(set);
+    packet_list_model_->setDisplayedFrameIgnore(set);
     create_far_overlay_ = true;
     emit packetDissectionChanged();
 }
@@ -2904,8 +1805,7 @@ void PacketList::ignoreAllDisplayedFrames(bool set)
 void PacketList::setTimeReference()
 {
     if (!cap_file_ || !packet_list_model_) return;
-
-    packet_list_model_->toggleFrameRefTime(selectedSourceIndexes());
+    packet_list_model_->toggleFrameRefTime(currentIndex());
     create_far_overlay_ = true;
 }
 
@@ -2961,9 +1861,6 @@ void PacketList::sectionResized(int col, int, int new_width)
 
         recent_set_column_width(col, new_width);
     }
-
-    mirrorSectionWidthToOverlays(col, new_width);
-    layoutPinnedOverlays();
 }
 
 // The user moved a column. Make sure prefs.col_list, the column format
@@ -3010,9 +1907,11 @@ void PacketList::sectionMoved(int logicalIndex, int oldVisualIndex, int newVisua
     // Undo move to ensure that the logical indices map to the visual indices,
     // otherwise the column order is changed twice (once via the modified
     // col_list, once because of the visual/logical index mismatch).
-    disconnect(header(), &QHeaderView::sectionMoved, this, &PacketList::sectionMoved);
+    disconnect(header(), SIGNAL(sectionMoved(int,int,int)),
+               this, SLOT(sectionMoved(int,int,int)));
     header()->moveSection(newVisualIndex, oldVisualIndex);
-    connect(header(), &QHeaderView::sectionMoved, this, &PacketList::sectionMoved);
+    connect(header(), SIGNAL(sectionMoved(int,int,int)),
+            this, SLOT(sectionMoved(int,int,int)));
 
     // Clear and rebuild our (and the header's) model. There doesn't appear
     // to be another way to reset the logical index.
@@ -3042,289 +1941,49 @@ void PacketList::sectionMoved(int logicalIndex, int oldVisualIndex, int newVisua
     if (left_col <= sort_idx && sort_idx <= right_col) {
         header()->setSortIndicator(sort_idx, header()->sortIndicatorOrder());
     }
-
-    layoutPinnedOverlays();
 }
 
-PacketList::PinAction PacketList::selectedRowsPinAction() const
+void PacketList::updateRowHeights(const QModelIndex &ih_index)
 {
-    // Selecting more packets than can be pinned means that at least
-    // that many minus those already pinned are unpinned, which would
-    // exceed the limit; don't build the list of a large selection.
-    if (pinned_rows_model_ && selectedFrameCount(PinnedRowsModel::kMaxPinnedRows + 1) > PinnedRowsModel::kMaxPinnedRows) {
-        return PinRowsOverLimit;
+    QStyleOptionViewItem option;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    initViewItemOption(&option);
+#else
+    option = viewOptions();
+#endif
+    int max_height = 0;
+
+    // One of our columns increased the maximum row height. Find out which one.
+    for (int col = 0; col < packet_list_model_->columnCount(); col++) {
+        QSize size_hint = itemDelegate()->sizeHint(option, packet_list_model_->index(ih_index.row(), col));
+        max_height = qMax(max_height, size_hint.height());
     }
 
-    const QList<frame_data *> frames = selectedFrames();
-    if (frames.isEmpty() || !pinned_rows_model_) {
-        return NoPinAction;
-    }
-
-    int unpinned = 0;
-    for (const frame_data *fdata : frames) {
-        if (!pinned_rows_model_->isPinned((int)fdata->num)) {
-            unpinned++;
-        }
-    }
-    if (unpinned == 0) {
-        return UnpinRows;
-    }
-    if (pinned_rows_model_->pinnedCount() + unpinned > PinnedRowsModel::kMaxPinnedRows) {
-        return PinRowsOverLimit;
-    }
-    return PinRows;
-}
-
-void PacketList::updatePinActions(QAction *pin_selected, QAction *unpin_all) const
-{
-    if (pin_selected) {
-        switch (selectedRowsPinAction()) {
-        case UnpinRows:
-            pin_selected->setText(tr("Unpin Selected Rows"));
-            pin_selected->setEnabled(true);
-            break;
-        case PinRowsOverLimit:
-            pin_selected->setText(tr("Pin Selected Rows (max %Ln)", "", PinnedRowsModel::kMaxPinnedRows));
-            pin_selected->setEnabled(false);
-            break;
-        case PinRows:
-            pin_selected->setText(tr("Pin Selected Rows"));
-            pin_selected->setEnabled(true);
-            break;
-        case NoPinAction:
-        default:
-            pin_selected->setText(tr("Pin Selected Rows"));
-            pin_selected->setEnabled(false);
-            break;
-        }
-    }
-    if (unpin_all) {
-        unpin_all->setEnabled(pinned_rows_model_ && pinned_rows_model_->pinnedCount() > 0);
+    if (max_height > 0) {
+        packet_list_model_->setMaximumRowHeight(max_height);
     }
 }
 
-void PacketList::togglePinSelectedRows()
+QString PacketList::createSummaryText(QModelIndex idx, SummaryCopyType type)
 {
-    switch (selectedRowsPinAction()) {
-    case UnpinRows:
-        unpinSelectedRows();
-        break;
-    case PinRows:
-        pinSelectedRows();
-        break;
-    case PinRowsOverLimit:
-        mainApp->pushStatus(MainApplication::TemporaryStatus,
-                            tr("At most %Ln rows can be pinned.", "", PinnedRowsModel::kMaxPinnedRows));
-        break;
-    case NoPinAction:
-    default:
-        break;
-    }
-}
-
-void PacketList::pinSelectedRows()
-{
-    if (!pinned_rows_model_ || !packet_list_model_) return;
-
-    // Pin all of them or none.
-    if (selectedRowsPinAction() != PinRows) return;
-
-    for (const frame_data *fdata : selectedFrames()) {
-        pinned_rows_model_->pinFrame((int)fdata->num);
-    }
-    updatePinnedRowVisibility();
-}
-
-void PacketList::unpinSelectedRows()
-{
-    if (!pinned_rows_model_ || !packet_list_model_) return;
-
-    {
-        // Removing a selected pinned row deselects it in the pinned-row
-        // strip, which shouldn't deselect its row here as well.
-        QScopedValueRollback<bool> syncing(syncing_selection_, true);
-        for (const frame_data *fdata : selectedFrames()) {
-            pinned_rows_model_->unpinFrame((int)fdata->num);
-        }
-    }
-    updatePinnedRowVisibility();
-    // A selected pinned packet that's filtered out of this view is no
-    // longer selected at all.
-    drawCurrentPacket(false);
-}
-
-void PacketList::unpinAllRows()
-{
-    {
-        // See unpinSelectedRows().
-        QScopedValueRollback<bool> syncing(syncing_selection_, true);
-        pinned_rows_model_->clear();
-    }
-    updatePinnedRowVisibility();
-    drawCurrentPacket(false);
-}
-
-int PacketList::pinnedRowHeight() const
-{
-    int row_height = sizeHintForRow(0);
-    if (row_height > 0) {
-        return row_height;
-    }
-    // No rows laid out yet (e.g. empty capture); fall back to font-based
-    // spacing so the strip still sizes sensibly rather than to 0.
-    return fontMetrics().height() + 2;
-}
-
-void PacketList::setPinnedColumnBoundary(int column_count)
-{
-    pinned_column_boundary_ = column_count;
-    emit pinnedColumnBoundaryChanged(pinned_column_boundary_);
-
-    // Seed widths for the newly-pinned range; afterward sectionResized()
-    // keeps these in sync as the user resizes columns.
-    for (int i = 0; i < pinned_column_boundary_; i++) {
-        int width = header()->sectionSize(i);
-        if (pinned_column_view_) {
-            pinned_column_view_->mirrorSectionWidth(i, width);
-        }
-        if (pinned_row_corner_view_) {
-            pinned_row_corner_view_->mirrorSectionWidth(i, width);
-        }
-    }
-
-    if (pinned_column_view_) {
-        pinned_column_view_->setFrozenColumnCount(pinned_column_boundary_);
-    }
-    if (packet_list_header_) {
-        packet_list_header_->setFrozenColumnCount(pinned_column_boundary_);
-    }
-
-    updatePinnedRowVisibility();
-    layoutPinnedOverlays();
-}
-
-void PacketList::updatePinnedRowVisibility()
-{
-    pinned_rows_model_->refresh();
-    reconcilePinnedSelection();
-
-    bool have_pinned_rows = pinned_rows_model_->pinnedCount() > 0;
-
-    for (unsigned i = 0; i < prefs.num_cols; i++) {
-        int width = header()->sectionSize(i);
-        if (pinned_row_view_) {
-            pinned_row_view_->mirrorSectionWidth(i, width);
-        }
-        if (pinned_row_corner_view_) {
-            pinned_row_corner_view_->mirrorSectionWidth(i, width);
-        }
-    }
-
-    if (pinned_row_view_) {
-        pinned_row_view_->setColumnRange(pinned_column_boundary_, -1);
-        pinned_row_view_->setVisible(have_pinned_rows);
-        pinned_row_view_->updateGeometry();
-    }
-    if (pinned_row_corner_view_) {
-        bool show_corner = have_pinned_rows && pinned_column_boundary_ > 0;
-        if (show_corner) {
-            pinned_row_corner_view_->setColumnRange(0, pinned_column_boundary_ - 1);
-        }
-        pinned_row_corner_view_->setVisible(show_corner);
-        pinned_row_corner_view_->updateGeometry();
-    }
-
-    layoutPinnedOverlays();
-}
-
-void PacketList::updateFrozenOverlayMask()
-{
-    if (!pinned_column_view_) {
-        return;
-    }
-    if (header_drag_active_ && pinned_column_view_->isVisible()) {
-        int header_height = header()->height();
-        pinned_column_view_->setMask(QRegion(0, header_height, pinned_column_view_->width(),
-                                             pinned_column_view_->height() - header_height));
-    } else {
-        pinned_column_view_->clearMask();
-    }
-}
-
-void PacketList::layoutPinnedOverlays()
-{
-    // Width of the frozen-column portion, shared between the column-freeze
-    // overlay below and the pinned-row strip's "corner" widget (whose
-    // sizing PacketListPane keeps in sync via pinnedRowsCornerWidthChanged()).
-    int corner_width = 0;
-    for (int i = 0; i < pinned_column_boundary_; i++) {
-        corner_width += header()->sectionSize(i);
-    }
-    bool have_pinned_rows = pinned_rows_model_ && pinned_rows_model_->pinnedCount() > 0;
-    emit pinnedRowsCornerWidthChanged(corner_width, have_pinned_rows);
-
-    if (!pinned_column_view_) {
-        return;
-    }
-
-    // Derive the real on-screen offsets from the primary view's own child
-    // widgets rather than assuming (0, 0): QTreeView's default frame
-    // border/margin means header()/viewport() do not actually start flush
-    // with PacketList's own top-left corner.
-    int left_offset = header()->pos().x();
-    int top_offset = header()->pos().y();
-    int header_height = header()->height();
-
-    if (pinned_column_boundary_ > 0) {
-        pinned_column_view_->mirrorHeaderHeight(header_height);
-        // Span from the header's own top offset (not the viewport's) so
-        // this view's own header covers the primary header's frozen-column
-        // titles, which would otherwise scroll horizontally with the rest
-        // of the header.
-        QSize new_size(corner_width, header_height + viewport()->height());
-        pinned_column_view_->setGeometry(left_offset, top_offset,
-                                          new_size.width(), new_size.height());
-        pinned_column_view_->setVisible(true);
-        pinned_column_view_->raise();
-        // refreshLayout() forces a full row-geometry recompute
-        // (doItemsLayout()), which must run after setGeometry() since
-        // QTreeView computes its vertical scroll range from the current
-        // viewport size -- but only the height actually affects that
-        // range, so skip the recompute when only corner_width (the
-        // column-resize-driven part of new_size) changed. Without this,
-        // dragging a column resize handle while frozen columns are active
-        // re-runs a full O(rows) layout on every mouse-move tick.
-        if (new_size.height() != pinned_column_view_size_.height()) {
-            pinned_column_view_->refreshLayout();
-        }
-        pinned_column_view_size_ = new_size;
-        updateFrozenOverlayMask();
-        pinned_column_view_->setVerticalScrollValue(verticalScrollBar()->value());
-    } else {
-        pinned_column_view_->setVisible(false);
-    }
-}
-
-QString PacketList::createSummaryText(int frame_num, SummaryCopyType type)
-{
-    // The source model's rows are in frame number order.
-    int row = frame_num - 1;
-    if (! packet_list_model_->index(row, 0).isValid())
+    if (! idx.isValid())
         return "";
 
     QStringList col_parts;
+    int row = idx.row();
     for (int col = 0; col < packet_list_model_->columnCount(); col++) {
         if (get_column_visible(col)) {
             col_parts << packet_list_model_->data(packet_list_model_->index(row, col), Qt::DisplayRole).toString();
         }
     }
-    return joinSummaryRow(col_parts, frame_num, type);
+    return joinSummaryRow(col_parts, row, type);
 }
 
 QString PacketList::createHeaderSummaryText(SummaryCopyType type)
 {
     QStringList col_parts;
-    for (int col = 0; col < packet_list_model_->columnCount(); ++col) {
+    for (int col = 0; col < packet_list_model_->columnCount(); ++col)
+    {
         if (get_column_visible(col)) {
             col_parts << packet_list_model_->headerData(col, Qt::Orientation::Horizontal, Qt::DisplayRole).toString();
         }
@@ -3332,175 +1991,9 @@ QString PacketList::createHeaderSummaryText(SummaryCopyType type)
     return joinSummaryRow(col_parts, 0, type);
 }
 
-QStringList PacketList::createHeaderPartsForAligned()
-{
-    QStringList hdr_parts;
-    for (int col = 0; col < packet_list_model_->columnCount(); ++col) {
-        if (get_column_visible(col)) {
-            hdr_parts << packet_list_model_->headerData(col, Qt::Orientation::Horizontal, Qt::DisplayRole).toString();
-        }
-    }
-    return hdr_parts;
-}
-
-QList<int> PacketList::createAlignmentPartsForAligned()
-{
-    QList<int> align_parts;
-    for (int col = 0; col < packet_list_model_->columnCount(); col++) {
-        if (get_column_visible(col)) {
-            align_parts << packet_list_model_->data(packet_list_model_->index(0, col), Qt::TextAlignmentRole).toInt();
-        }
-    }
-    return align_parts;
-}
-
-QList<int> PacketList::createSizePartsForAligned(bool useHeader, QStringList hdr_parts, QList<int> frame_nums)
-{
-    QList<int> size_parts;
-
-    for (int i = 0; i < hdr_parts.size(); ++i) {
-        if (useHeader)
-            size_parts << static_cast<int>(hdr_parts.at(i).size());
-        else
-            size_parts << 0;
-    }
-
-    foreach(int frame_num, frame_nums)
-    {
-        // The source model's rows are in frame number order.
-        int row = frame_num - 1;
-        QModelIndex idx = packet_list_model_->index(row, 0);
-        if (! idx.isValid())
-            continue;
-
-        QStringList col_parts;
-        for (int col = 0; col < packet_list_model_->columnCount(); col++) {
-            if (get_column_visible(col)) {
-                col_parts << (packet_list_model_->data(packet_list_model_->index(row, col), Qt::DisplayRole).toString());
-            }
-        }
-
-        for (int i = 0; i < col_parts.size(); ++i) {
-            if (col_parts.at(i).size() > size_parts.at(i)) {
-                size_parts[i] = static_cast<int>(col_parts.at(i).size());
-            }
-        }
-        col_parts.clear();
-    }
-
-    return size_parts;
-}
-
-QString PacketList::createHeaderSummaryForAligned(QStringList hdr_parts, QList<int> align_parts, QList<int> size_parts)
-{
-    QString hdr_text;
-    for (int i = 0; i < hdr_parts.size(); ++i) {
-        if (align_parts.at(i) == Qt::AlignLeft) {
-            hdr_text += hdr_parts[i].leftJustified(size_parts.at(i), ' ') + "  ";
-        }
-        else if (align_parts.at(i) == Qt::AlignRight) {
-            hdr_text += hdr_parts[i].rightJustified(size_parts.at(i), ' ') + "  ";
-        }
-    }
-    return QStringLiteral("-%1").arg(hdr_text).trimmed().mid(1);
-}
-
-QString PacketList::createSummaryForAligned(int frame_num, QList<int> align_parts, QList<int> size_parts)
-{
-    // The source model's rows are in frame number order.
-    int row = frame_num - 1;
-    if (! packet_list_model_->index(row, 0).isValid())
-        return "";
-
-    QStringList col_parts;
-    for (int col = 0; col < packet_list_model_->columnCount(); col++) {
-        if (get_column_visible(col)) {
-            col_parts << packet_list_model_->data(packet_list_model_->index(row, col), Qt::DisplayRole).toString();
-        }
-    }
-
-    QString col_text;
-    for (int i = 0; i < col_parts.size(); ++i) {
-        if (align_parts.at(i) == Qt::AlignLeft) {
-            col_text += col_parts[i].leftJustified(size_parts.at(i), ' ') + "  ";
-        }
-        else if (align_parts.at(i) == Qt::AlignRight) {
-            col_text += col_parts[i].rightJustified(size_parts.at(i), ' ') + "  ";
-        }
-    }
-
-    return QStringLiteral("-%1").arg(col_text).trimmed().mid(1);
-}
-
-QString PacketList::createDefaultStyleForHtml()
-{
-    QString fontFamily = QString(prefs.gui_font_name).split(",")[0];
-    QString fontSize = QString(prefs.gui_font_name).split(",")[1];
-
-    return QStringLiteral("<style>"
-        "table{font-family:%1;font-size:%2pt;}"
-        "th{background-color:#000000;color:#ffffff;text-align:left;}"
-        "th,td{padding:%3pt}"
-        "</style>").arg(fontFamily, fontSize).arg(fontSize.toInt() / 2);
-}
-
-QString PacketList::createOpeningTagForHtml()
-{
-    return "<table>";
-}
-
-QString PacketList::createHeaderSummaryForHtml()
-{
-    QString hdr_text;
-    hdr_text += "<tr>";
-    for (int col = 0; col < packet_list_model_->columnCount(); ++col) {
-        if (get_column_visible(col)) {
-            hdr_text += "<th>";
-            hdr_text += packet_list_model_->headerData(col, Qt::Orientation::Horizontal, Qt::DisplayRole).toString();
-            hdr_text += "</th>";
-        }
-    }
-    hdr_text += "</tr>";
-    return hdr_text;
-}
-
-QString PacketList::createSummaryForHtml(int frame_num)
-{
-    // The source model's rows are in frame number order.
-    int row = frame_num - 1;
-    if (! packet_list_model_->index(row, 0).isValid())
-        return "";
-
-    QString col_text;
-
-    QString bg_color = packet_list_model_->data(packet_list_model_->index(row, 0), Qt::BackgroundRole).toString();
-    QString fg_color = packet_list_model_->data(packet_list_model_->index(row, 0), Qt::ForegroundRole).toString();
-    col_text += "<tr style=\"background-color:" + bg_color + ";color:" + fg_color + ";\">";
-
-    QString alignment[] = {"left", "right", "center", "justify"};
-
-    for (int col = 0; col < packet_list_model_->columnCount(); col++) {
-        if (get_column_visible(col)) {
-            col_text += "<td style=\"text-align:" + alignment[packet_list_model_->data(packet_list_model_->index(row, col), Qt::TextAlignmentRole).toInt() / 2] + ";\">";
-            col_text += packet_list_model_->data(packet_list_model_->index(row, col), Qt::DisplayRole).toString();
-            col_text += "</td>";
-        }
-    }
-
-    col_text += "</tr>";
-    return col_text;
-}
-
-QString PacketList::createClosingTagForHtml()
-{
-    return "</table>";
-}
-
 void PacketList::copySummary()
 {
-    // The selected packets, or the packet the context menu was shown for.
-    const QList<int> frame_nums = selectedRows(true);
-    if (frame_nums.isEmpty()) return;
+    if (!currentIndex().isValid()) return;
 
     QAction *ca = qobject_cast<QAction*>(sender());
     if (!ca) return;
@@ -3510,52 +2003,9 @@ void PacketList::copySummary()
         return;
     SummaryCopyType copy_type = type.value<SummaryCopyType>();
 
-    QStringList content;
-    if (type == CopyAsText || type == CopyAsHTML) {
-        QList<int> align_parts, size_parts;
-        if (prefs.gui_packet_list_copy_text_with_aligned_columns) {
-            QStringList hdr_parts = createHeaderPartsForAligned();
-            align_parts = createAlignmentPartsForAligned();
-            size_parts = createSizePartsForAligned(false, hdr_parts, frame_nums);
-        }
-        QStringList htmlContent;
-        if (type == CopyAsHTML) {
-            htmlContent << createDefaultStyleForHtml();
-            htmlContent << createOpeningTagForHtml();
-        }
-        for (int frame_num : frame_nums) {
-            if (prefs.gui_packet_list_copy_text_with_aligned_columns) {
-                content << createSummaryForAligned(frame_num, align_parts, size_parts);
-            } else {
-                content << createSummaryText(frame_num, CopyAsText);
-            }
-            if (type == CopyAsHTML) {
-                htmlContent << createSummaryForHtml(frame_num);
-            }
-        }
-        QString copy_text = content.join('\n') + "\n";
-        if (type == CopyAsHTML) {
-            htmlContent << createClosingTagForHtml();
-            // htmlContent will never be empty as they will always have
-            // style and table tags
-            QMimeData *mimeData = new QMimeData;
-            mimeData->setHtml(htmlContent.join('\n'));
-            mimeData->setText(copy_text);
-            mainApp->clipboard()->setMimeData(mimeData, QClipboard::Clipboard);
-        }
-        else {
-            mainApp->clipboard()->setText(copy_text);
-        }
-    }
-    else {
-        for (int frame_num : frame_nums) {
-            content << createSummaryText(frame_num, copy_type);
-        }
-        QString copy_text = content.join('\n');
-        if (type != CopyAsYAML)
-            copy_text += "\n";
-        mainApp->clipboard()->setText(copy_text);
-    }
+    QString copy_text = createSummaryText(currentIndex(), copy_type);
+
+    mainApp->clipboard()->setText(copy_text);
 }
 
 // We need to tell when the user has scrolled the packet list, either to
@@ -3609,7 +2059,7 @@ void PacketList::drawNearOverlay()
 
     qreal dp_ratio = overlay_sb_->devicePixelRatio();
     int o_height = overlay_sb_->height() * dp_ratio;
-    int o_rows = qMin(packet_list_proxy_model_->rowCount(), o_height);
+    int o_rows = qMin(packet_list_model_->rowCount(), o_height);
     QFontMetricsF fmf(mainApp->font());
     int o_width = ((static_cast<int>(fmf.height())) * 2 * dp_ratio) + 2; // 2ems + 1-pixel border on either side.
 
@@ -3623,36 +2073,25 @@ void PacketList::drawNearOverlay()
         int cur_line = 0;
         int start = 0;
 
-        if (packet_list_proxy_model_->rowCount() > o_height && overlay_sb_->maximum() > 0) {
-            start += ((double) overlay_sb_->value() / overlay_sb_->maximum()) * (packet_list_proxy_model_->rowCount() - o_rows);
+        if (packet_list_model_->rowCount() > o_height && overlay_sb_->maximum() > 0) {
+            start += ((double) overlay_sb_->value() / overlay_sb_->maximum()) * (packet_list_model_->rowCount() - o_rows);
         }
         int end = start + o_rows;
         for (int row = start; row < end; row++) {
-            packet_list_proxy_model_->ensureRowColorized(row);
+            packet_list_model_->ensureRowColorized(row);
+
+            frame_data *fdata = packet_list_model_->getRowFdata(row);
+            const color_t *bgcolor = NULL;
+            if (fdata->color_filter) {
+                const color_filter_t *color_filter = (const color_filter_t *) fdata->color_filter;
+                bgcolor = &color_filter->bg_color;
+            }
 
             int next_line = (row - start + 1) * o_height / o_rows;
-            int row_height = next_line - cur_line;
-
-            // Colors of the matching rules; the first is the primary rule. A
-            // conversation rule comes alone. Multi-color mode Off shows only
-            // the primary rule; every other mode draws one stripe per rule.
-            QModelIndex idx = packet_list_proxy_model_->index(row, 0);
-            const QList<ColoringRuleColors> colors =
-                idx.data(PacketListModel::COLORING_RULE_COLORS).value<QList<ColoringRuleColors>>();
-            int num_colors = static_cast<int>(colors.size());
-            if (prefs.gui_packet_list_multi_color_mode == PACKET_LIST_MULTI_COLOR_MODE_OFF) {
-                num_colors = qMin(num_colors, 1);
+            if (bgcolor) {
+                QColor color(ColorUtils::fromColorT(bgcolor));
+                painter.fillRect(0, cur_line, o_width, next_line - cur_line, color);
             }
-            if (num_colors > 0) {
-                int stripe_width = o_width / num_colors;
-                int x_pos = 0;
-                for (int stripe_idx = 0; stripe_idx < num_colors; stripe_idx++) {
-                    int width = (stripe_idx == num_colors - 1) ? (o_width - x_pos) : stripe_width;
-                    painter.fillRect(x_pos, cur_line, width, row_height, colors.at(stripe_idx).background);
-                    x_pos += stripe_width;
-                }
-            }
-
             cur_line = next_line;
         }
 
@@ -3695,7 +2134,7 @@ void PacketList::drawNearOverlay()
             }
         }
 
-        overlay_sb_->setNearOverlayImage(overlay, packet_list_proxy_model_->rowCount(), start, end, positions, (o_height / o_rows));
+        overlay_sb_->setNearOverlayImage(overlay, packet_list_model_->rowCount(), start, end, positions, (o_height / o_rows));
     } else {
         QImage overlay;
         overlay_sb_->setNearOverlayImage(overlay);
@@ -3717,7 +2156,7 @@ void PacketList::drawFarOverlay()
     groove_size *= dp_ratio;
     int o_width = groove_size.width();
     int o_height = groove_size.height();
-    int pl_rows = packet_list_proxy_model_->rowCount();
+    int pl_rows = packet_list_model_->rowCount();
     QImage overlay(o_width, o_height, QImage::Format_ARGB32_Premultiplied);
     bool have_marked_image = false;
 
@@ -3737,7 +2176,7 @@ void PacketList::drawFarOverlay()
 
         for (int row = 0; row < pl_rows; row++) {
 
-            frame_data *fdata = packet_list_proxy_model_->getRowFdata(row);
+            frame_data *fdata = packet_list_model_->getRowFdata(row);
             if (fdata->marked || fdata->ref_time || fdata->ignored) {
                 int new_line = row * o_height / pl_rows;
                 int tick_width = o_width / 3;
@@ -3778,13 +2217,6 @@ void PacketList::drawFarOverlay()
 void PacketList::rowsInserted(const QModelIndex &parent, int start, int end)
 {
     QTreeView::rowsInserted(parent, start, end);
-    bool aggregation_mode = recent.aggregation_view && prefs.aggregation_fields_num > 0;
-    if (aggregation_mode) {
-        // In Aggregation mode, we might have replaced the currently selected
-        // packets with new ones matching the aggregation fields, so we need
-        // to redissect the details if a single frame is selected.
-        drawCurrentPacket(false);
-    }
     if (capture_in_progress_ && tail_at_end_) {
         scrollToBottom();
     }
@@ -3795,7 +2227,7 @@ void PacketList::resizeAllColumns(bool onlyTimeFormatted)
     if (!cap_file_ || cap_file_->state == FILE_CLOSED || cap_file_->state == FILE_READ_PENDING)
         return;
 
-    for (unsigned col = 0; col < cap_file_->cinfo.num_cols; col++) {
+    for (int col = 0; col < cap_file_->cinfo.num_cols; col++) {
         if (! onlyTimeFormatted || col_has_time_fmt(&cap_file_->cinfo, col)) {
             resizeColumnToContents(col);
         }

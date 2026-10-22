@@ -1325,7 +1325,7 @@ typedef enum
 rr_rest_octets_elem_idx_t;
 
 #define NUM_GSM_RR_REST_OCTETS_ELEM array_length(gsm_rr_rest_octets_elem_strings)
-static int ett_gsm_rr_rest_octets_elem[NUM_GSM_RR_REST_OCTETS_ELEM];
+int ett_gsm_rr_rest_octets_elem[NUM_GSM_RR_REST_OCTETS_ELEM];
 
 /* True/False flags specifically for gsm_rr_csn_flag */
 static const true_false_string tfs_tfi_multi_block_allocation_present = {"TFI Assignment Present", "Multi Block Allocation Present"};
@@ -1375,7 +1375,6 @@ static int de_rr_eutran_not_allowed_cells(tvbuff_t *tvb, proto_tree *tree, int b
 /* this function is used for dissecting the H/L presence flags in CSN.1 coded IEs"
    If truncation ( 44.018 section 8.9) is allowed, truncation_length is set to the actual bit length of the CSN.1 string,
    otherwise it is set to 0 */
-/* coverity[+no_checked_return] */
 static bool gsm_rr_csn_HL_flag(tvbuff_t *tvb, proto_tree *tree, unsigned truncation_length, unsigned bit_offset, int hf_bit)
 {
     uint8_t bit_mask        = 0x80 >> (bit_offset % 8);
@@ -1558,10 +1557,9 @@ int f_k(int k, int *w, int range)
 
 static void dissect_channel_list_n_range(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len, int range)
 {
-    int         curr_offset = offset, bit_offset, f0, w[64], wsize, i;
+    int         curr_offset = offset, bit_offset, f0, arfcn_orig, w[64], wsize, i;
     int         octet, nwi  = 1, jwi=0, imax, iused, arfcn;
     uint8_t     list[1024];
-    uint64_t    arfcn_orig;
     proto_tree *subtree;
 
     memset((void*)list,0,sizeof(list));
@@ -1581,10 +1579,10 @@ static void dissect_channel_list_n_range(tvbuff_t *tvb, proto_tree *tree, packet
     }
     else {
         bit_offset = curr_offset*8 + 7;
-        proto_tree_add_bits_ret_val(subtree, hf_n_range_orig_arfcn, tvb, bit_offset, 10, &arfcn_orig, ENC_BIG_ENDIAN);
+        arfcn_orig = (int) tvb_get_bits(tvb, bit_offset, 10, false);
+        proto_tree_add_bits_item(subtree, hf_n_range_orig_arfcn, tvb, bit_offset, 10, ENC_BIG_ENDIAN);
         bit_offset+=10;
 
-        /* N.B. cannot go out of bounds as read only 10 bits */
         list[arfcn_orig] = 1;
 
         switch (range) {
@@ -1608,7 +1606,7 @@ static void dissect_channel_list_n_range(tvbuff_t *tvb, proto_tree *tree, packet
 
     /* extract the variable size w[] elements */
     for (i=1; i<=imax; i++) {
-        w[i] = tvb_get_bits32(tvb, bit_offset, wsize, ENC_BIG_ENDIAN);
+        w[i] = (int) tvb_get_bits(tvb, bit_offset, wsize, false);
         proto_tree_add_bytes_format(subtree, hf_gsm_a_rr_w_elements, tvb, bit_offset>>3, ((bit_offset+wsize-1)>>3) - (bit_offset>>3) + 1 , NULL, "%s W(%d): %d",
                             decode_bits_in_field(pinfo->pool, bit_offset, wsize, w[i], ENC_BIG_ENDIAN),
                             i,
@@ -1921,7 +1919,7 @@ de_rr_cell_select_indic(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_,
 
                     while (idx > 0)
                     {
-                        w[i] = tvb_get_bits32(tvb, bit_offset, wsize, ENC_BIG_ENDIAN);
+                        w[i] = tvb_get_bits(tvb, bit_offset, wsize, ENC_BIG_ENDIAN);
                         bit_offset += wsize;
                         idx -= wsize;
                         if (w[i] == 0)
@@ -1993,7 +1991,7 @@ de_rr_cell_select_indic(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_,
 
                     while (idx > 0)
                     {
-                        w[i] = tvb_get_bits32(tvb, bit_offset, wsize, ENC_BIG_ENDIAN);
+                        w[i] = tvb_get_bits(tvb, bit_offset, wsize, ENC_BIG_ENDIAN);
                         bit_offset += wsize;
                         idx -= wsize;
                         if (w[i]  ==  0)
@@ -2644,7 +2642,7 @@ de_rr_chnl_req_desc2(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, ui
         proto_tree_add_bits_item(tree, hf_gsm_a_rr_pfi, tvb, bit_offset, 7, ENC_BIG_ENDIAN);
         bit_offset += 7;
     }
-    (void) gsm_rr_csn_HL_flag(tvb, tree, 0, bit_offset++, hf_gsm_a_rr_multiple_tbf_procedures);
+    gsm_rr_csn_HL_flag(tvb, tree, 0, bit_offset++, hf_gsm_a_rr_multiple_tbf_procedures);
     bit_offset += 1;
     if (gsm_rr_csn_HL_flag(tvb, tree, (offset+len)<<3, bit_offset++, hf_gsm_a_rr_additions_in_rel_7)) {
         proto_tree_add_bits_item(tree, hf_gsm_a_rr_rlc_non_pers_mode_cap, tvb, bit_offset, 1, ENC_BIG_ENDIAN);
@@ -3286,10 +3284,42 @@ static const value_string gsm_a_egprs_windows_size_vals[] = {
     { 0, NULL }
 };
 
-static void fmt_2db_units(char *label, uint32_t val)
-{
-    snprintf(label, ITEM_LABEL_LENGTH, "%u dB (%u)", val * 2, val);
-}
+static const value_string gsm_a_rr_gamma_vals[] = {
+    {  0, "0 dB"},
+    {  1, "2 dB"},
+    {  2, "4 dB"},
+    {  3, "6 dB"},
+    {  4, "8 dB"},
+    {  5, "10 dB"},
+    {  6, "12 dB"},
+    {  7, "14 dB"},
+    {  8, "16 dB"},
+    {  9, "18 dB"},
+    { 10, "20 dB"},
+    { 11, "22 dB"},
+    { 12, "24 dB"},
+    { 13, "26 dB"},
+    { 14, "28 dB"},
+    { 15, "30 dB"},
+    { 16, "32 dB"},
+    { 17, "34 dB"},
+    { 18, "36 dB"},
+    { 19, "38 dB"},
+    { 20, "40 dB"},
+    { 21, "42 dB"},
+    { 22, "44 dB"},
+    { 23, "46 dB"},
+    { 24, "48 dB"},
+    { 25, "50 dB"},
+    { 26, "52 dB"},
+    { 27, "54 dB"},
+    { 28, "56 dB"},
+    { 29, "58 dB"},
+    { 30, "60 dB"},
+    { 31, "62 dB"},
+    {  0, NULL }
+};
+
 
 
 static const value_string gsm_a_link_quality_meas_mode_vals[] = {
@@ -4009,7 +4039,7 @@ de_rr_ia_rest_oct(tvbuff_t *tvb, proto_tree *subtree, packet_info *pinfo _U_, ui
         if (0 == gsm_rr_csn_HL_flag(tvb, subtree, 0, bit_offset++, hf_gsm_a_rr_second_discriminator_bit))
         {
            /* LL */
-           (void) gsm_rr_csn_HL_flag(tvb, subtree, 0,bit_offset++, hf_gsm_a_rr_a_compressed_inter_rat_handover_info);
+           gsm_rr_csn_HL_flag(tvb, subtree, 0,bit_offset++, hf_gsm_a_rr_a_compressed_inter_rat_handover_info);
 
            if (gsm_rr_csn_HL_flag(tvb, subtree, 0, bit_offset++, hf_gsm_a_rr_additions_in_rel_13))
             {
@@ -4076,7 +4106,7 @@ de_rr_ia_rest_oct(tvbuff_t *tvb, proto_tree *subtree, packet_info *pinfo _U_, ui
                     length -= 1;
                 }
             }
-            (void) gsm_rr_csn_HL_flag(tvb, subtree, 0, bit_offset++, hf_gsm_a_rr_a_compressed_inter_rat_handover_info);
+            gsm_rr_csn_HL_flag(tvb, subtree, 0, bit_offset++, hf_gsm_a_rr_a_compressed_inter_rat_handover_info);
 
             if (gsm_rr_csn_HL_flag(tvb, subtree, 0, bit_offset++, hf_gsm_a_rr_additions_in_rel_13))
             {
@@ -4712,8 +4742,8 @@ de_rr_p1_rest_oct(tvbuff_t *tvb, proto_tree *subtree, packet_info *pinfo _U_, ui
         proto_tree_add_expert_format(subtree, pinfo, &ei_gsm_a_rr_data_not_dissected, tvb, bit_offset_sav>>3, (bit_offset-bit_offset_sav)>>3,
                     "Group Call Information: Data(Not decoded)");
     }
-    (void) gsm_rr_csn_HL_flag(tvb, subtree, bit_len, bit_offset++, hf_gsm_a_rr_packet_page_indication_1);
-    (void) gsm_rr_csn_HL_flag(tvb, subtree, bit_len, bit_offset++, hf_gsm_a_rr_packet_page_indication_2);
+    gsm_rr_csn_HL_flag(tvb, subtree, bit_len, bit_offset++, hf_gsm_a_rr_packet_page_indication_1);
+    gsm_rr_csn_HL_flag(tvb, subtree, bit_len, bit_offset++, hf_gsm_a_rr_packet_page_indication_2);
 
     /* Truncation allowed (see 44.018 section 8.9) */
 
@@ -4767,15 +4797,15 @@ de_rr_p2_rest_oct(tvbuff_t *tvb, proto_tree *subtree, packet_info *pinfo _U_, ui
         bit_offset += 3;
         proto_item_append_text(item2, " for Mobile Identity 3");
     }
-    (void) gsm_rr_csn_HL_flag(tvb, subtree, bit_len, bit_offset++, hf_gsm_a_rr_packet_paging_procedure_1);
-    (void) gsm_rr_csn_HL_flag(tvb, subtree, bit_len, bit_offset++, hf_gsm_a_rr_packet_paging_procedure_2);
-    (void) gsm_rr_csn_HL_flag(tvb, subtree, bit_len, bit_offset++, hf_gsm_a_rr_packet_paging_procedure_3);
+    gsm_rr_csn_HL_flag(tvb, subtree, bit_len, bit_offset++, hf_gsm_a_rr_packet_paging_procedure_1);
+    gsm_rr_csn_HL_flag(tvb, subtree, bit_len, bit_offset++, hf_gsm_a_rr_packet_paging_procedure_2);
+    gsm_rr_csn_HL_flag(tvb, subtree, bit_len, bit_offset++, hf_gsm_a_rr_packet_paging_procedure_3);
 
 
     if (gsm_rr_csn_HL_flag(tvb, subtree, bit_len, bit_offset++, hf_gsm_a_rr_additions_in_release_6_present))
     { /* Additions in release 6 */
         bit_offset += 1;
-        proto_tree_add_expert_format_remaining(subtree, pinfo, &ei_gsm_a_rr_data_not_dissected, tvb, bit_offset>>3, "Additions in Release 6: Data (Not decoded)");
+        proto_tree_add_expert_format(subtree, pinfo, &ei_gsm_a_rr_data_not_dissected, tvb, bit_offset>>3, -1, "Additions in Release 6: Data (Not decoded)");
     }
 
     /* Truncation allowed (see 44.018 section 8.9 */
@@ -4849,8 +4879,7 @@ static uint16_t
 de_rr_packet_ch_desc(tvbuff_t *tvb, proto_tree *subtree, packet_info *pinfo _U_, uint32_t offset, unsigned len _U_, char *add_string _U_, int string_len _U_)
 {
     uint32_t     curr_offset = offset;
-    uint32_t      oct8;
-    uint8_t       second_oct8;
+    uint8_t      oct8, second_oct8;
 
     /* Octet 2 */
     /* Channel Type */
@@ -4861,7 +4890,8 @@ de_rr_packet_ch_desc(tvbuff_t *tvb, proto_tree *subtree, packet_info *pinfo _U_,
     curr_offset +=1;
 
     /* Octet 3 */
-    proto_tree_add_item_ret_uint(subtree, hf_gsm_a_rr_training_sequence, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &oct8);
+    oct8 = tvb_get_uint8(tvb, curr_offset);
+    proto_tree_add_item(subtree, hf_gsm_a_rr_training_sequence, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
     if ((oct8 & 0x10) == 0x10)
     {
         /* Hopping sequence */
@@ -5289,7 +5319,7 @@ de_rr_si1_rest_oct(tvbuff_t *tvb, proto_tree *subtree, packet_info *pinfo _U_, u
         proto_tree_add_bits_item(subtree, hf_gsm_a_rr_nch_position, tvb, bit_offset, 5, ENC_BIG_ENDIAN);
         bit_offset += 5;
     }
-    (void) gsm_rr_csn_HL_flag(tvb, subtree, 0, bit_offset++, hf_gsm_a_rr_band_indicator);
+    gsm_rr_csn_HL_flag(tvb, subtree, 0, bit_offset++, hf_gsm_a_rr_band_indicator);
 
     gsm_rr_padding_bits(subtree, tvb, bit_offset, tvb_len, PADDING_BYTE);
     return tvb_len - offset;
@@ -5702,7 +5732,7 @@ de_rr_si2quater_meas_info_utran_fdd_desc(tvbuff_t *tvb, proto_tree *tree, int bi
 
             while (idx > 0)
             {
-                w[i] = tvb_get_bits32(tvb, curr_bit_offset, wsize, ENC_BIG_ENDIAN);
+                w[i] = tvb_get_bits(tvb, curr_bit_offset, wsize, ENC_BIG_ENDIAN);
                 curr_bit_offset += wsize;
                 idx -= wsize;
                 if (w[i] == 0)
@@ -5782,7 +5812,7 @@ de_rr_si2quater_meas_info_utran_tdd_desc(tvbuff_t *tvb, proto_tree *tree, int bi
 
             while (idx > 0)
             {
-                w[i] = tvb_get_bits32(tvb, curr_bit_offset, wsize, ENC_BIG_ENDIAN);
+                w[i] = tvb_get_bits(tvb, curr_bit_offset, wsize, ENC_BIG_ENDIAN);
                 curr_bit_offset += wsize;
                 idx -= wsize;
                 if (w[i] == 0)
@@ -7490,8 +7520,6 @@ static const value_string gsm_a_rr_cell_reselect_offset_vals[] = {
     {63, "126 dB"},
     { 0, NULL }
 };
-static value_string_ext gsm_a_rr_cell_reselect_offset_vals_ext = VALUE_STRING_EXT_INIT(gsm_a_rr_cell_reselect_offset_vals);
-
 
 static const value_string gsm_a_rr_penalty_time_vals[] = {
     { 0, "20 s"},
@@ -7621,8 +7649,8 @@ de_rr_si3_rest_oct(tvbuff_t *tvb, proto_tree *subtree, packet_info *pinfo _U_, u
         proto_tree_add_bits_item(subtree, hf_gsm_a_rr_power_offset, tvb, bit_offset, 2, ENC_BIG_ENDIAN);
         bit_offset += 2;
     }
-    (void) gsm_rr_csn_HL_flag(tvb, subtree, 0, bit_offset++, hf_gsm_a_rr_system_information_type_2ter);
-    (void) gsm_rr_csn_HL_flag(tvb, subtree, 0, bit_offset++, hf_gsm_a_rr_early_classmark_sending);
+    gsm_rr_csn_HL_flag(tvb, subtree, 0, bit_offset++, hf_gsm_a_rr_system_information_type_2ter);
+    gsm_rr_csn_HL_flag(tvb, subtree, 0, bit_offset++, hf_gsm_a_rr_early_classmark_sending);
     if (gsm_rr_csn_HL_flag(tvb, subtree, 0, bit_offset++, hf_gsm_a_rr_scheduling_if_and_where))
     { /* Scheduling if and where */
         proto_tree_add_bits_item(subtree, hf_gsm_a_rr_where, tvb, bit_offset, 3, ENC_BIG_ENDIAN);
@@ -7633,7 +7661,7 @@ de_rr_si3_rest_oct(tvbuff_t *tvb, proto_tree *subtree, packet_info *pinfo _U_, u
     { /* GPRS indicator */
         bit_offset += de_rr_rest_oct_gprs_indicator(tvb, subtree, bit_offset);
     }
-    (void) gsm_rr_csn_HL_flag(tvb, subtree, 0, bit_offset++, hf_gsm_a_rr_3g_early_classmark_sending_restriction);
+    gsm_rr_csn_HL_flag(tvb, subtree, 0, bit_offset++, hf_gsm_a_rr_3g_early_classmark_sending_restriction);
     if (gsm_rr_csn_HL_flag(tvb, subtree, 0, bit_offset++, hf_gsm_a_rr_si2quater_indicator))
     { /* SI2quater Indicator */
         proto_tree_add_bits_item(subtree, hf_gsm_a_rr_si2quater_position, tvb, bit_offset, 1, ENC_BIG_ENDIAN);
@@ -7771,7 +7799,7 @@ de_rr_si4_rest_oct(tvbuff_t *tvb, proto_tree *subtree, packet_info *pinfo _U_, u
     }
     else
     { /* Break indicator */
-        (void) gsm_rr_csn_HL_flag(tvb, subtree, bit_len, bit_offset++, hf_gsm_a_rr_break_indicator);
+        gsm_rr_csn_HL_flag(tvb, subtree, bit_len, bit_offset++, hf_gsm_a_rr_break_indicator);
     }
     /* Truncation allowed (see 44.018 section 8.9 */
     gsm_rr_padding_bits(subtree, tvb, bit_offset, tvb_len, PADDING_BYTE);
@@ -7868,7 +7896,7 @@ de_rr_si6_rest_oct(tvbuff_t *tvb, proto_tree *subtree, packet_info *pinfo _U_, u
         proto_tree_add_bits_item(subtree, hf_gsm_a_rr_max_lapdm, tvb, bit_offset, 3, ENC_BIG_ENDIAN);
         bit_offset += 3;
     }
-    (void) gsm_rr_csn_HL_flag(tvb, subtree, 0, bit_offset++, hf_gsm_a_rr_band_indicator);
+    gsm_rr_csn_HL_flag(tvb, subtree, 0, bit_offset++, hf_gsm_a_rr_band_indicator);
     if (gsm_rr_csn_HL_flag(tvb, subtree, 0, bit_offset++, hf_gsm_a_rr_gprs_ms_txpwr_max_ccch_present))
     {
         proto_tree_add_bits_item(subtree, hf_gsm_a_rr_gprs_ms_txpwr_max_ccch, tvb, bit_offset, 5, ENC_BIG_ENDIAN);
@@ -8618,7 +8646,8 @@ de_rr_tlli(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t off
 
     curr_offset = offset;
 
-    proto_tree_add_item_ret_uint(tree, hf_gsm_a_rr_tlli, tvb, curr_offset, 4, ENC_BIG_ENDIAN, &tlli);
+    tlli = tvb_get_ntohl(tvb, curr_offset);
+    proto_tree_add_item(tree, hf_gsm_a_rr_tlli, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
 
     if(gsm_a_rr_nri_length > 0) {
         /* NRI is in second byte of TLLI */
@@ -9181,7 +9210,7 @@ de_rr_ec_fua(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t o
     return len;
 }
 
-uint16_t (* const rr_elem_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string, int string_len) = {
+uint16_t (*rr_elem_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string, int string_len) = {
     /* Radio Resource Management  Information Elements 10.5.2, most are from 10.5.1 */
 
     de_rr_ba_range,                             /* [3]  10.5.2.1a       BA Range */
@@ -11796,7 +11825,7 @@ dtap_rr_ec_dl_ass(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint3
 
 #define NUM_GSM_DTAP_MSG_RR array_length(gsm_a_dtap_msg_rr_strings)
 static int ett_gsm_dtap_msg_rr[NUM_GSM_DTAP_MSG_RR];
-static void (* const dtap_msg_rr_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len) = {
+static void (*dtap_msg_rr_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len) = {
     NULL,       /* Reserved */
     dtap_rr_add_ass,            /* Additional Assignment */
     dtap_rr_imm_ass,            /* 9.1.18 Immediate assignment  */
@@ -12065,7 +12094,7 @@ void get_rr_msg_params(uint8_t oct, const char **msg_str, int *ett_tree, int *hf
  * The name CCCH might not be correct!
  */
 static int
-dissect_dtap_with_l2_pseudo_len(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_, const char *name)
+dissect_ccch(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 {
 
     static gsm_a_tap_rec_t  tap_rec[4];
@@ -12076,7 +12105,7 @@ dissect_dtap_with_l2_pseudo_len(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
     uint8_t                 oct;
     uint8_t                 pd;
     uint32_t                offset;
-    uint32_t                len = tvb_reported_length(tvb);
+    uint32_t                len;
     uint32_t                oct_1;
     proto_item             *ccch_item   = NULL;
     proto_tree             *ccch_tree   = NULL;
@@ -12085,7 +12114,23 @@ dissect_dtap_with_l2_pseudo_len(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
     const char             *msg_str;
     int                     ett_tree;
     int                     hf_idx;
+    uint8_t                *gsmtap_channel_type = (uint8_t *)data;
 
+    len = tvb_reported_length(tvb);
+
+    if ((NULL != gsmtap_channel_type) && ((*gsmtap_channel_type & ~GSMTAP_CHANNEL_ACCH) == GSMTAP_CHANNEL_RACH)) {
+        return dissect_rach(tvb, pinfo, tree, NULL);
+    }
+
+    if (len < 3){
+        /*
+         * too short to be CCCH
+         */
+        call_data_dissector(tvb, pinfo, tree);
+        return tvb_captured_length(tvb);
+    }
+
+    col_append_str(pinfo->cinfo, COL_INFO, "(CCCH) ");
     /*
      * set tap record pointer
      */
@@ -12122,7 +12167,7 @@ dissect_dtap_with_l2_pseudo_len(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
     ett_tree = -1;
     hf_idx = -1;
     msg_fcn_p = NULL;
-    col_append_fstr(pinfo->cinfo, COL_INFO, "(%s) ",val_to_str(pinfo->pool, pd,gsm_a_pd_short_str_vals,"Unknown (%u)"));
+    col_append_fstr(pinfo->cinfo, COL_INFO, "(%s) ",val_to_str(pd,gsm_a_pd_short_str_vals,"Unknown (%u)"));
 
     /*
      * octet 1
@@ -12142,14 +12187,13 @@ dissect_dtap_with_l2_pseudo_len(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
      */
     if (msg_str == NULL){
         ccch_item = proto_tree_add_protocol_format(tree, proto_a_ccch, tvb, 0, len,
-            "GSM %s - Message Type (0x%02x)",
-            name,
-            oct);
+                                                   "GSM CCCH - Message Type (0x%02x)",
+                                                   oct);
 
         ccch_tree = proto_item_add_subtree(ccch_item, ett_ccch_msg);
     }else{
         ccch_item = proto_tree_add_protocol_format(tree, proto_a_ccch, tvb, 0, -1,
-                                                   "GSM %s - %s", name, msg_str);
+                                                   "GSM CCCH - %s", msg_str);
 
         ccch_tree = proto_item_add_subtree(ccch_item, ett_tree);
 
@@ -12158,7 +12202,7 @@ dissect_dtap_with_l2_pseudo_len(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
 
     /*  L2 Pseudo Length 10.5.2.19 */
     /* note: dissected out of sequence! */
-    (void) elem_v(tvb, ccch_tree, pinfo, GSM_A_PDU_TYPE_RR, DE_RR_L2_PSEUDO_LEN, 0, NULL);
+    elem_v(tvb, ccch_tree, pinfo, GSM_A_PDU_TYPE_RR, DE_RR_L2_PSEUDO_LEN, 0, NULL);
 
     oct_1_item = proto_tree_add_item(ccch_tree, hf_gsm_a_L3_protocol_discriminator, tvb, 1, 1, ENC_BIG_ENDIAN);
     pd_tree = proto_item_add_subtree(oct_1_item, ett_ccch_oct_1);
@@ -12201,58 +12245,13 @@ dissect_dtap_with_l2_pseudo_len(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
 
 #define NUM_GSM_DTAP_EC_CCCH_MSG_RR array_length(gsm_a_dtap_msg_rr_ec_ccch_strings)
 static int ett_gsm_dtap_ec_ccch_msg_rr[NUM_GSM_DTAP_EC_CCCH_MSG_RR];
-static void (* const dtap_msg_rr_ec_ccch_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len) = {
+static void (*dtap_msg_rr_ec_ccch_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len) = {
   dtap_rr_ec_imm_ass_type_2,                  /* EC-Immediate Assignment Type 2 */
   dtap_rr_ec_imm_ass_rej,                     /* EC-Immediate Assignment Reject */
   dtap_rr_ec_dummy,                           /* EC-Dummy */
   dtap_rr_ec_dl_ass,                          /* EC-Downlink Assignment */
   dtap_rr_ec_paging_req,                      /* EC-Paging Request */
 };
-
-static int
-dissect_ccch(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data)
-{
-
-    uint8_t* gsmtap_channel_type = (uint8_t*)data;
-    uint32_t                len = tvb_reported_length(tvb);
-
-    if ((NULL != gsmtap_channel_type) && ((*gsmtap_channel_type & ~GSMTAP_CHANNEL_ACCH) == GSMTAP_CHANNEL_RACH)) {
-        return dissect_rach(tvb, pinfo, tree, NULL);
-    }
-
-    if (len < 3) {
-        /*
-         * too short to be CCCH
-         */
-        call_data_dissector(tvb, pinfo, tree);
-        return tvb_captured_length(tvb);
-    }
-
-    col_append_str(pinfo->cinfo, COL_INFO, "(CCCH) ");
-
-    return dissect_dtap_with_l2_pseudo_len(tvb, pinfo, tree, data, "CCCH");
-
-}
-
-static int
-dissect_sacch_ui(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data)
-{
-    uint32_t                len = tvb_reported_length(tvb);
-
-    if (len < 3) {
-        /*
-         * too short to be SACCH
-         */
-        call_data_dissector(tvb, pinfo, tree);
-        return tvb_captured_length(tvb);
-    }
-
-    col_append_str(pinfo->cinfo, COL_INFO, "(SACCH) ");
-
-    return dissect_dtap_with_l2_pseudo_len(tvb, pinfo, tree, data, "SACCH");
-
-}
-
 
 static void
 get_rr_ec_ccch_msg_params(uint8_t oct, const char **msg_str, int *ett_tree, int *hf_idx, msg_fcn *msg_fcn_p)
@@ -12346,7 +12345,7 @@ const value_string gsm_a_rr_short_pd_msg_strings[] = {
 
 #define NUM_GSM_SACCH_MSG_RR array_length(gsm_a_rr_short_pd_msg_strings)
 static int ett_gsm_sacch_msg_rr[NUM_GSM_SACCH_MSG_RR];
-static void (* const sacch_msg_rr_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len) = {
+static void (*sacch_msg_rr_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len) = {
     NULL,                       /* System Information Type 10 */
     NULL,                       /* Notification/FACCH */
     NULL,                       /* Uplink Free  */
@@ -13528,7 +13527,7 @@ proto_register_gsm_a_rr(void)
             },
             { &hf_gsm_a_rr_cell_reselect_offset,
               { "Cell Reselect Offset", "gsm_a.rr.cell_reselect_offset",
-                FT_UINT8, BASE_DEC|BASE_EXT_STRING,  &gsm_a_rr_cell_reselect_offset_vals_ext, 0x00,
+                FT_UINT8, BASE_DEC,  VALS(gsm_a_rr_cell_reselect_offset_vals), 0x00,
                 "Offset to the C2 reselection criterion (Cell Reselect Offset)", HFILL }
             },
             { &hf_gsm_a_rr_temporary_offset,
@@ -14215,7 +14214,7 @@ proto_register_gsm_a_rr(void)
             },
             { &hf_gsm_a_rr_p0,
               { "P0", "gsm_a.rr.p0",
-                FT_UINT8, BASE_CUSTOM, CF_FUNC(&fmt_2db_units), 0x00,
+                FT_UINT8, BASE_DEC, NULL, 0x00,
                 NULL, HFILL }
             },
             { &hf_gsm_a_rr_pr_mode,
@@ -14250,7 +14249,7 @@ proto_register_gsm_a_rr(void)
             },
             { &hf_gsm_a_rr_gamma,
               { "Gamma", "gsm_a.rr.gamma",
-                FT_UINT8, BASE_CUSTOM, CF_FUNC(&fmt_2db_units), 0x00,
+                FT_UINT8, BASE_DEC, VALS(gsm_a_rr_gamma_vals), 0x00,
                 NULL, HFILL }
             },
             { &hf_gsm_a_rr_timing_adv_index,
@@ -15008,7 +15007,7 @@ proto_register_gsm_a_rr(void)
         { &ei_gsm_a_rr_ie_underrun, { "gsm_a.rr.ie_underrun", PI_COMMENTS_GROUP, PI_NOTE, "IE under-runs stated length", EXPFILL }},
         { &ei_gsm_a_rr_data_not_dissected, { "gsm_a.rr.data_not_dissected", PI_UNDECODED, PI_WARN, "Not dissected yet", EXPFILL }},
         { &ei_gsm_a_rr_unknown_version, { "gsm_a.rr.unknown_version", PI_PROTOCOL, PI_WARN, "Unknown version", EXPFILL }},
-        { &ei_gsm_a_rr_extraneous_data, { "gsm_a.rr.extraneous_data", PI_PROTOCOL, PI_NOTE, "Extraneous Data, dissector bug or later version spec (report to wireshark.org)", EXPFILL }},
+        { &ei_gsm_a_rr_extraneous_data, { "gsm_a.rr.extraneous_data", PI_PROTOCOL, PI_NOTE, "Extraneous Data, dissector bug or later version spec(report to wireshark.org)", EXPFILL }},
         { &ei_gsm_a_rr_missing_mandatory_element, { "gsm_a.rr.missing_mandatory_element", PI_PROTOCOL, PI_ERROR, "Missing Mandatory element, rest of dissection is suspect", EXPFILL }},
     };
 
@@ -15074,7 +15073,6 @@ proto_register_gsm_a_rr(void)
 
     /* subdissector code */
     register_dissector("gsm_a_sacch", dissect_sacch, proto_a_sacch);
-    register_dissector("gsm_a_sacch_ui", dissect_sacch_ui, proto_a_sacch);
     /* Register the protocol name and description */
 
     proto_a_ec_ccch =

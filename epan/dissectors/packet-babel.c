@@ -170,7 +170,7 @@ format_prefix(wmem_allocator_t *scope, const unsigned char *prefix, unsigned cha
 
 static int
 network_prefix(int ae, int plen, unsigned int omitted,
-               tvbuff_t *tvb, unsigned offset, const unsigned char *dp,
+               tvbuff_t *tvb, int offset, const unsigned char *dp,
                unsigned int len, unsigned char *p_r)
 {
     unsigned   pb;
@@ -234,7 +234,7 @@ network_prefix(int ae, int plen, unsigned int omitted,
 }
 
 static int
-network_address(int ae, tvbuff_t *tvb, unsigned offset, unsigned int len,
+network_address(int ae, tvbuff_t *tvb, int offset, unsigned int len,
                 unsigned char *a_r)
 {
     return network_prefix(ae, -1, 0, tvb, offset, NULL, len, a_r);
@@ -543,7 +543,7 @@ dissect_babel_body(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                                     tvb, message + 16, len - 14, ENC_NA);
             } else if (type == MESSAGE_PC){
                 proto_tree_add_item(message_tree, hf_babel_message_index,
-                                    tvb, message + 2, 4, ENC_BIG_ENDIAN);
+                                    tvb, message + 2, 4, ENC_NA);
             }
         }
         i += len + 2;

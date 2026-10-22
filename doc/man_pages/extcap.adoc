@@ -7,11 +7,11 @@ include::../attributes.adoc[]
 
 == NAME
 
-extcap - The external capture interface
+extcap - The extcap interface
 
 == DESCRIPTION
 
-The extcap (external capture) interface is a versatile plugin interface that allows external binaries
+The extcap interface is a versatile plugin interface that allows external binaries
 to act as capture interfaces directly in Wireshark. It is used in scenarios, where
 the source of the capture is not a traditional capture model
 (live capture from an interface, from a pipe, from a file, etc). The typical
@@ -29,7 +29,7 @@ The extcap subsystem is made of multiple extcap binaries that are automatically
 called by the GUI in a row. In the following chapters we will refer to them as
 "the extcaps".
 
-Extcaps may be any binary or script within the _extcap/wireshark_ or _extcap/stratoshark_ directories.
+Extcaps may be any binary or script within the _extcap/wireshark_ or _extcap/logray_ directories.
 Please note that scripts need to be executable without prefacing a script interpreter before the call.
 
 WINDOWS USERS: Because of restrictions directly calling the script may not always work.
@@ -77,9 +77,7 @@ Argument type for UI filtering for raw, or UI type for selector:
     booleanflag (display checkbox)
     radio (display group of radio buttons with provided values, all values as strings)
     fileselect (display a dialog to select a file from the filesystem, value as string)
-    folderselect (display a dialog to select a folder from the filesystem, value as string)
     multicheck (display a textbox for selecting multiple options, values as strings)
-    table (display a table that is populated by the user, selections can be configured, values as commandlines arguments)
     password (display a textbox with masked text)
     timestamp (display a calendar)
 --
@@ -121,60 +119,10 @@ Example 4:
     arg {number=0}{call=--username}{display=Username}{type=string}
     arg {number=1}{call=--password}{display=Password}{type=password}
 
-Example 5: timestamp
+Example 5:
 
     arg {number=0}{call=--start}{display=Start Time}{type=timestamp}
     arg {number=1}{call=--end}{display=End Time}{type=timestamp}
-
-Example 6: multicheck
-
-    arg {number=0}{call=--device}{display=Device}{type=multicheck}
-    value {arg=0}{value=USBDEV}{display=USB devices}{enabled=false}
-    value {arg=0}{value=/dev/sysfs/usb/foo/123}{display=Ubertooth One sn 1234}{parent=USBDEV}
-    value {arg=0}{value=/dev/sysfs/usb/foo/456}{display=Ubertooth One sn 8901}{parent=USBDEV}
-    value {arg=0}{value=PCIDEV}{display=PCI devices}{enabled=false}
-    value {arg=0}{value=/sys/devices/pci123}{display=Device 1}{parent=PCIDEV}
-    value {arg=0}{value=/sys/devices/pci456}{display=Device 2}{parent=PCIDEV}
-
-== File and folder select fields
-
-The "fileselect" and "folderselect" fields accept the following additional attributes:
-
-mustexist::
-If set to "true", the selected file or folder must already exist on disk (checked both in the
-GUI and, for the default value, on startup). Defaults to "false", in which case the argument
-is treated as the target of a save operation and need not exist yet.
-
-fileext::
-A file extension filter, in the same form accepted by Qt's file dialogs (e.g.
-`Capture Files (*.pcap *.pcapng)`). Only used by "fileselect".
-
-Example:
-
-    arg {number=0}{call=--logdir}{display=Output Location}{type=folderselect}{mustexist=false}
-
-== Table field
-
-The "table" field is a bit different, in that its values can have additional configuration options.
-The values can either be entered manually by the user, or a list of available values can be provided using the same
-API as "multicheck".
-Unlike most APIs, the value is provided using a commandline-like API, separated by spaces instead of comas. For instance,
-a configured "myparam" attribute where the user selected three values (1, 2 and 3) would receive:
-
-    --myparam "1 2 3"
-
-If a "prefix" is configured to be "--p", it would receive the following:
-
-    --myparam "--p 1 --p 2 --p 3"
-
-The values selected in a table field may have specific configuration options, if "configurable=true" for the "multicheck" field.
-In this case, the extcap will be called again when the user presses the configuration wheel that matches a value in the table,
-with the additional "--extcap-config-option-name <option_name> --extcap-config-option-value <option_value>" with no prefix.
-An extcap program should respond with an additional set of arguments, which will be opened in a popup. Once those are configured,
-the extcap might get the following, assuming for instance that an additional "param1" is requested when value is 1, and "param2"
-when value is 2.
-
-    --myparam "--p 1 --param1 1 --p 2 --param2 true --p 3"
 
 == Security Considerations
 
@@ -186,7 +134,7 @@ when value is 2.
 
 == SEE ALSO
 
-xref:wireshark.html[wireshark](1), xref:tshark.html[tshark](1), xref:dumpcap.html[dumpcap](1), xref:androiddump.html[androiddump](1), xref:sshdig.html[sshdig](1), xref:sshdump.html[sshdump](1), xref:randpktdump.html[randpktdump](1)
+xref:wireshark.html[wireshark](1), xref:tshark.html[tshark](1), xref:dumpcap.html[dumpcap](1), xref:androiddump.html[androiddump](1), xref:sshdump.html[sshdump](1), xref:randpktdump.html[randpktdump](1)
 
 == NOTES
 

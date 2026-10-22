@@ -11,11 +11,9 @@
 
 #include <wireshark.h>
 #include <time.h>
-#include <wsutil/array.h>
 #include <wsutil/buffer.h>
 #include <wsutil/nstime.h>
 #include <wsutil/inet_addr.h>
-#include <wsutil/file_compressed.h>
 #include "wtap_opttypes.h"
 
 #ifdef __cplusplus
@@ -302,7 +300,7 @@ extern "C" {
 #define WTAP_ENCAP_ZWAVE_SERIAL                 211
 #define WTAP_ENCAP_ETW                          212
 #define WTAP_ENCAP_ERI_ENB_LOG                  213
-#define WTAP_ENCAP_ZBNCP                        214
+#define WTAP_ENCAP_ZBNCP			214
 #define WTAP_ENCAP_USB_2_0_LOW_SPEED            215
 #define WTAP_ENCAP_USB_2_0_FULL_SPEED           216
 #define WTAP_ENCAP_USB_2_0_HIGH_SPEED           217
@@ -314,12 +312,6 @@ extern "C" {
 #define WTAP_ENCAP_MDB                          223
 #define WTAP_ENCAP_EMS                          224
 #define WTAP_ENCAP_DECT_NR                      225
-#define WTAP_ENCAP_MMODULE                      226
-#define WTAP_ENCAP_PROCMON                      227
-#define WTAP_ENCAP_ZWAVE_TAP                    228
-#define WTAP_ENCAP_DECT_NR_TAP                  229
-#define WTAP_ENCAP_GSMTAP_UM                    230
-#define WTAP_ENCAP_DEKTEC_SDI                   231
 
 /* After adding new item here, please also add new item to encap_table_base array */
 
@@ -329,26 +321,25 @@ extern "C" {
 #define WTAP_FILE_TYPE_SUBTYPE_UNKNOWN                        -1
 
 /* timestamp precision (currently only these values are supported) */
-#define WTAP_TSPREC_UNKNOWN    -2 /**< Timestamp precision is unknown. */
-#define WTAP_TSPREC_PER_PACKET -1 /**< As a per-file value, means each packet carries its own precision. */
-
+#define WTAP_TSPREC_UNKNOWN    -2
+#define WTAP_TSPREC_PER_PACKET -1  /* as a per-file value, means per-packet */
 /*
  * These values are the number of digits of precision after the integral part.
- * They're the same as WS_TSPREC values; we define them here so that
+ * Thry're the same as WS_TSPREC values; we define them here so that
  * tools/make-enums.py sees them.
  */
-#define WTAP_TSPREC_SEC       0 /**< Precision: 1 second (0 fractional digits). */
-#define WTAP_TSPREC_100_MSEC  1 /**< Precision: 100 milliseconds (1 fractional digit). */
-#define WTAP_TSPREC_DSEC      1 /**< Precision: decisecond — alias for #WTAP_TSPREC_100_MSEC (backwards compatibility). */
-#define WTAP_TSPREC_10_MSEC   2 /**< Precision: 10 milliseconds (2 fractional digits). */
-#define WTAP_TSPREC_CSEC      2 /**< Precision: centisecond — alias for #WTAP_TSPREC_10_MSEC (backwards compatibility). */
-#define WTAP_TSPREC_MSEC      3 /**< Precision: 1 millisecond (3 fractional digits). */
-#define WTAP_TSPREC_100_USEC  4 /**< Precision: 100 microseconds (4 fractional digits). */
-#define WTAP_TSPREC_10_USEC   5 /**< Precision: 10 microseconds (5 fractional digits). */
-#define WTAP_TSPREC_USEC      6 /**< Precision: 1 microsecond (6 fractional digits). */
-#define WTAP_TSPREC_100_NSEC  7 /**< Precision: 100 nanoseconds (7 fractional digits). */
-#define WTAP_TSPREC_10_NSEC   8 /**< Precision: 10 nanoseconds (8 fractional digits). */
-#define WTAP_TSPREC_NSEC      9 /**< Precision: 1 nanosecond (9 fractional digits). */
+#define WTAP_TSPREC_SEC         0
+#define WTAP_TSPREC_100_MSEC    1
+#define WTAP_TSPREC_DSEC        1 /* Backwards compatibility */
+#define WTAP_TSPREC_10_MSEC     2
+#define WTAP_TSPREC_CSEC        2 /* Backwards compatibility */
+#define WTAP_TSPREC_MSEC        3
+#define WTAP_TSPREC_100_USEC    4
+#define WTAP_TSPREC_10_USEC     5
+#define WTAP_TSPREC_USEC        6
+#define WTAP_TSPREC_100_NSEC    7
+#define WTAP_TSPREC_10_NSEC     8
+#define WTAP_TSPREC_NSEC        9
 /* if you add to the above, update wtap_tsprec_string() */
 
 /*
@@ -377,7 +368,6 @@ extern "C" {
 #define WTAP_MAX_PACKET_SIZE_USBPCAP     (128U*1024U*1024U)
 #define WTAP_MAX_PACKET_SIZE_EBHSCR      (32U*1024U*1024U)
 #define WTAP_MAX_PACKET_SIZE_DBUS        (128U*1024U*1024U)
-#define WTAP_MAX_PACKET_SIZE_DEKTEC_SDI  (16U*1024U*1024U)
 
 /*
  * "Pseudo-headers" are used to supply to the clients of wiretap
@@ -386,37 +376,34 @@ extern "C" {
  *
  * NOTE: do not use pseudo-header structures to hold information
  * used by the code to read a particular capture file type; to
- * keep that sort of state information, define a private structure
- * to hold that information in your code, and allocate one of those
- * structures and set the "priv" member of the wth structure to
- * point to the allocated structure in the "open" routine for that
- * capture file type if the open succeeds.  See various other capture
- * file type handlers for examples of that.
+ * keep that sort of state information, add a new structure for
+ * that private information to "wtap-int.h", add a pointer to that
+ * type of structure to the "capture" member of the "struct wtap"
+ * structure, and allocate one of those structures and set that member
+ * in the "open" routine for that capture file type if the open
+ * succeeds.  See various other capture file type handlers for examples
+ * of that.
  */
 
 
-/**
- * @brief Pseudo-header for Ethernet capture files carrying FCS length metadata.
- */
+/* Packet "pseudo-header" information for Ethernet capture files. */
 struct eth_phdr {
-    int fcs_len; /**< Number of bytes of FCS appended to the frame; -1 if unknown. */
+    int    fcs_len;  /* Number of bytes of FCS - -1 means "unknown" */
 };
 
-#define FROM_DCE 0x80 /**< Flag bit indicating the packet was transmitted from the DCE toward the DTE. */
-
-/**
- * @brief Pseudo-header for DTE/DCE capture files (LAPB, V.120, Frame Relay) carrying direction metadata.
- */
+/* Packet "pseudo-header" information for capture files for traffic
+   between DTE and DCE. */
+#define FROM_DCE 0x80
 struct dte_dce_phdr {
-    uint8_t flags; /**< Direction flags; FROM_DCE set means the packet originated from the DCE; clear means from the DTE. */
+    uint8_t flags;   /* ENCAP_LAPB, ENCAP_V120, ENCAP_FRELAY: 1st bit means From DCE */
 };
 
-/**
- * @brief Pseudo-header for ISDN capture files carrying direction and channel metadata.
- */
+/* Packet "pseudo-header" information for ISDN capture files. */
+
+/* Direction */
 struct isdn_phdr {
-    bool    uton;    /**< Direction of the packet: true = user-to-network (UNI), false = network-to-user. */
-    uint8_t channel; /**< Logical channel number: 0 = D-channel (signalling), n = B-channel n (bearer). */
+    bool uton;
+    uint8_t  channel;   /* 0 = D-channel; n = B-channel n */
 };
 
 /* Packet "pseudo-header" for ATM capture files.
@@ -497,22 +484,19 @@ struct isdn_phdr {
 #define TRAF_ST_IPSILON_FT1      2  /* Ipsilon: Flow Type 1 */
 #define TRAF_ST_IPSILON_FT2      3  /* Ipsilon: Flow Type 2 */
 
-/**
- * @brief Pseudo-header for ATM capture files carrying cell, circuit, and AAL-layer metadata.
- */
 struct atm_phdr {
-    uint32_t flags;          /**< Bitmask of status flags describing capture conditions for this ATM packet. */
-    uint8_t  aal;            /**< ATM Adaptation Layer type in use (e.g. AAL1, AAL2, AAL5). */
-    uint8_t  type;           /**< Traffic type classification for this virtual circuit. */
-    uint8_t  subtype;        /**< Traffic subtype providing further classification within @p type. */
-    uint16_t vpi;            /**< Virtual Path Identifier of the ATM virtual circuit. */
-    uint16_t vci;            /**< Virtual Circuit Identifier of the ATM virtual circuit. */
-    uint8_t  aal2_cid;       /**< AAL2 channel identifier; only meaningful when @p aal is AAL2. */
-    uint16_t channel;        /**< Link direction: 0 = DTE→DCE, 1 = DCE→DTE. */
-    uint16_t cells;          /**< Number of ATM cells comprising this packet. */
-    uint16_t aal5t_u2u;      /**< AAL5 User-to-User (UU) indicator field from the AAL5 CPCS trailer. */
-    uint16_t aal5t_len;      /**< Length in bytes of the AAL5 CPCS-PDU payload. */
-    uint32_t aal5t_chksum;   /**< CRC-32 checksum from the AAL5 CPCS trailer covering the AAL5 packet. */
+    uint32_t flags;      /* status flags */
+    uint8_t aal;        /* AAL of the traffic */
+    uint8_t type;       /* traffic type */
+    uint8_t subtype;    /* traffic subtype */
+    uint16_t vpi;        /* virtual path identifier */
+    uint16_t vci;        /* virtual circuit identifier */
+    uint8_t aal2_cid;   /* channel id */
+    uint16_t channel;    /* link: 0 for DTE->DCE, 1 for DCE->DTE */
+    uint16_t cells;      /* number of cells */
+    uint16_t aal5t_u2u;  /* user-to-user indicator */
+    uint16_t aal5t_len;  /* length of the packet */
+    uint32_t aal5t_chksum;   /* checksum for AAL5 packet */
 };
 
 /* Packet "pseudo-header" for the output from "wandsession", "wannext",
@@ -527,23 +511,18 @@ struct atm_phdr {
 #define ASCEND_PFX_ISDN_R   5
 #define ASCEND_PFX_ETHER    6
 
-/**
- * @brief Pseudo-header for Ascend WAN capture files carrying session, call, and task metadata.
- */
 struct ascend_phdr {
-    uint16_t type;                        /**< Packet type identifier; one of the ASCEND_PFX_* values. */
-    char     user[ASCEND_MAX_STR_LEN];    /**< Username extracted from the WAN session header; NUL-terminated. */
-    uint32_t sess;                        /**< Session number extracted from the WAN session header. */
-    char     call_num[ASCEND_MAX_STR_LEN];/**< Called phone number extracted from the WDD header; NUL-terminated. */
-    uint32_t chunk;                       /**< Chunk number extracted from the WDD header. */
-    uint32_t task;                        /**< Task number identifying the Ascend task that generated this packet. */
+    uint16_t type;                         /* ASCEND_PFX_*, as defined above */
+    char    user[ASCEND_MAX_STR_LEN];     /* Username, from wandsession header */
+    uint32_t sess;                         /* Session number, from wandsession header */
+    char    call_num[ASCEND_MAX_STR_LEN]; /* Called number, from WDD header */
+    uint32_t chunk;                        /* Chunk number, from WDD header */
+    uint32_t task;                         /* Task number */
 };
 
-/**
- * @brief Pseudo-header for point-to-point link capture files carrying packet direction metadata.
- */
+/* Packet "pseudo-header" for point-to-point links with direction flags. */
 struct p2p_phdr {
-    bool sent; /**< True if the packet was sent (transmitted); false if it was received. */
+    bool sent;
 };
 
 /*
@@ -592,39 +571,39 @@ struct p2p_phdr {
  * PHY-specific information.
  */
 
-/**
- * @brief PHY metadata for 802.11 legacy FHSS (Frequency Hopping Spread Spectrum) captures.
+/*
+ * 802.11 legacy FHSS.
  */
 struct ieee_802_11_fhss {
-    unsigned has_hop_set     : 1; /**< Non-zero if @p hop_set contains a valid value. */
-    unsigned has_hop_pattern : 1; /**< Non-zero if @p hop_pattern contains a valid value. */
-    unsigned has_hop_index   : 1; /**< Non-zero if @p hop_index contains a valid value. */
+    unsigned has_hop_set:1;
+    unsigned has_hop_pattern:1;
+    unsigned has_hop_index:1;
 
-    uint8_t  hop_set;             /**< Hop set identifier used by the FHSS hopping sequence. */
-    uint8_t  hop_pattern;         /**< Hop pattern identifier used by the FHSS hopping sequence. */
-    uint8_t  hop_index;           /**< Hop index indicating the current position within the hopping sequence. */
+    uint8_t  hop_set;        /* Hop set */
+    uint8_t  hop_pattern;    /* Hop pattern */
+    uint8_t  hop_index;      /* Hop index */
 };
 
-
-/**
- * @brief PHY metadata for 802.11b captures.
+/*
+ * 802.11b.
  */
 struct ieee_802_11b {
-    unsigned has_short_preamble : 1; /**< Non-zero if @p short_preamble contains a valid value. */
+    /* Which of this information is present? */
+    unsigned has_short_preamble:1;
 
-    bool short_preamble;             /**< True if the frame was transmitted with a short PLCP preamble. */
+    bool short_preamble; /* Short preamble */
 };
 
-
-/**
- * @brief PHY metadata for 802.11a captures.
+/*
+ * 802.11a.
  */
 struct ieee_802_11a {
-    unsigned has_channel_type : 1; /**< Non-zero if @p channel_type contains a valid value. */
-    unsigned has_turbo_type   : 1; /**< Non-zero if @p turbo_type contains a valid value. */
+    /* Which of this information is present? */
+    unsigned has_channel_type:1;
+    unsigned has_turbo_type:1;
 
-    unsigned channel_type     : 2; /**< Channel type identifier indicating the 802.11a channel classification. */
-    unsigned turbo_type       : 2; /**< Turbo mode type indicating whether and how proprietary turbo mode is in use. */
+    unsigned channel_type:2;
+    unsigned turbo_type:2;
 };
 
 /*
@@ -647,17 +626,18 @@ struct ieee_802_11a {
 #define PHDR_802_11A_TURBO_TYPE_DYNAMIC_TURBO    2
 #define PHDR_802_11A_TURBO_TYPE_STATIC_TURBO     3
 
-/**
- * @brief PHY metadata for 802.11g OFDM captures.
+/*
+ * 802.11g.
  *
- * This struct should only be used for packets transmitted using OFDM.
- * Packets sent on an 802.11g network using DSSS should use @ref ieee_802_11b
- * with the PHY type set to 802.11b instead.
+ * This should only be used for packets sent using OFDM; packets
+ * sent on an 11g network using DSSS should have the PHY set to
+ * 11b.
  */
 struct ieee_802_11g {
-    unsigned has_mode : 1; /**< Non-zero if @p mode contains a valid value. */
+    /* Which of this information is present? */
+    unsigned has_mode:1;
 
-    uint32_t mode;         /**< Proprietary extension mode flags describing vendor-specific 802.11g transmission properties. */
+    uint32_t mode;           /* Various proprietary extensions */
 };
 
 /*
@@ -666,25 +646,26 @@ struct ieee_802_11g {
 #define PHDR_802_11G_MODE_NORMAL    0
 #define PHDR_802_11G_MODE_SUPER_G   1  /* Atheros Super G */
 
-/**
- * @brief PHY metadata for 802.11n (HT) captures.
+/*
+ * 802.11n.
  */
 struct ieee_802_11n {
-    unsigned has_mcs_index    : 1; /**< Non-zero if @p mcs_index contains a valid value. */
-    unsigned has_bandwidth    : 1; /**< Non-zero if @p bandwidth contains a valid value. */
-    unsigned has_short_gi     : 1; /**< Non-zero if @p short_gi contains a valid value. */
-    unsigned has_greenfield   : 1; /**< Non-zero if @p greenfield contains a valid value. */
-    unsigned has_fec          : 1; /**< Non-zero if @p fec contains a valid value. */
-    unsigned has_stbc_streams : 1; /**< Non-zero if @p stbc_streams contains a valid value. */
-    unsigned has_ness         : 1; /**< Non-zero if @p ness contains a valid value. */
+    /* Which of this information is present? */
+    unsigned has_mcs_index:1;
+    unsigned has_bandwidth:1;
+    unsigned has_short_gi:1;
+    unsigned has_greenfield:1;
+    unsigned has_fec:1;
+    unsigned has_stbc_streams:1;
+    unsigned has_ness:1;
 
-    uint16_t mcs_index;            /**< Modulation and Coding Scheme (MCS) index specifying the 802.11n data rate. */
-    unsigned bandwidth;            /**< Channel bandwidth in MHz (e.g. 20, 40). */
-    unsigned short_gi     : 1;     /**< True if a short guard interval (400 ns) was used; false for long guard interval (800 ns). */
-    unsigned greenfield   : 1;     /**< True if the frame was transmitted in greenfield (HT-only) mode; false for mixed mode. */
-    unsigned fec          : 1;     /**< Forward error correction type: 0 = BCC (Binary Convolutional Coding), 1 = LDPC. */
-    unsigned stbc_streams : 2;     /**< Number of Space-Time Block Coding (STBC) spatial streams used for this transmission. */
-    unsigned ness;                 /**< Number of extension spatial streams (Ness) present in the HT PPDU. */
+    uint16_t mcs_index;      /* MCS index */
+    unsigned bandwidth;      /* Bandwidth = 20 MHz, 40 MHz, etc. */
+    unsigned short_gi:1;     /* True for short guard interval */
+    unsigned greenfield:1;   /* True for greenfield, short for mixed */
+    unsigned fec:1;          /* FEC: 0 = BCC, 1 = LDPC */
+    unsigned stbc_streams:2; /* Number of STBC streams */
+    unsigned ness;           /* Number of extension spatial streams */
 };
 
 /*
@@ -717,33 +698,34 @@ struct ieee_802_11n {
 #define PHDR_802_11_BANDWIDTH_20UUL    24 /* ???, 160 MHz */
 #define PHDR_802_11_BANDWIDTH_20UUU    25 /* ???, 160 MHz */
 
-/**
- * @brief PHY metadata for 802.11ac (VHT) captures.
+/*
+ * 802.11ac.
  */
 struct ieee_802_11ac {
-    unsigned has_stbc                  : 1; /**< Non-zero if @p stbc contains a valid value. */
-    unsigned has_txop_ps_not_allowed   : 1; /**< Non-zero if @p txop_ps_not_allowed contains a valid value. */
-    unsigned has_short_gi              : 1; /**< Non-zero if @p short_gi contains a valid value. */
-    unsigned has_short_gi_nsym_disambig: 1; /**< Non-zero if @p short_gi_nsym_disambig contains a valid value. */
-    unsigned has_ldpc_extra_ofdm_symbol: 1; /**< Non-zero if @p ldpc_extra_ofdm_symbol contains a valid value. */
-    unsigned has_beamformed            : 1; /**< Non-zero if @p beamformed contains a valid value. */
-    unsigned has_bandwidth             : 1; /**< Non-zero if @p bandwidth contains a valid value. */
-    unsigned has_fec                   : 1; /**< Non-zero if @p fec contains a valid value. */
-    unsigned has_group_id              : 1; /**< Non-zero if @p group_id contains a valid value. */
-    unsigned has_partial_aid           : 1; /**< Non-zero if @p partial_aid contains a valid value. */
+    /* Which of this information is present? */
+    unsigned has_stbc:1;
+    unsigned has_txop_ps_not_allowed:1;
+    unsigned has_short_gi:1;
+    unsigned has_short_gi_nsym_disambig:1;
+    unsigned has_ldpc_extra_ofdm_symbol:1;
+    unsigned has_beamformed:1;
+    unsigned has_bandwidth:1;
+    unsigned has_fec:1;
+    unsigned has_group_id:1;
+    unsigned has_partial_aid:1;
 
-    unsigned stbc                  : 1; /**< True if all spatial streams were transmitted with Space-Time Block Coding (STBC). */
-    unsigned txop_ps_not_allowed   : 1; /**< True if the TXOP Power Save mode is not permitted for this transmission. */
-    unsigned short_gi              : 1; /**< True if a short guard interval (400 ns) was used; false for long guard interval (800 ns). */
-    unsigned short_gi_nsym_disambig: 1; /**< True if the short GI Nsym disambiguation bit is set, indicating an extra symbol was added. */
-    unsigned ldpc_extra_ofdm_symbol: 1; /**< True if an extra OFDM symbol was appended to support LDPC encoding. */
-    unsigned beamformed            : 1; /**< True if the frame was transmitted using beamforming. */
-    uint8_t  bandwidth;                 /**< Channel bandwidth in MHz (e.g. 20, 40, 80, 160). */
-    uint8_t  mcs[4];                    /**< MCS index per user for up to 4 MU-MIMO users. */
-    uint8_t  nss[4];                    /**< Number of spatial streams per user for up to 4 MU-MIMO users. */
-    uint8_t  fec;                       /**< Per-user FEC type bitmask: bit set = LDPC, bit clear = BCC, for up to 4 MU-MIMO users. */
-    uint8_t  group_id;                  /**< VHT group ID identifying the MU-MIMO group for this transmission. */
-    uint16_t partial_aid;               /**< Partial AID (Association ID) used to identify the recipient in MU-MIMO transmissions. */
+    unsigned stbc:1;         /* 1 if all spatial streams have STBC */
+    unsigned txop_ps_not_allowed:1;
+    unsigned short_gi:1;     /* True for short guard interval */
+    unsigned short_gi_nsym_disambig:1;
+    unsigned ldpc_extra_ofdm_symbol:1;
+    unsigned beamformed:1;
+    uint8_t  bandwidth;      /* Bandwidth = 20 MHz, 40 MHz, etc. */
+    uint8_t  mcs[4];         /* MCS index per user */
+    uint8_t  nss[4];         /* NSS per user */
+    uint8_t  fec;            /* Bit array of FEC per user: 0 = BCC, 1 = LDPC */
+    uint8_t  group_id;
+    uint16_t partial_aid;
 };
 
 /*
@@ -760,129 +742,111 @@ struct ieee_802_11ac {
 #define IS_80211AD(frequency) (((frequency) >= PHDR_802_11AD_MIN_FREQUENCY) &&\
                                ((frequency) <= PHDR_802_11AD_MAX_FREQUENCY))
 
-/**
- * @brief PHY metadata for 802.11ad (WiGig/DMG) captures.
- */
 struct ieee_802_11ad {
-    unsigned has_mcs_index : 1; /**< Non-zero if @p mcs contains a valid value. */
+    /* Which of this information is present? */
+    unsigned has_mcs_index:1;
 
-    uint8_t mcs;                /**< Modulation and Coding Scheme (MCS) index specifying the 802.11ad data rate. */
+    uint8_t  mcs;            /* MCS index */
 };
 
-
-/**
- * @brief PHY metadata for 802.11ax (HE — High Efficiency) captures.
+/*
+ * 802.11ax (HE).
  */
 struct ieee_802_11ax {
-    unsigned has_mcs_index : 1; /**< Non-zero if @p mcs contains a valid value. */
-    unsigned has_bwru      : 1; /**< Non-zero if @p bwru contains a valid value. */
-    unsigned has_gi        : 1; /**< Non-zero if @p gi contains a valid value. */
+    /* Which of this information is present? */
+    unsigned has_mcs_index:1;
+    unsigned has_bwru:1;
+    unsigned has_gi:1;
 
-    uint8_t nsts : 4;           /**< Number of Space-Time Streams used for this HE transmission. */
-    uint8_t mcs  : 4;           /**< Modulation and Coding Scheme (MCS) index for this HE transmission. */
-    uint8_t bwru : 4;           /**< Bandwidth or Resource Unit (RU) allocation identifier. */
-    uint8_t gi   : 2;           /**< Guard interval: encodes 0.8 µs, 1.6 µs, or 3.2 µs GI. */
+    uint8_t  nsts:4;         /* Number of Space-time Streams */
+    uint8_t  mcs:4;          /* MCS index */
+    uint8_t  bwru:4;         /* Bandwidth/RU allocation */
+    uint8_t  gi:2;           /* Guard Interval */
 };
 
-
-/**
- * @brief Per-user PHY metadata for a single user within an 802.11be (EHT) MU transmission.
+/*
+ * 802.11be (EHT).
  */
 struct ieee_802_11be_user_info {
-    unsigned sta_id_known         : 1;  /**< Non-zero if @p sta_id contains a valid value. */
-    unsigned mcs_known            : 1;  /**< Non-zero if @p mcs contains a valid value. */
-    unsigned coding_known         : 1;  /**< Non-zero if @p ldpc_coding contains a valid value. */
-    unsigned rsv_known            : 1;  /**< Non-zero if @p rsv contains a valid value. */
-    unsigned nsts_known           : 1;  /**< Non-zero if @p nsts contains a valid value. */
-    unsigned bf_known             : 1;  /**< Non-zero if @p beamform contains a valid value. */
-    unsigned spatial_config_known : 1;  /**< Non-zero if spatial configuration information is valid for this user. */
-    unsigned data_for_this_user   : 1;  /**< Non-zero if this EHT PPDU carries data intended for this user. */
-    unsigned sta_id               : 11; /**< Association ID (partial) identifying this MU-MIMO user. */
-    unsigned ldpc_coding          : 1;  /**< Forward error correction type: 0 = BCC, 1 = LDPC. */
-    unsigned mcs                  : 4;  /**< Modulation and Coding Scheme (MCS) index assigned to this user. */
-    unsigned nsts                 : 4;  /**< Number of Space-Time Streams assigned to this user. */
-    unsigned rsv                  : 1;  /**< Reserved bit. */
-    unsigned beamform             : 1;  /**< Non-zero if beamforming was applied for this user. */
-    unsigned rsv2                 : 2;  /**< Reserved bits. */
+    unsigned sta_id_known:1;
+    unsigned mcs_known:1;
+    unsigned coding_known:1;
+    unsigned rsv_known:1;
+    unsigned nsts_known:1;
+    unsigned bf_known:1;
+    unsigned spatial_config_known:1;
+    unsigned data_for_this_user:1;
+    unsigned sta_id:11;
+    unsigned ldpc_coding:1;
+    unsigned mcs:4;
+    unsigned nsts:4;
+    unsigned rsv:1;
+    unsigned beamform:1;
+    unsigned rsv2:2;
 };
 
-#define PHDR_802_11BE_MAX_USERS 4 /**< Maximum number of MU-MIMO users described in an 802.11be PHY metadata record. */
-
-/**
- * @brief PHY metadata for 802.11be (EHT — Extremely High Throughput) captures.
- */
+#define PHDR_802_11BE_MAX_USERS 4
 struct ieee_802_11be {
-    unsigned has_ru_mru_size : 1; /**< Non-zero if @p ru_mru_size contains a valid value. */
-    unsigned has_gi          : 1; /**< Non-zero if @p gi contains a valid value. */
-    unsigned has_bandwidth   : 1; /**< Non-zero if @p bandwidth contains a valid value. */
+    /* Which of this information is present? */
+    unsigned has_ru_mru_size:1;
+    unsigned has_gi:1;
+    unsigned has_bandwidth:1;
 
-    uint8_t bandwidth;            /**< Channel bandwidth in MHz (e.g. 20, 40, 80, 160, 320). */
-    uint8_t ru_mru_size : 4;      /**< Resource Unit (RU) or Multi-RU (MRU) allocation size identifier. */
-    uint8_t gi          : 2;      /**< Guard interval: encodes 0.8 µs, 1.6 µs, or 3.2 µs GI. */
-    uint8_t num_users;            /**< Number of valid entries in the @p user array; at most PHDR_802_11BE_MAX_USERS. */
-    struct ieee_802_11be_user_info user[PHDR_802_11BE_MAX_USERS]; /**< Per-user PHY metadata for up to PHDR_802_11BE_MAX_USERS MU-MIMO users. */
+    uint8_t  bandwidth;
+    uint8_t  ru_mru_size:4;  /* RU/MRU allocation */
+    uint8_t  gi:2;           /* Guard Interval */
+    uint8_t  num_users;
+    struct ieee_802_11be_user_info user[PHDR_802_11BE_MAX_USERS]; /* Adding info for only upto 4 users */
 };
 
 
-/**
- * @brief Union representing physical layer information for IEEE 802.11 variants.
- *
- * This union encapsulates PHY-specific metadata for various 802.11 standards,
- * allowing parsers or analyzers to interpret modulation, channel, and timing
- * details based on the active wireless technology.
- *
- * Each member corresponds to a specific PHY type, such as FHSS, DSSS, OFDM,
- * or advanced MIMO schemes used in newer standards.
- */
 union ieee_802_11_phy_info {
-    struct ieee_802_11_fhss info_11_fhss; /**< Frequency-Hopping Spread Spectrum (802.11-1997). */
-    struct ieee_802_11b    info_11b;      /**< Direct Sequence Spread Spectrum (802.11b). */
-    struct ieee_802_11a    info_11a;      /**< OFDM-based PHY (802.11a). */
-    struct ieee_802_11g    info_11g;      /**< Extended OFDM PHY (802.11g). */
-    struct ieee_802_11n    info_11n;      /**< High Throughput PHY (802.11n). */
-    struct ieee_802_11ac   info_11ac;     /**< Very High Throughput PHY (802.11ac). */
-    struct ieee_802_11ad   info_11ad;     /**< 60 GHz PHY (802.11ad). */
-    struct ieee_802_11ax   info_11ax;     /**< High Efficiency PHY (802.11ax). */
-    struct ieee_802_11be   info_11be;     /**< Extremely High Throughput PHY (802.11be). */
+    struct ieee_802_11_fhss info_11_fhss;
+    struct ieee_802_11b info_11b;
+    struct ieee_802_11a info_11a;
+    struct ieee_802_11g info_11g;
+    struct ieee_802_11n info_11n;
+    struct ieee_802_11ac info_11ac;
+    struct ieee_802_11ad info_11ad;
+    struct ieee_802_11ax info_11ax;
+    struct ieee_802_11be info_11be;
 };
 
-/**
- * @brief Pseudo-header for 802.11 wireless capture files carrying full PHY, signal, and frame metadata.
- */
 struct ieee_802_11_phdr {
-    int      fcs_len;                       /**< Number of bytes of FCS appended to the frame; -1 if unknown. */
-    unsigned decrypted                : 1;  /**< True if the frame has been decrypted despite the 802.11 "Protected" flag being set. */
-    unsigned datapad                  : 1;  /**< True if padding bytes are present between the 802.11 header and the payload. */
-    unsigned no_a_msdus               : 1;  /**< True if the A-MSDU subframe bit in the QoS Control field should be ignored. */
-    unsigned phy;                           /**< PHY type identifier indicating the 802.11 physical layer variant (e.g. 802.11a/b/g/n/ac/ax). */
-    union ieee_802_11_phy_info phy_info;    /**< PHY-specific metadata corresponding to the @p phy type. */
+    int      fcs_len;          /* Number of bytes of FCS - -1 means "unknown" */
+    unsigned decrypted:1;      /* true if frame is decrypted even if "protected" bit is set */
+    unsigned datapad:1;        /* true if frame has padding between 802.11 header and payload */
+    unsigned no_a_msdus:1;     /* true if we should ignore the A-MSDU bit */
+    unsigned phy;              /* PHY type */
+    union ieee_802_11_phy_info phy_info;
 
-    unsigned has_channel              : 1;  /**< Non-zero if @p channel contains a valid value. */
-    unsigned has_frequency            : 1;  /**< Non-zero if @p frequency contains a valid value. */
-    unsigned has_data_rate            : 1;  /**< Non-zero if @p data_rate contains a valid value. */
-    unsigned has_signal_percent       : 1;  /**< Non-zero if @p signal_percent contains a valid value. */
-    unsigned has_noise_percent        : 1;  /**< Non-zero if @p noise_percent contains a valid value. */
-    unsigned has_signal_dbm           : 1;  /**< Non-zero if @p signal_dbm contains a valid value. */
-    unsigned has_noise_dbm            : 1;  /**< Non-zero if @p noise_dbm contains a valid value. */
-    unsigned has_signal_db            : 1;  /**< Non-zero if @p signal_db contains a valid value. */
-    unsigned has_noise_db             : 1;  /**< Non-zero if @p noise_db contains a valid value. */
-    unsigned has_tsf_timestamp        : 1;  /**< Non-zero if @p tsf_timestamp contains a valid value. */
-    unsigned has_aggregate_info       : 1;  /**< Non-zero if @p aggregate_flags and @p aggregate_id contain valid values. */
-    unsigned has_zero_length_psdu_type: 1;  /**< Non-zero if @p zero_length_psdu_type contains a valid value. */
+    /* Which of this information is present? */
+    unsigned has_channel:1;
+    unsigned has_frequency:1;
+    unsigned has_data_rate:1;
+    unsigned has_signal_percent:1;
+    unsigned has_noise_percent:1;
+    unsigned has_signal_dbm:1;
+    unsigned has_noise_dbm:1;
+    unsigned has_signal_db:1;
+    unsigned has_noise_db:1;
+    unsigned has_tsf_timestamp:1;
+    unsigned has_aggregate_info:1;        /* aggregate flags and ID */
+    unsigned has_zero_length_psdu_type:1; /* zero-length PSDU type */
 
-    uint16_t channel;                       /**< 802.11 channel number on which this frame was captured. */
-    uint32_t frequency;                     /**< Center frequency in MHz of the channel on which this frame was captured. */
-    uint16_t data_rate;                     /**< Data rate at which this frame was transmitted, in units of 500 Kb/s. */
-    uint8_t  signal_percent;                /**< Received signal level expressed as a percentage of the maximum. */
-    uint8_t  noise_percent;                 /**< Noise level expressed as a percentage of the maximum. */
-    int8_t   signal_dbm;                    /**< Received signal level in dBm. */
-    int8_t   noise_dbm;                     /**< Noise level in dBm. */
-    uint8_t  signal_db;                     /**< Received signal level in dB relative to an arbitrary reference point. */
-    uint8_t  noise_db;                      /**< Noise level in dB relative to an arbitrary reference point. */
-    uint64_t tsf_timestamp;                 /**< 802.11 Timing Synchronization Function (TSF) timer value at the time of capture, in microseconds. */
-    uint32_t aggregate_flags;               /**< A-MPDU aggregation flags describing the role of this frame within the aggregate. */
-    uint32_t aggregate_id;                  /**< A-MPDU aggregate identifier used to group subframes for reassembly. */
-    uint8_t  zero_length_psdu_type;         /**< Type code of the zero-length PSDU, used for sounding and NDP frames. */
+    uint16_t channel;                     /* Channel number */
+    uint32_t frequency;                   /* Channel center frequency */
+    uint16_t data_rate;                   /* Data rate, in .5 Mb/s units */
+    uint8_t  signal_percent;              /* Signal level, as a percentage */
+    uint8_t  noise_percent;               /* Noise level, as a percentage */
+    int8_t   signal_dbm;                  /* Signal level, in dBm */
+    int8_t   noise_dbm;                   /* Noise level, in dBm */
+    uint8_t  signal_db;                   /* Signal level, in dB from an arbitrary point */
+    uint8_t  noise_db;                    /* Noise level, in dB from an arbitrary point */
+    uint64_t tsf_timestamp;
+    uint32_t aggregate_flags;             /* A-MPDU flags */
+    uint32_t aggregate_id;                /* ID for A-MPDU reassembly */
+    uint8_t  zero_length_psdu_type;       /* type of zero-length PSDU */
 };
 
 /*
@@ -915,18 +879,15 @@ struct ieee_802_11_phdr {
 #define COSINE_DIR_TX 1
 #define COSINE_DIR_RX 2
 
-/**
- * @brief Pseudo-header for CoSine Systems capture files carrying encapsulation, direction, and QoS metadata.
- */
 struct cosine_phdr {
-    uint8_t  encap;                           /**< Encapsulation type of this packet; one of the COSINE_ENCAP_* values. */
-    uint8_t  direction;                       /**< Packet direction; one of the COSINE_DIR_* values. */
-    char     if_name[COSINE_MAX_IF_NAME_LEN]; /**< NUL-terminated encapsulation and logical interface name string. */
-    uint16_t pro;                             /**< Protocol identifier associated with this packet. */
-    uint16_t off;                             /**< Offset value associated with this packet's encapsulation layer. */
-    uint16_t pri;                             /**< Priority level assigned to this packet for QoS processing. */
-    uint16_t rm;                              /**< Rate Marking value applied to this packet for traffic shaping. */
-    uint16_t err;                             /**< Error code reported by the CoSine device for this packet; 0 if no error. */
+    uint8_t encap;      /* COSINE_ENCAP_* as defined above */
+    uint8_t direction;  /* COSINE_DIR_*, as defined above */
+    char    if_name[COSINE_MAX_IF_NAME_LEN];  /* Encap & Logical I/F name */
+    uint16_t pro;        /* Protocol */
+    uint16_t off;        /* Offset */
+    uint16_t pri;        /* Priority */
+    uint16_t rm;         /* Rate Marking */
+    uint16_t err;        /* Error Code */
 };
 
 /* Packet "pseudo-header" for IrDA capture files. */
@@ -950,22 +911,18 @@ struct cosine_phdr {
 #define IRDA_CLASS_LOG      0x0100
 #define IRDA_CLASS_MASK     0xFF00
 
-/**
- * @brief Pseudo-header carrying IrDA packet type metadata for captured IrDA frames.
- */
 struct irda_phdr {
-    uint16_t pkttype;  /**< IrDA packet type identifier classifying the captured frame (e.g., log message, data frame). */
+    uint16_t pkttype;    /* packet type */
 };
 
-/**
- * @brief Pseudo-header for HP-UX nettl capture files carrying subsystem, device, and process metadata.
- */
+/* Packet "pseudo-header" for nettl (HP-UX) capture files. */
+
 struct nettl_phdr {
-    uint16_t subsys; /**< Subsystem identifier indicating the HP-UX network layer or driver that captured this packet. */
-    uint32_t devid;  /**< Device identifier of the network interface that captured this packet. */
-    uint32_t kind;   /**< Kind flags describing the type and direction of this capture record. */
-    int32_t  pid;    /**< Process identifier (PID) of the process associated with this packet; -1 if not applicable. */
-    uint32_t uid;    /**< User identifier (UID) of the user associated with this packet. */
+    uint16_t subsys;
+    uint32_t devid;
+    uint32_t kind;
+    int32_t pid;
+    uint32_t uid;
 };
 
 /* Packet "pseudo-header" for MTP2 files. */
@@ -974,142 +931,93 @@ struct nettl_phdr {
 #define MTP2_ANNEX_A_USED          1
 #define MTP2_ANNEX_A_USED_UNKNOWN  2
 
-/**
- * @brief Pseudo-header carrying MTP2 link metadata for captured SS7 MTP2 frames.
- */
 struct mtp2_phdr {
-    uint8_t  sent;           /**< Non-zero if this frame was transmitted (sent); zero if it was received. */
-    uint8_t  annex_a_used;   /**< Non-zero if MTP2 Annex A (FISU/LSSU extensions) was used on this link. */
-    uint16_t link_number;    /**< Identifies the MTP2 signalling link that carried this frame. */
+    uint8_t sent;
+    uint8_t annex_a_used;
+    uint16_t link_number;
 };
 
-/**
- * @brief Pseudo-header metadata for packets in K12 capture files.
- *
- * This union provides additional per-packet context for K12-formatted captures,
- * typically used in telecom and voice-over-circuit environments. It supports
- * both ATM and DS0-based framing.
- */
+/* Packet "pseudo-header" for K12 files. */
+
 typedef union {
-    /**
-     * @brief ATM-specific channel identifiers.
-     *
-     * Used when the packet is associated with an ATM virtual circuit.
-     */
     struct {
-        uint16_t vp;  /**< Virtual Path Identifier (VPI). */
-        uint16_t vc;  /**< Virtual Channel Identifier (VCI). */
-        uint16_t cid; /**< Channel Identifier. */
+        uint16_t vp;
+        uint16_t vc;
+        uint16_t cid;
     } atm;
 
-    /**
-     * @brief DS0 channel bitmask.
-     *
-     * Used when the packet is associated with a TDM (Time Division Multiplexing)
-     * DS0 channel. Each bit represents an active timeslot.
-     */
     uint32_t ds0mask;
 } k12_input_info_t;
 
-/**
- * @brief Pseudo-header for Tektronix K12 capture files carrying input port, stack, and protocol metadata.
- */
 struct k12_phdr {
-    uint32_t         input;        /**< Numeric identifier of the K12 input port on which this packet was captured. */
-    const char      *input_name;   /**< Human-readable name of the input port; NULL if unavailable. */
-    const char      *stack_file;   /**< Path to the K12 stack configuration file associated with this input; NULL if unavailable. */
-    uint32_t         input_type;   /**< Type identifier describing the protocol stack or medium of the input port. */
-    k12_input_info_t input_info;   /**< Protocol-specific input configuration details corresponding to @p input_type. */
-    uint8_t         *extra_info;   /**< Pointer to additional raw metadata bytes associated with this packet; NULL if none. */
-    uint32_t         extra_length; /**< Length in bytes of the data pointed to by @p extra_info; 0 if none. */
-    void            *stuff;        /**< Opaque pointer to internal K12 reader state associated with this input port. */
+    uint32_t          input;
+    const char       *input_name;
+    const char       *stack_file;
+    uint32_t          input_type;
+    k12_input_info_t  input_info;
+    uint8_t          *extra_info;
+    uint32_t          extra_length;
+    void*             stuff;
 };
 
 #define K12_PORT_DS0S      0x00010008
 #define K12_PORT_DS1       0x00100008
 #define K12_PORT_ATMPVC    0x01020000
 
-/**
- * @brief LAPD pseudo-header for packet metadata.
- *
- * This structure provides minimal metadata for LAPD (Link Access Procedure for the D channel)
- * packets, typically used in ISDN signaling. It may be used to distinguish packet types
- * and network direction.
- */
 struct lapd_phdr {
-    uint16_t pkttype;    /**< LAPD packet type identifier. */
-    uint8_t we_network;  /**< Direction flag: true if packet is from the network side. */
+    uint16_t pkttype;    /* packet type */
+    uint8_t we_network;
 };
 
-/**
- * @brief Pseudo-header for Catapult DCT2000 captures.
- *
- * This structure wraps protocol-specific pseudo-headers for ISDN, ATM, or P2P traffic,
- * along with file offset and capture context. It is used to interpret packets in
- * Catapult DCT2000 trace files.
- */
-struct catapult_dct2000_phdr {
-    union {
-        struct isdn_phdr isdn; /**< ISDN-specific pseudo-header. */
-        struct atm_phdr  atm;  /**< ATM-specific pseudo-header. */
-        struct p2p_phdr  p2p;  /**< Point-to-point pseudo-header. */
+struct wtap;
+struct catapult_dct2000_phdr
+{
+    union
+    {
+        struct isdn_phdr isdn;
+        struct atm_phdr  atm;
+        struct p2p_phdr  p2p;
     } inner_pseudo_header;
-
-    int64_t seek_off;     /**< File offset of the packet within the capture. */
-    struct wtap *wth;     /**< Pointer to the capture context (Wiretap handle). */
+    int64_t      seek_off;
+    struct wtap *wth;
 };
 
-/**
- * @brief Pseudo-header for Endace ERF (Extensible Record Format) capture files carrying timestamp and record metadata.
+/*
+ * Endace Record Format pseudo header
  */
 struct erf_phdr {
-    uint64_t ts;    /**< ERF timestamp in Endace's 64-bit fixed-point format: upper 32 bits are seconds since 1970-01-01, lower 32 bits are fractional seconds. */
-    uint8_t  type;  /**< ERF record type identifying the physical medium and encapsulation of this record. */
-    uint8_t  flags; /**< Bitmask of ERF flags describing capture conditions such as RX/TX direction and loss indicators. */
-    uint16_t rlen;  /**< Record length in bytes including this header, extension headers, any subheader, and the payload. */
-    uint16_t lctr;  /**< Loss counter; incremented by the capture hardware each time one or more records are dropped. */
-    uint16_t wlen;  /**< Wire length in bytes of the original packet as observed on the network. */
+    uint64_t ts;     /* Time stamp */
+    uint8_t type;
+    uint8_t flags;
+    uint16_t rlen;
+    uint16_t lctr;
+    uint16_t wlen;
 };
 
-/**
- * @brief Holds a single ERF extension header word appended after the main ERF header.
- */
 struct erf_ehdr {
-    uint64_t ehdr; /**< Raw 64-bit extension header value; the type and continuation bit are encoded in the most significant byte. */
+  uint64_t ehdr;
 };
 
-#define MAX_ERF_EHDR 16 /**< Maximum number of ERF extension headers that may be present in a single ERF record. */
-
-/**
- * @brief ERF Ethernet subheader providing the frame offset for Ethernet ERF records.
+/*
+ * ERF pseudo header with optional subheader
+ * (Multichannel or Ethernet)
  */
+
+#define MAX_ERF_EHDR 16
+
 struct wtap_erf_eth_hdr {
-    uint8_t offset; /**< Byte offset from the start of the captured data to the first byte of the Ethernet frame. */
-    uint8_t pad;    /**< Padding byte to align the subheader to a 2-byte boundary; must be zero. */
+    uint8_t offset;
+    uint8_t pad;
 };
 
-/**
- * @brief Extended pseudo-header for ERF multi-channel (MC) packet records.
- *
- * This structure builds on the basic ERF header to support multi-channel
- * packet formats, including optional extended headers and protocol-specific
- * subheaders. It is used in advanced ERF capture scenarios such as DAG cards
- * with multiple input streams or specialized framing.
- */
 struct erf_mc_phdr {
-    struct erf_phdr phdr; /**< Base ERF header containing timestamp, type, and length metadata. */
-
-    struct erf_ehdr ehdr_list[MAX_ERF_EHDR]; /**< Array of extended ERF headers (e.g., channel, color, hash). */
-
-    /**
-     * @brief Protocol-specific subheader union.
-     *
-     * Contains additional metadata depending on the ERF record type.
-     */
-    union {
-        struct wtap_erf_eth_hdr eth_hdr; /**< Ethernet-specific subheader. */
-        uint32_t mc_hdr;                 /**< Multi-channel header value. */
-        uint32_t aal2_hdr;               /**< AAL2-specific header value. */
+    struct erf_phdr phdr;
+    struct erf_ehdr ehdr_list[MAX_ERF_EHDR];
+    union
+    {
+        struct wtap_erf_eth_hdr eth_hdr;
+        uint32_t mc_hdr;
+        uint32_t aal2_hdr;
     } subhdr;
 };
 
@@ -1168,23 +1076,18 @@ struct erf_mc_phdr {
 #define SITA_PROTO_DPM_LINK            (0x11)
 #define SITA_PROTO_BOP_FRL             (0x12)
 
-/**
- * @brief Pseudo-header for SITA WAN capture files carrying signal, error, and protocol metadata.
- */
 struct sita_phdr {
-    uint8_t sita_flags;    /**< Bitmask of SITA capture flags describing the state and direction of this frame. */
-    uint8_t sita_signals;  /**< Bitmask of physical signal line states (e.g. RTS, CTS, DSR, DTR) at the time of capture. */
-    uint8_t sita_errors1;  /**< First bitmask of hardware-reported error conditions for this frame. */
-    uint8_t sita_errors2;  /**< Second bitmask of hardware-reported error conditions for this frame. */
-    uint8_t sita_proto;    /**< Protocol identifier indicating the WAN protocol encapsulated in this frame. */
+    uint8_t sita_flags;
+    uint8_t sita_signals;
+    uint8_t sita_errors1;
+    uint8_t sita_errors2;
+    uint8_t sita_proto;
 };
 
-/**
- * @brief Pseudo-header for Bluetooth HCI capture files carrying direction and channel metadata.
- */
+/*pseudo header for Bluetooth HCI*/
 struct bthci_phdr {
-    bool     sent;    /**< True if the HCI frame was sent from the host to the controller; false if received from the controller. */
-    uint32_t channel; /**< HCI channel identifier indicating the logical transport on which this frame was exchanged. */
+    bool      sent;
+    uint32_t  channel;
 };
 
 #define BTHCI_CHANNEL_COMMAND  1
@@ -1193,42 +1096,34 @@ struct bthci_phdr {
 #define BTHCI_CHANNEL_EVENT    4
 #define BTHCI_CHANNEL_ISO      5
 
-/**
- * @brief Pseudo-header for Linux Bluetooth Monitor (WTAP_ENCAP_BLUETOOTH_LINUX_MONITOR) capture files.
- */
+/* pseudo header for WTAP_ENCAP_BLUETOOTH_LINUX_MONITOR */
 struct btmon_phdr {
-    uint16_t adapter_id; /**< Index of the Bluetooth adapter associated with this HCI event or data frame. */
-    uint16_t opcode;     /**< Linux Bluetooth Monitor opcode identifying the type of this monitor record. */
+    uint16_t  adapter_id;
+    uint16_t  opcode;
 };
 
-/**
- * @brief Pseudo-header for layer 1 event (WTAP_ENCAP_LAYER1_EVENT) capture files carrying signal direction metadata.
- */
+/* pseudo header for WTAP_ENCAP_LAYER1_EVENT */
 struct l1event_phdr {
-    bool uton; /**< True if the layer 1 event was in the user-to-network direction; false for network-to-user. */
+    bool uton;
 };
 
-/**
- * @brief Pseudo-header for I2C bus capture files carrying bus number, event type, and flag metadata.
- */
+/* * I2C pseudo header */
 struct i2c_phdr {
-    uint8_t  is_event; /**< Non-zero if this record represents an I2C bus event rather than a data transfer. */
-    uint8_t  bus;      /**< I2C bus number on which this transfer or event was captured. */
-    uint32_t flags;    /**< Bitmask of I2C capture flags describing transfer properties and error conditions. */
+    uint8_t is_event;
+    uint8_t bus;
+    uint32_t flags;
 };
 
-/**
- * @brief Pseudo-header for GSM Um air interface (WTAP_ENCAP_GSM_UM) capture files.
- */
+/* pseudo header for WTAP_ENCAP_GSM_UM */
 struct gsm_um_phdr {
-    bool     uplink;      /**< True if the frame was captured on the uplink (MS→BTS); false for downlink (BTS→MS). */
-    uint8_t  channel;     /**< Logical channel type on which this frame was captured (e.g. BCCH, SDCCH, TCH). */
+    bool uplink;
+    uint8_t  channel;
     /* The following are only populated for downlink */
-    uint8_t  bsic;        /**< Base Station Identity Code of the BTS; populated for downlink frames only. */
-    uint16_t arfcn;       /**< Absolute Radio Frequency Channel Number of the carrier; populated for downlink frames only. */
-    uint32_t tdma_frame;  /**< TDMA frame number at which this frame was captured; populated for downlink frames only. */
-    uint8_t  error;       /**< Error code reported by the capture device for this frame; 0 if no error. */
-    uint16_t timeshift;   /**< Timing offset in quarter-symbol units measured for this frame. */
+    uint8_t  bsic;
+    uint16_t arfcn;
+    uint32_t tdma_frame;
+    uint8_t  error;
+    uint16_t timeshift;
 };
 
 #define GSM_UM_CHANNEL_UNKNOWN  0
@@ -1241,159 +1136,93 @@ struct gsm_um_phdr {
 #define GSM_UM_CHANNEL_AGCH     7
 #define GSM_UM_CHANNEL_PCH      8
 
-/**
- * @brief Pseudo-header for Citrix NetScaler nstrace capture files carrying field offset and record layout metadata.
- */
+/* Pseudo-header for nstrace packets */
 struct nstr_phdr {
-    int64_t  rec_offset;            /**< Byte offset of this record within the nstrace capture file. */
-    int32_t  rec_len;               /**< Total length in bytes of this capture record. */
-    uint8_t  nicno_offset;          /**< Byte offset within the record to the NIC number field. */
-    uint8_t  nicno_len;             /**< Length in bytes of the NIC number field. */
-    uint8_t  dir_offset;            /**< Byte offset within the record to the packet direction field. */
-    uint8_t  dir_len;               /**< Length in bytes of the packet direction field. */
-    uint16_t eth_offset;            /**< Byte offset within the record to the start of the Ethernet frame data. */
-    uint8_t  pcb_offset;            /**< Byte offset within the record to the primary Protocol Control Block (PCB) pointer field. */
-    uint8_t  l_pcb_offset;          /**< Byte offset within the record to the linked Protocol Control Block (PCB) pointer field. */
-    uint8_t  rec_type;              /**< Record type identifier indicating the format and content of this nstrace record. */
-    uint8_t  vlantag_offset;        /**< Byte offset within the record to the VLAN tag field. */
-    uint8_t  coreid_offset;         /**< Byte offset within the record to the CPU core ID field. */
-    uint8_t  srcnodeid_offset;      /**< Byte offset within the record to the source cluster node ID field. */
-    uint8_t  destnodeid_offset;     /**< Byte offset within the record to the destination cluster node ID field. */
-    uint8_t  clflags_offset;        /**< Byte offset within the record to the cluster flags field. */
-    uint8_t  src_vmname_len_offset; /**< Byte offset within the record to the source VM name length field. */
-    uint8_t  dst_vmname_len_offset; /**< Byte offset within the record to the destination VM name length field. */
-    uint8_t  ns_activity_offset;    /**< Byte offset within the record to the NetScaler activity flags field. */
-    uint8_t  data_offset;           /**< Byte offset within the record to the start of the packet payload data. */
+    int64_t rec_offset;
+    int32_t rec_len;
+    uint8_t nicno_offset;
+    uint8_t nicno_len;
+    uint8_t dir_offset;
+    uint8_t dir_len;
+    uint16_t eth_offset;
+    uint8_t pcb_offset;
+    uint8_t l_pcb_offset;
+    uint8_t rec_type;
+    uint8_t vlantag_offset;
+    uint8_t coreid_offset;
+    uint8_t srcnodeid_offset;
+    uint8_t destnodeid_offset;
+    uint8_t clflags_offset;
+    uint8_t src_vmname_len_offset;
+    uint8_t dst_vmname_len_offset;
+    uint8_t ns_activity_offset;
+    uint8_t data_offset;
 };
 
-/**
- * @brief Pseudo-header for Nokia firewall capture files, extending the Ethernet pseudo-header with device-specific metadata.
- */
+/* Packet "pseudo-header" for Nokia output */
 struct nokia_phdr {
-    struct eth_phdr eth;   /**< Standard Ethernet pseudo-header carrying FCS length metadata. */
-    uint8_t stuff[4];      /**< Device-specific metadata of unknown purpose appended by Nokia firmware. */
+    struct eth_phdr eth;
+    uint8_t stuff[4];    /* mysterious stuff */
 };
 
-#define LLCP_PHDR_FLAG_SENT 0 /**< Flag value indicating the LLCP frame was sent by the local device. */
-
-/**
- * @brief Pseudo-header for NFC Logical Link Control Protocol (LLCP) capture files.
- */
+#define LLCP_PHDR_FLAG_SENT 0
 struct llcp_phdr {
-    uint8_t adapter; /**< Index of the NFC adapter on which this LLCP frame was captured. */
-    uint8_t flags;   /**< Bitmask of LLCP capture flags; LLCP_PHDR_FLAG_SENT indicates a sent frame. */
+    uint8_t adapter;
+    uint8_t flags;
 };
 
-/**
- * @brief Pseudo-header for Android Logcat (WTAP_ENCAP_LOGCAT) capture files.
- */
+/* pseudo header for WTAP_ENCAP_LOGCAT */
 struct logcat_phdr {
-    int version; /**< Logcat binary format version identifying the record layout (e.g. 1, 2, 3, or 4). */
+    int version;
 };
 
-/**
- * @brief Pseudo-header metadata for packets captured in NetMon (Network Monitor) files.
- *
- * This structure provides supplemental information for each packet in a NetMon capture,
- * including user-defined comments and protocol-specific subheaders. It is used to
- * enrich packet display and analysis in tools that support NetMon format.
- */
+/* Packet "pseudo-header" information for header data from NetMon files. */
+
 struct netmon_phdr {
-    uint8_t* title;       /**< Comment title, stored as a null-terminated UTF-8 string. */
-    uint32_t descLength;  /**< Length in bytes of the comment description. */
-    uint8_t* description; /**< Comment description, formatted in ASCII RTF. */
-
-    unsigned sub_encap;   /**< Actual encapsulation type used for the packet (e.g., Ethernet, ATM). */
-
-    /**
-     * @brief Protocol-specific subheader union.
-     *
-     * Contains metadata relevant to the encapsulated protocol.
-     */
+    uint8_t* title;          /* Comment title, as a null-terminated UTF-8 string */
+    uint32_t descLength;     /* Number of bytes in the comment description */
+    uint8_t* description;    /* Comment description, in ASCII RTF */
+    unsigned sub_encap;        /* "Real" encap value for the record that will be used once pseudo header data is display */
     union sub_wtap_pseudo_header {
-        struct eth_phdr eth;               /**< Ethernet pseudo-header. */
-        struct atm_phdr atm;               /**< ATM pseudo-header. */
-        struct ieee_802_11_phdr ieee_802_11; /**< IEEE 802.11 wireless pseudo-header. */
+        struct eth_phdr     eth;
+        struct atm_phdr     atm;
+        struct ieee_802_11_phdr ieee_802_11;
     } subheader;
 };
 
-/* Record "pseudo-header" information for header data from MS ProcMon files. */
-
-struct procmon_process_t;
-
-/**
- * @brief Pseudo-header for Microsoft ProcMon (Process Monitor) captures.
- */
-struct procmon_phdr {
-    uint32_t                 *process_index_map;      /**< Map from raw process index to @c process_array index. */
-    size_t                    process_index_map_size; /**< Number of entries in @c process_index_map. */
-    struct procmon_process_t *process_array;          /**< Array of captured process descriptors. */
-    size_t                    process_array_size;     /**< Number of entries in @c process_array. */
-    bool                      system_bitness;         /**< True if the captured system was 64-bit, false if 32-bit. */
-};
-
-
-/**
- * @brief Pseudo-header for BER (Basic Encoding Rules) data files.
- */
+/* File "pseudo-header" for BER data files. */
 struct ber_phdr {
-    const char *pathname; /**< Path name of the BER-encoded source file. */
+    const char *pathname;   /* Path name of file. */
 };
 
-
-/**
- * @brief Pseudo-header for M-Module binary files.
- */
-struct mmodule_phdr {
-    uint8_t chunktype; /**< M-Module chunk type identifier. */
-};
-
-/**
- * @brief Pseudo-header for DekTec DTSDI frame records.
- */
-struct dtsdi_phdr {
-    uint8_t format_version; /**< On-disk DTSDI format version. */
-    uint8_t data_type;      /**< DekTec SDI video-standard identifier. */
-    uint16_t flags;         /**< DekTec SDI data-format flags. */
-};
-
-/**
- * @brief Top-level union of all Wiretap pseudo-headers.
- *
- * Exactly one member is valid per record, selected by the encapsulation
- * type (@c wtap_packet_header.pkt_encap) or record type.
- */
 union wtap_pseudo_header {
-    struct eth_phdr              eth;         /**< Ethernet pseudo-header. */
-    struct dte_dce_phdr          dte_dce;     /**< DTE/DCE serial pseudo-header. */
-    struct isdn_phdr             isdn;        /**< ISDN pseudo-header. */
-    struct atm_phdr              atm;         /**< ATM pseudo-header. */
-    struct ascend_phdr           ascend;      /**< Lucent/Ascend WAN pseudo-header. */
-    struct p2p_phdr              p2p;         /**< Point-to-point pseudo-header. */
-    struct ieee_802_11_phdr      ieee_802_11; /**< IEEE 802.11 wireless pseudo-header. */
-    struct cosine_phdr           cosine;      /**< CoSine IPNOS pseudo-header. */
-    struct irda_phdr             irda;        /**< IrDA pseudo-header. */
-    struct nettl_phdr            nettl;       /**< HP-UX nettl pseudo-header. */
-    struct mtp2_phdr             mtp2;        /**< MTP2 pseudo-header. */
-    struct k12_phdr              k12;         /**< Tektronix K12 pseudo-header. */
-    struct lapd_phdr             lapd;        /**< LAPD pseudo-header. */
-    struct catapult_dct2000_phdr dct2000;     /**< Catapult DCT2000 pseudo-header. */
-    struct erf_mc_phdr           erf;         /**< Endace ERF (multi-channel) pseudo-header. */
-    struct sita_phdr             sita;        /**< SITA WAN pseudo-header. */
-    struct bthci_phdr            bthci;       /**< Bluetooth HCI pseudo-header. */
-    struct btmon_phdr            btmon;       /**< Bluetooth Linux Monitor pseudo-header. */
-    struct l1event_phdr          l1event;     /**< Layer 1 event pseudo-header. */
-    struct i2c_phdr              i2c;         /**< I2C pseudo-header. */
-    struct gsm_um_phdr           gsm_um;      /**< GSM Um (air interface) pseudo-header. */
-    struct nstr_phdr             nstr;        /**< NetScaler nstrace pseudo-header. */
-    struct nokia_phdr            nokia;       /**< Nokia pseudo-header. */
-    struct llcp_phdr             llcp;        /**< NFC LLCP pseudo-header. */
-    struct logcat_phdr           logcat;      /**< Android logcat pseudo-header. */
-    struct netmon_phdr           netmon;      /**< Microsoft NetMon pseudo-header. */
-    struct procmon_phdr          procmon;     /**< Microsoft ProcMon pseudo-header. */
-    struct ber_phdr              ber;         /**< BER file pseudo-header. */
-    struct mmodule_phdr          mmodule;     /**< M-Module pseudo-header. */
-    struct dtsdi_phdr            dtsdi;       /**< DekTec DTSDI pseudo-header. */
+    struct eth_phdr     eth;
+    struct dte_dce_phdr dte_dce;
+    struct isdn_phdr    isdn;
+    struct atm_phdr     atm;
+    struct ascend_phdr  ascend;
+    struct p2p_phdr     p2p;
+    struct ieee_802_11_phdr ieee_802_11;
+    struct cosine_phdr  cosine;
+    struct irda_phdr    irda;
+    struct nettl_phdr   nettl;
+    struct mtp2_phdr    mtp2;
+    struct k12_phdr     k12;
+    struct lapd_phdr    lapd;
+    struct catapult_dct2000_phdr dct2000;
+    struct erf_mc_phdr  erf;
+    struct sita_phdr    sita;
+    struct bthci_phdr   bthci;
+    struct btmon_phdr   btmon;
+    struct l1event_phdr l1event;
+    struct i2c_phdr     i2c;
+    struct gsm_um_phdr  gsm_um;
+    struct nstr_phdr    nstr;
+    struct nokia_phdr   nokia;
+    struct llcp_phdr    llcp;
+    struct logcat_phdr  logcat;
+    struct netmon_phdr  netmon;
+    struct ber_phdr     ber;
 };
 
 /*
@@ -1455,16 +1284,15 @@ union wtap_pseudo_header {
 #define REC_TYPE_SYSTEMD_JOURNAL_EXPORT 4    /**< systemd journal entry */
 #define REC_TYPE_CUSTOM_BLOCK           5    /**< pcapng custom block */
 
-/**
- * @brief Header metadata for a captured network packet.
- */
 typedef struct {
-    uint32_t caplen;      /**< Number of bytes stored in the capture file for this packet. */
-    uint32_t len;         /**< Original packet length as seen on the wire. */
-    int      pkt_encap;   /**< Encapsulation type (@c WTAP_ENCAP_*) identifying the link layer for this packet. */
-    uint32_t interface_id; /**< pcapng interface ID that captured this packet. */
+    uint32_t  caplen;           /* data length in the file */
+    uint32_t  len;              /* data length on the wire */
+    int       pkt_encap;        /* WTAP_ENCAP_ value for this packet */
+                                /* pcapng variables */
+    uint32_t  interface_id;     /* identifier of the interface. */
+                                /* options */
 
-    union wtap_pseudo_header pseudo_header; /**< Encapsulation-specific metadata; active member selected by @c pkt_encap. */
+    union wtap_pseudo_header  pseudo_header;
 } wtap_packet_header;
 
 /*
@@ -1538,50 +1366,44 @@ typedef struct {
     ((fcs_length) << 23) | \
     (ll_dependent_errors))
 
-/**
- * @brief Header metadata for a file-type-specific event or report record.
- */
 typedef struct {
-    int      file_type_subtype; /**< File type/subtype identifier for which this record is valid. */
-    unsigned record_type;       /**< File-type-specific record subtype value (e.g. pcapng block type). */
-    uint32_t record_len;        /**< Length of the record in bytes. */
-
-    union wtap_pseudo_header pseudo_header; /**< Encapsulation-specific metadata associated with this record. */
+    unsigned  record_type;      /* the type of record this is - file type-specific value */
+    uint32_t  record_len;       /* length of the record */
 } wtap_ft_specific_header;
 
-/**
- * @brief Header metadata for a system call record (e.g. from Sysdig/Falco captures).
- */
 typedef struct {
-    const char *pathname;      /**< Path name of the source capture file. */
-    struct wtap *wth;          /**< Wiretap file handle for callback registration. */
-    unsigned    record_type;   /**< Record type; mirrors @c ft_specific_record_phdr for pcapng block chaining. */
-    int         byte_order;    /**< Byte order of the record data (@c G_BIG_ENDIAN or @c G_LITTLE_ENDIAN). */
-    uint64_t    timestamp;     /**< Event timestamp in nanoseconds since the Unix epoch. */
-    uint64_t    thread_id;     /**< ID of the thread that generated the system call. */
-    uint32_t    event_len;     /**< Total length of the ppm event in bytes. */
-    uint32_t    event_data_len; /**< Length of the event payload (event_len minus the ppm event header length). */
-    uint32_t    nparams;       /**< Number of parameters carried by this event. */
-    uint32_t    flags;         /**< Event flags (ppm event flags). */
-    uint16_t    event_type;    /**< ppm event type identifier. */
-    uint16_t    cpu_id;        /**< ID of the CPU on which the event was captured. */
+    const char *pathname;       /* Path name of file. */
+    unsigned  record_type;      /* XXX match ft_specific_record_phdr so that we chain off of packet-pcapng_block for now. */
+    int       byte_order;
+    /* uint32_t sentinel; */
+    uint64_t  timestamp;        /* ns since epoch - XXX dup of ts */
+    uint64_t  thread_id;
+    uint32_t  event_len;        /* length of the event */
+    uint32_t  event_filelen;    /* event data length in the file */
+    uint16_t  event_type;
+    uint32_t  nparams;          /* number of parameters of the event */
+    uint16_t  cpu_id;
+    /* ... Event ... */
 } wtap_syscall_header;
 
-/**
- * @brief Header metadata for a systemd journal export record.
- */
 typedef struct {
-    uint32_t record_len; /**< Length of the journal export record in bytes. */
+    uint32_t  record_len;       /* length of the record */
 } wtap_systemd_journal_export_header;
 
-/**
- * @brief Header metadata for a pcapng Custom Block record.
- */
 typedef struct {
-    uint32_t pen;          /**< IANA Private Enterprise Number identifying the block's owner. */
-    uint32_t length;       /**< Length in bytes of the Custom Data field plus any options. */
-    bool     copy_allowed; /**< True if this Custom Block may be copied to output files. */
+    uint32_t  length;           /* length of the record */
+    uint32_t  pen;              /* private enterprise number */
+    bool      copy_allowed;     /* CB can be written */
+    union {
+        struct nflx {
+            uint32_t  type;             /* block type */
+            uint32_t  skipped;          /* Used if type == BBLOG_TYPE_SKIPPED_BLOCK */
+        } nflx_custom_data_header;
+    } custom_data_header;
 } wtap_custom_block_header;
+
+#define BBLOG_TYPE_EVENT_BLOCK   1
+#define BBLOG_TYPE_SKIPPED_BLOCK 2
 
 /*
  * The largest nstime.secs value that can be put into an unsigned
@@ -1607,47 +1429,30 @@ typedef struct {
  */
 #define WTAP_NSTIME_32BIT_SECS_MAX ((time_t)(sizeof(time_t) > sizeof(int32_t) ? UINT32_MAX : INT32_MAX))
 
-/**
- * @brief Represents a single capture record read from or written to a capture file, regardless of record type.
- */
 typedef struct wtap_rec {
-    unsigned    rec_type;        /**< Record type identifier (e.g. REC_TYPE_PACKET, REC_TYPE_FT_SPECIFIC_EVENT). */
-    uint32_t    presence_flags;  /**< Bitmask of WTAP_HAS_ flags indicating which optional fields are populated in this record. */
-    unsigned    section_number;  /**< Zero-based index of the section within the capture file that contains this record. */
-    nstime_t    ts;              /**< Timestamp at which this record was captured. */
-    int         tsprec;          /**< Timestamp precision as a WTAP_TSPREC_ constant (e.g. WTAP_TSPREC_USEC, WTAP_TSPREC_NSEC). */
-    const char *rec_type_name;   /**< Human-readable name of this record type, suitable for display and logging. */
-
-    /**
-     * @brief Type-specific record header, interpreted according to @ref rec_type.
-     */
+    unsigned  rec_type;          /* what type of record is this? */
+    uint32_t  presence_flags;    /* what stuff do we have? */
+    unsigned  section_number;    /* section, within file, containing this record */
+    nstime_t  ts;                /* time stamp */
+    int       tsprec;            /* WTAP_TSPREC_ value for this record */
+    nstime_t  ts_rel_cap;        /* time stamp relative from capture start */
+    bool      ts_rel_cap_valid;  /* is ts_rel_cap valid and can be used? */
     union {
-        wtap_packet_header                    packet_header;                /**< Header for standard captured network packets (REC_TYPE_PACKET). */
-        wtap_ft_specific_header               ft_specific_header;           /**< Header for file-type-specific event records (REC_TYPE_FT_SPECIFIC_EVENT or REC_TYPE_FT_SPECIFIC_REPORT). */
-        wtap_syscall_header                   syscall_header;               /**< Header for system call event records (REC_TYPE_SYSCALL). */
-        wtap_systemd_journal_export_header    systemd_journal_export_header;/**< Header for systemd journal export records (REC_TYPE_SYSTEMD_JOURNAL_EXPORT). */
-        wtap_custom_block_header              custom_block_header;          /**< Header for custom block records (REC_TYPE_CUSTOM_BLOCK). */
+        wtap_packet_header packet_header;
+        wtap_ft_specific_header ft_specific_header;
+        wtap_syscall_header syscall_header;
+        wtap_systemd_journal_export_header systemd_journal_export_header;
+        wtap_custom_block_header custom_block_header;
     } rec_header;
 
-    /**
-     * @brief Block-level metadata associated with this record.
-     *
-     * Carries structured block information (options, etc.) that may overlap with or
-     * eventually supersede @ref rec_header. NULL for record types that do not
-     * correspond to a pcapng block or equivalent construct.
+    wtap_block_t block ;         /* packet block; holds comments and verdicts in its options */
+    bool block_was_modified; /* true if ANY aspect of the block has been modified */
+
+    /*
+     * We use a Buffer so that we don't have to allocate and free
+     * a buffer for the options for each record.
      */
-    wtap_block_t block;
-
-    bool         block_was_modified; /**< True if any field or option within @ref block has been modified since it was read. */
-
-    /**
-     * @brief Reusable buffer holding serialized file-type-specific option data for this record.
-     *
-     * Using a persistent Buffer avoids per-record allocation and deallocation overhead for option payloads.
-     */
-    Buffer       options_buf;
-
-    Buffer       data; /**< Raw bytes of the record payload (e.g. the captured packet data). */
+    Buffer    options_buf;       /* file-type specific data */
 } wtap_rec;
 
 /*
@@ -1677,49 +1482,31 @@ typedef struct wtap_rec {
 #define WTAP_HAS_INTERFACE_ID   0x00000004  /**< interface ID */
 #define WTAP_HAS_SECTION_NUMBER 0x00000008  /**< section number */
 
-/*
- * The old max name length define, both for backwards compatibility and because
- * other name types (in epan) use it. While Name Resolution Blocks (NRBs) only
- * support IPv4 and IPv6 currently, they could later support other name types.
- */
 #ifndef MAXNAMELEN
-#define MAXNAMELEN  	64	/* max name length (most names: DNS labels, services, eth) */
+#define MAXNAMELEN  	64	/* max name length (hostname and port name) */
 #endif
 
-#ifndef MAXDNSNAMELEN
-#define MAXDNSNAMELEN  	256	/* max total length of a domain name in DNS */
-#endif
-
-/**
- * @brief Hash table entry for a resolved or unresolved IPv4 address.
- */
 typedef struct hashipv4 {
-    unsigned addr;                          /**< IPv4 address in host byte order used as the hash key. */
-    uint8_t  flags;                         /**< State flags: B0 = dummy entry, B1 = resolution attempted, B2 = address appears in the capture. */
-    char     ip[WS_INET_ADDRSTRLEN];        /**< Dotted-decimal string representation of the IPv4 address (e.g. "192.168.1.1"). */
-    char     name[MAXDNSNAMELEN];           /**< Resolved DNS hostname for this address, or an empty string if unresolved. */
-    char     cidr_addr[WS_INET_CIDRADDRSTRLEN]; /**< CIDR notation string representation of the IPv4 address/prefix (e.g. "192.168.1.0/24"). */
+    unsigned          addr;
+    uint8_t           flags;          /* B0 dummy_entry, B1 resolve, B2 If the address is used in the trace */
+    char              ip[WS_INET_ADDRSTRLEN];
+    char              name[MAXNAMELEN];
+    char              cidr_addr[WS_INET_CIDRADDRSTRLEN];
 } hashipv4_t;
 
-
-/**
- * @brief Hash table entry for a resolved or unresolved IPv6 address.
- */
 typedef struct hashipv6 {
-    uint8_t addr[16];                           /**< IPv6 address in network byte order used as the hash key. */
-    uint8_t flags;                              /**< State flags: B0 = dummy entry, B1 = resolution attempted, B2 = address appears in the capture. */
-    char    ip6[WS_INET6_ADDRSTRLEN];           /**< Colon-separated string representation of the IPv6 address (e.g. "2001:db8::1"). */
-    char    name[MAXDNSNAMELEN];                /**< Resolved DNS hostname for this address, or an empty string if unresolved. */
-    char    cidr_addr[WS_INET6_CIDRADDRSTRLEN]; /**< CIDR notation string representation of the IPv6 address/prefix (e.g. "2001:db8::/32"). */
+    uint8_t           addr[16];
+    uint8_t           flags;          /* B0 dummy_entry, B1 resolve, B2 If the address is used in the trace */
+    char              ip6[WS_INET6_ADDRSTRLEN];
+    char              name[MAXNAMELEN];
 } hashipv6_t;
 
-
-/**
- * @brief Aggregates lists of resolved IPv4 and IPv6 addresses for writing into a pcapng Name Resolution Block (NRB).
+/** A struct with lists of resolved addresses.
+ *  Used when writing name resolutions blocks (NRB)
  */
 typedef struct addrinfo_lists {
-    GList *ipv4_addr_list; /**< A list of resolved hashipv4_t entries to be written into the NRB. */
-    GList *ipv6_addr_list; /**< A list of resolved hashipv6_t entries to be written into the NRB. */
+    GList      *ipv4_addr_list; /**< A list of resolved hashipv4_t*/
+    GList      *ipv6_addr_list; /**< A list of resolved hashipv6_t*/
 } addrinfo_lists_t;
 
 /**
@@ -1757,11 +1544,7 @@ typedef struct wtap_dump_params {
     const GArray *mevs_growing;             /**< Meta events that will be written while writing packets, or NULL.
                                                  This array may grow since the dumper was opened and will subsequently
                                                  be written before newer packets are written in wtap_dump. */
-    const GArray *pibs_growing;             /**< Process information blocks that will be written while writing packets, or NULL.
-                                                 This array may grow since the dumper was opened and will subsequently
-                                                 be written before newer packets are written in wtap_dump. */
     bool        dont_copy_idbs;             /**< XXX - don't copy IDBs; this should eventually always be the case. */
-    int         zstd_compression_level;      /**< Zstandard output level; 0 uses the library default */
 } wtap_dump_params;
 
 /* Zero-initializer for wtap_dump_params. */
@@ -1774,10 +1557,7 @@ typedef struct wtap_dumper wtap_dumper;
 
 typedef struct wtap_reader *FILE_T;
 
-/**
- * @brief Companion metadata block for Lua-based file writers registered via wslua, carrying the write-open callback reference and its associated state.
- *
- * Similar to the wtap_open_routine_info for open routines, the following
+/* Similar to the wtap_open_routine_info for open routines, the following
  * wtap_wslua_file_info struct is used by wslua code for Lua-based file writers.
  *
  * This concept is necessary because when wslua goes to invoke the
@@ -1789,12 +1569,12 @@ typedef struct wtap_reader *FILE_T;
  * 'data' member is not free'd in wtap_dump_close().
  */
 typedef struct wtap_wslua_file_info {
-    int (*wslua_can_write_encap)(int, void*); /**< Callback that returns non-zero if the Lua writer supports the given WTAP_ENCAP_ encapsulation type; the void* receives @ref wslua_data. */
-    void *wslua_data;                         /**< Opaque pointer to the Lua state or ref data needed by wslua when invoking the registered write-open and dump callbacks. */
+    int (*wslua_can_write_encap)(int, void*);   /* a can_write_encap func for wslua uses */
+    void* wslua_data;                           /* holds the wslua data */
 } wtap_wslua_file_info_t;
 
-/**
- * @brief For registering extensions used for file formats.
+/*
+ * For registering extensions used for file formats.
  *
  * These items are used in dialogs for opening files, so that
  * the user can ask to see all capture files (as identified
@@ -1806,7 +1586,7 @@ typedef struct wtap_wslua_file_info {
  * whose contents we can dissect, and a list of extensions files of
  * that type might have.
  *
- * Note that entries in this table do *not* necessarily correspond
+ * Note that entries in this table do *not* necessarily correspoond
  * to single file types; for example, the entry that lists just "cap"
  * is for several file formats, all of which use the extension ".cap".
  *
@@ -1832,13 +1612,18 @@ typedef struct wtap_wslua_file_info {
  * extensions for those entries.
  */
 struct file_extension_info {
-    const char *name;       /**< Human-readable description of the file type. */
-    bool is_capture_file;   /**< True if this is a capture file format. */
-    const char *extensions; /**< Semicolon-separated list of file extensions. */
+    /* the file type description */
+    const char *name;
+
+    /* true if this is a capture file type */
+    bool is_capture_file;
+
+    /* a semicolon-separated list of file extensions used for this type */
+    const char *extensions;
 };
 
-/**
- * @brief For registering file types that we can open.
+/*
+ * For registering file types that we can open.
  *
  * Each file type has an open routine.
  *
@@ -1864,17 +1649,15 @@ struct file_extension_info {
  * and will likely just overwrite the pointer.
  */
 typedef enum {
-    WTAP_OPEN_NOT_MINE = 0, /**< File isn't handled by this module. */
-    WTAP_OPEN_MINE = 1,     /**< File is handled by this module. */
-    WTAP_OPEN_ERROR = -1    /**< I/O error occurred while opening the file. */
+    WTAP_OPEN_NOT_MINE = 0,
+    WTAP_OPEN_MINE = 1,
+    WTAP_OPEN_ERROR = -1
 } wtap_open_return_val;
 
 typedef wtap_open_return_val (*wtap_open_routine_t)(struct wtap*, int *,
     char **);
 
-/**
- * @brief Strategy used to identify a file format.
- *
+/*
  * Some file formats have defined magic numbers at fixed offsets from
  * the beginning of the file; those routines should return 1 if and
  * only if the file has the magic number at that offset.  (pcapng
@@ -1893,28 +1676,16 @@ typedef wtap_open_return_val (*wtap_open_routine_t)(struct wtap*, int *,
  * might be recognized by the heuristics for a different file type.
  */
 typedef enum {
-    OPEN_INFO_MAGIC = 0,    /**< Format identified by a fixed magic number at a known offset. */
-    OPEN_INFO_HEURISTIC = 1 /**< Format identified by heuristic inspection of file contents. */
+    OPEN_INFO_MAGIC = 0,
+    OPEN_INFO_HEURISTIC = 1
 } wtap_open_type;
 
-/**
- * @brief Initialize registered file open routines.
- *
- * Registers a set of default file open handlers for wiretap modules.
- * Typically called during initialization or module loading.
- */
 WS_DLL_PUBLIC void init_open_routines(void);
 
-/**
- * @brief Clean up registered file open routines.
- *
- * Frees any resources or state associated with wiretap module open handlers.
- * Typically called during shutdown or module unloading.
- */
 void cleanup_open_routines(void);
 
-/**
- * @brief Information about a given file type that applies to all subtypes of
+/*
+ * Information about a given file type that applies to all subtypes of
  * the file type.
  *
  * Each file type has:
@@ -1940,114 +1711,70 @@ void cleanup_open_routines(void);
  * as it will not be used for any purpose (no such hinting is done).
  */
 struct open_info {
-    const char *name;                 /**< Description */
-    wtap_open_type type;              /**< Open routine type */
-    wtap_open_routine_t open_routine; /**< Open routine */
-    const char *extensions;           /**< List of extensions used for this file type */
-    char **extensions_set;            /**< Array of those extensions; populated using extensions member during initialization */
-    void* wslua_data;                 /**< Data for Lua file readers */
+    const char *name;                 /* Description */
+    wtap_open_type type;              /* Open routine type */
+    wtap_open_routine_t open_routine; /* Open routine */
+    const char *extensions;           /* List of extensions used for this file type */
+    char **extensions_set;           /* Array of those extensions; populated using extensions member during initialization */
+    void* wslua_data;                 /* Data for Lua file readers */
 };
-
-/**
- * @brief Table of registered wiretap file open handlers.
- *
- * Each entry describes how to recognize and open a supported file format.
- * Populated during wiretap module initialization.
- */
 WS_DLL_PUBLIC struct open_info *open_routines;
 
 /*
  * Types of comments.
  */
- /**
- * @brief Comment applies to the entire file or file section.
- *
- * Used for global annotations such as capture metadata or session notes.
- */
 #define WTAP_COMMENT_PER_SECTION        0x00000001      /* per-file/per-file-section */
-
-/**
- * @brief Comment applies to a specific interface.
- *
- * Useful for describing interface-specific settings or observations.
- */
 #define WTAP_COMMENT_PER_INTERFACE      0x00000002      /* per-interface */
-
-/**
- * @brief Comment applies to an individual packet.
- *
- * Enables fine-grained annotations such as decoding notes or anomalies.
- */
 #define WTAP_COMMENT_PER_PACKET         0x00000004      /* per-packet */
 
-/**
- * @brief Indicates how a file format supports a given option type.
- *
- * Used to describe whether a block type can include zero, one, or multiple instances
- * of a specific option type.
- *
+/*
  * For a given option type in a certain block type, does a file format
  * not support it, support only one such option, or support multiple
  * such options?
  */
 typedef enum {
-    OPTION_NOT_SUPPORTED,      /**< The option type is not supported in this block. */
-    ONE_OPTION_SUPPORTED,      /**< Only one instance of the option type is supported. */
-    MULTIPLE_OPTIONS_SUPPORTED /**< Multiple instances of the option type are supported. */
+    OPTION_NOT_SUPPORTED,
+    ONE_OPTION_SUPPORTED,
+    MULTIPLE_OPTIONS_SUPPORTED
 } option_support_t;
 
-/**
- * @brief Entry describing support level for a specific option type.
- *
- * Indicates whether a block type supports zero, one, or multiple instances
- * of a given option. Used in format capability tables.
+/*
+ * Entry in a table of supported option types.
  */
 struct supported_option_type {
-    unsigned opt;                  /**< Option type identifier. */
-    option_support_t support;     /**< Support level for this option type. */
+    unsigned opt;
+    option_support_t support; /* OPTION_NOT_SUPPORTED allowed, equivalent to absence */
 };
 
-/**
- * @brief Declare supported option types for a block.
- *
- * Expands to the length of the option type array and the array itself.
- */
 #define OPTION_TYPES_SUPPORTED(option_type_array) \
     array_length(option_type_array), option_type_array
 
-/**
- * @brief Declare that no option types are supported for a block.
- *
- * Expands to zero and NULL, indicating absence of supported options.
- */
 #define NO_OPTIONS_SUPPORTED \
     0, NULL
 
-/**
- * @brief Indicates how many instances of a given block type a file format supports.
+/*
+ * For a given block type, does a file format not support it, support
+ * only one such block, or support multiple such blocks?
  */
 typedef enum {
-    BLOCK_NOT_SUPPORTED,       /**< The file format does not support this block type at all */
-    ONE_BLOCK_SUPPORTED,       /**< The file format supports exactly one instance of this block type */
-    MULTIPLE_BLOCKS_SUPPORTED  /**< The file format supports multiple instances of this block type */
+    BLOCK_NOT_SUPPORTED,
+    ONE_BLOCK_SUPPORTED,
+    MULTIPLE_BLOCKS_SUPPORTED
 } block_support_t;
 
-/**
- * @brief Describes a single block type supported by a file format, including its option support.
+/*
+ * Entry in a table of supported block types.
  */
 struct supported_block_type {
-    wtap_block_type_t              type;                  /**< The block type this entry describes (see ::wtap_block_type_t) */
-    block_support_t                support;               /**< Number of instances the format allows; ::BLOCK_NOT_SUPPORTED is equivalent to omitting the entry */
-    size_t                         num_supported_options; /**< Number of entries in the @p supported_options array */
-    const struct supported_option_type *supported_options;/**< Array of option types supported within this block type, or NULL if none */
+    wtap_block_type_t type;
+    block_support_t support; /* BLOCK_NOT_SUPPORTED allowed, equivalent to absence */
+    size_t num_supported_options;
+    const struct supported_option_type *supported_options;
 };
 
 #define BLOCKS_SUPPORTED(block_type_array) \
     array_length(block_type_array), block_type_array
 
-/**
- * @brief Describes a single capture file type/subtype, including its metadata, capability flags, and I/O function pointers.
-*/
 struct file_type_subtype_info {
     /**
      * The file type description.
@@ -2118,19 +1845,12 @@ struct file_type_subtype_info {
  * @brief Initialize the Wiretap library.
  *
  * @param load_wiretap_plugins Load Wiretap plugins when initializing library.
- * @param app_env_var_prefix The prefix for the application environment variable used to get the personal config directory.
- * @param file_extensions Array of file extensions supported by the application
- * @param num_extensions Number of file extensions supported by the application
 */
 WS_DLL_PUBLIC
-void wtap_init(bool load_wiretap_plugins, const char* app_env_var_prefix, const struct file_extension_info* file_extensions, unsigned num_extensions);
+void wtap_init(bool load_wiretap_plugins);
 
-/**
- * @brief Open a capture file for offline analysis.
- *
- * Attempts to open the specified file using either automatic format detection
- * or an explicitly chosen format. On failure, returns NULL and stores error details
- * into the "int" pointed to by its second argument:
+/** On failure, "wtap_open_offline()" returns NULL, and puts into the
+ * "int" pointed to by its second argument:
  *
  * @param filename Name of the file to open
  * @param type WTAP_TYPE_AUTO for automatic recognize file format or explicit choose format type
@@ -2139,139 +1859,46 @@ void wtap_init(bool load_wiretap_plugins, const char* app_env_var_prefix, const 
  * @param[out] err_info for some errors, a string giving more details of
  * the error
  * @param do_random true if random access to the file will be done,
- * @param app_env_var_prefix The prefix for the application environment variable used to get the personal config directory.
  * false if not
  */
 WS_DLL_PUBLIC
 struct wtap* wtap_open_offline(const char *filename, unsigned int type, int *err,
-    char **err_info, bool do_random, const char* app_env_var_prefix);
+    char **err_info, bool do_random);
 
 /**
- * @brief Clear EOF status for a wiretap file.
- *
- * If compiled with zlib and the file is at EOF, this resets the EOF flag
- * to allow continued reading. Useful when tailing a file that may grow.
- *
- * @param wth Wiretap file handle.
+ * If we were compiled with zlib and we're at EOF, unset EOF so that
+ * wtap_read/gzread has a chance to succeed. This is necessary if
+ * we're tailing a file.
  */
 WS_DLL_PUBLIC
 void wtap_cleareof(wtap *wth);
 
 /**
- * @brief Callback type for registering new IPv4 hostnames.
- *
- * Used to associate an IPv4 address with a hostname during file parsing.
- * Must match the signature of add_ipv4_name in addr_resolv.c.
- *
- * @param addr IPv4 address in host byte order.
- * @param name Hostname to associate.
- * @param static_entry True if the entry is static; false if dynamic.
+ * Set callback functions to add new hostnames. Currently pcapng-only.
+ * MUST match add_ipv4_name and add_ipv6_name in addr_resolv.c.
  */
 typedef void (*wtap_new_ipv4_callback_t) (const unsigned addr, const char *name, const bool static_entry);
-
-/**
- * @brief Set the callback for adding new IPv4 hostnames.
- *
- * Registers a function to be called when new IPv4 addresses are discovered.
- * Currently used only for pcapng files.
- *
- * @param wth Wiretap file handle.
- * @param add_new_ipv4 Callback function to register.
- */
 WS_DLL_PUBLIC
 void wtap_set_cb_new_ipv4(wtap *wth, wtap_new_ipv4_callback_t add_new_ipv4);
 
-/**
- * @brief Callback type for registering new IPv6 hostnames.
- *
- * Used to associate an IPv6 address with a hostname during file parsing.
- * Must match the signature of add_ipv6_name in addr_resolv.c.
- *
- * @param addrp Pointer to IPv6 address.
- * @param name Hostname to associate.
- * @param static_entry True if the entry is static; false if dynamic.
- */
-typedef void (*wtap_new_ipv6_callback_t) (const ws_in6_addr *addrp, const char *name, const bool static_entry);
-
-/**
- * @brief Set the callback for adding new IPv6 hostnames.
- *
- * Registers a function to be called when new IPv6 addresses are discovered.
- * Currently used only for pcapng files.
- *
- * @param wth Wiretap file handle.
- * @param add_new_ipv6 Callback function to register.
- */
+typedef void (*wtap_new_ipv6_callback_t) (const void *addrp, const char *name, const bool static_entry);
 WS_DLL_PUBLIC
 void wtap_set_cb_new_ipv6(wtap *wth, wtap_new_ipv6_callback_t add_new_ipv6);
 
 /**
- * @brief Callback type for receiving new decryption secrets.
- *
- * Used to register secrets (e.g., TLS keys) discovered during file parsing.
- * The secrets type is defined in secrets-types.h. Currently used only for pcapng.
- *
- * @param secrets_type Type identifier for the secrets.
- * @param secrets Pointer to the secrets data.
- * @param size Size of the secrets data in bytes.
+ * Set callback function to receive new decryption secrets for a particular
+ * secrets type (as defined in secrets-types.h). Currently pcapng-only.
  */
 typedef void (*wtap_new_secrets_callback_t)(uint32_t secrets_type, const void *secrets, unsigned size);
-
-/**
- * @brief Set the callback for receiving new decryption secrets.
- *
- * Registers a function to be called when decryption secrets are discovered.
- * Currently used only for pcapng files.
- *
- * @param wth Wiretap file handle.
- * @param add_new_secrets Callback function to register.
- */
 WS_DLL_PUBLIC
 void wtap_set_cb_new_secrets(wtap *wth, wtap_new_secrets_callback_t add_new_secrets);
 
-/**
- * @brief Callback for Sysdig/Falco pcapng metadata blocks.
+/** Read the next record in the file, filling in *phdr and *buf.
  *
- * Called when a Falco libs metadata (meta event) block (machine info, process,
- * file descriptor, interface, or user list) is read from a pcapng file. The
- * callback receives the raw block body (content between the block header and
- * trailing block total length). Event blocks are not delivered here; they are
- * returned to the caller as records.
- *
- * @param block_type The pcapng block type.
- * @param block_body Pointer to the raw block body data.
- * @param block_body_length Length of the block body in bytes.
- * @param user_data User-supplied context pointer.
- */
-typedef void (*wtap_pcapng_block_callback_t)(uint32_t block_type, const uint8_t *block_body,
-                                             uint32_t block_body_length, void *user_data);
-
-/**
- * @brief Register a callback for pcapng metadata blocks.
- *
- * When registered, all previously-read metadata blocks are replayed to
- * the callback immediately. Metadata blocks read afterwards fire the
- * callback as they are encountered during sequential reading. This lets
- * a consumer (e.g. the Falco Events plugin) reconstruct the capture's
- * section header and metadata for libsinsp's raw_block engine while the
- * event blocks are consumed separately as records.
- *
- * This is currently used only for the Falco Events plugin, but could be
- * generalized if needed.
- *
- * @param wth Wiretap file handle.
- * @param callback The callback function.
- * @param user_data Context pointer passed to the callback.
- */
-WS_DLL_PUBLIC
-void wtap_set_cb_pcapng_block(wtap *wth, wtap_pcapng_block_callback_t callback, void *user_data);
-
-/**
- * @brief Read the next record in the file, filling in *phdr and *buf.
- *
- * @param wth a wtap * returned by a call that opened a file for reading.
- * @param rec a pointer to a wtap_rec, filled in with information about the
- * record and the data from the record.
+ * @wth a wtap * returned by a call that opened a file for reading.
+ * @rec a pointer to a wtap_rec, filled in with information about the
+ * record.
+ * @buf a pointer to a Buffer, filled in with data from the record.
  * @param err a positive "errno" value, or a negative number indicating
  * the type of error, if the read failed.
  * @param err_info for some errors, a string giving more details of
@@ -2282,19 +1909,19 @@ void wtap_set_cb_pcapng_block(wtap *wth, wtap_pcapng_block_callback_t callback, 
  * @return true on success, false on failure.
  */
 WS_DLL_PUBLIC
-bool wtap_read(wtap *wth, wtap_rec *rec, int *err, char **err_info,
-    int64_t *offset);
+bool wtap_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err,
+    char **err_info, int64_t *offset);
 
-/**
- * @brief Read the record at a specified offset in a capture file, filling in
+/** Read the record at a specified offset in a capture file, filling in
  * *phdr and *buf.
  *
- * @param wth a wtap * returned by a call that opened a file for random-access
+ * @wth a wtap * returned by a call that opened a file for random-access
  * reading.
- * @param seek_off a int64_t giving an offset value returned by a previous
+ * @seek_off a int64_t giving an offset value returned by a previous
  * wtap_read() call.
- * @param rec a pointer to a struct wtap_rec, filled in with information
- * about the record and the data from the record.
+ * @rec a pointer to a struct wtap_rec, filled in with information
+ * about the record.
+ * @buf a pointer to a Buffer, filled in with data from the record.
  * @param err a positive "errno" value, or a negative number indicating
  * the type of error, if the read failed.
  * @param err_info for some errors, a string giving more details of
@@ -2303,240 +1930,64 @@ bool wtap_read(wtap *wth, wtap_rec *rec, int *err, char **err_info,
  */
 WS_DLL_PUBLIC
 bool wtap_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
-    int *err, char **err_info);
+    Buffer *buf, int *err, char **err_info);
 
-/**
- * @brief Initialize a wtap_rec structure.
- *
- * Allocates internal space and prepares the record for use.
- *
- * @param rec Pointer to the wtap_rec structure.
- * @param space Size of internal allocation.
- */
+/*** initialize a wtap_rec structure ***/
 WS_DLL_PUBLIC
-void wtap_rec_init(wtap_rec *rec, size_t space);
+void wtap_rec_init(wtap_rec *rec);
 
-/**
- * @brief Apply a snapshot length to a wtap_rec.
- *
- * Sets the maximum captured packet length for the record.
- *
- * @param rec Pointer to the wtap_rec structure.
- * @param snaplen Snapshot length in bytes.
- */
-WS_DLL_PUBLIC
-void wtap_rec_apply_snapshot(wtap_rec *rec, uint32_t snaplen);
-
-/**
- * @brief Re-initialize a wtap_rec structure.
- *
- * Clears existing content and resets the record for reuse.
- *
- * @param rec Pointer to the wtap_rec structure.
- *
- * @note wtap_read and wtap_seek_read call this before doing anything, so
- * for a processing loop that calls one of those for each iteration and
- * calls wtap_rec_cleanup at the end, this isn't needed.
- */
+/*** Re-initialize a wtap_rec structure ***/
 WS_DLL_PUBLIC
 void wtap_rec_reset(wtap_rec *rec);
 
-/**
- * @brief Clean up a wtap_rec structure.
- *
- * Frees any memory allocated by wtap_rec_init().
- *
- * @param rec Pointer to the wtap_rec structure.
- */
+/*** clean up a wtap_rec structure, freeing what wtap_rec_init() allocated */
 WS_DLL_PUBLIC
 void wtap_rec_cleanup(wtap_rec *rec);
 
-/**
- * @brief Return an error string for WTAP_ERR_UNWRITABLE_REC_TYPE.
- *
- * Provides a human-readable explanation for why a given record type
- * cannot be written to a file.
- *
- * @param rec Pointer to the wtap_rec structure.
- * @return Error string describing the issue.
+/*
+ * Types of compression for a file, including "none".
  */
-WS_DLL_PUBLIC
-char *wtap_unwritable_rec_type_err_string(const wtap_rec *rec);
+typedef enum {
+    WTAP_UNCOMPRESSED,
+    WTAP_GZIP_COMPRESSED,
+    WTAP_ZSTD_COMPRESSED,
+    WTAP_LZ4_COMPRESSED,
+    WTAP_UNKNOWN_COMPRESSION,
+} wtap_compression_type;
 
-/**
- * @brief Set up a wtap_rec for a packet (REC_TYPE_PACKET).
- *
- * Initializes the record type and encapsulation for a packet record.
- *
- * @param rec Pointer to the wtap_rec structure.
- * @param encap Encapsulation type (WTAP_ENCAP_...).
- */
 WS_DLL_PUBLIC
-void wtap_setup_packet_rec(wtap_rec *rec, int encap);
-
-/**
- * @brief Set up a wtap_rec for a file-type specific event.
- *
- * Initializes the record as REC_TYPE_FT_SPECIFIC_EVENT with the given subtype and record type.
- *
- * @param rec Pointer to the wtap_rec structure.
- * @param file_type_subtype Format-specific subtype identifier.
- * @param record_type Format-specific record type identifier.
- */
+wtap_compression_type wtap_get_compression_type(wtap *wth);
 WS_DLL_PUBLIC
-void wtap_setup_ft_specific_event_rec(wtap_rec *rec, int file_type_subtype,
-                                      unsigned record_type);
-
-/**
- * @brief Set up a wtap_rec for a file-type specific report.
- *
- * Initializes the record as REC_TYPE_FT_SPECIFIC_REPORT with the given subtype and record type.
- *
- * @param rec Pointer to the wtap_rec structure.
- * @param file_type_subtype Format-specific subtype identifier.
- * @param record_type Format-specific record type identifier.
- */
+wtap_compression_type wtap_name_to_compression_type(const char *name);
 WS_DLL_PUBLIC
-void wtap_setup_ft_specific_report_rec(wtap_rec *rec, int file_type_subtype,
-                                       unsigned record_type);
-
-/**
- * @brief Set up a wtap_rec for a system call.
- *
- * Initializes the record as REC_TYPE_SYSCALL for syscall trace data.
- *
- * @param rec Pointer to the wtap_rec structure.
- */
+wtap_compression_type wtap_extension_to_compression_type(const char *ext);
 WS_DLL_PUBLIC
-void wtap_setup_syscall_rec(wtap_rec *rec);
-
-/**
- * @brief Set up a wtap_rec for a systemd journal export entry.
- *
- * Initializes the record as REC_TYPE_SYSTEMD_JOURNAL_EXPORT for journal export data.
- *
- * @param rec Pointer to the wtap_rec structure.
- */
+const char *wtap_compression_type_description(wtap_compression_type compression_type);
 WS_DLL_PUBLIC
-void wtap_setup_systemd_journal_export_rec(wtap_rec *rec);
-
-/**
- * @brief Set up a wtap_rec for a custom block.
- *
- * Initializes the record as REC_TYPE_CUSTOM_BLOCK with the given Private Enterprise Number (PEN),
- * payload length, and copy permission flag.
- *
- * @param rec Pointer to the wtap_rec structure.
- * @param pen Private Enterprise Number identifying the block owner.
- * @param payload_length Length of the custom block payload in bytes.
- * @param copy_allowed True if copying the block is permitted; false otherwise.
- */
+const char *wtap_compression_type_extension(wtap_compression_type compression_type);
 WS_DLL_PUBLIC
-void wtap_setup_custom_block_rec(wtap_rec *rec, uint32_t pen,
-                                 uint32_t payload_length, bool copy_allowed);
-
-/**
- * @brief Get the compression type used for the capture file.
- *
- * Returns the compression method applied to the file, if any.
- *
- * @param wth Wiretap file handle.
- * @return Compression type (e.g., none, gzip).
- */
+GSList *wtap_get_all_compression_type_extensions_list(void);
 WS_DLL_PUBLIC
-ws_compression_type wtap_get_compression_type(wtap *wth);
+GSList *wtap_get_all_output_compression_type_names_list(void);
+WS_DLL_PUBLIC
+bool wtap_can_write_compression_type(wtap_compression_type compression_type);
 
 /*** get various information snippets about the current file ***/
 
-/**
- * @brief Return an approximation of the amount of data read sequentially.
- *
- * Provides a rough estimate of how many bytes have been read from the file so far,
- * useful for progress tracking or tailing scenarios.
- *
- * @param wth Wiretap file handle.
- * @return Number of bytes read sequentially.
- */
+/** Return an approximation of the amount of data we've read sequentially
+ * from the file so far. */
 WS_DLL_PUBLIC
 int64_t wtap_read_so_far(wtap *wth);
-
-/**
- * @brief Get the size of the capture file.
- *
- * Returns the total file size in bytes. On failure, sets an error code.
- *
- * @param wth Wiretap file handle.
- * @param err Pointer to an error code variable.
- * @return File size in bytes, or -1 on error.
- */
 WS_DLL_PUBLIC
 int64_t wtap_file_size(wtap *wth, int *err);
-
-/**
- * @brief Get the snapshot length for the capture file.
- *
- * Returns the maximum number of bytes captured per packet.
- *
- * @param wth Wiretap file handle.
- * @return Snapshot length in bytes.
- */
 WS_DLL_PUBLIC
-unsigned wtap_snapshot_length(wtap *wth);
-
-/**
- * @brief Get the file type subtype.
- *
- * Returns the format-specific subtype identifier for the capture file.
- *
- * @param wth Wiretap file handle.
- * @return File type subtype.
- */
+unsigned wtap_snapshot_length(wtap *wth); /* per file */
 WS_DLL_PUBLIC
 int wtap_file_type_subtype(wtap *wth);
-
-/**
- * @brief Get the encapsulation type for the capture file.
- *
- * Returns the WTAP_ENCAP_... value used for packet encapsulation.
- *
- * @param wth Wiretap file handle.
- * @return Encapsulation type.
- */
 WS_DLL_PUBLIC
 int wtap_file_encap(wtap *wth);
-
-/**
- * @brief Get the timestamp precision for the capture file.
- *
- * Returns the WTAP_TSPREC_... value indicating timestamp resolution.
- *
- * @param wth Wiretap file handle.
- * @return Timestamp precision.
- */
 WS_DLL_PUBLIC
 int wtap_file_tsprec(wtap *wth);
-
-/**
- * @brief Get the start timestamp of the capture file.
- *
- * Returns a pointer to the first packet's timestamp, if available.
- *
- * @param wth Wiretap file handle.
- * @return Pointer to start timestamp, or NULL if unavailable.
- */
-WS_DLL_PUBLIC
-const nstime_t* wtap_file_start_ts(wtap *wth);
-
-/**
- * @brief Get the end timestamp of the capture file.
- *
- * Returns a pointer to the last packet's timestamp, if available.
- *
- * @param wth Wiretap file handle.
- * @return Pointer to end timestamp, or NULL if unavailable.
- */
-WS_DLL_PUBLIC
-const nstime_t* wtap_file_end_ts(wtap *wth);
 
 /**
  * @brief Gets number of section header blocks.
@@ -2603,7 +2054,6 @@ unsigned wtap_file_get_shb_global_interface_id(wtap *wth, unsigned shb_num, uint
 WS_DLL_PUBLIC
 wtapng_iface_descriptions_t *wtap_file_get_idb_info(wtap *wth);
 
-
 /**
  * @brief Gets next interface description.
  *
@@ -2634,7 +2084,7 @@ void wtap_free_idb_info(wtapng_iface_descriptions_t *idb_info);
 /**
  * @brief Gets a debug string of an interface description.
  * @details Returns a newly allocated string of debug information about
- *          the given interface description, useful for debugging.
+ *          the given interface descrption, useful for debugging.
  * @note The returned pointer must be g_free'd.
  *
  * @param if_descr The interface description.
@@ -2686,50 +2136,6 @@ WS_DLL_PUBLIC
 wtap_block_t wtap_file_get_dsb(wtap *wth, unsigned dsb_num);
 
 /**
- * @brief Gets number of process information blocks.
- * @details Returns the number of existing PIBs.
- *
- * @param wth The wiretap session.
- * @return The number of existing process information blocks.
- */
-WS_DLL_PUBLIC
-unsigned wtap_file_get_num_pibs(wtap *wth);
-
-/**
- * @brief Gets existing process information block, not for new file.
- * @details Returns the pointer to an existing PIB, without creating a
- *          new one. This should only be used for accessing info.
- *
- * @param wth The wiretap session.
- * @param pib_num The ordinal number (0-based) of the process information
- * block in the file
- * @return The specified existing process information block, which must
- * NOT be g_free'd, or NULL if there is no such block.
- */
-WS_DLL_PUBLIC
-wtap_block_t wtap_file_get_pib(wtap *wth, unsigned pib_num);
-
-/**
- * @brief Finds the process information block for a process.
- * @details Returns the ordinal number of the most recent process information
- *          block whose process ID is the given one and whose start time, if it
- *          has one, is not after the given time, so that processes that reused
- *          the ID can be told apart. Only the blocks that precede the packet in
- *          the file are considered, as a writer describes a process before the
- *          first packet it attributes to it, unless none does. If every block
- *          considered has a later start time, the last of them is returned.
- *
- * @param wth The wiretap session.
- * @param process_id The process ID, as in the pcapng epb_processid_threadid option.
- * @param ts The time at which the packet was captured, or NULL to ignore start times.
- * @param file_off The file offset of the packet, or -1 to consider every block.
- * @param pib_num Set to the ordinal number (0-based) of the block found.
- * @return true if a block was found, false otherwise.
- */
-WS_DLL_PUBLIC
-bool wtap_file_find_pib(wtap *wth, uint32_t process_id, const nstime_t *ts, int64_t file_off, unsigned *pib_num);
-
-/**
  * @brief Adds a Decryption Secrets Block to the open wiretap session.
  * @details The passed-in DSB is added to the DSBs for the current
  *          session.
@@ -2741,8 +2147,8 @@ WS_DLL_PUBLIC
 void wtap_file_add_decryption_secrets(wtap *wth, const wtap_block_t dsb);
 
 /**
- * @brief Remove any decryption secret information from the per-file information;
- * used if we're stripping decryption secrets while the file is open.
+ * Remove any decryption secret information from the per-file information;
+ * used if we're stripping decryption secrets while the file is open
  *
  * @param wth The wiretap session from which to remove the
  * decryption secrets.
@@ -2751,101 +2157,50 @@ void wtap_file_add_decryption_secrets(wtap *wth, const wtap_block_t dsb);
 WS_DLL_PUBLIC
 bool wtap_file_discard_decryption_secrets(wtap *wth);
 
-/**
- * @brief Close all file descriptors for the current wiretap file.
- *
- * Releases both sequential and random-access file handles.
- *
- * @param wth Wiretap file handle.
- */
+/*** close the file descriptors for the current file ***/
 WS_DLL_PUBLIC
 void wtap_fdclose(wtap *wth);
 
-/**
- * @brief Reopen the random-access file descriptor for the current file.
- *
- * Useful when switching access modes or recovering from descriptor loss.
- *
- * @param wth Wiretap file handle.
- * @param filename Path to the file to reopen.
- * @param err Pointer to an error code variable.
- * @return True on success; false on failure.
- */
+/*** reopen the random file descriptor for the current file ***/
 WS_DLL_PUBLIC
 bool wtap_fdreopen(wtap *wth, const char *filename, int *err);
 
-/**
- * @brief Close the sequential-access side of the file.
- *
- * Frees memory associated with buffered reads while retaining random-access capability.
- *
- * @param wth Wiretap file handle.
- */
+/** Close only the sequential side, freeing up memory it uses. */
 WS_DLL_PUBLIC
 void wtap_sequential_close(wtap *wth);
 
-/**
- * @brief Fully close the wiretap file and release all resources.
- *
- * Closes any open file handles and frees memory associated with the wiretap handle.
- *
- * @param wth Wiretap file handle.
- */
+/** Closes any open file handles and frees the memory associated with wth. */
 WS_DLL_PUBLIC
 void wtap_close(wtap *wth);
 
-/**
- * @brief Check if a file type can be opened for dumping.
- *
- * Determines whether the specified file type supports writing packet data.
- *
- * @param filetype File type identifier.
- * @return True if dumping is supported; false otherwise.
- */
+/*** dump packets into a capture file ***/
 WS_DLL_PUBLIC
 bool wtap_dump_can_open(int filetype);
 
 /**
- * @brief Determine the required per-file encapsulation type.
- *
- * Given an array of WTAP_ENCAP_ types, returns the appropriate per-file encapsulation
- * type needed to write a file containing all of them. May return WTAP_ENCAP_PER_PACKET
- * if multiple types are present and the format supports it.
- *
- * @param file_encaps GArray of WTAP_ENCAP_ values.
- * @return Required per-file encapsulation type.
+ * Given a GArray of WTAP_ENCAP_ types, return the per-file encapsulation
+ * type that would be needed to write out a file with those types.
  */
 WS_DLL_PUBLIC
 int wtap_dump_required_file_encap_type(const GArray *file_encaps);
 
 /**
- * @brief Check if a file type/subtype supports writing a given encapsulation.
- *
- * Returns true if the specified encapsulation type can be written in the given
- * file format; false otherwise.
- *
- * @param file_type_subtype File type/subtype identifier.
- * @param encap Encapsulation type (WTAP_ENCAP_...).
- * @return True if supported; false if not.
+ * Return true if we can write this encapsulation type in this
+ * capture file type/subtype, false if not.
  */
 WS_DLL_PUBLIC
 bool wtap_dump_can_write_encap(int file_type_subtype, int encap);
 
 /**
- * @brief Check if a file type/subtype supports compression.
- *
- * Returns true if the specified file format can be written in compressed form.
- *
- * @param file_type_subtype File type/subtype identifier.
- * @return True if compression is supported; false otherwise.
+ * Return true if we can write this capture file type/subtype out in
+ * compressed form, false if not.
  */
 WS_DLL_PUBLIC
 bool wtap_dump_can_compress(int file_type_subtype);
 
 /**
- * @brief Initialize the per-file information based on an existing file.
- *
- * Its contents must be freed according to the requirements of wtap_dump_params.
+ * Initialize the per-file information based on an existing file. Its
+ * contents must be freed according to the requirements of wtap_dump_params.
  * If wth does not remain valid for the duration of the session, dsbs_growing
  * MUST be cleared after this function.
  *
@@ -2856,10 +2211,8 @@ WS_DLL_PUBLIC
 void wtap_dump_params_init(wtap_dump_params *params, wtap *wth);
 
 /**
- * @brief Initialize the per-file information based on an existing file, but
- * don't copy over the interface information.
- *
- * Its contents must be freed
+ * Initialize the per-file information based on an existing file, but
+ * don't copy over the interface information. Its contents must be freed
  * according to the requirements of wtap_dump_params.
  * If wth does not remain valid for the duration of the session, dsbs_growing
  * MUST be cleared after this function.
@@ -2875,7 +2228,7 @@ WS_DLL_PUBLIC
 void wtap_dump_params_init_no_idbs(wtap_dump_params *params, wtap *wth);
 
 /**
- * @brief Remove any name resolution information from the per-file information;
+ * Remove any name resolution information from the per-file information;
  * used if we're stripping name resolution as we write the file.
  *
  * @param params The parameters for wtap_dump_* from which to remove the
@@ -2885,7 +2238,7 @@ WS_DLL_PUBLIC
 void wtap_dump_params_discard_name_resolution(wtap_dump_params *params);
 
 /**
- * @brief Remove any decryption secret information from the per-file information;
+ * Remove any decryption secret information from the per-file information;
  * used if we're stripping decryption secrets as we write the file.
  *
  * @param params The parameters for wtap_dump_* from which to remove the
@@ -2895,18 +2248,7 @@ WS_DLL_PUBLIC
 void wtap_dump_params_discard_decryption_secrets(wtap_dump_params *params);
 
 /**
- * @brief Remove any process information from the per-file information;
- * used if we're stripping process information as we write the file.
- * The process information in the packets themselves is separate.
- *
- * @param params The parameters for wtap_dump_* from which to remove the
- * process information blocks.
- */
-WS_DLL_PUBLIC
-void wtap_dump_params_discard_process_info(wtap_dump_params *params);
-
-/**
- * @brief Free memory associated with the wtap_dump_params when it is no longer in
+ * Free memory associated with the wtap_dump_params when it is no longer in
  * use by wtap_dumper.
  *
  * @param params The parameters as initialized by wtap_dump_params_init.
@@ -2928,7 +2270,7 @@ void wtap_dump_params_cleanup(wtap_dump_params *params);
  */
 WS_DLL_PUBLIC
 wtap_dumper* wtap_dump_open(const char *filename, int file_type_subtype,
-    ws_compression_type compression_type, const wtap_dump_params *params,
+    wtap_compression_type compression_type, const wtap_dump_params *params,
     int *err, char **err_info);
 
 /**
@@ -2949,7 +2291,7 @@ wtap_dumper* wtap_dump_open(const char *filename, int file_type_subtype,
 WS_DLL_PUBLIC
 wtap_dumper* wtap_dump_open_tempfile(const char *tmpdir, char **filenamep,
     const char *pfx,
-    int file_type_subtype, ws_compression_type compression_type,
+    int file_type_subtype, wtap_compression_type compression_type,
     const wtap_dump_params *params, int *err, char **err_info);
 
 /**
@@ -2966,7 +2308,7 @@ wtap_dumper* wtap_dump_open_tempfile(const char *tmpdir, char **filenamep,
  */
 WS_DLL_PUBLIC
 wtap_dumper* wtap_dump_fdopen(int fd, int file_type_subtype,
-    ws_compression_type compression_type, const wtap_dump_params *params,
+    wtap_compression_type compression_type, const wtap_dump_params *params,
     int *err, char **err_info);
 
 /**
@@ -2982,11 +2324,11 @@ wtap_dumper* wtap_dump_fdopen(int fd, int file_type_subtype,
  */
 WS_DLL_PUBLIC
 wtap_dumper* wtap_dump_open_stdout(int file_type_subtype,
-    ws_compression_type compression_type, const wtap_dump_params *params,
+    wtap_compression_type compression_type, const wtap_dump_params *params,
     int *err, char **err_info);
 
-/**
- * @brief Add an IDB to the list of IDBs for a file we're writing.
+/*
+ * Add an IDB to the list of IDBs for a file we're writing.
  * Makes a copy of the IDB, so it can be freed after this call is made.
  *
  * @param wdh handle for the file we're writing.
@@ -2999,91 +2341,24 @@ wtap_dumper* wtap_dump_open_stdout(int file_type_subtype,
 WS_DLL_PUBLIC
 bool wtap_dump_add_idb(wtap_dumper *wdh, wtap_block_t idb, int *err,
      char **err_info);
-
-/**
- * @brief Write a record to the dump file.
- *
- * @param wdh handle for the file we're writing.
- * @param rec the record to write.
- * @param[out] err Will be set to an error code on failure.
- * @param[out] err_info for some errors, a string giving more details of
- * the error.
- * @return true on success, false on failure.
- */
 WS_DLL_PUBLIC
-bool wtap_dump(wtap_dumper *wdh, const wtap_rec *rec, int *err, char **err_info);
-
-/**
- * @brief Flushes the dump file.
- *
- * @param wdh Pointer to the wtap_dumper structure.
- * @param err Pointer to an integer where any error code will be stored.
- * @return true if the flush was successful, false otherwise.
- */
+bool wtap_dump(wtap_dumper *, const wtap_rec *, const uint8_t *,
+     int *err, char **err_info);
 WS_DLL_PUBLIC
-bool wtap_dump_flush(wtap_dumper *wdh, int *err);
-
-/**
- * @brief Get the file type subtype of a dump file.
- *
- * @param wdh Pointer to the wtap_dumper structure.
- * @return The file type subtype.
- */
+bool wtap_dump_flush(wtap_dumper *, int *);
 WS_DLL_PUBLIC
-int wtap_dump_file_type_subtype(const wtap_dumper *wdh);
-
-/**
- * @brief Get the number of bytes dumped by a packet capture.
- *
- * @param wdh Pointer to the wtap_dumper structure.
- * @return uint64_t The number of bytes dumped.
- */
+int wtap_dump_file_type_subtype(wtap_dumper *wdh);
 WS_DLL_PUBLIC
-uint64_t wtap_get_bytes_dumped(const wtap_dumper *wdh);
-
-/**
- * @brief Set the number of bytes dumped by a capture file.
- *
- * @param wdh Pointer to the wtap_dumper structure.
- * @param bytes_dumped The number of bytes that have been dumped.
- */
+int64_t wtap_get_bytes_dumped(wtap_dumper *);
 WS_DLL_PUBLIC
-void wtap_set_bytes_dumped(wtap_dumper *wdh, uint64_t bytes_dumped);
-
+void wtap_set_bytes_dumped(wtap_dumper *wdh, int64_t bytes_dumped);
 struct addrinfo;
-
-/**
- * @brief Checks if the address information list is empty.
- *
- * @param addrinfo_lists The address information lists to check.
- * @return true if the list is empty, false otherwise.
- */
 WS_DLL_PUBLIC
-bool wtap_addrinfo_list_empty(const addrinfo_lists_t *addrinfo_lists);
-
-/**
- * @brief Set the address information list for a dump file.
- *
- * @param wdh handle for the file we're writing.
- * @param addrinfo_lists the address information lists to set
- * @return true on success, false on failure.
- */
+bool wtap_addrinfo_list_empty(addrinfo_lists_t *addrinfo_lists);
 WS_DLL_PUBLIC
 bool wtap_dump_set_addrinfo_list(wtap_dumper *wdh, addrinfo_lists_t *addrinfo_lists);
-
-/**
- * @brief Discard name resolution information for a dump file.
- *
- * @param wdh The wtap_dumper structure representing the dump file.
- */
 WS_DLL_PUBLIC
 void wtap_dump_discard_name_resolution(wtap_dumper *wdh);
-
-/**
- * @brief Discard decryption secrets for a dump file.
- *
- * @param wdh The wtap_dumper structure representing the dump file.
- */
 WS_DLL_PUBLIC
 void wtap_dump_discard_decryption_secrets(wtap_dumper *wdh);
 
@@ -3108,28 +2383,15 @@ bool wtap_dump_close(wtap_dumper *wdh, bool *needs_reload,
     int *err, char **err_info);
 
 /**
- * @brief Determine whether a capture file can be written with the specified options.
- *
- * Returns true if a capture file can be created that supports all encapsulation
- * types listed in @p file_encaps and supports all comment types indicated by
- * the @p required_comment_types bitmask.
- *
- * The encapsulation list is a GArray of WTAP_ENCAP_ values. The comment types
- * bitmask uses WTAP_COMMENT_TYPE_ flags that indicate which comment features
- * (per-packet, per-file, per-block, etc.) must be supported by the output format.
- *
- * @param file_encaps GArray of WTAP_ENCAP_ values representing packet encapsulations required.
- * @param required_comment_types Bitmask of required comment type flags.
- * @return True if at least one file format/subtype can be written that satisfies
- *         both the encapsulation requirements and the comment type requirements; false otherwise.
+ * Return true if we can write a file out with the given GArray of file
+ * encapsulations and the given bitmask of comment types.
  */
 WS_DLL_PUBLIC
 bool wtap_dump_can_write(const GArray *file_encaps, uint32_t required_comment_types);
 
 /**
- * @brief Generates arbitrary packet data in "exported PDU" format
+ * Generates arbitrary packet data in "exported PDU" format
  * and appends it to buf.
- *
  * For filetype readers to transform non-packetized data.
  * Calls ws_buffer_asssure_space() for you and handles padding
  * to 4-byte boundary.
@@ -3143,7 +2405,7 @@ WS_DLL_PUBLIC
 void wtap_buffer_append_epdu_tag(Buffer *buf, uint16_t epdu_tag, const uint8_t *data, uint16_t data_len);
 
 /**
- * @brief Generates packet data for an unsigned integer in "exported PDU" format.
+ * Generates packet data for an unsigned integer in "exported PDU" format.
  * For filetype readers to transform non-packetized data.
  *
  * @param[in,out] buf   Buffer into which to write field
@@ -3154,7 +2416,7 @@ WS_DLL_PUBLIC
 void wtap_buffer_append_epdu_uint(Buffer *buf, uint16_t epdu_tag, uint32_t val);
 
 /**
- * @brief Generates packet data for a string in "exported PDU" format.
+ * Generates packet data for a string in "exported PDU" format.
  * For filetype readers to transform non-packetized data.
  *
  * @param[in,out] buf   Buffer into which to write field
@@ -3165,7 +2427,7 @@ WS_DLL_PUBLIC
 void wtap_buffer_append_epdu_string(Buffer *buf, uint16_t epdu_tag, const char *val);
 
 /**
- * @brief Close off a set of "exported PDUs" added to the buffer.
+ * Close off a set of "exported PDUs" added to the buffer.
  * For filetype readers to transform non-packetized data.
  *
  * @param[in,out] buf   Buffer into which to write field
@@ -3175,29 +2437,18 @@ void wtap_buffer_append_epdu_string(Buffer *buf, uint16_t epdu_tag, const char *
 WS_DLL_PUBLIC
 int wtap_buffer_append_epdu_end(Buffer *buf);
 
-/**
- * @brief Controls the sort key used when enumerating or presenting file type lists.
+/*
+ * Sort the file types by name or by description?
  */
 typedef enum {
-    FT_SORT_BY_NAME,        /**< Sort file types alphabetically by their short internal name */
-    FT_SORT_BY_DESCRIPTION  /**< Sort file types alphabetically by their human-readable description */
+	FT_SORT_BY_NAME,
+	FT_SORT_BY_DESCRIPTION
 } ft_sort_order;
 
 /**
- * @brief Get savable file type/subtype candidates for saving a capture file.
- *
  * Get a GArray of file type/subtype values for file types/subtypes
  * that can be used to save a file of a given type with a given GArray of
  * WTAP_ENCAP_ types and the given bitmask of comment types.
- *
- * The returned GArray contains int values (file type/subtype identifiers)
- * and must be freed with g_array_unref() by the caller.
- *
- * @param file_type_subtype File type/subtype identifier of the source file.
- * @param file_encaps GArray of WTAP_ENCAP_ values representing required encapsulations.
- * @param required_comment_types Bitmask of required comment type flags.
- * @param sort_order Ordering to apply to the returned list (ft_sort_order).
- * @return GArray* of int file type/subtype values, or NULL if none are available.
  */
 WS_DLL_PUBLIC
 GArray *wtap_get_savable_file_types_subtypes_for_file(int file_type_subtype,
@@ -3205,113 +2456,42 @@ GArray *wtap_get_savable_file_types_subtypes_for_file(int file_type_subtype,
     ft_sort_order sort_order);
 
 /**
- * @brief Get a list of all writable file type/subtype values.
- *
- * Returns a GArray containing all registered file type/subtype identifiers
- * that support writing (dumping) capture files. The array elements are
- * int values representing file type/subtype identifiers and must be freed
- * with g_array_unref() by the caller.
- *
- * @param sort_order Ordering to apply to the returned list (ft_sort_order).
- * @return GArray* of int file type/subtype values, or NULL if none are available.
+ * Get a GArray of all writable file type/subtype values.
  */
 WS_DLL_PUBLIC
 GArray *wtap_get_writable_file_types_subtypes(ft_sort_order sort_order);
 
 /*** various file type/subtype functions ***/
-/**
- * @brief Get a human-readable description for a file type/subtype.
- *
- * Returns a descriptive string suitable for UI display or logs that describes
- * the given file type/subtype.
- *
- * @param file_type_subtype File type/subtype identifier.
- * @return Pointer to a static string describing the file type/subtype, or NULL if unknown.
- */
 WS_DLL_PUBLIC
 const char *wtap_file_type_subtype_description(int file_type_subtype);
-
-/**
- * @brief Get a short name for a file type/subtype.
- *
- * Returns a concise, programmer-friendly name for the given file type/subtype.
- *
- * @param file_type_subtype File type/subtype identifier.
- * @return Pointer to a static string containing the short name, or NULL if unknown.
- */
 WS_DLL_PUBLIC
 const char *wtap_file_type_subtype_name(int file_type_subtype);
-
-/**
- * @brief Convert a file type/subtype name to its identifier.
- *
- * Parses a short name (as returned by wtap_file_type_subtype_name) and returns
- * the corresponding file type/subtype identifier.
- *
- * @param name Short name string for the file type/subtype.
- * @return File type/subtype identifier on success, or -1 if the name is not recognized.
- */
 WS_DLL_PUBLIC
 int wtap_name_to_file_type_subtype(const char *name);
-
-/**
- * @brief Get the file type/subtype identifier for classic pcap (microsecond timestamps).
- *
- * @return File type/subtype identifier for pcap.
- */
 WS_DLL_PUBLIC
 int wtap_pcap_file_type_subtype(void);
-
-/**
- * @brief Get the file type/subtype identifier for pcap with nanosecond timestamps.
- *
- * @return File type/subtype identifier for pcap with nanosecond precision.
- */
 WS_DLL_PUBLIC
 int wtap_pcap_nsec_file_type_subtype(void);
-
-/**
- * @brief Get the file type/subtype identifier for pcapng.
- *
- * @return File type/subtype identifier for pcapng.
- */
 WS_DLL_PUBLIC
 int wtap_pcapng_file_type_subtype(void);
 
 /**
- * @brief Determine whether a capture file format supports a given block type.
- *
- * Returns how the specified file type/subtype handles the supplied block type,
- * indicating whether the block is supported, optional, required, or not supported.
- *
- * @param file_type_subtype File type/subtype identifier.
- * @param type Block type to query (wtap_block_type_t).
- * @return block_support_t value describing support level for the block in the format.
+ * Return an indication of whether this capture file format supports
+ * the block in question.
  */
 WS_DLL_PUBLIC
 block_support_t wtap_file_type_subtype_supports_block(int file_type_subtype,
     wtap_block_type_t type);
 
 /**
- * @brief Determine whether a capture file format supports a specific option for a block.
- *
- * Queries the support level for the given option type within the specified block
- * for a particular file type/subtype.
- *
- * The returned value indicates whether the option is supported, optional,
- * required, or not supported in that file format/subtype.
- *
- * @param file_type_subtype File type/subtype identifier.
- * @param type Block type to query (wtap_block_type_t).
- * @param opttype Option type identifier (option type number).
- * @return option_support_t value describing the support level for the option.
+ * Return an indication of whether this capture file format supports
+ * the option in queston for the block in question.
  */
 WS_DLL_PUBLIC
 option_support_t wtap_file_type_subtype_supports_option(int file_type_subtype,
     wtap_block_type_t type, unsigned opttype);
 
-/**
- *@brief Return a list of all extensions that are used by all capture file
+/* Return a list of all extensions that are used by all capture file
  * types, including compressed extensions, e.g. not just "pcap" but
  * also "pcap.gz" if we can read gzipped files.
  *
@@ -3330,14 +2510,11 @@ option_support_t wtap_file_type_subtype_supports_option(int file_type_subtype,
  *
  * This is used to generate a list of extensions to look for if the user
  * chooses "All Capture Files" in a file open dialog.
- *
- * @return GSList* of char* strings containing file extensions; NULL if none are known.
  */
 WS_DLL_PUBLIC
 GSList *wtap_get_all_capture_file_extensions_list(void);
 
-/**
- * @brief Return a list of all extensions that are used by all file types that
+/* Return a list of all extensions that are used by all file types that
  * we can read, including compressed extensions, e.g. not just "pcap" but
  * also "pcap.gz" if we can read gzipped files.
  *
@@ -3348,45 +2525,26 @@ GSList *wtap_get_all_capture_file_extensions_list(void);
  *
  * All strings in the list are allocated with g_malloc() and must be freed
  * with g_free().
- *
- * @return GSList* of char* strings containing file extensions; NULL if none are known.
  */
 WS_DLL_PUBLIC
 GSList *wtap_get_all_file_extensions_list(void);
 
-/**
- * @brief Free a list of file extension strings returned by extension helpers.
- *
- * Frees the GSList and each string it contains. The list must have been
- * returned by one of:
- * - wtap_get_file_extension_type_extensions()
- * - wtap_get_all_capture_file_extensions_list()
- * - wtap_get_file_extensions_list()
- * - wtap_get_all_file_extensions_list()
- *
- * Each string in the list is freed with g_free() before the list itself is freed.
- *
- * @param extensions GSList of char* strings to free; may be NULL.
+/*
+ * Free a list returned by wtap_get_file_extension_type_extensions(),
+ * wtap_get_all_capture_file_extensions_list, wtap_get_file_extensions_list(),
+ * or wtap_get_all_file_extensions_list().
  */
 WS_DLL_PUBLIC
 void wtap_free_extensions_list(GSList *extensions);
 
-/**
- * @brief Get the default file extension for a file type/subtype.
- *
- * Returns the canonical, unprefixed extension (without a leading ".") to use
- * when saving files of the specified file type/subtype.
- *
- * The returned string is owned by the library and must not be freed by the caller.
- *
- * @param file_type_subtype File type/subtype identifier.
- * @return Pointer to a static string containing the default extension, or NULL if unknown.
+/*
+ * Return the default file extension to use with the specified file type
+ * and subtype; that's just the extension, without any ".".
  */
 WS_DLL_PUBLIC
 const char *wtap_default_file_extension(int file_type_subtype);
 
-/**
- * @brief Return a list of file extensions that are used by the specified file type
+/* Return a list of file extensions that are used by the specified file type
  * and subtype.
  *
  * If include_compressed is true, the list will include compressed
@@ -3395,255 +2553,74 @@ const char *wtap_default_file_extension(int file_type_subtype);
  *
  * All strings in the list are allocated with g_malloc() and must be freed
  * with g_free().
- *
- * @param file_type_subtype File type/subtype identifier.
- * @param include_compressed True to include compressed extensions; false to include only uncompressed ones.
- * @return GSList* of char* strings containing file extensions; NULL if none are known.
  */
 WS_DLL_PUBLIC
 GSList *wtap_get_file_extensions_list(int file_type_subtype, bool include_compressed);
 
-/**
- * @brief Get a short name for an encapsulation type.
- *
- * Returns a short, programmer-friendly name for the given WTAP_ENCAP_ value.
- *
- * @param encap Encapsulation type (WTAP_ENCAP_...).
- * @return Pointer to a static string containing the short name, or NULL if unknown.
- */
 WS_DLL_PUBLIC
 const char *wtap_encap_name(int encap);
-
-/**
- * @brief Get a human-readable description for an encapsulation type.
- *
- * Returns a descriptive string suitable for UI display or logs describing the encapsulation.
- *
- * @param encap Encapsulation type (WTAP_ENCAP_...).
- * @return Pointer to a static string containing the description, or NULL if unknown.
- */
 WS_DLL_PUBLIC
 const char *wtap_encap_description(int encap);
-
-/**
- * @brief Convert a short encapsulation name to its WTAP_ENCAP_ value.
- *
- * Parses a short encap name (as returned by wtap_encap_name) and returns the corresponding
- * encapsulation constant.
- *
- * @param short_name Short encap name string.
- * @return WTAP_ENCAP_ value on success, or -1 if the name is not recognized.
- */
 WS_DLL_PUBLIC
 int wtap_name_to_encap(const char *short_name);
 
-/**
- * @brief Convert a timestamp precision constant to a string.
- *
- * Returns a short string describing the timestamp precision (e.g., "microsecond", "nanosecond").
- *
- * @param tsprec Timestamp precision constant (WTAP_TSPREC_...).
- * @return Pointer to a static string describing the precision, or NULL if unknown.
- */
 WS_DLL_PUBLIC
 const char* wtap_tsprec_string(int tsprec);
 
-/**
- * @brief Return a human-readable error string for a WTAP error code.
- *
- * Maps wiretap error codes to descriptive strings for logging and diagnostics.
- *
- * @param err WTAP error code.
- * @return Pointer to a static string describing the error, or a generic message if unknown.
- */
 WS_DLL_PUBLIC
 const char *wtap_strerror(int err);
 
-
 /*** get available number of file types and encapsulations ***/
-/**
- * @brief Return the number of registered file type extension groups.
- *
- * Returns the count of known file type extension entries (the number of
- * different file type / extension groups the library knows about).
- *
- * @return Number of file type extension entries.
- */
 WS_DLL_PUBLIC
 int wtap_get_num_file_type_extensions(void);
-
-/**
- * @brief Return the number of known encapsulation types.
- *
- * Returns the count of WTAP_ENCAP_ values the library recognizes.
- *
- * @return Number of encapsulation types.
- */
 WS_DLL_PUBLIC
 int wtap_get_num_encap_types(void);
 
 /*** get information for file type extension ***/
-
-/**
- * @brief Get the short name for a file extension type.
- *
- * Returns a short, programmer-friendly name for the given file extension
- * type identifier (for example, a canonical key used in UI lists).
- *
- * The returned string is owned by the library and must not be freed by the caller.
- *
- * @param extension_type File extension type identifier.
- * @return Pointer to a static string containing the short name, or NULL if unknown.
- */
 WS_DLL_PUBLIC
 const char *wtap_get_file_extension_type_name(int extension_type);
-
-/**
- * @brief Get the list of extensions for a file extension type.
- *
- * Returns a GSList of strings containing the file extensions associated with
- * the specified extension type. Each string is allocated with g_malloc() and
- * must be freed with g_free() by the caller. The list itself should be freed
- * with wtap_free_extensions_list().
- *
- * @param extension_type File extension type identifier.
- * @return GSList* of char* strings containing extensions (without leading '.'), or NULL if none are known.
- */
 WS_DLL_PUBLIC
 GSList *wtap_get_file_extension_type_extensions(unsigned extension_type);
 
 /*** dynamically register new file types and encapsulations ***/
-
-/**
- * @brief Register file extension information for a file type.
- *
- * Dynamically registers a new file type's extension metadata so the library
- * can recognize and present the extensions in UI lists and file dialogs.
- *
- * The caller retains ownership of @p ei; the function will copy or reference
- * the data as needed according to the library's registration semantics.
- *
- * @param ei Pointer to a file_extension_info structure describing the file type's extensions.
- */
 WS_DLL_PUBLIC
 void wtap_register_file_type_extension(const struct file_extension_info *ei);
 
-/**
- * @brief Plugin registration callback table.
- *
- * Implementations of wiretap modules should populate this structure and pass
- * it to wtap_register_plugin to have their registration routine invoked at
- * library initialization or plugin registration time.
- *
- * @field register_wtap_module Function pointer called to register the wiretap module.
- *                            May be NULL if the plugin has no registration routine.
- */
 typedef struct {
-    void (*register_wtap_module)(void);
+	void (*register_wtap_module)(void);  /* routine to call to register a wiretap module */
 } wtap_plugin;
 
-/**
- * @brief Register a wiretap plugin.
- *
- * Registers a plugin with the library. If the plugin provides a
- * register_wtap_module callback, that callback will be invoked to perform
- * module-specific registrations (file formats, encapsulations, extensions, etc.).
- *
- * The caller retains ownership of @p plug.
- *
- * @param plug Pointer to a wtap_plugin describing the plugin's registration callback(s).
- */
 WS_DLL_PUBLIC
 void wtap_register_plugin(const wtap_plugin *plug);
 
-
-/**
- * @brief Query whether libwiretap plugin loading is available.
- *
- * Returns a status code indicating whether libwiretap can load plugins on
- * the current platform and build configuration.
- *
- * Return values:
- *   0  Plugins can be loaded for libwiretap (file type).
- *   1  Plugins are not supported by the platform.
- *  -1  Plugins were disabled in the build configuration.
- *
- * @return int status code as described above.
+/** Returns_
+ *     0 if plugins can be loaded for libwiretap (file type).
+ *     1 if plugins are not supported by the platform.
+ *    -1 if plugins were disabled in the build configuration.
  */
 WS_DLL_PUBLIC
 int wtap_plugins_supported(void);
 
-/* Registration and open-info */
-
-/**
- * @brief Register an open_info probe/open handler.
- * @param oi Pointer to open_info descriptor.
- * @param first_routine If true, insert at front of probe list.
- */
 WS_DLL_PUBLIC
 void wtap_register_open_info(struct open_info *oi, const bool first_routine);
-
-/**
- * @brief Check if an open_info handler with the given name is registered.
- * @param name Short name of the handler.
- * @return true if registered, false otherwise.
- */
 WS_DLL_PUBLIC
 bool wtap_has_open_info(const char *name);
-
-/**
- * @brief Check whether a wtap handle uses a Lua-based file handler.
- * @param wth Pointer to wtap handle.
- * @return true if backed by a Lua filehandler, false otherwise.
- */
 WS_DLL_PUBLIC
 bool wtap_uses_lua_filehandler(const wtap* wth);
-
-/**
- * @brief Deregister an open_info handler by name.
- * @param name Short name of the handler to remove.
- */
 WS_DLL_PUBLIC
 void wtap_deregister_open_info(const char *name);
 
-/* Type mapping and registration */
-
-/**
- * @brief Convert an open_info short name to its numeric type.
- * @param name Short name.
- * @return Unsigned type identifier (implementation-defined sentinel if not found).
- */
 WS_DLL_PUBLIC
 unsigned int open_info_name_to_type(const char *name);
-
-/**
- * @brief Register a file type/subtype.
- * @param fi Pointer to file_type_subtype_info.
- * @return non-negative file_type_subtype id on success, negative on failure.
- */
 WS_DLL_PUBLIC
 int wtap_register_file_type_subtype(const struct file_type_subtype_info* fi);
-
-/**
- * @brief Deregister a previously registered file type/subtype.
- * @param file_type_subtype Identifier returned by registration.
- */
 WS_DLL_PUBLIC
 void wtap_deregister_file_type_subtype(const int file_type_subtype);
 
-/* Encapsulation and cleanup */
-/**
- * @brief Register a new packet encapsulation type.
- * @param description Human-readable description.
- * @param name Short canonical name.
- * @return Encapsulation id on success, negative on failure.
- */
 WS_DLL_PUBLIC
 int wtap_register_encap_type(const char *description, const char *name);
 
-/**
- * @brief Clean up libwiretap internal registrations and plugin state.
- */
+/*** Cleanup the internal library structures */
 WS_DLL_PUBLIC
 void wtap_cleanup(void);
 
@@ -3735,10 +2712,6 @@ void wtap_cleanup(void);
 #define WTAP_ERR_TIME_STAMP_NOT_SUPPORTED     -27
     /**< We don't support writing that record's time stamp to that
          file type  */
-
-#define WTAP_ERR_REC_MALFORMED		      -28
-	 /**< Packet being read is of a known type, but is malformed so it will be skipped.
-	     This can be used instead of WTAP_ERR_BAD_FILE to not stop reading of a file */
 
 #ifdef __cplusplus
 }

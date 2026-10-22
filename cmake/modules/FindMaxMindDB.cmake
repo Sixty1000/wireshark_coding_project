@@ -1,18 +1,12 @@
 #
 # - Try to find libmaxminddb.
-# Once done this will define an IMPORTED target MaxMindDB::MaxMindDB
-# if libmaxminddb has been found. It will also define the following
-# result variables in the project:
+# Once done this will define
 #  MAXMINDDB_FOUND - System has libmaxminddb
 #  MAXMINDDB_INCLUDE_DIRS - The libmaxminddb include directories
 #  MAXMINDDB_LIBRARIES - The libraries needed to use libmaxminddb
 #  MAXMINDDB_DEFINITIONS - Compiler switches required for using libmaxminddb
-#  MAXMINDDB_DLL_DIR_RELEASE - (Windows) Path to the MaxMindDB Release DLL.
-#  MAXMINDDB_DLL_RELEASE     - (Windows) Name of the MaxMindDB Release DLL.
-#  MAXMINDDB_DLL_DIR_DEBUG   - (Windows) Path to the MaxMindDB Debug DLL.
-#  MAXMINDDB_DLL_DEBUG       - (Windows) Name of the MaxMindDB Debug DLL.
-# Some of these variables may be empty; e.g., vcpkg builds libmaxminddb as
-# static-only, so the DLL filenames will be empty.
+#  MAXMINDDB_DLL_DIR      - (Windows) Path to the MaxMindDB DLL.
+#  MAXMINDDB_DLL          - (Windows) Name of the MaxMindDB DLL.
 
 IF (MAXMINDDB_INCLUDE_DIRS)
   # Already in cache, be silent
@@ -35,15 +29,12 @@ FIND_PATH(MAXMINDDB_INCLUDE_DIR maxminddb.h
   PATH_SUFFIXES maxminddb
 )
 
-include(FindWSLibrary)
-FindWSLibrary(MAXMINDDB_LIBRARY
-  # maxminddbd is the debug library
+find_library(MAXMINDDB_LIBRARY
   NAMES
-    maxminddb libmaxminddb libmaxminddb-0 maxminddbd
+    maxminddb libmaxminddb libmaxminddb-0
   HINTS
     ${PC_LIBMAXMINDDB_LIBDIR} ${PC_LIBMAXMINDDB_LIBRARY_DIRS}
-  WIN32_HINTS
-    ${MAXMINDDB_HINTS}
+    "${MAXMINDDB_HINTS}/lib"
 )
 
 include(FindPackageHandleStandardArgs)
@@ -53,62 +44,32 @@ find_package_handle_standard_args(MaxMindDB DEFAULT_MSG
                                   MAXMINDDB_LIBRARY MAXMINDDB_INCLUDE_DIR)
 
 IF(MAXMINDDB_FOUND)
+  INCLUDE(CMakePushCheckState)
+  CMAKE_PUSH_CHECK_STATE()
   SET(MAXMINDDB_LIBRARIES ${MAXMINDDB_LIBRARY} )
   SET(MAXMINDDB_INCLUDE_DIRS ${MAXMINDDB_INCLUDE_DIR} )
-  if (USE_REPOSITORY)
-    set ( MAXMINDDB_DLL_DIR_RELEASE "${MAXMINDDB_HINTS}/bin"
-      CACHE PATH "Path to the MaxMindDB release DLL"
+  INCLUDE(CheckFunctionExists)
+  SET(CMAKE_REQUIRED_INCLUDES ${MAXMINDDB_INCLUDE_DIRS})
+  SET(CMAKE_REQUIRED_LIBRARIES ${MAXMINDDB_LIBRARIES})
+  CMAKE_POP_CHECK_STATE()
+  if (WIN32)
+    set ( MAXMINDDB_DLL_DIR "${MAXMINDDB_HINTS}/bin"
+      CACHE PATH "Path to the MaxMindDB DLL"
     )
-    set ( MAXMINDDB_DLL_DIR_DEBUG "${MAXMINDDB_HINTS}/debug/bin"
-      CACHE PATH "Path to the MaxMindDB debug DLL"
+    file( GLOB _MAXMINDDB_dll RELATIVE "${MAXMINDDB_DLL_DIR}"
+      "${MAXMINDDB_DLL_DIR}/libmaxminddb*.dll"
     )
-    file( GLOB _MAXMINDDB_dll RELATIVE "${MAXMINDDB_DLL_DIR_RELEASE}"
-      "${MAXMINDDB_DLL_DIR_RELEASE}/libmaxminddb*.dll"
-    )
-    set ( MAXMINDDB_DLL_RELEASE ${_MAXMINDDB_dll}
+    set ( MAXMINDDB_DLL ${_MAXMINDDB_dll}
       # We're storing filenames only. Should we use STRING instead?
       CACHE FILEPATH "MaxMindDB DLL file name"
     )
-    file( GLOB _MAXMINDDB_dll RELATIVE "${MAXMINDDB_DLL_DIR_DEBUG}"
-      "${MAXMINDDB_DLL_DIR_DEBUG}/libmaxminddb*.dll"
-    )
-    set ( MAXMINDDB_DLL_DEBUG ${_MAXMINDDB_dll}
-      # We're storing filenames only. Should we use STRING instead?
-      CACHE FILEPATH "MaxMindDB DLL file name"
-    )
-    mark_as_advanced( MAXMINDDB_DLL_DIR_RELEASE MAXMINDDB_DLL_RELEASE )
-    mark_as_advanced( MAXMINDDB_DLL_DIR_DEBUG MAXMINDDB_DLL_DEBUG )
-  endif()
-  if(MAXMINDDB_INCLUDE_DIR)
-    set(_version_regex "^#define[ \t]+PACKAGE_VERSION[ \t]+\"([^\"]+)\".*")
-    file(STRINGS "${MAXMINDDB_INCLUDE_DIR}/maxminddb.h" MAXMINDDB_VERSION REGEX "${_version_regex}")
-    string(REGEX REPLACE "${_version_regex}" "\\1" MAXMINDDB_VERSION "${MAXMINDDB_VERSION}")
-    unset(_version_regex)
-  endif()
-  if (NOT TARGET MaxMindDB::MaxMindDB)
-    add_library(MaxMindDB::MaxMindDB UNKNOWN IMPORTED)
-    if (USE_REPOSITORY)
-      set_target_properties(MaxMindDB::MaxMindDB PROPERTIES
-        IMPORTED_CONFIGURATIONS "RELEASE;DEBUG"
-        IMPORTED_LOCATION "${MAXMINDDB_LIBRARY_RELEASE}"
-        IMPORTED_LOCATION_DEBUG "${MAXMINDDB_LIBRARY_DEBUG}"
-        INTERFACE_INCLUDE_DIRECTORIES "${MAXMINDDB_INCLUDE_DIR}"
-      )
-    else()
-      set_target_properties(MaxMindDB::MaxMindDB PROPERTIES
-        IMPORTED_LOCATION "${MAXMINDDB_LIBRARY}"
-        INTERFACE_INCLUDE_DIRECTORIES "${MAXMINDDB_INCLUDE_DIR}"
-        INTERFACE_COMPILE_OPTIONS "${MAXMINDDB_DEFINITIONS}"
-      )
-    endif()
+    mark_as_advanced( MAXMINDDB_DLL_DIR MAXMINDDB_DLL )
   endif()
 ELSE(MAXMINDDB_FOUND)
   SET(MAXMINDDB_LIBRARIES )
   SET(MAXMINDDB_INCLUDE_DIRS )
-  SET(MAXMINDDB_DLL_DIR_RELEASE )
-  SET(MAXMINDDB_DLL_RELEASE )
-  SET(MAXMINDDB_DLL_DIR_DEBUG )
-  SET(MAXMINDDB_DLL_DEBUG )
+  SET(MAXMINDDB_DLL_DIR )
+  SET(MAXMINDDB_DLL )
 ENDIF(MAXMINDDB_FOUND)
 
 MARK_AS_ADVANCED( MAXMINDDB_LIBRARIES MAXMINDDB_INCLUDE_DIRS )

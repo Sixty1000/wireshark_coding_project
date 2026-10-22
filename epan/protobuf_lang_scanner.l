@@ -78,7 +78,7 @@ DIAG_OFF_FLEX()
 #define protobuf_lang_realloc(ptr, size, yyscanner)    (void *)realloc((char *)(ptr), (size))
 #define protobuf_lang_free(ptr, yyscanner)        free((char *)ptr)
 
-static int old_status;
+int old_status;
 
 /* Extended error handling function defined in protobuf_lang_grammar.lemon */
 void pbl_parser_error(protobuf_lang_state_t *state, const char *fmt, ...);
@@ -138,7 +138,6 @@ strdup_and_store(void* yyscanner, const char* text);
 
     /* key words */
 syntax                          PROTOBUF_LANG_PARSE(PT_SYNTAX);
-edition                         PROTOBUF_LANG_PARSE(PT_EDITION);
 import                          PROTOBUF_LANG_PARSE(PT_IMPORT);
 weak                            PROTOBUF_LANG_PARSE(PT_WEAK);
 public                          PROTOBUF_LANG_PARSE(PT_PUBLIC);
@@ -168,8 +167,8 @@ to                              PROTOBUF_LANG_PARSE(PT_TO);
 
     /* Using extended identifier because we care only about position */
 [a-zA-Z0-9_.][a-zA-Z0-9_.+-]*    PROTOBUF_LANG_PARSE(PT_IDENT);
-\"(\'|\\\"|[^\""\n"])*\"         PROTOBUF_LANG_PARSE(PT_STRLIT);
-\'(\"|\\\'|[^\'"\n"])*\'         PROTOBUF_LANG_PARSE(PT_STRLIT);
+\"(\'|\\.|\"\"|[^"\n"])*\"       PROTOBUF_LANG_PARSE(PT_STRLIT);
+\'(\"|\\.|\'\'|[^"\n"])*\'       PROTOBUF_LANG_PARSE(PT_STRLIT);
 
     /* comments */
 "//"[^\r\n]*

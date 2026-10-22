@@ -22,7 +22,6 @@
 #include <ui/qt/utils/qt_ui_utils.h>
 #include <ui/qt/widgets/wireshark_file_dialog.h>
 #include <wsutil/utf8_entities.h>
-#include <app/application_flavor.h>
 
 #include "main_application.h"
 
@@ -41,7 +40,7 @@ PreferenceEditorFrame::PreferenceEditorFrame(QWidget *parent) :
 {
     ui->setupUi(this);
 
-#ifdef Q_OS_MACOS
+#ifdef Q_OS_MAC
     foreach (QWidget *w, findChildren<QWidget *>()) {
         w->setAttribute(Qt::WA_MacSmallSize, true);
     }
@@ -71,12 +70,12 @@ void PreferenceEditorFrame::editPreference(preference *pref, pref_module *module
     ui->modulePreferencesToolButton->setText(tr("Open %1 preferences…").arg(module_->title));
 
     pref_stash(pref_, NULL);
-    ui->preferenceTitleLabel->setText(QStringLiteral("%1:").arg(prefs_get_title(pref)));
+    ui->preferenceTitleLabel->setText(QString("%1:").arg(prefs_get_title(pref)));
 
     // Convert the pref description from plain text to rich text.
     QString description = html_escape(prefs_get_description(pref));
     description.replace('\n', "<br>");
-    QString tooltip = QStringLiteral("<span>%1</span>").arg(description);
+    QString tooltip = QString("<span>%1</span>").arg(description);
     ui->preferenceTitleLabel->setToolTip(tooltip);
     ui->preferenceLineEdit->setToolTip(tooltip);
 
@@ -137,7 +136,7 @@ void PreferenceEditorFrame::editPreference(preference *pref, pref_module *module
 void PreferenceEditorFrame::uintLineEditTextEdited(const QString &new_str)
 {
     if (new_str.isEmpty()) {
-        new_uint_ = prefs_get_uint_value(pref_, pref_stashed);
+        new_uint_ = prefs_get_uint_value_real(pref_, pref_stashed);
         ui->preferenceLineEdit->setSyntaxState(SyntaxLineEdit::Empty);
         ui->buttonBox->button(QDialogButtonBox::Ok)->setEnabled(true);
         return;
@@ -149,7 +148,7 @@ void PreferenceEditorFrame::uintLineEditTextEdited(const QString &new_str)
         new_uint_ = new_uint;
         ui->preferenceLineEdit->setSyntaxState(SyntaxLineEdit::Valid);
     } else {
-        new_uint_ = prefs_get_uint_value(pref_, pref_stashed);
+        new_uint_ = prefs_get_uint_value_real(pref_, pref_stashed);
         ui->preferenceLineEdit->setSyntaxState(SyntaxLineEdit::Invalid);
     }
     ui->buttonBox->button(QDialogButtonBox::Ok)->setEnabled(ok);
@@ -273,7 +272,7 @@ void PreferenceEditorFrame::on_buttonBox_accepted()
         prefs_main_write();
 
         char* err = NULL;
-        if (save_decode_as_entries(application_flavor_name_proper(), application_configuration_environment_prefix(), &err) < 0)
+        if (save_decode_as_entries(&err) < 0)
         {
             simple_dialog(ESD_TYPE_ERROR, ESD_BTN_OK, "%s", err);
             g_free(err);

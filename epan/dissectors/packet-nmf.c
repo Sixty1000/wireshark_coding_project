@@ -5,7 +5,19 @@
  *
  * Copyright 2017 Stefan Metzmacher <metze@samba.org>
  *
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
 #include "config.h"
@@ -165,6 +177,7 @@ dissect_nmf_record(tvbuff_t *tvb, packet_info *pinfo,
 	uint32_t size = 0;
 	const uint8_t *str = NULL;
 	tvbuff_t *payload_tvb = NULL;
+	tvbuff_t *xml_tvb = NULL;
 
 	record_item = proto_tree_add_item(tree, hf_nmf_record, tvb, offset, -1, ENC_NA);
 	proto_item_append_text(record_item, ", start_offset=0x%x, ", (unsigned)offset);
@@ -204,7 +217,7 @@ dissect_nmf_record(tvbuff_t *tvb, packet_info *pinfo,
 
 		proto_tree_add_item_ret_string(record_tree, hf_nmf_via_value,
 					       tvb, offset, size, ENC_UTF_8,
-					       pinfo->pool, &str);
+					       wmem_packet_scope(), &str);
 		offset += size;
 		proto_item_append_text(record_item, ": %s", (const char *)str);
 		break;
@@ -233,7 +246,6 @@ dissect_nmf_record(tvbuff_t *tvb, packet_info *pinfo,
 				       size, plurality(size, "", "s"));
 		proto_tree_add_format_text(record_tree, payload_tvb, 0, size);
 #if 0
-		tvbuff_t *xml_tvb = NULL;
 		if (0) {
 			/* TODO:
 			 *
@@ -249,11 +261,11 @@ dissect_nmf_record(tvbuff_t *tvb, packet_info *pinfo,
 				xml_tvb = NULL;
 			}
 		}
+#endif
 		if (xml_tvb != NULL) {
 			call_dissector_with_data(xml_handle, xml_tvb, pinfo,
 					         record_tree, NULL);
 		}
-#endif
 		break;
 	case NMF_END_RECORD:
 		/* TODO */
@@ -271,7 +283,7 @@ dissect_nmf_record(tvbuff_t *tvb, packet_info *pinfo,
 
 		proto_tree_add_item_ret_string(record_tree, hf_nmf_upgrade_protocol,
 					       tvb, offset, size, ENC_UTF_8,
-					       pinfo->pool, &str);
+					       wmem_packet_scope(), &str);
 		offset += size;
 		proto_item_append_text(record_item, ": %s", (const char *)str);
 		break;
@@ -294,15 +306,14 @@ dissect_nmf_record(tvbuff_t *tvb, packet_info *pinfo,
 }
 
 static unsigned
-nmf_get_pdu_len(packet_info *pinfo, tvbuff_t *parent_tvb, int parent_offset, void *_info)
+nmf_get_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *_info)
 {
 	nmf_conv_info_t *nmf_info = (nmf_conv_info_t *)_info;
 	enum nmf_record_type record_type;
-	tvbuff_t *tvb = tvb_new_subset_remaining(parent_tvb, parent_offset);
-	unsigned offset = 0;
+	int start_offset = offset;
 
 	if (pinfo->fd->num > nmf_info->fnum_negotiated) {
-		unsigned remaining = tvb_captured_length(tvb);
+		unsigned remaining = tvb_captured_length_remaining(tvb, offset);
 		unsigned len = 0;
 		unsigned needed = 0;
 
@@ -311,13 +322,14 @@ nmf_get_pdu_len(packet_info *pinfo, tvbuff_t *parent_tvb, int parent_offset, voi
 		}
 
 		len = tvb_get_uint32(tvb, offset, ENC_LITTLE_ENDIAN);
+		offset += 4;
 
 		needed = 4 + len;
 		return needed;
 	}
 
 	if (pinfo->fd->num > nmf_info->fnum_upgraded) {
-		unsigned remaining = tvb_captured_length(tvb);
+		unsigned remaining = tvb_captured_length_remaining(tvb, offset);
 		unsigned len = 0;
 		unsigned needed = 0;
 
@@ -328,6 +340,7 @@ nmf_get_pdu_len(packet_info *pinfo, tvbuff_t *parent_tvb, int parent_offset, voi
 		offset += 3;
 
 		len = tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN);
+		offset += 2;
 
 		needed = 5 + len;
 		return needed;
@@ -360,15 +373,14 @@ nmf_get_pdu_len(packet_info *pinfo, tvbuff_t *parent_tvb, int parent_offset, voi
 			 * Just take the rest of this segment.
 			 * The expert info will be handled in the main dissection
 			 * routine. */
-			return tvb_reported_length(tvb);
+			return tvb_reported_length_remaining(tvb, start_offset);
 		}
-		offset += len;
-		if (/*size > UINT32_MAX || */ ckd_add(&offset, offset, size)) {
-			/* Invalid length or overflow. A size > UINT32_MAX
-			 * will always overflow so we don't need to check
-			 * unless we want to distinguish the two cases. */
-			return tvb_reported_length(tvb);
+		if (size > UINT32_MAX) {
+			/* Invalid length */
+			return tvb_reported_length_remaining(tvb, start_offset);
 		}
+		offset += (int)len;
+		offset += (int)size;
 		break;
         }
 	case NMF_VERSION_RECORD:
@@ -402,14 +414,14 @@ nmf_get_pdu_len(packet_info *pinfo, tvbuff_t *parent_tvb, int parent_offset, voi
 		break;
 	}
 
-	return offset;
+	return offset - start_offset;
 }
 
 static int
 dissect_nmf_payload(tvbuff_t *tvb, packet_info *pinfo,
 		    proto_tree *tree, nmf_conv_info_t *nmf_info)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	while (tvb_reported_length_remaining(tvb, offset) > 0) {
 		int ret;
@@ -435,7 +447,7 @@ dissect_nmf_pdu(tvbuff_t *tvb, packet_info *pinfo,
 	if (pinfo->fd->num > nmf_info->fnum_negotiated) {
 		proto_item *item = proto_tree_get_parent(tree);
 		uint32_t len = 0;
-		unsigned offset = 0;
+		int offset = 0;
 		tvbuff_t *gssapi_tvb = NULL;
 		tvbuff_t *plain_tvb = NULL, *decr_tvb= NULL;
 		int ver_len;
@@ -523,7 +535,7 @@ dissect_nmf_pdu(tvbuff_t *tvb, packet_info *pinfo,
 		unsigned rlen = tvb_reported_length(tvb);
 		uint16_t len = 0;
 		uint8_t type;
-		unsigned offset = 0;
+		int offset = 0;
 		tvbuff_t *negotiate_tvb = NULL;
 
 		col_set_str(pinfo->cinfo, COL_INFO, "NMF Upgrade");

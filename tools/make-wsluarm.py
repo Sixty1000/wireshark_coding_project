@@ -31,7 +31,8 @@ import os
 import re
 import sys
 
-logger = logging.getLogger('make-wsluarm')
+from enum import Enum
+from string import Template
 
 def parse_desc(description):
     '''\
@@ -81,7 +82,25 @@ intact. Assumes the input has been stripped.
                 adoc_lines.append(line)
 
             # If line starts with single "*" and space, leave it mostly intact.
-            elif re.match(r'^\*\s', line) or re.match(r'^1\.\s', line):
+            elif re.match(r'^\*\s', line):
+                adoc_lines += ['', line]
+                # keep eating until we find a blank line or end
+                line = next(cli)
+                try:
+                    while not re.match(r'^\s*$', line):
+                        raw_len = len(line)
+                        line = line.lstrip()
+                        # if this is less indented than before, break out
+                        if raw_len - len(line) < indent:
+                            break
+                        adoc_lines += [line]
+                        line = next(cli)
+                except StopIteration:
+                    pass
+                adoc_lines.append('')
+
+            # if line starts with "1." and space, leave it mostly intact.
+            elif re.match(r'^1\.\s', line):
                 adoc_lines += ['', line]
                 # keep eating until we find a blank line or end
                 line = next(cli)
@@ -124,11 +143,11 @@ class LuaFunction:
         self.arguments = [] # (name, description, optional)
         self.returns = [] # description
         self.errors = [] # description
-        logger.info(f'Created function {id} ({name}) at {start}')
+        logging.info(f'Created function {id} ({name}) at {start}')
 
     def add_argument(self, id, raw_name, raw_description, raw_optional):
         if id != self.id:
-            logger.critical(f'Invalid argument ID {id} in function {self.id}')
+            logging.critical(f'Invalid argument ID {id} in function {self.id}')
             sys.exit(1)
         if not raw_description:
             raw_description = ''
@@ -145,30 +164,30 @@ class LuaFunction:
         # Handles functions like "loadfile(filename)" too.
         for m in re.finditer(r'#define WSLUA_(OPT)?ARG_((?:[A-Za-z0-9]+_)?[a-z0-9_]+)_([A-Z0-9_]+)\s+\d+' + TRAILING_COMMENT_RE, buf, re.MULTILINE|re.DOTALL):
             self.add_argument(m.group(2), m.group(3), m.group(6), m.group(1))
-            logger.info(f'Created arg {m.group(3)} for {self.id} at {m.start()}')
+            logging.info(f'Created arg {m.group(3)} for {self.id} at {m.start()}')
 
         # Same as above, except that there is no macro but a (multi-line) comment.
         for m in re.finditer(r'/\*\s*WSLUA_(OPT)?ARG_((?:[A-Za-z0-9]+_)?[a-z0-9_]+)_([A-Z0-9_]+)\s*(.*?)\*/', buf, re.MULTILINE|re.DOTALL):
             self.add_argument(m.group(2), m.group(3), m.group(4), m.group(1))
-            logger.info(f'Created arg {m.group(3)} for {self.id} at {m.start()}')
+            logging.info(f'Created arg {m.group(3)} for {self.id} at {m.start()}')
 
         for m in re.finditer(r'/\*\s+WSLUA_MOREARGS\s+([A-Za-z_]+)\s+(.*?)\*/', buf, re.MULTILINE|re.DOTALL):
             self.add_argument(m.group(1), '...', m.group(2), False)
-            logger.info(f'Created morearg for {self.id}')
+            logging.info(f'Created morearg for {self.id}')
 
         for m in re.finditer(r'WSLUA_(FINAL_)?RETURN\(\s*.*?\s*\)\s*;' + TRAILING_COMMENT_RE, buf, re.MULTILINE|re.DOTALL):
             if m.group(4) and len(m.group(4)) > 0:
                 self.returns.append(m.group(4).strip())
-                logger.info(f'Created return for {self.id} at {m.start()}')
+                logging.info(f'Created return for {self.id} at {m.start()}')
 
         for m in re.finditer(r'/\*\s*_WSLUA_RETURNS_\s*(.*?)\*/', buf, re.MULTILINE|re.DOTALL):
             if m.group(1) and len(m.group(1)) > 0:
                 self.returns.append(m.group(1).strip())
-                logger.info(f'Created return for {self.id} at {m.start()}')
+                logging.info(f'Created return for {self.id} at {m.start()}')
 
         for m in re.finditer(r'WSLUA_ERROR\s*\(\s*(([A-Z][A-Za-z]+)_)?([a-z_]+),' + QUOTED_RE, buf, re.MULTILINE|re.DOTALL):
             self.errors.append(m.group(4).strip())
-            logger.info(f'Created error {m.group(4)[:10]} for {self.id} at {m.start()}')
+            logging.info(f'Created error {m.group(4)[:10]} for {self.id} at {m.start()}')
 
     def to_adoc(self):
         # The Perl script wrapped optional args in '[]', joined them with ', ', and
@@ -250,7 +269,7 @@ def extract_class_definitions(c_file, c_buf, module, classes, functions):
             'attributes': [],
         }
         classes[name] = mod_class
-        logger.info(f'Created class {name}')
+        logging.info(f'Created class {name}')
     return 0
 
 def extract_function_definitions(c_file, c_buf, module, classes, functions):
@@ -311,7 +330,7 @@ def extract_attribute_markups(c_file, c_buf, module, classes, functions):
             'description': parse_desc(f'{mode_desc}\n{m.group(4)}'),
         }
         classes[class_name]['attributes'].append(attribute)
-        logger.info(f'Created attribute {name} for class {class_name}')
+        logging.info(f'Created attribute {name} for class {class_name}')
 
 def main():
     parser = argparse.ArgumentParser(description="WSLUA's Reference Manual Generator")
@@ -343,7 +362,7 @@ def main():
                     modules[module_name]['c'] = [c_pair]
                     modules[module_name]['file_base'] = os.path.splitext(c_pair[0])[0]
             else:
-                logger.warning(f'No module found in {c_file}')
+                logging.warning(f'No module found in {c_file}')
 
     extractors = [
         extract_class_definitions,
@@ -357,7 +376,7 @@ def main():
 
     for module_name in sorted(modules):
         adoc_file = f'{modules[module_name]["file_base"]}.adoc'
-        logger.info(f'Writing module {module_name} to {adoc_file} from {len(modules[module_name]["c"])} input(s)')
+        logging.info(f'Writing module {module_name} to {adoc_file} from {len(modules[module_name]["c"])} input(s)')
         functions = {}
         classes = {}
 
@@ -396,7 +415,7 @@ def main():
 ==== {class_name}
 ''')
 
-                if lua_class["description"] != '':
+                if not lua_class["description"] == '':
                     adoc_f.write(f'\n{lua_class["description"]}\n')
 
                 for constructor_id in sorted(lua_class['constructors'], key=lambda id: functions[id].start):
@@ -427,10 +446,11 @@ def main():
 ==== Global Functions
 ''')
 
-            adoc_f.writelines(functions[global_id].to_adoc() for global_id in sorted(functions.keys(), key=lambda id: functions[id].start))
+            for global_id in sorted(functions.keys(), key=lambda id: functions[id].start):
+                adoc_f.write(functions[global_id].to_adoc())
 
             if len(functions.keys()) > 0:
-                adoc_f.write('// Global function\n')
+                adoc_f.write(f'// Global function\n')
 
             adoc_f.write('// end of module\n')
 

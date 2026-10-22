@@ -10,7 +10,4 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
- /**
-  * @brief Register the protocol fields for the packet info stats tree.
-  */
 extern void register_pinfo_stat_trees(void);

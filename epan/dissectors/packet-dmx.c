@@ -28,8 +28,6 @@
 #include <epan/prefs.h>
 #include <epan/expert.h>
 
-#include "data-dmx-manfid.h"
-
 #define DMX_SC_DMX	0x00
 #define DMX_SC_TEXT	0x17
 #define DMX_SC_TEST	0x55
@@ -150,7 +148,7 @@ dissect_dmx_chan(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
 				if (global_disp_chan_val_type == 0) {
 					v = (v * 100) / 255;
 					if (v == 100) {
-						wmem_strbuf_append(chan_str, " FL ");
+						wmem_strbuf_append(chan_str, "FL ");
 					} else {
 						wmem_strbuf_append_printf(chan_str, chan_format[global_disp_chan_val_type], v);
 					}
@@ -379,7 +377,7 @@ dissect_dmx(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
 	next_tvb = tvb_new_subset_remaining(tvb, offset);
 
-	if (!dissector_try_uint_with_data(dmx_dissector_table, start_code, next_tvb, pinfo,
+	if (!dissector_try_uint_new(dmx_dissector_table, start_code, tvb, pinfo,
                              tree, true, NULL)) {
 		call_data_dissector(next_tvb, pinfo, tree);
 	}
@@ -528,27 +526,27 @@ proto_register_dmx_sip(void)
 
 		{ &hf_dmx_sip_orig_dev_id,
 			{ "1st Device's ID", "dmx_sip.orig_dev_id",
-				FT_UINT16, BASE_HEX|BASE_EXT_STRING, &dmx_esta_manfid_vals_ext, 0x0,
+				FT_UINT16, BASE_HEX, NULL, 0x0,
 				NULL, HFILL }},
 
 		{ &hf_dmx_sip_sec_dev_id,
 			{ "2nd Device's ID", "dmx_sip.sec_dev_id",
-				FT_UINT16, BASE_HEX|BASE_EXT_STRING, &dmx_esta_manfid_vals_ext, 0x0,
+				FT_UINT16, BASE_HEX, NULL, 0x0,
 				NULL, HFILL }},
 
 		{ &hf_dmx_sip_third_dev_id,
 			{ "3rd Device's ID", "dmx_sip.third_dev_id",
-				FT_UINT16, BASE_HEX|BASE_EXT_STRING, &dmx_esta_manfid_vals_ext, 0x0,
+				FT_UINT16, BASE_HEX, NULL, 0x0,
 				NULL, HFILL }},
 
 		{ &hf_dmx_sip_fourth_dev_id,
 			{ "4th Device's ID", "dmx_sip.fourth_dev_id",
-				FT_UINT16, BASE_HEX|BASE_EXT_STRING, &dmx_esta_manfid_vals_ext, 0x0,
+				FT_UINT16, BASE_HEX, NULL, 0x0,
 				NULL, HFILL }},
 
 		{ &hf_dmx_sip_fifth_dev_id,
 			{ "5th Device's ID", "dmx_sip.fifth_dev_id",
-				FT_UINT16, BASE_HEX|BASE_EXT_STRING, &dmx_esta_manfid_vals_ext, 0x0,
+				FT_UINT16, BASE_HEX, NULL, 0x0,
 				NULL, HFILL }},
 
 		{ &hf_dmx_sip_reserved,

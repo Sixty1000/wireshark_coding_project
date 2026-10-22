@@ -12,6 +12,7 @@
 
 #include <epan/packet.h>
 #include <epan/etypes.h>
+#include <epan/eapol_keydes_types.h>
 #include <epan/proto_data.h>
 #include <epan/tfs.h>
 
@@ -20,7 +21,7 @@
 void proto_register_eapol(void);
 void proto_reg_handoff_eapol(void);
 
-static int proto_eapol;
+int proto_eapol;
 static int hf_eapol_version;
 static int hf_eapol_type;
 static int hf_eapol_len;
@@ -103,9 +104,10 @@ dissect_eapol(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
   proto_tree_add_item(eapol_tree, hf_eapol_version, tvb, offset, 1, ENC_BIG_ENDIAN);
   offset++;
 
-  proto_tree_add_item_ret_uint8(eapol_tree, hf_eapol_type, tvb, offset, 1, ENC_BIG_ENDIAN, &eapol_type);
+  eapol_type = tvb_get_uint8(tvb, offset);
+  proto_tree_add_item(eapol_tree, hf_eapol_type, tvb, offset, 1, ENC_BIG_ENDIAN);
   col_add_str(pinfo->cinfo, COL_INFO,
-                val_to_str(pinfo->pool, eapol_type, eapol_type_vals, "Unknown Type (0x%02X)"));
+                val_to_str(eapol_type, eapol_type_vals, "Unknown Type (0x%02X)"));
   offset++;
 
   eapol_len = tvb_get_ntohs(tvb, offset);
@@ -117,9 +119,8 @@ dissect_eapol(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
   }
   offset += 2;
 
-  /* Save eapol key type packets for IEEE 802.11 dissector and
-   * MKA type packets for the MKA dissector */
-  if (!pinfo->fd->visited && (eapol_type == EAPOL_KEY || eapol_type == EAPOL_MKA)) {
+  /* Save eapol key type packets for IEEE 802.11 dissector */
+  if (!pinfo->fd->visited && eapol_type == EAPOL_KEY) {
     proto_eapol_key_frame_t *key_frame = wmem_new(pinfo->pool, proto_eapol_key_frame_t);
     key_frame->type = 0;
     key_frame->len = len;
@@ -129,7 +130,7 @@ dissect_eapol(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
   }
 
   next_tvb = tvb_new_subset_remaining(tvb, offset);
-  if (!dissector_try_uint_with_data(eapol_type_dissector_table,
+  if (!dissector_try_uint_new(eapol_type_dissector_table,
                             eapol_type, next_tvb, pinfo, tree,
                             false, eapol_tree)) {
     call_data_dissector(next_tvb, pinfo, tree);
@@ -159,7 +160,7 @@ dissect_eapol_key(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree _U_, void*
     }
   }
 
-  if (!dissector_try_uint_with_data(eapol_keydes_type_dissector_table,
+  if (!dissector_try_uint_new(eapol_keydes_type_dissector_table,
                               keydesc_type, next_tvb, pinfo, eapol_tree,
                               false, NULL)) {
     proto_tree_add_item(eapol_tree, hf_eapol_keydes_body, tvb, offset, -1, ENC_NA);
@@ -178,7 +179,8 @@ dissect_eapol_rc4_key(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, v
   proto_tree *key_index_tree;
   int         eapol_len;
 
-  proto_tree_add_item_ret_uint16(tree, hf_eapol_keydes_key_len, tvb, offset, 2, ENC_BIG_ENDIAN, &eapol_key_len);
+  eapol_key_len = tvb_get_ntohs(tvb, offset);
+  proto_tree_add_item(tree, hf_eapol_keydes_key_len, tvb, offset, 2, ENC_BIG_ENDIAN);
   offset += 2;
   proto_tree_add_item(tree, hf_eapol_keydes_replay_counter, tvb,
                       offset, 8, ENC_BIG_ENDIAN);

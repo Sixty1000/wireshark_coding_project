@@ -16,8 +16,6 @@
 #include <epan/exceptions.h>
 #include <epan/to_str.h>
 #include <epan/strutil.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 #include "packet-mount.h"
 #include "packet-nfs.h"
 
@@ -113,8 +111,8 @@ static const value_string mount3_mountstat3[] =
  * value-to-string mappings as version 3 since we believe that this mapping
  * is consistent with most v1 and v2 implementations.
  */
-static unsigned
-dissect_fhstatus(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, rpc_call_info_value* civ)
+static int
+dissect_fhstatus(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, rpc_call_info_value* civ)
 {
 	int32_t status;
 
@@ -129,7 +127,7 @@ dissect_fhstatus(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree 
 			/* void */
 			col_append_fstr(
 					pinfo->cinfo, COL_INFO, " Error:%s",
-					val_to_str(pinfo->pool, status, mount3_mountstat3,
+					val_to_str(status, mount3_mountstat3,
 					    "Unknown (0x%08X)"));
 		break;
 	}
@@ -139,10 +137,11 @@ dissect_fhstatus(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree 
 
 
 static int
-dissect_mount_dirpath_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+dissect_mount_dirpath_call(tvbuff_t *tvb, packet_info *pinfo,
+		proto_tree *tree, void* data)
 {
 	const char *mountpoint=NULL;
-	unsigned offset = 0;
+	int offset = 0;
 
 	if((!pinfo->fd->visited) && nfs_file_name_snooping){
 		rpc_call_info_value *civ=(rpc_call_info_value *)data;
@@ -173,7 +172,7 @@ dissect_mount_dirpath_call(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
 		}
 	}
 
-	offset = dissect_rpc_string(tvb,pinfo,tree,hf_mount_path,offset,&mountpoint);
+	offset = dissect_rpc_string(tvb,tree,hf_mount_path,offset,&mountpoint);
 	col_append_fstr(pinfo->cinfo, COL_INFO," %s", mountpoint);
 
 	return offset;
@@ -192,7 +191,7 @@ dissect_mount1_mnt_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 /* RFC 1094, Page 26 */
 /* RFC 1813, Page 110 */
 static int
-dissect_mountlist(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
+dissect_mountlist(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
 	proto_item* lock_item;
 	proto_tree* lock_tree;
@@ -205,9 +204,9 @@ dissect_mountlist(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree
 
 	lock_tree = proto_item_add_subtree(lock_item, ett_mount_mountlist);
 
-	offset = dissect_rpc_string(tvb, pinfo, lock_tree,
+	offset = dissect_rpc_string(tvb, lock_tree,
 			hf_mount_mountlist_hostname, offset, &hostname);
-	offset = dissect_rpc_string(tvb, pinfo, lock_tree,
+	offset = dissect_rpc_string(tvb, lock_tree,
 			hf_mount_mountlist_directory, offset, &directory);
 
 	if (lock_item) {
@@ -235,12 +234,12 @@ dissect_mount_dump_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 /* RFC 1094, Page 26 */
 /* RFC 1813, Page 110 */
 static int
-dissect_group(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data)
+dissect_group(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree, void* data)
 {
 	wmem_strbuf_t *group_name_list = (wmem_strbuf_t *)data;
 	const char *group_name;
 
-	offset = dissect_rpc_string(tvb, pinfo, tree,
+	offset = dissect_rpc_string(tvb, tree,
 			hf_mount_groups_group, offset, &group_name);
 	if (wmem_strbuf_get_len(group_name_list) != 0)
 		wmem_strbuf_append_c(group_name_list, ' ');
@@ -253,7 +252,7 @@ dissect_group(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tr
 /* RFC 1094, Page 26 */
 /* RFC 1813, Page 113 */
 static int
-dissect_exportlist(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
+dissect_exportlist(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	proto_item* exportlist_item = NULL;
 	proto_tree* exportlist_tree = NULL;
@@ -270,7 +269,7 @@ dissect_exportlist(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tre
 		exportlist_tree = proto_item_add_subtree(exportlist_item, ett_mount_exportlist);
 	}
 
-	offset = dissect_rpc_string(tvb, pinfo, exportlist_tree,
+	offset = dissect_rpc_string(tvb, exportlist_tree,
 			hf_mount_exportlist_directory, offset, &directory);
 	groups_offset = offset;
 
@@ -397,7 +396,7 @@ dissect_mount_pathconf_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *
 		&hf_mount_pathconf_error_vdisable,
 		NULL
 	};
-	unsigned offset = 0;
+	int offset = 0;
 
 	/*
 	 * Extract the mask first, so we know which other fields the
@@ -461,8 +460,8 @@ dissect_mount_pathconf_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *
 
 
 /* RFC 1813, Page 107 */
-static unsigned
-dissect_mountstat3(packet_info *pinfo, tvbuff_t *tvb, proto_tree *tree, unsigned offset, int hfindex, uint32_t *status)
+static int
+dissect_mountstat3(packet_info *pinfo, tvbuff_t *tvb, proto_tree *tree, int offset, int hfindex, uint32_t *status)
 {
 	uint32_t mountstat3;
 
@@ -470,7 +469,7 @@ dissect_mountstat3(packet_info *pinfo, tvbuff_t *tvb, proto_tree *tree, unsigned
 	if(mountstat3){
 		col_append_fstr(
 				pinfo->cinfo, COL_INFO, " Error:%s",
-				val_to_str(pinfo->pool, mountstat3, mount3_mountstat3,
+				val_to_str(mountstat3, mount3_mountstat3,
 				    "Unknown (0x%08X)"));
 	}
 
@@ -487,7 +486,7 @@ dissect_mount3_mnt_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 	uint32_t auth_flavors;
 	uint32_t auth_flavor;
 	uint32_t auth_flavor_i;
-	unsigned offset = 0;
+	int offset = 0;
 
 	offset = dissect_mountstat3(pinfo,tvb,tree,offset,hf_mount3_status,&status);
 
@@ -515,7 +514,7 @@ dissect_mount3_mnt_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 }
 
 static int
-dissect_sgi_exportlist(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree, void* data _U_)
+dissect_sgi_exportlist(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
 	proto_item* exportlist_item = NULL;
 	proto_tree* exportlist_tree = NULL;
@@ -530,13 +529,13 @@ dissect_sgi_exportlist(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto
 						ett_mount_exportlist);
 	}
 
-	offset = dissect_rpc_string(tvb, pinfo, exportlist_tree,
+	offset = dissect_rpc_string(tvb, exportlist_tree,
 			hf_mount_exportlist_directory, offset, &directory);
 
 	offset = dissect_rpc_bool(tvb, exportlist_tree,
 			hf_mount_has_options, offset);
 
-	offset = dissect_rpc_string(tvb, pinfo, exportlist_tree, hf_mount_options,
+	offset = dissect_rpc_string(tvb, exportlist_tree, hf_mount_options,
 			 offset, &options);
 
 	if (exportlist_item) {
@@ -596,7 +595,7 @@ static const true_false_string tos_st_local = {
 };
 
 static int
-dissect_mount_statvfs_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+dissect_mount_statvfs_reply(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
 	static int * const flags[] = {
 		&hf_mount_statvfs_flag_rdonly,
@@ -607,7 +606,7 @@ dissect_mount_statvfs_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 		&hf_mount_statvfs_flag_local,
 		NULL
 	};
-	unsigned offset = 0;
+	int offset = 0;
 
 	dissect_rpc_uint32(tvb, tree, hf_mount_statvfs_bsize, offset);
 	offset += 4;
@@ -633,11 +632,11 @@ dissect_mount_statvfs_reply(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 	dissect_rpc_uint32(tvb, tree, hf_mount_statvfs_favail, offset);
 	offset += 4;
 
-	dissect_rpc_bytes(tvb, pinfo, tree, hf_mount_statvfs_basetype, offset,
+	dissect_rpc_bytes(tvb, tree, hf_mount_statvfs_basetype, offset,
 			16, true, NULL);
 	offset += 16;
 
-	dissect_rpc_bytes(tvb, pinfo, tree, hf_mount_statvfs_fstr, offset, 32, false, NULL);
+	dissect_rpc_bytes(tvb, tree, hf_mount_statvfs_fstr, offset, 32, false, NULL);
 	offset += 32;
 
 	dissect_rpc_uint32(tvb, tree, hf_mount_statvfs_fsid, offset);

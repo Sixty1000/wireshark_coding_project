@@ -29,9 +29,6 @@
 #cmakedefine ILBC_FOUND
 #cmakedefine OPUS_FOUND
 #cmakedefine LIBSSH_FOUND
-#cmakedefine AMRNB_FOUND
-#cmakedefine AMRWB_FOUND
-
 
 #cmakedefine DOC_DIR "@DOC_DIR@"
 

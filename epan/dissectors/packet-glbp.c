@@ -185,9 +185,11 @@ dissect_glbp_hello(tvbuff_t *tvb, int offset,
   offset += 2;
   proto_tree_add_item(tlv_tree, hf_glbp_hello_unknown13, tvb, offset, 2, ENC_NA);
   offset += 2;
-  proto_tree_add_item_ret_uint8(tlv_tree, hf_glbp_hello_addrtype,  tvb, offset, 1, ENC_BIG_ENDIAN, &addrtype);
+  proto_tree_add_item(tlv_tree, hf_glbp_hello_addrtype,  tvb, offset, 1, ENC_BIG_ENDIAN);
+  addrtype = tvb_get_uint8(                             tvb, offset);
   offset++;
-  proto_tree_add_item_ret_uint8(tlv_tree, hf_glbp_hello_addrlen,   tvb, offset, 1, ENC_BIG_ENDIAN, &addrlen);
+  proto_tree_add_item(tlv_tree, hf_glbp_hello_addrlen,   tvb, offset, 1, ENC_BIG_ENDIAN);
+  addrlen = tvb_get_uint8(tvb, offset);
   offset++;
   switch (addrtype) {
     case 1:
@@ -213,7 +215,7 @@ dissect_glbp_hello(tvbuff_t *tvb, int offset,
   offset += addrlen;
 
   col_append_fstr(pinfo->cinfo, COL_INFO, ", %s",
-    val_to_str(pinfo->pool, addrtype, glbp_addr_type_vals, "%d"));
+    val_to_str(addrtype, glbp_addr_type_vals, "%d"));
 
   return offset;
 }
@@ -248,9 +250,11 @@ dissect_glbp_auth(tvbuff_t *tvb, int offset,
   uint8_t authtype;
   uint8_t authlength;
 
-  proto_tree_add_item_ret_uint8(tlv_tree, hf_glbp_auth_authtype,   tvb, offset, 1, ENC_BIG_ENDIAN, &authtype);
+  proto_tree_add_item(tlv_tree, hf_glbp_auth_authtype,   tvb, offset, 1, ENC_BIG_ENDIAN);
+  authtype = tvb_get_uint8(tvb, offset);
   offset++;
-  proto_tree_add_item_ret_uint8(tlv_tree, hf_glbp_auth_authlength, tvb, offset, 1, ENC_BIG_ENDIAN, &authlength);
+  proto_tree_add_item(tlv_tree, hf_glbp_auth_authlength, tvb, offset, 1, ENC_BIG_ENDIAN);
+  authlength = tvb_get_uint8(tvb, offset);
   offset++;
   switch(authtype) {
   case 1:
@@ -330,14 +334,14 @@ dissect_glbp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
     ti = proto_tree_add_item(glbp_tree, hf_glbp_tlv, tvb, offset, length+2, ENC_BIG_ENDIAN);
     tlv_tree = proto_item_add_subtree(ti, ett_glbp_tlv);
     proto_item_append_text(ti, " l=%d, t=%s", length+2,
-                           val_to_str(pinfo->pool, type, glbp_type_vals, "%d"));
+                           val_to_str(type, glbp_type_vals, "%d"));
 
     proto_tree_add_item(tlv_tree, hf_glbp_type, tvb, offset, 1,  ENC_BIG_ENDIAN);
     offset++;
     proto_tree_add_item(tlv_tree, hf_glbp_length, tvb, offset, 1,  ENC_BIG_ENDIAN);
     offset++;
     col_append_fstr(pinfo->cinfo, COL_INFO, ", %s",
-                    val_to_str(pinfo->pool, type, glbp_type_vals, "%d"));
+                    val_to_str(type, glbp_type_vals, "%d"));
 
     lastoffset = offset;
     switch(type) {
@@ -566,15 +570,15 @@ proto_register_glbp(void)
   static ei_register_info ei[] = {
     { &ei_glbp_ipv4_wrong_length,
       { "glbp.ipv4_wrong_length", PI_MALFORMED, PI_ERROR,
-        "Wrong IPv4 address length",
+        "Wrong IPv4 address length: %u",
         EXPFILL }},
     { &ei_glbp_ipv6_wrong_length,
       { "glbp.ipv6_wrong_length", PI_MALFORMED, PI_ERROR,
-        "Wrong IPv6 address length",
+        "Wrong IPv6 address length: %u",
         EXPFILL }},
     { &ei_glbp_tlv_length_too_small,
       { "glbp.tlv_length_too_small", PI_MALFORMED, PI_ERROR,
-        "TLV Length too small",
+        "Length %u too small",
         EXPFILL }},
     { &ei_glbp_tlv_invalid_bytes_used,
       { "glbp.tlv_invalid_bytes_used", PI_MALFORMED, PI_ERROR,

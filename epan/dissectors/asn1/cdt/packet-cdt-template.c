@@ -31,6 +31,10 @@
 #define CDT_P3         3
 #define CDT_P7         4
 
+#define PNAME  "Compressed Data Type"
+#define PSNAME "CDT"
+#define PFNAME "cdt"
+
 void proto_register_cdt(void);
 void proto_reg_handoff_cdt(void);
 
@@ -97,7 +101,7 @@ void proto_register_cdt (void) {
   expert_module_t* expert_cdt;
 
   /* Register protocol */
-  proto_cdt = proto_register_protocol ("Compressed Data Type", "CDT", "cdt");
+  proto_cdt = proto_register_protocol (PNAME, PSNAME, PFNAME);
 
   /* Register fields and subtrees */
   proto_register_field_array (proto_cdt, hf, array_length(hf));

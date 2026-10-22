@@ -1,7 +1,7 @@
 /* packet-nas_5gs.c
  * Routines for Non-Access-Stratum (NAS) protocol for 5G System (5GS) dissection
  *
- * Copyright 2018-2025, Anders Broman <a.broman58@gmail.com>
+ * Copyright 2018-2022, Anders Broman <anders.broman@ericsson.com>
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
@@ -9,7 +9,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * References: 3GPP TS 24.501 19.8.0
+ * References: 3GPP TS 24.501 18.7.0
  */
 
 #include "config.h"
@@ -17,13 +17,13 @@
 #include <epan/packet.h>
 #include <epan/expert.h>
 #include <epan/proto_data.h>
+#include <epan/ipproto.h>
 #include <epan/etypes.h>
 #include <epan/exceptions.h>
 #include <epan/show_exception.h>
 #include <epan/to_str.h>
 #include <epan/tfs.h>
 #include <epan/unit_strings.h>
-#include <epan/iana-info.h>
 
 #include <wsutil/array.h>
 #include <wsutil/pow2.h>
@@ -36,8 +36,6 @@
 
 void proto_register_nas_5gs(void);
 void proto_reg_handoff_nas_5gs(void);
-
-#define PFNAME "nas-5gs"
 
 static bool g_nas_5gs_null_decipher;
 enum {
@@ -56,13 +54,13 @@ static const enum_val_t nas_5gs_user_data_container_as_vals[] = {
 static int g_nas_5gs_decode_user_data_container_as = DECODE_USER_DATA_AS_NONE;
 static const char *g_nas_5gs_non_ip_data_dissector = "";
 
+
 static int dissect_nas_5gs_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, void* data);
 static int dissect_nas_5gs(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data);
 static uint16_t de_nas_5gs_mm_pdu_ses_id_2(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len _U_, char *add_string _U_, int string_len _U_);
 static uint16_t de_nas_5gs_cmn_add_inf(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string _U_, int string_len _U_);
 static void nas_5gs_mm_5gmm_status(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len);
 static uint16_t de_nas_5gs_mm_req_type(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len _U_, char *add_string _U_, int string_len _U_);
-static uint16_t de_nas_5gs_mm_sor_transp_cont(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string _U_, int string_len _U_);
 
 static dissector_handle_t nas_5gs_handle;
 static dissector_handle_t eap_handle;
@@ -73,6 +71,10 @@ static dissector_handle_t ipv4_handle;
 static dissector_handle_t ipv6_handle;
 static dissector_handle_t non_ip_data_handle;
 static dissector_handle_t ethernet_handle;
+
+#define PNAME  "Non-Access-Stratum 5GS (NAS)PDU"
+#define PSNAME "NAS-5GS"
+#define PFNAME "nas-5gs"
 
 static int proto_json;
 
@@ -99,7 +101,6 @@ static int hf_nas_5gs_rfu_b0;
 static int hf_nas_5gs_security_header_type;
 static int hf_nas_5gs_msg_auth_code;
 static int hf_nas_5gs_seq_no;
-static int hf_nas_5gs_ciphered_msg;
 static int hf_nas_5gs_mm_msg_type;
 static int hf_nas_5gs_sm_msg_type;
 static int hf_nas_5gs_updp_msg_type;
@@ -206,13 +207,6 @@ static int hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_4_1;
 static int hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_5_1;
 static int hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_1_9;
 static int hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_1_10;
-static int hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_2_17a;
-static int hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_2_18a;
-static int hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_2_20a;
-static int hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_2_26;
-static int hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_2_27;
-static int hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_1_11;
-static int hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_1_12;
 static int hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_1_1;
 static int hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_1_2;
 static int hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_1_3;
@@ -257,18 +251,6 @@ static int hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_1_9;
 static int hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_1_10;
 static int hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_2_24;
 static int hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_2_25;
-static int hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_2_17a;
-static int hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_2_18a;
-static int hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_2_20a;
-static int hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_2_26;
-static int hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_2_27;
-static int hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_1_11;
-static int hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_1_12;
-static int hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_6_7;
-static int hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_7_1;
-static int hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_7_2;
-static int hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_7_3;
-static int hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_7_4;
 static int hf_nas_5gs_mm_ciph_key_data_ciphering_set_id;
 static int hf_nas_5gs_mm_ciph_key_data_ciphering_key;
 static int hf_nas_5gs_mm_ciph_key_data_c0_len;
@@ -349,20 +331,6 @@ static int hf_nas_5gs_mm_mcsiu_b0;
 static int hf_nas_5gs_mm_nvl_satnr_b1;
 static int hf_nas_5gs_rslpl_b2;
 static int hf_nas_5gs_nsuc_b3;
-static int hf_nas_5gs_rslpvu_b4;
-static int hf_nas_5gs_rslppu_b5;
-static int hf_nas_5gs_atuc_b6;
-static int hf_nas_5gs_lp_wuspsai_si_b7;
-static int hf_nas_5gs_ophpae_b0;
-static int hf_nas_5gs_5g_prose_mci_b1;
-static int hf_nas_5gs_mlcsup_b2;
-static int hf_nas_5gs_5g_prose_l3imrelay_b3;
-static int hf_nas_5gs_5g_prose_l2imrelay_b4;
-static int hf_nas_5gs_mint_eps_b5;
-static int hf_nas_5gs_ef5l_b6;
-static int hf_nas_5gs_lwd_b7;
-static int hf_nas_5gs_nonsatlsp_b0;
-static int hf_nas_5gs_lcscdl_b3;
 static int hf_nas_5gs_mm_type_id;
 static int hf_nas_5gs_mm_odd_even;
 static int hf_nas_5gs_mm_length;
@@ -517,82 +485,14 @@ static int hf_nas_5gs_sm_port_mgmt_info_cont;
 static int hf_nas_5gs_sm_eth_hdr_comp_config_cid_len;
 static int hf_nas_5gs_sm_pdu_session_pair_id;
 static int hf_nas_5gs_sm_pdu_session_rsn;
-static int hf_nas_5gs_sm_ecn_mark_l4s_ind_qri;
-
-static int hf_nas_5gs_sm_remote_ue_ctx_list_nb_ue_ctx;
-static int hf_nas_5gs_sm_remote_ue_ctx_len;
-static int hf_nas_5gs_sm_remote_ue_ctx_addr_type;
-static int hf_nas_5gs_sm_remote_ue_ctx_userid_len;
-static int hf_nas_5gs_sm_remote_ue_ctx_userid;
-static int hf_nas_5gs_sm_remote_ue_ctx_ipv4;
-static int hf_nas_5gs_sm_remote_ue_ctx_ipv6;
-static int hf_nas_5gs_sm_remote_ue_ctx_ipv6_pfx_len;
-
-static int hf_nas_5gs_sm_req_mbs_cont_num_sess;
-static int hf_nas_5gs_sm_req_mbs_sess_info_len;
-static int hf_nas_5gs_sm_req_mbs_sess_op;
-static int hf_nas_5gs_sm_req_mbs_sess_id_type;
-static int hf_nas_5gs_sm_req_mbs_tmgi;
-static int hf_nas_5gs_sm_req_mbs_src_ipv4;
-static int hf_nas_5gs_sm_req_mbs_mcast_ipv4;
-static int hf_nas_5gs_sm_req_mbs_src_ipv6;
-static int hf_nas_5gs_sm_req_mbs_mcast_ipv6;
-
-static int hf_nas_5gs_sm_rec_mbs_cont_num_sess;
-static int hf_nas_5gs_sm_rec_mbs_info_len;
-static int hf_nas_5gs_sm_rec_mbs_decision;
-static int hf_nas_5gs_sm_rec_mbs_sess_id_type;
-static int hf_nas_5gs_sm_rec_mbs_cause;
-
-static int hf_nas_5gs_sm_n3qai_num_qfis;
-static int hf_nas_5gs_sm_n3qai_qfi;
-static int hf_nas_5gs_sm_n3qai_num_params;
-static int hf_nas_5gs_sm_n3qai_param_id;
-static int hf_nas_5gs_sm_n3qai_param_len;
-static int hf_nas_5gs_sm_n3qai_param_contents;
-
-static int hf_nas_5gs_sm_n3gpp_delay_budget_val;
-static int hf_nas_5gs_sm_n3gpp_delay_budget_flags;
-static int hf_nas_5gs_sm_n3gpp_delay_budget_qfipi;
-static int hf_nas_5gs_sm_n3gpp_delay_budget_pfpi;
-static int hf_nas_5gs_sm_n3gpp_delay_budget_num_qfis;
-static int hf_nas_5gs_sm_n3gpp_delay_budget_qfi;
-
-static int hf_nas_5gs_sm_ursp_report_num_conn_caps;
-static int hf_nas_5gs_sm_ursp_report_conn_cap_id;
-
-static int hf_nas_5gs_sm_prot_desc_len;
-static int hf_nas_5gs_sm_prot_desc_qri;
-static int hf_nas_5gs_sm_prot_desc_tp;
-static int hf_nas_5gs_sm_prot_desc_heipi;
-static int hf_nas_5gs_sm_prot_desc_pilpi;
-static int hf_nas_5gs_sm_prot_desc_rtp_hdr_ext_type;
-static int hf_nas_5gs_sm_prot_desc_rtp_hdr_ext_id;
-static int hf_nas_5gs_sm_prot_desc_rtp_payload_info_list_len;
-static int hf_nas_5gs_sm_prot_desc_rtp_payload_format;
-static int hf_nas_5gs_sm_prot_desc_rtp_num_payload_types;
-static int hf_nas_5gs_sm_prot_desc_rtp_payload_type;
-
-static int hf_nas_5gs_sm_n3gpp_dev_info_pdu_sess_type;
-static int hf_nas_5gs_sm_n3gpp_dev_info_entry_len;
-static int hf_nas_5gs_sm_n3gpp_dev_info_id_len;
-static int hf_nas_5gs_sm_n3gpp_dev_info_id;
-static int hf_nas_5gs_sm_n3gpp_dev_info_conn_info;
 static int hf_nas_5gs_sm_sel_sc_mode;
 static int hf_nas_5gs_sm_tpmic_b7;
 static int hf_nas_5gs_sm_atsss_st_b3_b6;
 static int hf_nas_5gs_sm_ept_s1_b2;
 static int hf_nas_5gs_sm_mh6_pdu_b1;
 static int hf_nas_5gs_sm_rqos_b0;
-static int hf_nas_5gs_sm_mpquic_ip_b7;
-static int hf_nas_5gs_sm_mpquic_udp_b6;
-static int hf_nas_5gs_sm_mptcp_b5;
-static int hf_nas_5gs_sm_atsss_ll_b3_b4;
-static int hf_nas_5gs_rtpmmii_b2;
 static int hf_nas_5gs_sm_sdnaepc_b1;
 static int hf_nas_5gs_sm_apmqf_b0;
-static int hf_nas_5gs_sm_e8pcpdei_b1;
-static int hf_nas_5gs_sm_mpquic_e_b0;
 static int hf_nas_5gs_sm_5gsm_cause;
 static int hf_nas_5gs_sm_apsi;
 static int hf_nas_5gs_sm_apsr;
@@ -659,10 +559,6 @@ static int hf_nas_5gs_mm_nssci;
 static int hf_nas_5gs_mm_nssai_inc_mode;
 static int hf_nas_5gs_mm_ue_usage_setting;
 static int hf_nas_5gs_mm_5gs_drx_param;
-static int hf_nas_5gs_e802cstag;
-static int hf_nas_5gs_sup_rure;
-static int hf_nas_5gs_svpsu;
-static int hf_nas_5gs_epsurdp;
 static int hf_nas_5gs_sup_andsp;
 static int hf_nas_5gs_nssui;
 
@@ -677,19 +573,13 @@ static int ett_nas_5gs_mm_part_sal;
 static int ett_nas_5gs_mm_part_tal;
 static int ett_nas_5gs_sm_mapd_eps_b_cont;
 static int ett_nas_5gs_sm_mapd_eps_b_cont_params_list;
+static int ett_nas_5gs_enc;
 static int ett_nas_5gs_mm_ladn_indic;
 static int ett_nas_5gs_mm_sor;
 static int ett_nas_5gs_sm_pkt_filter_components;
 static int ett_nas_5gs_updp_ue_policy_section_mgm_lst;
 static int ett_nas_5gs_updp_ue_policy_section_mgm_sublst;
 static int ett_nas_5gs_ue_policies_ursp;
-static int ett_nas_5gs_ue_policies_andp;
-static int ett_nas_5gs_wlansp_rule;
-static int ett_nas_5gs_wlansp_tod;
-static int ett_nas_5gs_loc_3gpp_sub_ent;
-static int ett_nas_5gs_wlansp_val_area;
-static int ett_nas_5gs_wlansp_sel_crit_ent;
-static int ett_nas_5gs_wlansp_sel_crit;
 static int ett_nas_5gs_ursp_traff_desc;
 static int ett_nas_5gs_usrp_r_sel_list;
 static int ett_nas_5gs_usrp_r_sel;
@@ -725,22 +615,6 @@ static int ett_nas_5gs_mm_alt_nssai_alternative;
 static int ett_nas_5gs_mm_s_nssai_loc_valid_info;
 static int ett_nas_5gs_mm_s_nssai_time_valid_info;
 static int ett_nas_5gs_mm_on_demand_nssai;
-static int ett_nas_5gs_n3nan_sel_len;
-static int ett_nas_5gs_n3nan_sel_info_entry;
-static int ett_nas_5gs_n3nan_conf_inf;
-static int ett_nas_5gs_n3iwf_identifier_entry;
-static int ett_nas_5gs_epdg_identifier_entry;
-static int ett_nas_5gs_sm_srtp_mult_media_id_info;
-static int ett_nas_5gs_sm_remote_ue_ctx;
-static int ett_nas_5gs_sm_req_mbs_sess_info;
-static int ett_nas_5gs_sm_rec_mbs_info;
-static int ett_nas_5gs_sm_n3qai_entry;
-static int ett_nas_5gs_sm_n3qai_param;
-static int ett_nas_5gs_sm_n3gpp_delay_budget_entry;
-static int ett_nas_5gs_sm_ursp_report;
-static int ett_nas_5gs_sm_prot_desc_entry;
-static int ett_nas_5gs_sm_prot_desc_rtp_payload_info;
-static int ett_nas_5gs_sm_n3gpp_dev_info_entry;
 
 static int hf_nas_5gs_mm_abba;
 static int hf_nas_5gs_mm_supi_fmt;
@@ -809,8 +683,6 @@ static int hf_nas_5gs_nw_feat_sup_naps;
 static int hf_nas_5gs_nw_feat_sup_lcs_upp;
 static int hf_nas_5gs_nw_feat_sup_supl;
 static int hf_nas_5gs_nw_feat_sup_rslp;
-static int hf_nas_5gs_nw_feat_sup_mlcsup;
-static int hf_nas_5gs_nw_feat_sup_ef5l;
 
 static int hf_nas_5gs_tac;
 
@@ -868,26 +740,11 @@ static int hf_nas_5gs_tos_tc_mask;
 static int hf_nas_5gs_flow_label;
 static int hf_nas_5gs_mac_addr;
 static int hf_nas_5gs_vlan_tag_vid;
-static int hf_nas_5gs_vlan_tag_pcp_ind;
-static int hf_nas_5gs_vlan_tag_dei_ind;
 static int hf_nas_5gs_vlan_tag_pcp;
 static int hf_nas_5gs_vlan_tag_dei;
 static int hf_nas_5gs_ethertype;
 static int hf_nas_5gs_mac_addr_low;
 static int hf_nas_5gs_mac_addr_high;
-static int hf_nas_5gs_srtp_mult_media_id_info_rptpi;
-static int hf_nas_5gs_srtp_mult_media_id_info_rshempi;
-static int hf_nas_5gs_srtp_mult_media_id_info_mitpi;
-static int hf_nas_5gs_srtp_mult_media_id_info_ptpi;
-static int hf_nas_5gs_srtp_mult_media_id_info_ssrcpi;
-static int hf_nas_5gs_srtp_mult_media_id_info_nb;
-static int hf_nas_5gs_srtp_mult_media_id_info_len;
-static int hf_nas_5gs_srtp_mult_media_id_info_ssrc;
-static int hf_nas_5gs_srtp_mult_media_id_info_payload_type;
-static int hf_nas_5gs_srtp_mult_media_id_info_mid_id_tag_len;
-static int hf_nas_5gs_srtp_mult_media_id_info_mid_id_tag;
-static int hf_nas_5gs_srtp_mult_media_id_info_sdes_hdr_ext_id;
-static int hf_nas_5gs_srtp_mult_media_id_info_rtcp_pkt_type;
 static int hf_nas_5gs_updp_ue_pol_sect_sublst_len;
 static int hf_nas_5gs_updp_ue_pol_sect_subresult_len;
 static int hf_nas_5gs_updp_instr_len;
@@ -910,7 +767,6 @@ static int hf_nas_5gs_ursp_traff_desc_next_hdr;
 static int hf_nas_5gs_ursp_traff_desc_single_remote_port;
 static int hf_nas_5gs_ursp_traff_desc_remote_port_range_low;
 static int hf_nas_5gs_ursp_traff_desc_remote_port_range_high;
-static int hf_nas_5gs_ursp_traff_desc_ip_3_tuple_bitmap;
 static int hf_nas_5gs_ursp_traff_desc_sec_param_index;
 static int hf_nas_5gs_ursp_traff_desc_tos_tc;
 static int hf_nas_5gs_ursp_traff_desc_tos_tc_mask;
@@ -927,31 +783,12 @@ static int hf_nas_5gs_ursp_traff_desc_conn_cap_len;
 static int hf_nas_5gs_ursp_traff_desc_conn_cap;
 static int hf_nas_5gs_ursp_traff_desc_dest_fqdn_len;
 static int hf_nas_5gs_ursp_traff_desc_dest_fqdn;
-static int hf_nas_5gs_ursp_traff_desc_regex_len;
-static int hf_nas_5gs_ursp_traff_desc_regex;
-static int hf_nas_5gs_ursp_traff_desc_pin_id_len;
-static int hf_nas_5gs_ursp_traff_desc_pin_id;
-static int hf_nas_5gs_ursp_traff_desc_conn_group_id_len;
-static int hf_nas_5gs_ursp_traff_desc_conn_group_id;
 static int hf_nas_5gs_ursp_traff_desc_dest_mac_addr_range_low;
 static int hf_nas_5gs_ursp_traff_desc_dest_mac_addr_range_high;
 static int hf_nas_5gs_ursp_traff_desc_len;
 static int hf_nas_5gs_ursp_r_sel_des_prec;
 static int hf_nas_5gs_ursp_r_sel_des_cont_len;
 static int hf_nas_5gs_ursp_ursp_r_sel_desc_comp_type;
-static int hf_nas_5gs_ursp_r_sel_desc_loc_crit_len;
-static int hf_nas_5gs_ursp_r_sel_desc_loc_area_type;
-static int hf_nas_5gs_ursp_r_sel_desc_loc_num_eutra_cells;
-static int hf_nas_5gs_ursp_r_sel_desc_loc_num_nr_cells;
-static int hf_nas_5gs_ursp_r_sel_desc_loc_num_gnb_ids;
-static int hf_nas_5gs_ursp_r_sel_desc_loc_nr_cell_id;
-static int hf_nas_5gs_ursp_r_sel_desc_loc_eutra_cell_id;
-static int hf_nas_5gs_ursp_r_sel_desc_loc_gnb_id;
-static int hf_nas_5gs_ursp_r_sel_desc_loc_tai_len;
-static int hf_nas_5gs_ursp_r_sel_desc_time_win_start;
-static int hf_nas_5gs_ursp_r_sel_desc_time_win_stop;
-static int hf_nas_5gs_ursp_r_sel_desc_pdu_sess_pair_id;
-static int hf_nas_5gs_ursp_r_sel_desc_rsn;
 static int hf_nas_5gs_dnn_len;
 static int hf_nas_5gs_upsi_sublist_len;
 static int hf_nas_5gs_upsc;
@@ -1040,7 +877,6 @@ static int hf_nas_5gs_mm_s_nssai_time_valid_info_time_window_recurrence_pattern;
 static int hf_nas_5gs_mm_s_nssai_time_valid_info_time_window_recurrence_end_time;
 static int hf_nas_5gs_mm_n3gpp_path_switch_info_nsonr;
 static int hf_nas_5gs_mm_au3n_ind_aun3reg;
-static int hf_nas_5gs_mm_feat_auth_ind_hpase;
 static int hf_nas_5gs_mm_feat_auth_ind_mbsrai;
 static int hf_nas_5gs_mm_payload_cont_info_pru;
 static int hf_nas_5gs_mm_aun3_device_sec_key_askt;
@@ -1049,98 +885,7 @@ static int hf_nas_5gs_mm_aun3_device_sec_key_key;
 static int hf_nas_5gs_mm_on_demand_nssai_len;
 static int hf_nas_5gs_mm_on_demand_nssai_slice_dereg_inactiv_timer;
 static int hf_nas_5gs_mm_ext_5gmm_cause_sat_nr;
-static int hf_nas_5gs_mm_lp_wusps_assist_info_type;
-static int hf_nas_5gs_mm_lp_wusps_assist_info_paging_subgroup_id;
-static int hf_nas_5gs_mm_lp_wusps_assist_info_ue_paging_prob_info;
-static int hf_nas_5gs_mm_lws;
 static int hf_nas_5gs_ue_os_id;
-static int hf_nas_5gs_andsp_info_type;
-static int hf_nas_5gs_andsp_info_len;
-static int hf_nas_5gs_andsp_info_contents;
-static int hf_nas_5gs_wlansp_rule_len;
-static int hf_nas_5gs_wlansp_rule_id;
-static int hf_nas_5gs_wlansp_rule_prio;
-static int hf_nas_5gs_roaming_ind;
-static int hf_nas_5gs_validity_area_ind;
-static int hf_nas_5gs_3gpp_loc_ind;
-static int hf_nas_5gs_wlan_loc_ind;
-static int hf_nas_5gs_geo_loc_ind;
-static int hf_nas_5gs_time_of_day_ind;
-
-static int hf_nas_5gs_wlansp_sel_crit_len;
-static int hf_nas_5gs_wlansp_num_sel_crit_ent;
-static int hf_nas_5gs_wlansp_sel_crit_ent_len;
-static int hf_nas_5gs_wlansp_maxbssload_ind;
-static int hf_nas_5gs_wlansp_homenetwork_ind;
-static int hf_nas_5gs_wlansp_max_bss_ld_val;
-static int hf_nas_5gs_wlansp_criteria_priority;
-static int hf_nas_5gs_wlansp_sel_crit_set_len;
-static int hf_nas_5gs_wlansp_sel_crit_set_type;
-static int hf_nas_5gs_wlansp_sel_crit_num_sub_entr;
-static int hf_nas_5gs_wlansp_pref_ssid_list_wlan_prio;
-static int hf_nas_5gs_wlansp_ssid_len;
-static int hf_nas_5gs_wlansp_pref_ssid_list_ssid_ind;
-static int hf_nas_5gs_wlansp_pref_ssid_list_hessid_ind;
-static int hf_nas_5gs_wlansp_pref_ssid_list_ssid;
-static int hf_nas_5gs_wlansp_pref_ssid_list_hessid;
-static int hf_nas_5gs_wlansp_pref_roam_part_list_prio;
-static int hf_nas_5gs_wlansp_fqdn_match_len;
-static int hf_nas_5gs_wlansp_fqdn_match;
-static int hf_nas_5gs_wlansp_country_len;
-static int hf_nas_5gs_wlansp_country;
-
-static int hf_nas_5gs_wlansp_req_prot_ip_prot;
-static int hf_nas_5gs_wlansp_req_prot_port_len;
-static int hf_nas_5gs_wlansp_req_prot_port;
-static int hf_nas_5gs_wlansp_sub_ent_len;
-static int hf_nas_5gs_wlansp_sel_crit_sp_exc;
-static int hf_nas_5gs_wlansp_sp_excl_list_ulbi_ind;
-static int hf_nas_5gs_wlansp_sp_excl_list_dlbi_ind;
-static int hf_nas_5gs_wlansp_sp_excl_list_nw_type;
-static int hf_nas_5gs_wlansp_sp_excl_list_ulb;
-static int hf_nas_5gs_wlansp_sp_excl_list_dlb;
-static int hf_nas_5gs_wlansp_val_area_len;
-static int hf_nas_5gs_wlansp_time_of_day_len;
-static int hf_nas_5gs_wlansp_num_loc_entr;
-static int hf_nas_5gs_wlansp_loc_entry_len;
-static int hf_nas_5gs_wlansp_loc_entry_type;
-static int hf_nas_5gs_wlansp_loc_num_sub_entries;
-static int hf_nas_5gs_wlansp_loc_3gpp_sub_ent_len;
-static int hf_nas_5gs_wlansp_loc_3gpp_num_loc_fields;
-static int hf_nas_5gs_wlansp_loc_3gpp_loc_field_len;
-static int hf_nas_5gs_wlansp_loc_3gpp_loc_field_type;
-static int hf_nas_5gs_wlansp_loc_3gpp_loc_tac;
-static int hf_nas_5gs_wlansp_loc_3gpp_loc_eutra_ci;
-static int hf_nas_5gs_wlansp_loc_3gpp_loc_nr_ci;
-static int hf_nas_5gs_wlansp_loc_num_loc_fields;
-static int hf_nas_5gs_wlansp_loc_sub_ent_len;
-static int hf_nas_5gs_wlansp_loc_wlan_loc_field_len;
-static int hf_nas_5gs_wlansp_loc_wlan_sub_ent_type;
-static int hf_nas_5gs_wlansp_loc_hessid;
-static int hf_nas_5gs_wlansp_loc_ssid;
-static int hf_nas_5gs_wlansp_loc_bssid;
-static int hf_nas_5gs_geo_loc_anc_lat;
-static int hf_nas_5gs_geo_loc_anc_long;
-static int hf_nas_5gs_geo_loc_rad;
-static int hf_nas_5gs_n3nan_sel_len;
-static int hf_nas_5gs_n3nan_node_sel_entry_len;
-static int hf_nas_5gs_node_sel_entry_fqdn_format;
-static int hf_nas_5gs_node_sel_entry_pref;
-static int hf_nas_5gs_node_sel_entry_prio;
-static int hf_nas_5gs_n3nan_node_conf_inf_type;
-static int hf_nas_5gs_n3nan_home_n3iwf_id_type;
-static int hf_nas_5gs_home_n3iwf_ipv4_addr;
-static int hf_nas_5gs_home_n3iwf_ipv6_addr;
-static int hf_nas_5gs_home_n3iwf_fqdn_len;
-static int hf_nas_5gs_home_n3iwf_id_cont_len;
-static int hf_nas_5gs_home_n3iwf_fqdn;
-
-static int hf_nas_5gs_n3nan_home_epdg_id_type;
-static int hf_nas_5gs_home_epdg_ipv4_addr;
-static int hf_nas_5gs_home_epdg_ipv6_addr;
-static int hf_nas_5gs_home_epdg_fqdn_len;
-static int hf_nas_5gs_home_epdg_id_cont_len;
-static int hf_nas_5gs_home_epdg_fqdn;
 
 static expert_field ei_nas_5gs_extraneous_data;
 static expert_field ei_nas_5gs_unknown_pd;
@@ -1160,32 +905,6 @@ static expert_field ei_nas_5gs_not_diss;
 #define NAS_5GS_INTEG_CIPH_NAS_MSG     2
 #define NAS_5GS_INTEG_NEW_NAS_MSG      3
 #define NAS_5GS_INTEG_CIPH_NEW_NAS_MSG 4
-
-#define NAS_5GS_SM_MSG_PDU_SESSION_ESTABLISHMENT_REQUEST            0xc1
-#define NAS_5GS_SM_MSG_PDU_SESSION_ESTABLISHMENT_RESPONSE           0xc2
-#define NAS_5GS_SM_MSG_PDU_SESSION_ESTABLISHMENT_REJECT             0xc3
-
-#define NAS_5GS_SM_MSG_PDU_SESSION_AUTHENTICATION_COMMAND           0xc5
-#define NAS_5GS_SM_MSG_PDU_SESSION_AUTHENTICATION_COMPLETE          0xc6
-#define NAS_5GS_SM_MSG_PDU_SESSION_AUTHENTICATION_RESULT            0xc7
-
-#define NAS_5GS_SM_MSG_PDU_SESSION_MODIFICATION_REQUEST             0xc9
-#define NAS_5GS_SM_MSG_PDU_SESSION_MODIFICATION_REJECT              0xca
-#define NAS_5GS_SM_MSG_PDU_SESSION_MODIFICATION_COMMAND             0xcb
-#define NAS_5GS_SM_MSG_PDU_SESSION_MODIFICATION_COMPLETE            0xcc
-#define NAS_5GS_SM_MSG_PDU_SESSION_MODIFICATION_COMMAND_REJECT      0xcd
-
-#define NAS_5GS_SM_MSG_PDU_SESSION_RELEASE_REQUEST                  0xd1
-#define NAS_5GS_SM_MSG_PDU_SESSION_RELEASE_REJECT                   0xd2
-#define NAS_5GS_SM_MSG_PDU_SESSION_RELEASE_COMMAND                  0xd3
-#define NAS_5GS_SM_MSG_PDU_SESSION_RELEASE_COMPLETE                 0xd4
-
-#define NAS_5GS_SM_MSG_5GSM_STATUS                                  0xd6
-
-#define NAS_5GS_SM_MSG_SERVICE_LEVEL_AUTHENTICATION_COMMAND         0xd8
-#define NAS_5GS_SM_MSG_SERVICE_LEVEL_AUTHENTICATION_COMPLETE        0xd9
-#define NAS_5GS_SM_MSG_REMOTE_UE_REPORT                             0xda
-#define NAS_5GS_SM_MSG_REMOTE_UE_REPORT_RESPONSE                    0xdb
 
 static const value_string nas_5gs_security_header_type_vals[] = {
     { NAS_5GS_PLAIN_NAS_MSG,          "Plain NAS message, not security protected"},
@@ -1224,37 +943,6 @@ static const value_string nas_5gs_epd_vals[] = {
     { TGPP_PD_5GMM,      "5G mobility management messages" },
     { 0,    NULL }
 };
-
-
-
-/* Format functions  XXXX Should these be in a common file in epan? */
-/* Copied from gsm_a_common dissector */
-
-static void
-nas_5gs_degreesLatitude_fmt(char* s, uint32_t v)
-{
-    snprintf(s, ITEM_LABEL_LENGTH, "%s%f degrees (%u)",
-        (v & 0x00800000) ? "-" : "",
-        ((float)(v & 0x7fffff) / 8388607.0) * 90, v);
-}
-
-static void
-nas_5gs_degreesLongitude_fmt(char* s, uint32_t v)
-{
-    int32_t longitude = (int32_t)v;
-
-    longitude |= (longitude & 0x800000) ? 0xff000000 : 0x00000000;
-    /* (X/0xffffff) *360 = degrees */
-
-    snprintf(s, ITEM_LABEL_LENGTH, "%f degrees (%d)",
-        ((float)longitude / 16777215.0) * 360, longitude);
-}
-
-static void
-nas_5gs_radius_fmt(char* s, uint32_t v)
-{
-    snprintf(s, ITEM_LABEL_LENGTH, "%um (%u)", 5 * v, v);
-}
 
 struct nas5gs_private_data {
     uint8_t sec_hdr_type;
@@ -1416,38 +1104,14 @@ de_nas_5gs_mm_5gmm_cap(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_,
     };
 
     static int * const flags9[] = {
-        &hf_nas_5gs_lp_wuspsai_si_b7,
-        &hf_nas_5gs_atuc_b6,
-        &hf_nas_5gs_rslppu_b5,
-        &hf_nas_5gs_rslpvu_b4,
-        &hf_nas_5gs_nsuc_b3,
-        &hf_nas_5gs_rslpl_b2,
-        &hf_nas_5gs_mm_nvl_satnr_b1,
-        &hf_nas_5gs_mm_mcsiu_b0,
-        NULL
-    };
-
-    static int * const flags10[] = {
-        &hf_nas_5gs_lwd_b7,
-        &hf_nas_5gs_ef5l_b6,
-        &hf_nas_5gs_mint_eps_b5,
-        &hf_nas_5gs_5g_prose_l2imrelay_b4,
-        &hf_nas_5gs_5g_prose_l3imrelay_b3,
-        &hf_nas_5gs_mlcsup_b2,
-        &hf_nas_5gs_5g_prose_mci_b1,
-        &hf_nas_5gs_ophpae_b0,
-        NULL
-    };
-
-    static int * const flags11[] = {
         &hf_nas_5gs_spare_b7,
         &hf_nas_5gs_spare_b6,
         &hf_nas_5gs_spare_b5,
         &hf_nas_5gs_spare_b4,
-        &hf_nas_5gs_lcscdl_b3,
-        &hf_nas_5gs_spare_b2,
-        &hf_nas_5gs_spare_b1,
-        &hf_nas_5gs_nonsatlsp_b0,
+        &hf_nas_5gs_nsuc_b3,
+        &hf_nas_5gs_rslpl_b2,
+        &hf_nas_5gs_mm_nvl_satnr_b1,
+        &hf_nas_5gs_mm_mcsiu_b0,
         NULL
     };
 
@@ -1502,18 +1166,6 @@ de_nas_5gs_mm_5gmm_cap(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_,
         return (len);
 
     proto_tree_add_bitmask_list(tree, tvb, curr_offset, 1, flags9, ENC_BIG_ENDIAN);
-    curr_offset++;
-
-    if ((curr_offset - offset) >= len)
-        return (len);
-
-    proto_tree_add_bitmask_list(tree, tvb, curr_offset, 1, flags10, ENC_BIG_ENDIAN);
-    curr_offset++;
-
-    if ((curr_offset - offset) >= len)
-        return (len);
-
-    proto_tree_add_bitmask_list(tree, tvb, curr_offset, 1, flags11, ENC_BIG_ENDIAN);
     curr_offset++;
 
     EXTRANEOUS_DATA_CHECK(len, curr_offset - offset, pinfo, &ei_nas_5gs_extraneous_data);
@@ -1772,7 +1424,7 @@ de_nas_5gs_mm_5gs_mobile_id(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
             }
         } else if (supi_fmt == 1 ||supi_fmt == 2 ||supi_fmt == 3) {
             /* NAI */
-            proto_tree_add_item(tree, hf_nas_5gs_mm_suci_nai, tvb, offset, len - 1, ENC_UTF_8);
+            proto_tree_add_item(tree, hf_nas_5gs_mm_suci_nai, tvb, offset, len - 1, ENC_UTF_8 | ENC_NA);
         } else {
             proto_tree_add_expert(tree, pinfo, &ei_nas_5gs_unknown_value, tvb, offset, len - 1);
         }
@@ -1834,7 +1486,7 @@ de_nas_5gs_mm_5gs_mobile_id(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
         /* EUI-64 */
         proto_tree_add_bitmask_list(tree, tvb, offset, 1, flags_spare_tid, ENC_BIG_ENDIAN);
         offset++;
-        proto_tree_add_item(tree, hf_nas_5gs_mm_eui_64, tvb, offset, 8, ENC_BIG_ENDIAN);
+        proto_tree_add_item(tree, hf_nas_5gs_mm_eui_64, tvb, offset, 8, ENC_NA);
         break;
 
     default:
@@ -1927,8 +1579,8 @@ de_nas_5gs_mm_5gs_nw_feat_sup(tvbuff_t *tvb, proto_tree *tree, packet_info *pinf
     static int * const flags_oct6[] = {
         &hf_nas_5gs_spare_b7,
         &hf_nas_5gs_spare_b6,
-        &hf_nas_5gs_nw_feat_sup_ef5l,
-        &hf_nas_5gs_nw_feat_sup_mlcsup,
+        &hf_nas_5gs_spare_b5,
+        &hf_nas_5gs_spare_b4,
         &hf_nas_5gs_nw_feat_sup_rslp,
         &hf_nas_5gs_nw_feat_sup_supl,
         &hf_nas_5gs_nw_feat_sup_lcs_upp,
@@ -2412,7 +2064,7 @@ dissect_nas_5gs_mm_cag_information_list(tvbuff_t* tvb, proto_tree* tree, packet_
     proto_item *item;
     unsigned num_entry = 1;
     uint32_t curr_offset = offset;
-    uint32_t start_offset, entry_len, cag_id_offset;
+    uint32_t start_offset, entry_len;
     bool caili, lci;
 
     while ((curr_offset - offset) < len) {
@@ -2425,10 +2077,9 @@ dissect_nas_5gs_mm_cag_information_list(tvbuff_t* tvb, proto_tree* tree, packet_
         dissect_e212_mcc_mnc(tvb, pinfo, sub_tree, curr_offset, E212_NONE, true);
         curr_offset += 3;
         if (is_ext) {
-            proto_tree_add_bits_item(sub_tree, hf_nas_5gs_spare_bits, tvb, (curr_offset << 3), 4, ENC_BIG_ENDIAN);
+            proto_tree_add_bits_item(sub_tree, hf_nas_5gs_spare_bits, tvb, (curr_offset << 3), 5, ENC_BIG_ENDIAN);
             proto_tree_add_item_ret_boolean(sub_tree, hf_nas_5gs_mm_cag_info_entry_caili, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &caili);
             proto_tree_add_item_ret_boolean(sub_tree, hf_nas_5gs_mm_cag_info_entry_lci, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &lci);
-            proto_tree_add_bits_item(sub_tree, hf_nas_5gs_spare_bits, tvb, (curr_offset << 3) + 6, 1, ENC_BIG_ENDIAN);
         } else {
             proto_tree_add_bits_item(sub_tree, hf_nas_5gs_spare_bits, tvb, (curr_offset << 3), 7, ENC_BIG_ENDIAN);
             caili = false;
@@ -2437,13 +2088,10 @@ dissect_nas_5gs_mm_cag_information_list(tvbuff_t* tvb, proto_tree* tree, packet_
         proto_tree_add_item(sub_tree, hf_nas_5gs_mm_cag_info_entry_cag_only, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
         curr_offset++;
         if (lci) {
-            cag_id_offset = curr_offset;
             proto_tree_add_item_ret_uint(sub_tree, hf_nas_5gs_mm_cag_info_entry_cag_without_add_info_list_len, tvb, curr_offset, 2, ENC_BIG_ENDIAN, &entry_len);
             curr_offset += 2;
-        } else {
-            cag_id_offset = start_offset;
         }
-        while ((curr_offset - cag_id_offset) < entry_len) {
+        while ((curr_offset - start_offset) < entry_len) {
             proto_tree_add_item(sub_tree, hf_nas_5gs_mm_cag_info_entry_cag_id, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
             curr_offset += 4;
         }
@@ -2689,17 +2337,6 @@ de_nas_5gs_mm_ciphering_key_data(tvbuff_t* tvb, proto_tree* tree, packet_info* p
             &hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_5_1,
             &hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_1_9,
             &hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_1_10,
-            &hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_2_17a,
-            &hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_2_18a,
-            NULL
-        };
-        static int * const eutra_flags6[] = {
-            &hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_2_20a,
-            &hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_2_26,
-            &hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_2_27,
-            &hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_1_11,
-            &hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_1_12,
-            &hf_nas_5gs_spare_b2,
             &hf_nas_5gs_spare_b1,
             &hf_nas_5gs_spare_b0,
             NULL
@@ -2764,21 +2401,10 @@ de_nas_5gs_mm_ciphering_key_data(tvbuff_t* tvb, proto_tree* tree, packet_info* p
             &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_1_10,
             &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_2_24,
             &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_2_25,
-            &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_2_17a,
-            &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_2_18a,
-            &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_2_20a,
-            &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_2_26,
-            NULL
-        };
-        static int * const nr_flags7[] = {
-            &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_2_27,
-            &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_1_11,
-            &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_1_12,
-            &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_6_7,
-            &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_7_1,
-            &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_7_2,
-            &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_7_3,
-            &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_7_4,
+            &hf_nas_5gs_spare_b3,
+            &hf_nas_5gs_spare_b2,
+            &hf_nas_5gs_spare_b1,
+            &hf_nas_5gs_spare_b0,
             NULL
         };
 
@@ -2809,8 +2435,6 @@ de_nas_5gs_mm_ciphering_key_data(tvbuff_t* tvb, proto_tree* tree, packet_info* p
                 proto_tree_add_bitmask_list(sub_tree, tvb, curr_offset + 3, 1, eutra_flags4, ENC_NA);
             if (pos_sib_len >= 5)
                 proto_tree_add_bitmask_list(sub_tree, tvb, curr_offset + 4, 1, eutra_flags5, ENC_NA);
-            if (pos_sib_len >= 6)
-                proto_tree_add_bitmask_list(sub_tree, tvb, curr_offset + 5, 1, eutra_flags6, ENC_NA);
             curr_offset += pos_sib_len;
         }
         proto_tree_add_bits_item(sub_tree, hf_nas_5gs_spare_bits, tvb, offset<<3, 4, ENC_BIG_ENDIAN);
@@ -2828,8 +2452,6 @@ de_nas_5gs_mm_ciphering_key_data(tvbuff_t* tvb, proto_tree* tree, packet_info* p
                 proto_tree_add_bitmask_list(sub_tree, tvb, curr_offset + 4, 1, nr_flags5, ENC_NA);
             if (pos_sib_len >= 6)
                 proto_tree_add_bitmask_list(sub_tree, tvb, curr_offset + 5, 1, nr_flags6, ENC_NA);
-            if (pos_sib_len >= 7)
-                proto_tree_add_bitmask_list(sub_tree, tvb, curr_offset + 6, 1, nr_flags7, ENC_NA);
             curr_offset += pos_sib_len;
         }
         tm.tm_wday = 0;
@@ -2948,6 +2570,7 @@ de_nas_5gs_mm_eps_nas_msg_cont(tvbuff_t *tvb, proto_tree *tree, packet_info *pin
 {
     /* an EPS NAS message as specified in 3GPP TS 24.301 */
     if (nas_eps_handle) {
+        col_append_str(pinfo->cinfo, COL_PROTOCOL, "/");
         col_set_fence(pinfo->cinfo, COL_PROTOCOL);
         call_dissector(nas_eps_handle, tvb_new_subset_length(tvb, offset, len), pinfo, tree);
     }
@@ -3204,7 +2827,7 @@ de_nas_5gs_mm_nas_msg_cont(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
     if (nas5gs_data->sec_hdr_type == NAS_5GS_PLAIN_NAS_MSG || g_nas_5gs_null_decipher) {
         dissect_nas_5gs(tvb_new_subset_length(tvb, offset, len), pinfo, tree, NULL);
     } else {
-        proto_tree_add_item(tree, hf_nas_5gs_ciphered_msg, tvb, offset, len, ENC_NA);
+        proto_tree_add_subtree(tree, tvb, offset, len, ett_nas_5gs_enc, NULL, "Encrypted data");
     }
 
     return len;
@@ -3450,7 +3073,7 @@ de_nas_5gs_mm_op_def_acc_cat_def(tvbuff_t *tvb, proto_tree *tree, packet_info *p
                     sub_tree3 = proto_tree_add_subtree_format(sub_tree2, tvb, curr_offset, -1, ett_nas_5gs_mm_op_def_acc_cat_criteria,
                                                               &item3, "OS Id + Os App Id %u", k);
                     proto_tree_add_item(sub_tree3, hf_nas_5gs_mm_op_def_access_cat_criteria_os_id,
-                                        tvb, curr_offset, 16, ENC_BIG_ENDIAN);
+                                        tvb, curr_offset, 16, ENC_NA);
                     curr_offset += 16;
                     proto_tree_add_item_ret_uint(sub_tree3, hf_nas_5gs_mm_op_def_access_cat_criteria_os_app_id_len,
                                                  tvb, curr_offset, 1, ENC_BIG_ENDIAN, &os_app_id_len);
@@ -3533,7 +3156,6 @@ de_nas_5gs_mm_pld_cont(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
         dissect_nas_5gs_common(tvb_new_subset_length(tvb, offset, len), pinfo, tree, 0, NULL);
         break;
     case 2: /* SMS */
-    case 7: /* Location services */
         if (gsm_a_dtap_handle) {
             call_dissector(gsm_a_dtap_handle, tvb_new_subset_length(tvb, offset, len), pinfo, tree);
         } else {
@@ -3546,9 +3168,6 @@ de_nas_5gs_mm_pld_cont(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
         } else {
             proto_tree_add_item(tree, hf_nas_5gs_mm_pld_cont, tvb, offset, len, ENC_NA);
         }
-        break;
-    case 4: /* SOR transparent container */
-        de_nas_5gs_mm_sor_transp_cont(tvb, tree, pinfo, offset, len, NULL, 0);
         break;
     case 5: /* UE policy container */
         dissect_nas_5gs_updp(tvb_new_subset_length(tvb, offset, len), pinfo, tree);
@@ -4180,7 +3799,8 @@ de_nas_5gs_mm_sor_transp_cont(tvbuff_t *tvb, proto_tree *tree, packet_info *pinf
     };
 
     proto_tree *sub_tree;
-    uint8_t oct, data_type, list_type, ap, list_ind;
+
+    uint8_t oct, data_type, list_type, ap;
     uint32_t curr_offset = offset;
     int i = 1;
 
@@ -4190,7 +3810,6 @@ de_nas_5gs_mm_sor_transp_cont(tvbuff_t *tvb, proto_tree *tree, packet_info *pinf
         /* SOR header    octet 4*/
         proto_tree_add_bitmask_list(tree, tvb, curr_offset, 1, flags_dt0, ENC_BIG_ENDIAN);
         curr_offset++;
-        list_ind = (oct & 0x2) >> 1;
         list_type = (oct & 0x4) >> 2;
         ap = (oct & 0x10) >> 4;
         /* SOR-MAC-IAUSF    octet 5-20 */
@@ -4215,39 +3834,37 @@ de_nas_5gs_mm_sor_transp_cont(tvbuff_t *tvb, proto_tree *tree, packet_info *pinf
                 NULL
             };
 
-            if (list_ind) {
-                proto_tree_add_item_ret_uint(tree, hf_nas_5gs_sor_plmn_id_act_len, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &plmn_id_act_len);
+            proto_tree_add_item_ret_uint(tree, hf_nas_5gs_sor_plmn_id_act_len, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &plmn_id_act_len);
+            curr_offset++;
+            while ((curr_offset - offset) < plmn_id_act_len) {
+                sub_tree = proto_tree_add_subtree_format(tree, tvb, curr_offset, 5, ett_nas_5gs_mm_sor, NULL, "List item %u", i);
+                curr_offset = dissect_e212_mcc_mnc(tvb, pinfo, sub_tree, curr_offset, E212_NONE, true);
+                curr_offset += 3;
+                proto_tree_add_bitmask_list(tree, tvb, curr_offset, 1, flags_access_tech_1, ENC_BIG_ENDIAN);
                 curr_offset++;
-                while ((curr_offset - offset) < plmn_id_act_len) {
-                    sub_tree = proto_tree_add_subtree_format(tree, tvb, curr_offset, 5, ett_nas_5gs_mm_sor, NULL, "List item %u", i);
-                    curr_offset = dissect_e212_mcc_mnc(tvb, pinfo, sub_tree, curr_offset, E212_NONE, true);
-                    curr_offset += 3;
-                    proto_tree_add_bitmask_list(tree, tvb, curr_offset, 1, flags_access_tech_1, ENC_BIG_ENDIAN);
-                    curr_offset++;
-                    proto_tree_add_bitmask_list(tree, tvb, curr_offset, 1, flags_access_tech_2, ENC_BIG_ENDIAN);
-                    curr_offset++;
-                    i++;
-                }
+                proto_tree_add_bitmask_list(tree, tvb, curr_offset, 1, flags_access_tech_2, ENC_BIG_ENDIAN);
+                curr_offset++;
+                i++;
             }
             proto_tree_add_bitmask_list_ret_uint64(tree, tvb, curr_offset, 1, flags_oct_o, ENC_BIG_ENDIAN, &oct_o_flags);
             curr_offset++;
             if (oct_o_flags & 0x01) {
                 proto_tree_add_item_ret_uint(tree, hf_nas_5gs_sor_cmci_len, tvb, curr_offset, 2, ENC_BIG_ENDIAN, &cont_len);
                 curr_offset += 2;
-                proto_tree_add_item(tree, hf_nas_5gs_sor_cmci_payload, tvb, curr_offset, cont_len, ENC_NA);
-                curr_offset += cont_len;
+                proto_tree_add_item(tree, hf_nas_5gs_sor_cmci_payload, tvb, curr_offset, len, ENC_NA);
+                curr_offset += len;
             }
             if (oct_o_flags & 0x04) {
                 proto_tree_add_item_ret_uint(tree, hf_nas_5gs_sor_snpn_si_len, tvb, curr_offset, 2, ENC_BIG_ENDIAN, &cont_len);
                 curr_offset += 2;
-                proto_tree_add_item(tree, hf_nas_5gs_sor_snpn_si_payload, tvb, curr_offset, cont_len, ENC_NA);
-                curr_offset += cont_len;
+                proto_tree_add_item(tree, hf_nas_5gs_sor_snpn_si_payload, tvb, curr_offset, len, ENC_NA);
+                curr_offset += len;
             }
             if (oct_o_flags & 0x08) {
                 proto_tree_add_item_ret_uint(tree, hf_nas_5gs_sor_snpn_si_ls_len, tvb, curr_offset, 2, ENC_BIG_ENDIAN, &cont_len);
                 curr_offset += 2;
-                proto_tree_add_item(tree, hf_nas_5gs_sor_snpn_si_ls_payload, tvb, curr_offset, cont_len, ENC_NA);
-                curr_offset += cont_len;
+                proto_tree_add_item(tree, hf_nas_5gs_sor_snpn_si_ls_payload, tvb, curr_offset, len, ENC_NA);
+                curr_offset += len;
             }
         } else {
             /* PLMN ID and access technology list    octet 23*-102* */
@@ -4391,9 +4008,7 @@ de_nas_5gs_mm_ue_sec_cap(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_
 
     /* EIA0    128-EIA1    128-EIA2    128-EIA3    EIA4    EIA5    EIA6    EIA7 octet 6 */
     proto_tree_add_bitmask_list(tree, tvb, curr_offset, 1, oct6_flags, ENC_NA);
-    curr_offset++;
 
-    EXTRANEOUS_DATA_CHECK(len, curr_offset - offset, pinfo, &ei_nas_5gs_extraneous_data);
 
     return len;
 }
@@ -4758,14 +4373,32 @@ de_nas_5gs_mm_extended_rejected_nssai(tvbuff_t* tvb, proto_tree* tree, packet_in
             sub_rejected_tree = proto_tree_add_subtree_format(sub_partial_tree, tvb, curr_offset, -1, ett_nas_5gs_mm_ext_rej_nssai,
                 &item, "Rejected S-NSSAI %u", i+1);
 
-
+            /* Octet 3 and octet 4 shall always be included*/
             proto_tree_add_item_ret_uint(sub_rejected_tree, hf_nas_5gs_mm_len_of_rejected_s_nssai, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &nssai_len);
             proto_tree_add_item(sub_rejected_tree, hf_nas_5gs_mm_rejected_s_nssai_cause_value, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
             proto_item_set_len(item, nssai_len);
             curr_offset++;
-
-            /* S-NSSAI */
-            curr_offset += de_nas_5gs_cmn_s_nssai(tvb, sub_rejected_tree, pinfo, curr_offset, nssai_len, NULL, 0);
+            proto_tree_add_item(sub_rejected_tree, hf_nas_5gs_mm_sst, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
+            curr_offset++;
+            if (nssai_len < 3) {
+                continue;
+            }
+            /* If the octet 5 is included, then octet 6 and octet 7 shall be included.*/
+            proto_tree_add_item(sub_rejected_tree, hf_nas_5gs_mm_sd, tvb, curr_offset, 3, ENC_BIG_ENDIAN);
+            curr_offset += 3;
+            if (nssai_len < 6) {
+                continue;
+            }
+            /* If the octet 8 is included, then octets 9, 10, and 11 may be included*/
+            /* Mapped HPLMN SST */
+            proto_tree_add_item(sub_rejected_tree, hf_nas_5gs_mm_mapped_hplmn_sst, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
+            curr_offset += 1;
+            if (nssai_len < 7) {
+                continue;
+            }
+            /* Mapped HPLMN SD */
+            proto_tree_add_item(sub_rejected_tree, hf_nas_5gs_mm_mapped_hplmn_ssd, tvb, offset, 3, ENC_BIG_ENDIAN);
+            curr_offset += 3;
         }
         num_partial_items++;
     }
@@ -5016,8 +4649,8 @@ de_nas_5gs_mm_reg_wait_range(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo
 
     subtree = proto_tree_add_subtree(tree, tvb, offset, 1, ett_nas_5gs_mm_reg_wait_range, NULL, "Minimum registration wait time");
     de_gc_timer(tvb, subtree, pinfo, offset, 1, NULL, 0);
-    subtree = proto_tree_add_subtree(tree, tvb, offset+1, 1, ett_nas_5gs_mm_reg_wait_range, NULL, "Maximum registration wait time");
-    de_gc_timer(tvb, subtree, pinfo, offset+1, 1, NULL, 0);
+    subtree = proto_tree_add_subtree(tree, tvb, offset+1, 1, ett_nas_5gs_mm_reg_wait_range, NULL, "Minimum registration wait time");
+    de_gc_timer(tvb, subtree, pinfo, offset, 1, NULL, 0);
 
     return len;
 }
@@ -5059,31 +4692,22 @@ de_nas_5gs_mm_nsag_info(tvbuff_t* tvb _U_, proto_tree* tree _U_, packet_info* pi
     while ((curr_offset - offset) < len) {
         proto_item *item;
         proto_tree *subtree;
-        uint32_t nsag_len, s_nssai_len, s_nssai_start, tai_len, nsag_start, length;
+        uint32_t nsag_len, s_nssai_len, tai_len;
 
         subtree = proto_tree_add_subtree_format(tree, tvb, curr_offset, -1, ett_nas_5gs_mm_nsag_info, &item, "NSSRG values for S-NSSAI %u", i);
         proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_mm_nsag_info_len, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &nsag_len);
         curr_offset++;
         proto_item_set_len(item, nsag_len + 1);
-        nsag_start = curr_offset;
         proto_tree_add_item(subtree, hf_nas_5gs_mm_nsag_id, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-        curr_offset++;
         proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_mm_nsag_info_s_nssai_len, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &s_nssai_len);
         curr_offset++;
-        s_nssai_start = curr_offset;
-        while ((curr_offset - s_nssai_start) < s_nssai_len) {
-            proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_mm_length, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &length);
-            curr_offset++;
-            curr_offset += de_nas_5gs_cmn_s_nssai(tvb, subtree, pinfo, curr_offset, length, NULL, 0);
-        }
+        curr_offset += de_nas_5gs_cmn_s_nssai(tvb, subtree, pinfo, curr_offset, s_nssai_len, NULL, 0);
         proto_tree_add_item(subtree, hf_nas_5gs_mm_nsag_prio, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
         curr_offset++;
-        if ((curr_offset - nsag_start) < nsag_len) {
-            proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_mm_nsag_tais_list_len, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &tai_len);
-            curr_offset++;
-            if (tai_len) {
-                curr_offset += de_nas_5gs_mm_5gs_ta_id_list(tvb, subtree, pinfo, curr_offset, tai_len, NULL, 0);
-            }
+        proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_mm_nsag_tais_list_len, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &tai_len);
+        curr_offset++;
+        if (tai_len) {
+            curr_offset += de_nas_5gs_mm_5gs_ta_id_list(tvb, subtree, pinfo, curr_offset, tai_len, NULL, 0);
         }
         i++;
     }
@@ -5242,7 +4866,7 @@ de_nas_5gs_mm_n3iwf_id(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo _U_,
         proto_tree_add_item(tree, hf_nas_5gs_mm_n3iwf_id_ipv6, tvb, offset+5, 16, ENC_NA);
         break;
     case 4:
-        proto_tree_add_item(tree, hf_nas_5gs_mm_n3iwf_id_fqdn, tvb, offset+1, len-1, ENC_APN_STR);
+        proto_tree_add_item(tree, hf_nas_5gs_mm_n3iwf_id_fqdn, tvb, offset+1, len-1, ENC_APN_STR|ENC_NA);
         break;
     default:
         break;
@@ -5285,7 +4909,7 @@ de_nas_5gs_mm_tnan_info(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo _U_ 
         proto_tree_add_item_ret_uint(tree, hf_nas_5gs_mm_tnan_info_ssid_len, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &ret_len);
         curr_offset++;
         proto_tree_add_item(tree, hf_nas_5gs_mm_tnan_info_ssid, tvb, curr_offset, ret_len, ENC_NA);
-        /*curr_offset += ret_len;*/
+        curr_offset += ret_len;
     }
 
     return len;
@@ -5448,12 +5072,12 @@ de_nas_5gs_mm_s_nssai_loc_valid_info(tvbuff_t* tvb, proto_tree* tree, packet_inf
         proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_mm_length, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &length);
         curr_offset++;
         curr_offset += de_nas_5gs_cmn_s_nssai(tvb, subtree, pinfo, curr_offset, length, NULL, 0);
-        proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_mm_s_nssai_loc_valid_info_per_s_nssai_nb_nr_cgi, tvb, curr_offset, 2, ENC_BIG_ENDIAN, &length);
-        curr_offset += 2;
+        proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_mm_s_nssai_loc_valid_info_per_s_nssai_nb_nr_cgi, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &length);
+        curr_offset++;
         for (j = 0; j < length; j++) {
             proto_tree_add_item(subtree, hf_nas_5gs_mm_s_nssai_loc_valid_info_per_s_nssai_nr_cell_id, tvb, curr_offset, 5, ENC_BIG_ENDIAN);
             curr_offset += 5;
-            curr_offset = dissect_e212_mcc_mnc(tvb, pinfo, subtree, curr_offset, E212_NONE, true);
+            curr_offset = dissect_e212_mcc_mnc(tvb, pinfo, tree, curr_offset, E212_NONE, true);
         }
         proto_item_set_len(item, curr_offset - start_offset);
     }
@@ -5503,16 +5127,16 @@ de_nas_5gs_mm_s_nssai_time_valid_info(tvbuff_t* tvb, proto_tree* tree, packet_in
         while ((curr_offset - start_offset2) < length) {
             proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_mm_s_nssai_time_valid_info_time_window_len, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &time_window_len);
             curr_offset++;
-            proto_tree_add_item(subtree, hf_nas_5gs_mm_s_nssai_time_valid_info_time_window_start_time, tvb, curr_offset, 8, ENC_BIG_ENDIAN);
+            proto_tree_add_item(subtree, hf_nas_5gs_mm_s_nssai_time_valid_info_time_window_start_time, tvb, curr_offset, 8, ENC_NA);
             curr_offset += 8;
-            proto_tree_add_item(subtree, hf_nas_5gs_mm_s_nssai_time_valid_info_time_window_stop_time, tvb, curr_offset, 8, ENC_BIG_ENDIAN);
+            proto_tree_add_item(subtree, hf_nas_5gs_mm_s_nssai_time_valid_info_time_window_stop_time, tvb, curr_offset, 8, ENC_NA);
             curr_offset += 8;
             if (time_window_len >= 9) {
                 proto_tree_add_bits_item(tree, hf_nas_5gs_spare_bits, tvb, offset << 3, 4, ENC_BIG_ENDIAN);
                 proto_tree_add_item(tree, hf_nas_5gs_mm_s_nssai_time_valid_info_time_window_recurrence_pattern, tvb, offset, 1, ENC_BIG_ENDIAN);
                 curr_offset++;
                 if (time_window_len >= 10) {
-                    proto_tree_add_item(subtree, hf_nas_5gs_mm_s_nssai_time_valid_info_time_window_recurrence_end_time, tvb, curr_offset, 8, ENC_BIG_ENDIAN);
+                    proto_tree_add_item(subtree, hf_nas_5gs_mm_s_nssai_time_valid_info_time_window_recurrence_end_time, tvb, curr_offset, 8, ENC_NA);
                     curr_offset += 8;
                 }
             }
@@ -5578,11 +5202,6 @@ de_nas_5gs_mm_au3n_ind(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo _U_,
 /*
  * 9.11.3.105   Feature authorization indication
  */
-static const true_false_string tfs_nas_5gs_mm_feat_auth_ind_hpase = {
-    "High priority access UEs are not exempt from service area restrictions",
-    "High priority access UEs are exempt from service area restrictions or the network does not support operator policy for high priority access exemptions for service area restrictions"
-};
-
 static const value_string nas_5gs_mm_feat_auth_ind_mbsrai_vals[] = {
     { 0, "no information" },
     { 1, "not authorized to operate as MBSR but allowed to operate as a UE" },
@@ -5595,8 +5214,7 @@ de_nas_5gs_mm_feat_auth_ind(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo 
     uint32_t offset, unsigned len,
     char* add_string _U_, int string_len _U_)
 {
-    proto_tree_add_bits_item(tree, hf_nas_5gs_spare_bits, tvb, offset << 3, 5, ENC_BIG_ENDIAN);
-    proto_tree_add_item(tree, hf_nas_5gs_mm_feat_auth_ind_hpase, tvb, offset, 1, ENC_BIG_ENDIAN);
+    proto_tree_add_bits_item(tree, hf_nas_5gs_spare_bits, tvb, offset << 3, 6, ENC_BIG_ENDIAN);
     proto_tree_add_item(tree, hf_nas_5gs_mm_feat_auth_ind_mbsrai, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     return len;
@@ -5667,7 +5285,7 @@ de_nas_5gs_mm_on_demand_nssai(tvbuff_t* tvb, proto_tree* tree, packet_info* pinf
         proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_mm_length, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &ret_len);
         curr_offset++;
         curr_offset += de_nas_5gs_cmn_s_nssai(tvb, subtree, pinfo, curr_offset, ret_len, NULL, 0);
-        if ((curr_offset - start_offset) < (length + 1)) {
+        if ((curr_offset < start_offset) < (length + 1)) {
             proto_tree_add_item(subtree, hf_nas_5gs_mm_on_demand_nssai_slice_dereg_inactiv_timer, tvb, curr_offset, 2, ENC_BIG_ENDIAN);
             curr_offset += 2;
         }
@@ -5697,63 +5315,6 @@ de_nas_5gs_mm_ext_5gmm_cause(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo
 }
 
 /*
- * 9.11.3.110 Access technology utilization control
- */
-/* See subclause 9.9.3.3A in 3GPP TS 24.301 [15]. */
-
-/*
- * 9.11.3.111 LP-WUSPS assistance information
- */
-static const value_string nas_5gs_mm_lp_wusps_assist_info_type_vals[] = {
-    { 0x0, "LP-WUSPS paging subgroup ID" },
-    { 0x1, "UE paging probability information" },
-    { 0,   NULL }
-};
-
-static uint16_t
-de_nas_5gs_mm_lp_wusps_assist_info(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo _U_,
-    uint32_t offset, unsigned len,
-    char* add_string _U_, int string_len _U_)
-{
-    uint8_t type;
-
-    proto_tree_add_item_ret_uint8(tree, hf_nas_5gs_mm_lp_wusps_assist_info_type, tvb, offset, 1, ENC_BIG_ENDIAN, &type);
-    switch (type) {
-    case 0:
-        proto_tree_add_item(tree, hf_nas_5gs_mm_lp_wusps_assist_info_paging_subgroup_id, tvb, offset, 1, ENC_BIG_ENDIAN);
-        break;
-    case 1:
-        proto_tree_add_item(tree, hf_nas_5gs_mm_lp_wusps_assist_info_ue_paging_prob_info, tvb, offset, 1, ENC_BIG_ENDIAN);
-        break;
-    case 2:
-        proto_tree_add_bits_item(tree, hf_nas_5gs_spare_bits, tvb, (offset << 3) + 3, 5, ENC_BIG_ENDIAN);
-    }
-
-    return len;
-}
-
-/*
- * 9.11.3.112 LP-WUS status
- */
-static uint16_t
-de_nas_5gs_mm_lp_wus_status(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo _U_,
-    uint32_t offset, unsigned len _U_,
-    char* add_string _U_, int string_len _U_)
-{
-    static int* const flags[] = {
-        &hf_nas_5gs_spare_b3,
-        &hf_nas_5gs_spare_b2,
-        &hf_nas_5gs_spare_b1,
-        &hf_nas_5gs_mm_lws,
-        NULL
-    };
-
-    proto_tree_add_bitmask_list(tree, tvb, offset, 1, flags, ENC_BIG_ENDIAN);
-
-    return 1;
-}
-
-/*
  * 9.11.4    5GS session management (5GSM) information elements
  */
 
@@ -5769,13 +5330,6 @@ static const value_string nas_5gs_sm_atsss_st_b3_b6_vals[] = {
     { 0x5, "MPQUIC functionality with any steering mode and ATSSS-LL functionality with any steering mode allowed for ATSSS-LL supported" },
     { 0x6, "MPTCP functionality with any steering mode, MPQUIC functionality with any steering mode and ATSSS-LL functionality with only active-standby steering mode supported" },
     { 0x7, "MPTCP functionality with any steering mode, MPQUIC functionality with any steering mode and ATSSS-LL functionality with any steering mode allowed for ATSSS-LL supported" },
-    { 0,   NULL }
-};
-
-static const value_string nas_nas_5gs_sm_atsss_ll_b3_b4_vals[] = {
-    { 0x0, "ATSSS-LL functionality not supported" },
-    { 0x1, "ATSSS-LL functionality with only active-standby steering mode supported" },
-    { 0x2, "ATSSS-LL functionality with any steering mode allowed for ATSSS-LL supported" },
     { 0,   NULL }
 };
 
@@ -5796,25 +5350,14 @@ de_nas_5gs_sm_5gsm_cap(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
     };
 
     static int * const flags2[] = {
-        &hf_nas_5gs_sm_mpquic_ip_b7,
-        &hf_nas_5gs_sm_mpquic_udp_b6,
-        &hf_nas_5gs_sm_mptcp_b5,
-        &hf_nas_5gs_sm_atsss_ll_b3_b4,
-        &hf_nas_5gs_rtpmmii_b2,
-        &hf_nas_5gs_sm_sdnaepc_b1,
-        &hf_nas_5gs_sm_apmqf_b0,
-        NULL
-    };
-
-    static int * const flags3[] = {
         &hf_nas_5gs_spare_b7,
         &hf_nas_5gs_spare_b6,
         &hf_nas_5gs_spare_b5,
         &hf_nas_5gs_spare_b4,
         &hf_nas_5gs_spare_b3,
         &hf_nas_5gs_spare_b2,
-        &hf_nas_5gs_sm_e8pcpdei_b1,
-        &hf_nas_5gs_sm_mpquic_e_b0,
+        &hf_nas_5gs_sm_sdnaepc_b1,
+        &hf_nas_5gs_sm_apmqf_b0,
         NULL
     };
 
@@ -5825,12 +5368,6 @@ de_nas_5gs_sm_5gsm_cap(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
         return (len);
 
     proto_tree_add_bitmask_list(tree, tvb, curr_offset, 1, flags2, ENC_BIG_ENDIAN);
-    curr_offset++;
-
-    if ((curr_offset - offset) >= len)
-        return (len);
-
-    proto_tree_add_bitmask_list(tree, tvb, curr_offset, 1, flags3, ENC_BIG_ENDIAN);
     curr_offset++;
 
     EXTRANEOUS_DATA_CHECK(len, curr_offset - offset, pinfo, &ei_nas_5gs_extraneous_data);
@@ -5881,7 +5418,6 @@ const value_string nas_5gs_sm_cause_vals[] = {
     { 0x54, "Syntactical error in the QoS operation" },
     { 0x55, "Invalid mapped EPS bearer identity" },
     { 0x56, "UAS services not allowed" },
-    { 0x57, "QoS differentiation for non-3GPP device identifier(s) not available" },
     { 0x5f, "Semantically incorrect message" },
     { 0x60, "Invalid mandatory information" },
     { 0x61, "Message type non-existent or not implemented" },
@@ -6220,8 +5756,8 @@ de_nas_5gs_sm_pdu_address(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
          */
         tvb_memcpy(tvb, interface_id, offset, 8);
         proto_tree_add_bytes_format_value(tree, hf_nas_5gs_sm_pdu_addr_inf_ipv6, tvb, offset, 8, NULL,
-                                          "::%x:%x:%x:%x", pntohu16(&interface_id[0]), pntohu16(&interface_id[2]),
-                                          pntohu16(&interface_id[4]), pntohu16(&interface_id[6]));
+                                          "::%x:%x:%x:%x", pntoh16(&interface_id[0]), pntoh16(&interface_id[2]),
+                                          pntoh16(&interface_id[4]), pntoh16(&interface_id[6]));
         offset += 8;
         break;
     case 3:
@@ -6231,8 +5767,8 @@ de_nas_5gs_sm_pdu_address(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
          */
         tvb_memcpy(tvb, interface_id, offset, 8);
         proto_tree_add_bytes_format_value(tree, hf_nas_5gs_sm_pdu_addr_inf_ipv6, tvb, offset, 8, NULL,
-                                          "::%x:%x:%x:%x", pntohu16(&interface_id[0]), pntohu16(&interface_id[2]),
-                                          pntohu16(&interface_id[4]), pntohu16(&interface_id[6]));
+                                          "::%x:%x:%x:%x", pntoh16(&interface_id[0]), pntoh16(&interface_id[2]),
+                                          pntoh16(&interface_id[4]), pntoh16(&interface_id[6]));
         offset += 8;
         proto_tree_add_item(tree, hf_nas_5gs_sm_pdu_addr_inf_ipv4, tvb, offset, 4, ENC_BIG_ENDIAN);
         offset += 4;
@@ -6454,11 +5990,8 @@ static const value_string nas_5gs_sm_pf_type_values[] = {
     { 0x85, "802.1Q C-TAG PCP/DEI type" },
     { 0x86, "802.1Q S-TAG PCP/DEI type" },
     { 0x87, "Ethertype type" },
-    { 0x88, "Destination MAC address range type" },
-    { 0x89, "Source MAC address range type" },
-    { 0x8a, "Extended 802.1Q C-TAG PCP/DEI type" },
-    { 0x8b, "Extended 802.1Q S-TAG PCP/DEI type" },
-    { 0x91, "(S)RTP multiplexed media identification information type" },
+    { 0x88, "Destination MAC address range" },
+    { 0x89, "Source MAC address range" },
     { 0, NULL }
  };
 
@@ -6671,79 +6204,6 @@ de_nas_5gs_sm_qos_rules(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
                         curr_offset += 6;
                         pfc_len = 12;
                         break;
-                    case 138:
-                    case 139:
-                        {
-                            uint8_t flags = tvb_get_bits8(tvb, (curr_offset << 3) + 2, 2);
-                            proto_tree_add_item(sub_tree3, hf_nas_5gs_vlan_tag_pcp_ind, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-                            proto_tree_add_item(sub_tree3, hf_nas_5gs_vlan_tag_dei_ind, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-                            if (flags & 2)
-                                proto_tree_add_item(sub_tree3, hf_nas_5gs_vlan_tag_pcp, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-                            if (flags & 1)
-                                proto_tree_add_item(sub_tree3, hf_nas_5gs_vlan_tag_dei, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-                            curr_offset++;
-                            pfc_len = 1;
-                        }
-                        break;
-                    case 145:
-                        {
-                            uint32_t srtp_offset = curr_offset;
-                            uint8_t entries_nb, entry = 1, entry_len, mid_id_tag_len;
-                            proto_tree *sub_tree4;
-                            proto_item *item3;
-                            uint64_t ret_flags;
-                            static int * const srtp_flags[] = {
-                                &hf_nas_5gs_spare_b7,
-                                &hf_nas_5gs_spare_b6,
-                                &hf_nas_5gs_spare_b5,
-                                &hf_nas_5gs_srtp_mult_media_id_info_rptpi,
-                                &hf_nas_5gs_srtp_mult_media_id_info_rshempi,
-                                &hf_nas_5gs_srtp_mult_media_id_info_mitpi,
-                                &hf_nas_5gs_srtp_mult_media_id_info_ptpi,
-                                &hf_nas_5gs_srtp_mult_media_id_info_ssrcpi,
-                                NULL
-                            };
-
-                            proto_tree_add_item_ret_uint8(sub_tree3, hf_nas_5gs_srtp_mult_media_id_info_nb,
-                                                          tvb, curr_offset, 1, ENC_BIG_ENDIAN, &entries_nb);
-                            curr_offset++;
-                            for (entry = 1; entry <= entries_nb; entry++) {
-                                sub_tree4 = proto_tree_add_subtree_format(sub_tree3, tvb, curr_offset, -1, ett_nas_5gs_sm_srtp_mult_media_id_info, &item3,
-                                                                          "(S)RTP multiplexed media identification information entry %u", entry);
-                                proto_tree_add_item_ret_uint8(sub_tree4, hf_nas_5gs_srtp_mult_media_id_info_len,
-                                                              tvb, curr_offset, 1, ENC_BIG_ENDIAN, &entry_len);
-                                curr_offset++;
-                                proto_item_set_len(item3, entry_len + 1);
-                                proto_tree_add_bitmask_list_ret_uint64(sub_tree4, tvb, curr_offset, 1, srtp_flags, ENC_BIG_ENDIAN, &ret_flags);
-                                curr_offset++;
-                                if (ret_flags & 0x01) {
-                                    proto_tree_add_item(sub_tree4, hf_nas_5gs_srtp_mult_media_id_info_ssrc, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
-                                    curr_offset += 4;
-                                }
-                                if (ret_flags & 0x02) {
-                                    proto_tree_add_item(sub_tree4, hf_nas_5gs_srtp_mult_media_id_info_payload_type, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-                                    curr_offset++;
-                                }
-                                if (ret_flags & 0x04) {
-                                    proto_tree_add_item_ret_uint8(sub_tree4, hf_nas_5gs_srtp_mult_media_id_info_mid_id_tag_len,
-                                                                  tvb, curr_offset, 1, ENC_BIG_ENDIAN, &mid_id_tag_len);
-                                    curr_offset++;
-                                    proto_tree_add_item(sub_tree4, hf_nas_5gs_srtp_mult_media_id_info_mid_id_tag,
-                                                        tvb, curr_offset, mid_id_tag_len, ENC_NA);
-                                    curr_offset += mid_id_tag_len;
-                                }
-                                if (ret_flags & 0x08) {
-                                    proto_tree_add_item(sub_tree4, hf_nas_5gs_srtp_mult_media_id_info_sdes_hdr_ext_id, tvb, curr_offset, entry_len - 1, ENC_NA);
-                                    curr_offset += entry_len - 1;
-                                }
-                                if (ret_flags & 0x10) {
-                                    proto_tree_add_item(sub_tree4, hf_nas_5gs_srtp_mult_media_id_info_rtcp_pkt_type, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-                                    curr_offset++;
-                                }
-                            }
-                            pfc_len = curr_offset - srtp_offset;
-                        }
-                        break;
                     default:
                         proto_tree_add_expert(sub_tree3, pinfo, &ei_nas_5gs_not_diss, tvb, curr_offset, pf_len);
                         curr_offset += pf_len;
@@ -6862,7 +6322,7 @@ de_nas_5gs_sm_pdu_dn_req_cont(tvbuff_t *tvb, proto_tree *tree, packet_info *pinf
     uint32_t offset, unsigned len,
     char *add_string _U_, int string_len _U_)
 {
-    proto_tree_add_item(tree, hf_nas_5gs_sm_dm_spec_id, tvb, offset, len, ENC_UTF_8);
+    proto_tree_add_item(tree, hf_nas_5gs_sm_dm_spec_id, tvb, offset, len, ENC_UTF_8|ENC_NA);
 
     return len;
 }
@@ -7159,54 +6619,11 @@ de_nas_5gs_sm_eth_hdr_comp_conf(tvbuff_t* tvb, proto_tree* tree, packet_info* pi
  * 9.11.4.29 Remote UE context list
  */
 static uint16_t
-de_nas_5gs_sm_remote_ue_ctx_list(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo _U_,
+de_nas_5gs_sm_remote_ue_ctx_list(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo,
     uint32_t offset, unsigned len,
     char* add_string _U_, int string_len _U_)
 {
-    uint32_t curr_offset = offset;
-    uint32_t num_ue_ctx, i;
-
-    proto_tree_add_item_ret_uint(tree, hf_nas_5gs_sm_remote_ue_ctx_list_nb_ue_ctx, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &num_ue_ctx);
-    curr_offset++;
-
-    for (i = 0; i < num_ue_ctx && (curr_offset - offset) < len; i++) {
-        proto_tree *subtree;
-        proto_item *item;
-        uint32_t ctx_len, start_offset = curr_offset;
-
-        subtree = proto_tree_add_subtree_format(tree, tvb, curr_offset, -1, ett_nas_5gs_sm_remote_ue_ctx, &item, "Remote UE context %u", i + 1);
-        proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_sm_remote_ue_ctx_len, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &ctx_len);
-        curr_offset++;
-
-        if (ctx_len > 0) {
-            uint32_t addr_type, userid_len;
-            proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_sm_remote_ue_ctx_addr_type, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &addr_type);
-            curr_offset++;
-
-            proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_sm_remote_ue_ctx_userid_len, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &userid_len);
-            curr_offset++;
-
-            if (userid_len > 0) {
-                proto_tree_add_item(subtree, hf_nas_5gs_sm_remote_ue_ctx_userid, tvb, curr_offset, userid_len, ENC_NA);
-                curr_offset += userid_len;
-            }
-
-            if ((curr_offset - start_offset - 1) < ctx_len) {
-                /* IP address fields if present */
-                if (addr_type & 0x01) {
-                    proto_tree_add_item(subtree, hf_nas_5gs_sm_remote_ue_ctx_ipv4, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
-                    curr_offset += 4;
-                }
-                if (addr_type & 0x02) {
-                    proto_tree_add_item(subtree, hf_nas_5gs_sm_remote_ue_ctx_ipv6_pfx_len, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-                    curr_offset++;
-                    proto_tree_add_item(subtree, hf_nas_5gs_sm_remote_ue_ctx_ipv6, tvb, curr_offset, 16, ENC_NA);
-                    curr_offset += 16;
-                }
-            }
-        }
-        proto_item_set_end(item, tvb, curr_offset);
-    }
+    proto_tree_add_expert(tree, pinfo, &ei_nas_5gs_ie_not_dis, tvb, offset, len);
 
     return len;
 }
@@ -7214,66 +6631,12 @@ de_nas_5gs_sm_remote_ue_ctx_list(tvbuff_t* tvb, proto_tree* tree, packet_info* p
 /*
  * 9.11.4.30 Requested MBS container
  */
-static const value_string nas_5gs_sm_req_mbs_sess_op_vals[] = {
-    { 0x0, "Join" },
-    { 0x1, "Leave" },
-    { 0,   NULL }
-};
-
-static const value_string nas_5gs_sm_mbs_sess_id_type_vals[] = {
-    { 0x0, "TMGI" },
-    { 0x1, "Source specific IP multicast address for IPv4" },
-    { 0x2, "Source specific IP multicast address for IPv6" },
-    { 0,   NULL }
-};
-
 static uint16_t
-de_nas_5gs_sm_req_mbs_cont(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo _U_,
-    uint32_t offset, unsigned len,
+de_nas_5gs_sm_req_mbs_cont(tvbuff_t* tvb _U_, proto_tree* tree _U_, packet_info* pinfo _U_,
+    uint32_t offset _U_, unsigned len,
     char* add_string _U_, int string_len _U_)
 {
-    uint32_t curr_offset = offset;
-    uint32_t num_sess, i;
-
-    proto_tree_add_item_ret_uint(tree, hf_nas_5gs_sm_req_mbs_cont_num_sess, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &num_sess);
-    curr_offset++;
-
-    for (i = 0; i < num_sess && (curr_offset - offset) < len; i++) {
-        proto_tree *subtree;
-        proto_item *item;
-        uint32_t sess_len, id_type, start_offset = curr_offset;
-
-        subtree = proto_tree_add_subtree_format(tree, tvb, curr_offset, -1, ett_nas_5gs_sm_req_mbs_sess_info, &item, "MBS session info %u", i + 1);
-        proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_sm_req_mbs_sess_info_len, tvb, curr_offset, 2, ENC_BIG_ENDIAN, &sess_len);
-        curr_offset += 2;
-
-        proto_tree_add_item(subtree, hf_nas_5gs_sm_req_mbs_sess_op, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-        proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_sm_req_mbs_sess_id_type, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &id_type);
-        curr_offset++;
-
-        switch (id_type) {
-        case 0: /* TMGI */
-            proto_tree_add_item(subtree, hf_nas_5gs_sm_req_mbs_tmgi, tvb, curr_offset, 6, ENC_NA);
-            curr_offset += 6;
-            break;
-        case 1: /* IPv4 */
-            proto_tree_add_item(subtree, hf_nas_5gs_sm_req_mbs_src_ipv4, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
-            curr_offset += 4;
-            proto_tree_add_item(subtree, hf_nas_5gs_sm_req_mbs_mcast_ipv4, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
-            curr_offset += 4;
-            break;
-        case 2: /* IPv6 */
-            proto_tree_add_item(subtree, hf_nas_5gs_sm_req_mbs_src_ipv6, tvb, curr_offset, 16, ENC_NA);
-            curr_offset += 16;
-            proto_tree_add_item(subtree, hf_nas_5gs_sm_req_mbs_mcast_ipv6, tvb, curr_offset, 16, ENC_NA);
-            curr_offset += 16;
-            break;
-        default:
-            curr_offset = start_offset + 2 + sess_len;
-            break;
-        }
-        proto_item_set_end(item, tvb, curr_offset);
-    }
+    proto_tree_add_expert(tree, pinfo, &ei_nas_5gs_ie_not_dis, tvb, offset, len);
 
     return len;
 }
@@ -7281,46 +6644,12 @@ de_nas_5gs_sm_req_mbs_cont(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo _
 /*
  * 9.11.4.31 Received MBS container
  */
-static const value_string nas_5gs_sm_rec_mbs_decision_vals[] = {
-    { 0x0, "Network accepts the join of the MBS session" },
-    { 0x1, "Network rejects the join of the MBS session" },
-    { 0x2, "Network removes the UE from the MBS session" },
-    { 0x3, "Network accepts the leave of the MBS session" },
-    { 0,   NULL }
-};
-
 static uint16_t
-de_nas_5gs_sm_rec_mbs_cont(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo _U_,
-    uint32_t offset, unsigned len,
+de_nas_5gs_sm_rec_mbs_cont(tvbuff_t* tvb _U_, proto_tree* tree _U_, packet_info* pinfo _U_,
+    uint32_t offset _U_, unsigned len,
     char* add_string _U_, int string_len _U_)
 {
-    uint32_t curr_offset = offset;
-    uint32_t num_sess, i;
-
-    proto_tree_add_item_ret_uint(tree, hf_nas_5gs_sm_rec_mbs_cont_num_sess, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &num_sess);
-    curr_offset++;
-
-    for (i = 0; i < num_sess && (curr_offset - offset) < len; i++) {
-        proto_tree *subtree;
-        proto_item *item;
-        uint32_t info_len, start_offset = curr_offset;
-
-        subtree = proto_tree_add_subtree_format(tree, tvb, curr_offset, -1, ett_nas_5gs_sm_rec_mbs_info, &item, "Received MBS info %u", i + 1);
-        proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_sm_rec_mbs_info_len, tvb, curr_offset, 2, ENC_BIG_ENDIAN, &info_len);
-        curr_offset += 2;
-
-        proto_tree_add_item(subtree, hf_nas_5gs_sm_rec_mbs_decision, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-        proto_tree_add_item(subtree, hf_nas_5gs_sm_rec_mbs_sess_id_type, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-        curr_offset++;
-
-        if (info_len > 1) {
-            proto_tree_add_item(subtree, hf_nas_5gs_sm_rec_mbs_cause, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-        }
-
-        /* Skip remaining content of this entry */
-        curr_offset = start_offset + 2 + info_len;
-        proto_item_set_end(item, tvb, curr_offset);
-    }
+    proto_tree_add_expert(tree, pinfo, &ei_nas_5gs_ie_not_dis, tvb, offset, len);
 
     return len;
 }
@@ -7360,71 +6689,12 @@ de_nas_5gs_sm_rsn(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo _U_,
 /*
  * 9.11.4.36 N3QAI
  */
-static const value_string nas_5gs_sm_n3qai_param_id_vals[] = {
-    { 0x01, "5QI" },
-    { 0x02, "GFBR uplink" },
-    { 0x03, "GFBR downlink" },
-    { 0x04, "MFBR uplink" },
-    { 0x05, "MFBR downlink" },
-    { 0x06, "Averaging window" },
-    { 0x07, "Resource type" },
-    { 0x08, "Priority level" },
-    { 0x09, "Packet delay budget" },
-    { 0x0a, "Packet error rate" },
-    { 0x0b, "Maximum data burst volume" },
-    { 0x0c, "Maximum packet loss rate downlink" },
-    { 0x0d, "Maximum packet loss rate uplink" },
-    { 0x0e, "ARP" },
-    { 0x0f, "Periodicity" },
-    { 0,    NULL }
-};
-
 static uint16_t
-de_nas_5gs_sm_n3qai(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo _U_,
+de_nas_5gs_sm_n3qai(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo,
     uint32_t offset, unsigned len,
     char* add_string _U_, int string_len _U_)
 {
-    uint32_t curr_offset = offset;
-    unsigned i = 1;
-
-    while ((curr_offset - offset) < len) {
-        proto_tree *subtree;
-        proto_item *item;
-        uint32_t num_qfis, num_params, j;
-        uint32_t start_offset = curr_offset;
-
-        subtree = proto_tree_add_subtree_format(tree, tvb, curr_offset, -1, ett_nas_5gs_sm_n3qai_entry, &item, "N3QAI %u", i++);
-
-        proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_sm_n3qai_num_qfis, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &num_qfis);
-        curr_offset++;
-
-        for (j = 0; j < num_qfis && (curr_offset - offset) < len; j++) {
-            proto_tree_add_item(subtree, hf_nas_5gs_sm_n3qai_qfi, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-            curr_offset++;
-        }
-
-        proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_sm_n3qai_num_params, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &num_params);
-        curr_offset++;
-
-        for (j = 0; j < num_params && (curr_offset - offset) < len; j++) {
-            proto_tree *param_tree;
-            proto_item *param_item;
-            uint32_t param_len;
-
-            param_tree = proto_tree_add_subtree_format(subtree, tvb, curr_offset, -1, ett_nas_5gs_sm_n3qai_param, &param_item, "Parameter %u", j + 1);
-            proto_tree_add_item(param_tree, hf_nas_5gs_sm_n3qai_param_id, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-            curr_offset++;
-            proto_tree_add_item_ret_uint(param_tree, hf_nas_5gs_sm_n3qai_param_len, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &param_len);
-            curr_offset++;
-            proto_tree_add_item(param_tree, hf_nas_5gs_sm_n3qai_param_contents, tvb, curr_offset, param_len, ENC_NA);
-            curr_offset += param_len;
-            proto_item_set_end(param_item, tvb, curr_offset);
-        }
-        proto_item_set_end(item, tvb, curr_offset);
-
-        if (curr_offset == start_offset)
-            break;
-    }
+    proto_tree_add_expert(tree, pinfo, &ei_nas_5gs_ie_not_dis, tvb, offset, len);
 
     return len;
 }
@@ -7433,52 +6703,11 @@ de_nas_5gs_sm_n3qai(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo _U_,
  * 9.11.4.37 Non-3GPP delay budget
  */
 static uint16_t
-de_nas_5gs_sm_n3gpp_delay_budget(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo _U_,
+de_nas_5gs_sm_n3gpp_delay_budget(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo,
     uint32_t offset, unsigned len,
     char* add_string _U_, int string_len _U_)
 {
-    uint32_t curr_offset = offset;
-    unsigned i = 1;
-
-    while ((curr_offset - offset) < len) {
-        proto_tree *subtree;
-        proto_item *item;
-        uint32_t flags, num_qfis, j;
-        uint32_t start_offset = curr_offset;
-
-        subtree = proto_tree_add_subtree_format(tree, tvb, curr_offset, -1, ett_nas_5gs_sm_n3gpp_delay_budget_entry, &item, "Non-3GPP delay budget %u", i++);
-
-        proto_tree_add_item(subtree, hf_nas_5gs_sm_n3gpp_delay_budget_val, tvb, curr_offset, 2, ENC_BIG_ENDIAN);
-        curr_offset += 2;
-
-        proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_sm_n3gpp_delay_budget_flags, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &flags);
-        proto_tree_add_item(subtree, hf_nas_5gs_sm_n3gpp_delay_budget_qfipi, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-        proto_tree_add_item(subtree, hf_nas_5gs_sm_n3gpp_delay_budget_pfpi, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-        curr_offset++;
-
-        if (flags & 0x02) { /* QFIPI */
-            proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_sm_n3gpp_delay_budget_num_qfis, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &num_qfis);
-            curr_offset++;
-            for (j = 0; j < num_qfis && (curr_offset - offset) < len; j++) {
-                proto_tree_add_item(subtree, hf_nas_5gs_sm_n3gpp_delay_budget_qfi, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-                curr_offset++;
-            }
-        }
-
-        /* PFPI - packet filter list: skip for now (complex, reuses QoS rule packet filter format) */
-        if (flags & 0x01) {
-            /* Remaining bytes in this entry belong to the packet filter list */
-            uint32_t remaining = len - (curr_offset - offset);
-            if (remaining > 0) {
-                curr_offset += remaining;
-            }
-        }
-
-        proto_item_set_end(item, tvb, curr_offset);
-
-        if (curr_offset == start_offset)
-            break;
-    }
+    proto_tree_add_expert(tree, pinfo, &ei_nas_5gs_ie_not_dis, tvb, offset, len);
 
     return len;
 }
@@ -7487,29 +6716,11 @@ de_nas_5gs_sm_n3gpp_delay_budget(tvbuff_t* tvb, proto_tree* tree, packet_info* p
  * 9.11.4.38 URSP rule enforcement reports
  */
 static uint16_t
-de_nas_5gs_sm_ursp_rule_enforce_reports(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo _U_,
+de_nas_5gs_sm_ursp_rule_enforce_reports(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo,
     uint32_t offset, unsigned len,
     char* add_string _U_, int string_len _U_)
 {
-    uint32_t curr_offset = offset;
-    unsigned i = 1;
-
-    while ((curr_offset - offset) < len) {
-        proto_tree *subtree;
-        proto_item *item;
-        uint32_t num_caps, j;
-
-        subtree = proto_tree_add_subtree_format(tree, tvb, curr_offset, -1, ett_nas_5gs_sm_ursp_report, &item, "URSP rule enforcement report %u", i++);
-
-        proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_sm_ursp_report_num_conn_caps, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &num_caps);
-        curr_offset++;
-
-        for (j = 0; j < num_caps && (curr_offset - offset) < len; j++) {
-            proto_tree_add_item(subtree, hf_nas_5gs_sm_ursp_report_conn_cap_id, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-            curr_offset++;
-        }
-        proto_item_set_end(item, tvb, curr_offset);
-    }
+    proto_tree_add_expert(tree, pinfo, &ei_nas_5gs_ie_not_dis, tvb, offset, len);
 
     return len;
 }
@@ -7517,168 +6728,12 @@ de_nas_5gs_sm_ursp_rule_enforce_reports(tvbuff_t* tvb, proto_tree* tree, packet_
 /*
  * 9.11.4.39 Protocol description
  */
-static const value_string nas_5gs_sm_prot_desc_tp_vals[] = {
-    { 0x01, "RTP" },
-    { 0x02, "SRTP" },
-    { 0,    NULL }
-};
-
-static const value_string nas_5gs_sm_prot_desc_rtp_hdr_ext_type_vals[] = {
-    { 0x01, "RTP Header Extension for PDU Set Marking" },
-    { 0,    NULL }
-};
-
-static const value_string nas_5gs_sm_prot_desc_rtp_payload_format_vals[] = {
-    { 0x01, "H.264/AVC" },
-    { 0x02, "H.265/HEVC" },
-    { 0,    NULL }
-};
-
 static uint16_t
-de_nas_5gs_sm_prot_desc(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo _U_,
+de_nas_5gs_sm_prot_desc(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo,
     uint32_t offset, unsigned len,
     char* add_string _U_, int string_len _U_)
 {
-    uint32_t curr_offset = offset;
-    unsigned i = 1;
-
-    while ((curr_offset - offset) < len) {
-        proto_tree *subtree;
-        proto_item *item;
-        uint32_t desc_len, flags, start_offset = curr_offset;
-
-        subtree = proto_tree_add_subtree_format(tree, tvb, curr_offset, -1, ett_nas_5gs_sm_prot_desc_entry, &item, "Protocol description %u", i++);
-
-        proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_sm_prot_desc_len, tvb, curr_offset, 2, ENC_BIG_ENDIAN, &desc_len);
-        curr_offset += 2;
-
-        if (desc_len == 0) {
-            proto_item_set_end(item, tvb, curr_offset);
-            continue;
-        }
-
-        if (desc_len == 1) {
-            /* Only QRI */
-            proto_tree_add_item(subtree, hf_nas_5gs_sm_prot_desc_qri, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-            curr_offset++;
-            proto_item_set_end(item, tvb, curr_offset);
-            continue;
-        }
-
-        proto_tree_add_item(subtree, hf_nas_5gs_sm_prot_desc_qri, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-        curr_offset++;
-
-        proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_sm_prot_desc_tp, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &flags);
-        proto_tree_add_item(subtree, hf_nas_5gs_sm_prot_desc_heipi, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-        proto_tree_add_item(subtree, hf_nas_5gs_sm_prot_desc_pilpi, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-        curr_offset++;
-
-        if (flags & 0x10) { /* HEIPI */
-            proto_tree_add_item(subtree, hf_nas_5gs_sm_prot_desc_rtp_hdr_ext_type, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-            curr_offset++;
-            proto_tree_add_item(subtree, hf_nas_5gs_sm_prot_desc_rtp_hdr_ext_id, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-            curr_offset++;
-        }
-
-        if (flags & 0x20) { /* PILPI */
-            uint32_t pil_len, num_pt, j;
-            proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_sm_prot_desc_rtp_payload_info_list_len, tvb, curr_offset, 2, ENC_BIG_ENDIAN, &pil_len);
-            curr_offset += 2;
-
-            uint32_t pil_end = curr_offset + pil_len;
-            while (curr_offset < pil_end && (curr_offset - offset) < len) {
-                proto_tree *pi_tree;
-                proto_item *pi_item;
-
-                pi_tree = proto_tree_add_subtree(subtree, tvb, curr_offset, -1, ett_nas_5gs_sm_prot_desc_rtp_payload_info, &pi_item, "RTP payload information");
-                proto_tree_add_item(pi_tree, hf_nas_5gs_sm_prot_desc_rtp_payload_format, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-                curr_offset++;
-                proto_tree_add_item_ret_uint(pi_tree, hf_nas_5gs_sm_prot_desc_rtp_num_payload_types, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &num_pt);
-                curr_offset++;
-                for (j = 0; j < num_pt && (curr_offset - offset) < len; j++) {
-                    proto_tree_add_item(pi_tree, hf_nas_5gs_sm_prot_desc_rtp_payload_type, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-                    curr_offset++;
-                }
-                proto_item_set_end(pi_item, tvb, curr_offset);
-            }
-        }
-
-        /* Advance to end of this description entry */
-        curr_offset = start_offset + 2 + desc_len;
-        proto_item_set_end(item, tvb, curr_offset);
-
-        if (curr_offset == start_offset)
-            break;
-    }
-
-    return len;
-}
-
-/*
- * 9.11.4.40 ECN marking for L4S indication
- */
-static uint16_t
-de_nas_5gs_sm_ecn_mark_l4s_ind(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo _U_,
-    uint32_t offset, unsigned len,
-    char* add_string _U_, int string_len _U_)
-{
-    uint32_t curr_offset = offset;
-
-    while ((curr_offset - offset) < len) {
-        proto_tree_add_item(tree, hf_nas_5gs_sm_ecn_mark_l4s_ind_qri, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-        curr_offset++;
-    }
-
-    return len;
-}
-
-/*
- * 9.11.4.41 Non-3GPP device information
- */
-static uint16_t
-de_nas_5gs_sm_n3gpp_device_info(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo _U_,
-    uint32_t offset, unsigned len,
-    char* add_string _U_, int string_len _U_)
-{
-    uint32_t curr_offset = offset;
-    unsigned i = 1;
-
-    proto_tree_add_item(tree, hf_nas_5gs_sm_n3gpp_dev_info_pdu_sess_type, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-    curr_offset++;
-
-    while ((curr_offset - offset) < len) {
-        proto_tree *subtree;
-        proto_item *item;
-        uint32_t entry_len, id_len;
-
-        subtree = proto_tree_add_subtree_format(tree, tvb, curr_offset, -1, ett_nas_5gs_sm_n3gpp_dev_info_entry, &item, "Non-3GPP device %u", i++);
-
-        proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_sm_n3gpp_dev_info_entry_len, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &entry_len);
-        curr_offset++;
-
-        if (entry_len == 0) {
-            proto_item_set_end(item, tvb, curr_offset);
-            continue;
-        }
-
-        uint32_t entry_end = curr_offset + entry_len;
-
-        proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_sm_n3gpp_dev_info_id_len, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &id_len);
-        id_len &= 0x7F; /* 7 bits for length */
-        curr_offset++;
-
-        if (id_len > 0 && (curr_offset + id_len) <= (offset + len)) {
-            proto_tree_add_item(subtree, hf_nas_5gs_sm_n3gpp_dev_info_id, tvb, curr_offset, id_len, ENC_NA);
-            curr_offset += id_len;
-        }
-
-        if (curr_offset < entry_end && (curr_offset - offset) < len) {
-            proto_tree_add_item(subtree, hf_nas_5gs_sm_n3gpp_dev_info_conn_info, tvb, curr_offset, entry_end - curr_offset, ENC_NA);
-        }
-
-        curr_offset = entry_end;
-        proto_item_set_end(item, tvb, curr_offset);
-    }
+    proto_tree_add_expert(tree, pinfo, &ei_nas_5gs_ie_not_dis, tvb, offset, len);
 
     return len;
 }
@@ -7743,7 +6798,7 @@ de_nas_5gs_cmn_dnn(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
     curr_offset = offset;
     /* A DNN value field contains an APN as defined in 3GPP TS 23.003 */
 
-    pi = proto_tree_add_item(tree, hf_nas_5gs_cmn_dnn, tvb, curr_offset, len, ENC_APN_STR);
+    pi = proto_tree_add_item(tree, hf_nas_5gs_cmn_dnn, tvb, curr_offset, len, ENC_APN_STR | ENC_NA);
 
     if (len > 100) {
         expert_add_info(pinfo, pi, &ei_nas_5gs_dnn_too_long);
@@ -7895,16 +6950,17 @@ de_nas_5gs_cmn_service_level_aa_cont(tvbuff_t *tvb, proto_tree *tree, packet_inf
     while ((curr_offset - offset) < len) {
         proto_item *item;
         proto_tree *subtree;
-        uint32_t param_len, param_offset = curr_offset;
-        uint8_t type;
+        uint32_t type, param_len, param_offset = curr_offset;
 
         subtree = proto_tree_add_subtree_format(tree, tvb, curr_offset, -1, ett_nas_5gs_cmn_service_level_aa_cont_param, &item, "Service-level-AA parameter %d", i + 1);
-        proto_tree_add_item_ret_uint8(subtree, hf_nas_5gs_cmn_service_level_aa_param_type, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &type);
-        curr_offset++;
+        type = tvb_get_uint8(tvb, curr_offset);
         if ((type & NAS_5GS_TV_IE_MASK) == NAS_5GS_TV_IE_VAL) {
             param_len = 0;
             type &= 0xf0;
-        } else if ((type & NAS_5GS_TLV_E_IE_MASK) == NAS_5GS_TLV_E_IE_VAL) {
+        }
+        proto_tree_add_uint(subtree, hf_nas_5gs_cmn_service_level_aa_param_type, tvb, curr_offset, 1, type);
+        curr_offset++;
+        if ((type & NAS_5GS_TLV_E_IE_MASK) == NAS_5GS_TLV_E_IE_VAL) {
             proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_cmn_service_level_aa_param_len, tvb, curr_offset, 2, ENC_BIG_ENDIAN, &param_len);
             curr_offset += 2;
         } else {
@@ -7914,7 +6970,7 @@ de_nas_5gs_cmn_service_level_aa_cont(tvbuff_t *tvb, proto_tree *tree, packet_inf
         proto_item_set_len(item, curr_offset + param_len - param_offset);
         switch (type) {
         case 0x10:
-            proto_tree_add_item(subtree, hf_nas_5gs_cmn_service_level_aa_param_device_id, tvb, curr_offset, param_len, ENC_UTF_8);
+            proto_tree_add_item(subtree, hf_nas_5gs_cmn_service_level_aa_param_device_id, tvb, curr_offset, param_len, ENC_UTF_8|ENC_NA);
             break;
         case 0x20:
             {
@@ -7933,7 +6989,7 @@ de_nas_5gs_cmn_service_level_aa_cont(tvbuff_t *tvb, proto_tree *tree, packet_inf
                     proto_tree_add_item(subtree, hf_nas_5gs_cmn_service_level_aa_param_addr_ipv6, tvb, curr_offset+5, 16, ENC_NA);
                     break;
                 case 4:
-                    proto_tree_add_item(subtree, hf_nas_5gs_cmn_service_level_aa_param_addr_fqdn, tvb, curr_offset+1, param_len-1, ENC_APN_STR);
+                    proto_tree_add_item(subtree, hf_nas_5gs_cmn_service_level_aa_param_addr_fqdn, tvb, curr_offset+1, param_len-1, ENC_APN_STR|ENC_NA);
                     break;
                 default:
                     break;
@@ -8038,7 +7094,7 @@ value_string_ext nas_5gs_common_elem_strings_ext = VALUE_STRING_EXT_INIT(nas_5gs
 int ett_nas_5gs_common_elem[NUM_NAS_5GS_COMMON_ELEM];
 
 
-uint16_t(* const nas_5gs_common_elem_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
+uint16_t(*nas_5gs_common_elem_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
     uint32_t offset, unsigned len,
     char *add_string, int string_len) = {
         /*  9.10.2    Common information elements */
@@ -8183,8 +7239,6 @@ typedef enum
     DE_NAS_5GS_MM_AUN3_DEVICE_SEC_KEY,       /* 9.11.3.107   AUN3 device security key */
     DE_NAS_5GS_MM_ON_DEMAND_NSSAI,           /* 9.11.3.108   On-demand NSSAI */
     DE_NAS_5GS_MM_EXT_5GMM_CAUSE,            /* 9.11.3.109   Extended 5GMM cause */
-    DE_NAS_5GS_MM_LP_WUSPS_ASSIST_INFO,      /* 9.11.3.111   LP-WUSPS assistance information */
-    DE_NAS_5GS_MM_LP_WUS_STATUS,             /* 9.11.3.112   LP-WUS status */
 
     DE_NAS_5GS_MM_NONE        /* NONE */
 }
@@ -8311,8 +7365,6 @@ static const value_string nas_5gs_mm_elem_strings[] = {
     { DE_NAS_5GS_MM_AUN3_DEVICE_SEC_KEY,        "AUN3 device security key" },           /* 9.11.3.107   AUN3 device security key */
     { DE_NAS_5GS_MM_ON_DEMAND_NSSAI,            "On-demand NSSAI" },                    /* 9.11.3.108   On-demand NSSAI */
     { DE_NAS_5GS_MM_EXT_5GMM_CAUSE,             "Extended 5GMM cause" },                /* 9.11.3.109   Extended 5GMM cause */
-    { DE_NAS_5GS_MM_LP_WUSPS_ASSIST_INFO,       "LP-WUSPS assistance information" },    /* 9.11.3.111   LP-WUSPS assistance information */
-    { DE_NAS_5GS_MM_LP_WUS_STATUS,              "LP-WUS status" },                      /* 9.11.3.112   LP-WUS status */
 
     { 0, NULL }
 };
@@ -8321,7 +7373,7 @@ value_string_ext nas_5gs_mm_elem_strings_ext = VALUE_STRING_EXT_INIT(nas_5gs_mm_
 #define NUM_NAS_5GS_MM_ELEM array_length(nas_5gs_mm_elem_strings)
 int ett_nas_5gs_mm_elem[NUM_NAS_5GS_MM_ELEM];
 
-uint16_t(* const nas_5gs_mm_elem_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
+uint16_t(*nas_5gs_mm_elem_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
     uint32_t offset, unsigned len,
     char *add_string, int string_len) = {
         /*  9.11.3    5GS mobility management (5GMM) information elements */
@@ -8445,8 +7497,6 @@ uint16_t(* const nas_5gs_mm_elem_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_
         de_nas_5gs_mm_aun3_device_sec_key,       /* 9.11.3.107   AUN3 device security key */
         de_nas_5gs_mm_on_demand_nssai,           /* 9.11.3.108   On-demand NSSAI */
         de_nas_5gs_mm_ext_5gmm_cause,            /* 9.11.3.109   Extended 5GMM cause */
-        de_nas_5gs_mm_lp_wusps_assist_info,      /* 9.11.3.111   LP-WUSPS assistance information */
-        de_nas_5gs_mm_lp_wus_status,             /* 9.11.3.112   LP-WUS status */
 
         NULL,   /* NONE */
 };
@@ -8496,8 +7546,6 @@ typedef enum
     DE_NAS_5GS_SM_N3GPP_DELAY_BUDGET,       /* 9.11.4.37   Non-3GPP delay budget */
     DE_NAS_5GS_SM_URSP_RULE_ENFORCE_REPORTS,/* 9.11.4.38   URSP rule enforcement reports */
     DE_NAS_5GS_SM_PROT_DESC,                /* 9.11.4.39   Protocol description */
-    DE_NAS_5GS_SM_ECN_MARK_L4S_IND,         /* 9.11.4.40   ECN marking for L4S indication */
-    DE_NAS_5GS_SM_N3GPP_DEVICE_INFO,        /* 9.11.4.41   Non-3GPP device information */
 
     DE_NAS_5GS_SM_NONE        /* NONE */
 }
@@ -8542,8 +7590,6 @@ static const value_string nas_5gs_sm_elem_strings[] = {
     { DE_NAS_5GS_SM_N3GPP_DELAY_BUDGET, "Non-3GPP delay budget" },                         /* 9.11.4.37   Non-3GPP delay budget */
     { DE_NAS_5GS_SM_URSP_RULE_ENFORCE_REPORTS, "URSP rule enforcement reports" },          /* 9.11.4.38   URSP rule enforcement reports */
     { DE_NAS_5GS_SM_PROT_DESC, "Protocol description" },                                   /* 9.11.4.39   Protocol description */
-    { DE_NAS_5GS_SM_ECN_MARK_L4S_IND, "ECN marking for L4S indication" },                  /* 9.11.4.40   ECN marking for L4S indication */
-    { DE_NAS_5GS_SM_N3GPP_DEVICE_INFO, "Non-3GPP device information" },                    /* 9.11.4.41   Non-3GPP device information */
 
     { 0, NULL }
 };
@@ -8552,7 +7598,7 @@ value_string_ext nas_5gs_sm_elem_strings_ext = VALUE_STRING_EXT_INIT(nas_5gs_sm_
 #define NUM_NAS_5GS_SM_ELEM array_length(nas_5gs_sm_elem_strings)
 int ett_nas_5gs_sm_elem[NUM_NAS_5GS_SM_ELEM];
 
-uint16_t(* const nas_5gs_sm_elem_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
+uint16_t(*nas_5gs_sm_elem_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
     uint32_t offset, unsigned len,
     char *add_string, int string_len) = {
         /*  5GS session management (5GSM) information elements */
@@ -8593,8 +7639,6 @@ uint16_t(* const nas_5gs_sm_elem_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_
         de_nas_5gs_sm_n3gpp_delay_budget,       /* 9.11.4.37   Non-3GPP delay budget */
         de_nas_5gs_sm_ursp_rule_enforce_reports,/* 9.11.4.38   URSP rule enforcement reports */
         de_nas_5gs_sm_prot_desc,                /* 9.11.4.39   Protocol description */
-        de_nas_5gs_sm_ecn_mark_l4s_ind,         /* 9.11.4.40   ECN marking for L4S indication */
-        de_nas_5gs_sm_n3gpp_device_info,        /* 9.11.4.41   Non-3GPP device information */
 
         NULL,   /* NONE */
 };
@@ -8752,56 +7796,82 @@ nas_5gs_mm_registration_req(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
     /*    ngKSI    NAS key set identifier 9.11.3.32    M    V    1/2 H1*/
     /*   5GS registration type    5GS registration type 9.11.3.7    M    V    1/2  H0*/
     ELEM_MAND_VV_SHORT(NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_5GS_REG_TYPE, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_NAS_KEY_SET_ID_H1, ei_nas_5gs_missing_mandatory_element);
+
     /*    Mobile identity    5GS mobile identity 9.11.3.4    M    LV-E    6-n*/
     ELEM_MAND_LV_E(NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_5GS_MOBILE_ID, NULL, ei_nas_5gs_missing_mandatory_element);
+
     /*C-    Non-current native NAS KSI    NAS key set identifier 9.11.3.32    O    TV    1*/
     ELEM_OPT_TV_SHORT(0xc0, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_NAS_KEY_SET_ID, " - native KSI");
+
     /*10    5GMM capability    5GMM capability 9.11.3.1    O    TLV    3-15*/
     ELEM_OPT_TLV(0x10, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_5GMM_CAP, NULL);
+
     /*2E    UE security capability    UE security capability 9.11.3.54    O    TLV    4-10*/
     ELEM_OPT_TLV(0x2e, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_UE_SEC_CAP, NULL);
+
     /*2F    Requested NSSAI    NSSAI 9.11.3.37    O    TLV    4-74*/
     ELEM_OPT_TLV(0x2f, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_NSSAI, " - Requested NSSAI");
+
     /*52    Last visited registered TAI    5GS tracking area identity 9.11.3.8    O    TV    7 */
     ELEM_OPT_TV(0x52, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_5GS_TA_ID, " - Last visited registered TAI");
+
     /*17    S1 UE network capability    S1 UE network capability 9.11.3.48    O    TLV    4-15 */
     ELEM_OPT_TLV(0x17, NAS_PDU_TYPE_EMM, DE_EMM_UE_NET_CAP, NULL);
+
     /*40    Uplink data status    Uplink data status 9.11.3.57    O    TLV    4-34 */
     ELEM_OPT_TLV(0x40, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_UL_DATA_STATUS, NULL);
+
     /*50    PDU session status    PDU session status 9.11.3.44    O    TLV    4-34 */
     ELEM_OPT_TLV(0x50, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_PDU_SES_STATUS, NULL);
+
     /*B-    MICO indication    MICO indication 9.11.3.31    O    TV    1*/
     ELEM_OPT_TV_SHORT(0xb0, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_MICO_IND, NULL);
+
     /*2B    UE status    UE status 9.11.3.56    O    TLV    3*/
     ELEM_OPT_TLV(0x2b, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_UE_STATUS, NULL);
+
     /*77    Additional GUTI    5GS mobile identity 9.11.3.4    O    TLV-E    14 */
     ELEM_OPT_TLV_E(0x77, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_5GS_MOBILE_ID, " -  Additional GUTI");
+
     /*25    Allowed PDU session status    Allowed PDU session status         9.11.3.13    O    TLV    4 - 34 */
     ELEM_OPT_TLV(0x25, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_ALLOW_PDU_SES_STS, NULL);
+
     /*18    UE's usage setting    UE's usage setting         9.11.3.55    O    TLV    3 */
     ELEM_OPT_TLV(0x18, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_UE_USAGE_SET, NULL);
+
     /*51    Requested DRX parameters    5GS DRX parameters 9.11.3.2A    O    TLV    3 */
     ELEM_OPT_TLV(0x51, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_5GS_DRX_PARAM, " - Requested DRX parameters");
+
     /*70    EPS NAS message container    EPS NAS message container 9.11.3.24    O    TLV-E    4-n */
     ELEM_OPT_TLV_E(0x70, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_EPS_NAS_MSG_CONT, NULL);
+
     /* 74    LADN indication    LADN indication 9.11.3.29    O    TLV-E    3-811 */
     ELEM_OPT_TLV_E(0x74, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_LADN_INDIC, NULL);
+
     /* 8-    Payload container type    Payload container type 9.11.3.40    O    TV    1 */
     ELEM_OPT_TV_SHORT(0x80, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_PLD_CONT_TYPE, NULL);
+
     /* 7B    Payload container     Payload container 9.11.3.39    O    TLV-E    4-65538 */
     ELEM_OPT_TLV_E(0x7B, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_PLD_CONT, NULL);
+
     /* 9-    Network slicing indication    Network slicing indication 9.11.3.36    O    TV    1 */
     ELEM_OPT_TV_SHORT(0x90, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_NW_SLICING_IND, NULL);
+
     /* 53    5GS update type    5GS update type 9.11.3.9A    O    TLV    3 */
     ELEM_OPT_TLV(0x53, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_UPDATE_TYPE, NULL);
+
     /* 41    Mobile station classmark 2    Mobile station classmark 2    9.11.3.31C    O    TLV 5 */
     ELEM_OPT_TLV(0x41, NAS_PDU_TYPE_COMMON, DE_EPS_MS_CM_2 , NULL );
+
     /* 42    Supported Codecs    Supported Codec List    9.11.3.51A    O    TLV 5-n */
     ELEM_OPT_TLV(0x42, GSM_A_PDU_TYPE_DTAP, DE_SUP_CODEC_LIST, " - Supported Codecs");
+
     /* 71    NAS message container    NAS message container 9.11.3.33    O    TLV-E    4-n */
     ELEM_OPT_TLV_E(0x71, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_NAS_MSG_CONT, NULL);
+
     /* 60    EPS bearer context status    EPS bearer context status 9.11.3.23A    O    TLV    4 */
     ELEM_OPT_TLV(0x60, NAS_PDU_TYPE_COMMON, DE_EPS_CMN_EPS_BE_CTX_STATUS, NULL);
+
     /* 6E    Requested extended DRX parameters    Extended DRX parameters 9.11.3.60    O    TLV    3-4 */
     ELEM_OPT_TLV(0x6E, GSM_A_PDU_TYPE_GM, DE_EXT_DRX_PARAMS, NULL);
     /* 6A    T3324 value    GPRS timer 3 9.11.2.5    O    TLV    3 */
@@ -8838,8 +7908,6 @@ nas_5gs_mm_registration_req(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
     ELEM_OPT_TLV(0x3F, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_N3GPP_PATH_SWITCH_INFO, NULL);
     /* 56    AUN3 indication    AUN3 indication     9.11.3.104    O    TLV    3 */
     ELEM_OPT_TLV(0x56, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_AU3N_IND, NULL);
-    /* 64    Requested LP-WUSPS assistance information    LP-WUSPS assistance information     9.11.3.111    O    TLV    3 */
-    ELEM_OPT_TLV(0x64, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_LP_WUSPS_ASSIST_INFO, " - Requested");
 
     EXTRANEOUS_DATA_CHECK(curr_len, 0, pinfo, &ei_nas_5gs_extraneous_data);
 
@@ -8971,8 +8039,8 @@ nas_5gs_mm_registration_accept(tvbuff_t *tvb, proto_tree *tree, packet_info *pin
     ELEM_OPT_TLV(0x4B, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_RAN_TIMING_SYNC, NULL);
     /* 4C    Alternative NSSAI    Alternative NSSAI 9.11.3.97    O    TLV    2-146 */
     ELEM_OPT_TLV(0x4C, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_ALT_NSSAI, NULL);
-    /* 4F    Discontinuous coverage maximum time offset    GPRS timer 3 9.11.2.5    O    TLV    3 */
-    ELEM_OPT_TLV(0x4F, GSM_A_PDU_TYPE_GM, DE_GPRS_TIMER_3, " - Discontinuous coverage maximum time offset");
+    /* 4F    Maximum time offset    GPRS timer 3 9.11.2.5    O    TLV    3 */
+    ELEM_OPT_TLV(0x4F, GSM_A_PDU_TYPE_GM, DE_GPRS_TIMER_3, " - Maximum time offset");
     /* 5B    S-NSSAI time validity information    S-NSSAI time validity information 9.11.3.101    O    TLV    23-257 */
     ELEM_OPT_TLV(0x5B, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_S_NSSAI_TIME_VALID_INFO, NULL);
     /* 3C   Unavailability configuration    Unavailability configuration 9.11.2.21    O    TLV 3-9 */
@@ -8981,12 +8049,6 @@ nas_5gs_mm_registration_accept(tvbuff_t *tvb, proto_tree *tree, packet_info *pin
     ELEM_OPT_TLV(0x5C, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_FEAT_AUTH_IND, NULL);
     /* 61    On-demand NSSAI    On-demand NSSAI 9.11.3.108    O    TLV    5-210 */
     ELEM_OPT_TLV(0x61, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_ON_DEMAND_NSSAI, NULL);
-    /* 63    Access technology utilization control    Access technology utilization control  9.11.3.110 O TLV 4-5 */
-    ELEM_OPT_TLV(0x63, NAS_PDU_TYPE_EMM, DE_EMM_ACCESS_TECH_UTIL_CTRL, NULL);
-    /* 64    Negotiated LP-WUSPS assistance information    LP-WUSPS assistance information     9.11.3.111    O    TLV    3 */
-    ELEM_OPT_TLV(0x64, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_LP_WUSPS_ASSIST_INFO, " - Negotiated");
-    /* 8-    LP-WUS status    LP-WUS status     9.11.3.112    O    TV    1 */
-    ELEM_OPT_TV_SHORT(0x80, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_LP_WUS_STATUS, NULL);
 
     EXTRANEOUS_DATA_CHECK(curr_len, 0, pinfo, &ei_nas_5gs_extraneous_data);
 
@@ -9055,8 +8117,6 @@ nas_5gs_mm_registration_rej(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo 
     ELEM_OPT_TLV(0x4D, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_TNAN_INFO, NULL);
     /* 62    Extended 5GMM cause    Extended 5GMM cause 9.11.3.109    O    TLV    3 */
     ELEM_OPT_TLV(0x62, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_EXT_5GMM_CAUSE, NULL);
-    /* 63    Access technology utilization control    Access technology utilization control  9.11.3.110 O TLV 4-5 */
-    ELEM_OPT_TLV(0x63, NAS_PDU_TYPE_EMM, DE_EMM_ACCESS_TECH_UTIL_CTRL, NULL);
 
     EXTRANEOUS_DATA_CHECK(curr_len, 0, pinfo, &ei_nas_5gs_extraneous_data);
 
@@ -9222,8 +8282,6 @@ nas_5gs_mm_de_registration_req_ue_term(tvbuff_t *tvb, proto_tree *tree, packet_i
     ELEM_OPT_TLV(0x1D, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_5GS_TA_ID_LIST, " - Forbidden TAI(s) for the list of \"5GS forbidden tracking areas for roaming\"");
     /* 1E    Forbidden TAI(s) for the list of "5GS forbidden tracking areas for regional provision of service"    5GS tracking area identity list 9.11.3.9    O    TLV    9-114 */
     ELEM_OPT_TLV(0x1E, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_5GS_TA_ID_LIST, " - Forbidden TAI(s) for the list of \"5GS forbidden tracking areas for regional provision of service\"");
-    /* 63    Access technology utilization control    Access technology utilization control  9.11.3.110 O TLV 4-5 */
-    ELEM_OPT_TLV(0x63, NAS_PDU_TYPE_EMM, DE_EMM_ACCESS_TECH_UTIL_CTRL, NULL);
 
     EXTRANEOUS_DATA_CHECK(curr_len, 0, pinfo, &ei_nas_5gs_extraneous_data);
 
@@ -9339,8 +8397,6 @@ nas_5gs_mm_service_rej(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, 
     ELEM_OPT_TLV(0x1D, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_5GS_TA_ID_LIST, " - Forbidden TAI(s) for the list of \"5GS forbidden tracking areas for roaming\"");
     /* 1E    Forbidden TAI(s) for the list of "5GS forbidden tracking areas for regional provision of service"    5GS tracking area identity list 9.11.3.9    O    TLV    9-114 */
     ELEM_OPT_TLV(0x1E, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_5GS_TA_ID_LIST, " - Forbidden TAI(s) for the list of \"5GS forbidden tracking areas for regional provision of service\"");
-    /* 63    Access technology utilization control    Access technology utilization control  9.11.3.110 O TLV 4-5 */
-    ELEM_OPT_TLV(0x63, NAS_PDU_TYPE_EMM, DE_EMM_ACCESS_TECH_UTIL_CTRL, NULL);
 
     EXTRANEOUS_DATA_CHECK(curr_len, 0, pinfo, &ei_nas_5gs_extraneous_data);
 
@@ -9434,11 +8490,11 @@ nas_5gs_mm_conf_upd_cmd(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_,
     /* 4C    Alternative NSSAI    Alternative NSSAI 9.11.3.97    O    TLV    2-146 */
     ELEM_OPT_TLV(0x4C, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_ALT_NSSAI, NULL);
     /* 7B    S-NSSAI location validity information    S-NSSAI location validity information 9.11.3.100    O    TLV-E    17-38611 */
-    ELEM_OPT_TLV_E(0x7B, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_S_NSSAI_LOC_VALID_INFO, NULL);
+    ELEM_OPT_TLV_E(0x7B, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_ALT_NSSAI, NULL);
     /* 5B    S-NSSAI time validity information    S-NSSAI time validity information 9.11.3.101    O    TLV    23-257 */
     ELEM_OPT_TLV(0x5B, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_S_NSSAI_TIME_VALID_INFO, NULL);
-    /* 4F    Discontinuous coverage maximum time offset    GPRS timer 3 9.11.2.5    O    TLV    3 */
-    ELEM_OPT_TLV(0x4F, GSM_A_PDU_TYPE_GM, DE_GPRS_TIMER_3, " - Discontinuous coverage maximum time offset");
+    /* 4F    Maximum time offset    GPRS timer 3 9.11.2.5    O    TLV    3 */
+    ELEM_OPT_TLV(0x4F, GSM_A_PDU_TYPE_GM, DE_GPRS_TIMER_3, " - Maximum time offset");
     /* 74    Partially allowed NSSAI    Partial NSSAI 9.11.3.103    O    TLV-E    3-808 */
     ELEM_OPT_TLV_E(0x74, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_PARTIAL_NSSAI, " - Partially allowed NSSAI");
     /* 7A    Partially rejected NSSAI    Partial NSSAI 9.11.3.103    O    TLV-E    3-808 */
@@ -9447,12 +8503,6 @@ nas_5gs_mm_conf_upd_cmd(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_,
     ELEM_OPT_TLV(0x5C, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_FEAT_AUTH_IND, NULL);
     /* 61    On-demand NSSAI    On-demand NSSAI 9.11.3.108    O    TLV    5-210 */
     ELEM_OPT_TLV(0x61, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_ON_DEMAND_NSSAI, NULL);
-    /* 63    Access technology utilization control Access technology utilization control 9.11.3.110 O TLV 4-5 */
-    ELEM_OPT_TLV(0x63, NAS_PDU_TYPE_EMM, DE_EMM_ACCESS_TECH_UTIL_CTRL, NULL);
-    /* 64    Updated LP-WUSPS assistance information    LP-WUSPS assistance information     9.11.3.111    O    TLV    3 */
-    ELEM_OPT_TLV(0x64, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_LP_WUSPS_ASSIST_INFO, " - Updated");
-    /* 8-    LP-WUS status    LP-WUS status     9.11.3.112    O    TV    1 */
-    ELEM_OPT_TV_SHORT(0x80, NAS_5GS_PDU_TYPE_MM, DE_NAS_5GS_MM_LP_WUS_STATUS, NULL);
 
     EXTRANEOUS_DATA_CHECK(curr_len, 0, pinfo, &ei_nas_5gs_extraneous_data);
 
@@ -10025,10 +9075,8 @@ nas_5gs_sm_pdu_ses_est_acc(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _
     ELEM_OPT_TLV_E(0x71, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_REC_MBS_CONT, NULL);
     /* 70    N3QAI    N3QAI 9.11.4.36    O    TLV-E    9-n */
     ELEM_OPT_TLV_E(0x70, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_N3QAI, NULL);
-    /* 73    Protocol description    Protocol description 9.11.4.39    O    TLV-E    6-n */
-    ELEM_OPT_TLV_E(0x73, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_PROT_DESC, NULL);
-    /* 38    ECN marking for L4S indication    ECN marking for L4S indication 9.11.4.40    O    TLV    2-257 */
-    ELEM_OPT_TLV(0x38, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_ECN_MARK_L4S_IND, NULL);
+    /* 36    Protocol description    Protocol description 9.11.4.39    O    TLV-E    6-n */
+    ELEM_OPT_TLV_E(0x36, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_PROT_DESC, NULL);
 
     EXTRANEOUS_DATA_CHECK(curr_len, 0, pinfo, &ei_nas_5gs_extraneous_data);
 
@@ -10067,8 +9115,6 @@ nas_5gs_sm_pdu_ses_est_rej(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _
     ELEM_OPT_TLV(0x1D, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_RE_ATTEMPT_IND, NULL);
     /* 72    Service-level-AA container    Service-level-AA container 9.11.2.10    O    TLV-E    4-65538 */
     ELEM_OPT_TLV_E(0x72, NAS_5GS_PDU_TYPE_COMMON, DE_NAS_5GS_CMN_SERVICE_LEVEL_AA_CONT, NULL);
-    /* 77    ATSSS container    ATSSS container 9.11.4.22    O    TLV-E    3-65538  */
-    ELEM_OPT_TLV_E(0x77, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_ATSSS_CONT, NULL);
 
     EXTRANEOUS_DATA_CHECK(curr_len, 0, pinfo, &ei_nas_5gs_extraneous_data);
 
@@ -10093,8 +9139,10 @@ nas_5gs_sm_pdu_ses_auth_cmd(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo 
 
     /*EAP message    EAP message 9.11.2.2    M    LV-E    6-1502 */
     ELEM_MAND_LV_E(NAS_5GS_PDU_TYPE_COMMON, DE_NAS_5GS_CMN_EAP_MESSAGE, NULL, ei_nas_5gs_missing_mandatory_element);
+
     /*7B    Extended protocol configuration options    Extended protocol configuration options    9.11.4.2    O    TLV - E    4 - 65538*/
     ELEM_OPT_TLV_E(0x7B, NAS_PDU_TYPE_ESM, DE_ESM_EXT_PCO, NULL);
+
 
     EXTRANEOUS_DATA_CHECK(curr_len, 0, pinfo, &ei_nas_5gs_extraneous_data);
 
@@ -10118,8 +9166,10 @@ nas_5gs_sm_pdu_ses_auth_comp(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo
 
     /*EAP message    EAP message 9.11.2.2    M    LV-E    6-1502 */
     ELEM_MAND_LV_E(NAS_5GS_PDU_TYPE_COMMON, DE_NAS_5GS_CMN_EAP_MESSAGE, NULL, ei_nas_5gs_missing_mandatory_element);
+
     /*7B    Extended protocol configuration options    Extended protocol configuration options    9.11.4.2    O    TLV - E    4 - 65538*/
     ELEM_OPT_TLV_E(0x7B, NAS_PDU_TYPE_ESM, DE_ESM_EXT_PCO, NULL);
+
 
     EXTRANEOUS_DATA_CHECK(curr_len, 0, pinfo, &ei_nas_5gs_extraneous_data);
 
@@ -10143,6 +9193,7 @@ nas_5gs_sm_pdu_ses_auth_res(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo 
 
     /*EAP message    EAP message 9.11.2.2    O    TLV-E    7-1503 */
     ELEM_OPT_TLV_E(0x78, NAS_5GS_PDU_TYPE_COMMON, DE_NAS_5GS_CMN_EAP_MESSAGE, NULL);
+
     /*7B    Extended protocol configuration options    Extended protocol configuration options    9.11.4.2    O    TLV - E    4 - 65538*/
     ELEM_OPT_TLV_E(0x7B, NAS_PDU_TYPE_ESM, DE_ESM_EXT_PCO, NULL);
 
@@ -10199,8 +9250,6 @@ nas_5gs_sm_pdu_ses_mod_req(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _
     ELEM_OPT_TLV_E(0x73, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_N3GPP_DELAY_BUDGET, NULL);
     /* 36    URSP rule enforcement reports    URSP rule enforcement reports 9.11.4.38    O    TLV    4-n */
     ELEM_OPT_TLV(0x36, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_URSP_RULE_ENFORCE_REPORTS, NULL);
-    /* 7C    Non-3GPP device information    Non-3GPP device information 9.11.4.41    O    TLV-E    7-n */
-    ELEM_OPT_TLV_E(0x7C, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_N3GPP_DEVICE_INFO, NULL);
 
     EXTRANEOUS_DATA_CHECK(curr_len, 0, pinfo, &ei_nas_5gs_extraneous_data);
 
@@ -10225,12 +9274,16 @@ nas_5gs_sm_pdu_ses_mod_rej(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _
 
     /* 5GSM cause    5GSM cause 9.11.4.2    M    V    1 */
     ELEM_MAND_V(NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_5GSM_CAUSE, NULL, ei_nas_5gs_missing_mandatory_element);
-    /* 37    Back-off timer value    GPRS timer 3 9.11.2.5    O    TLV    3 */
+
+    /*37    Back-off timer value    GPRS timer 3 9.11.2.5    O    TLV    3 */
     ELEM_OPT_TLV(0x37, GSM_A_PDU_TYPE_GM, DE_GPRS_TIMER_3, " - Back-off timer value");
+
     /* 61    5GSM congestion re-attempt indicator    5GSM congestion re-attempt indicator 9.11.4.21    O    TLV    3 */
     ELEM_OPT_TLV(0x61, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_5GSM_CONG_RE_ATTEMPT_IND, NULL);
-    /* 7B    Extended protocol configuration options    Extended protocol configuration options    9.11.4.6    O    TLV - E    4 - 65538*/
+
+    /*7B    Extended protocol configuration options    Extended protocol configuration options    9.11.4.6    O    TLV - E    4 - 65538*/
     ELEM_OPT_TLV_E(0x7B, NAS_PDU_TYPE_ESM, DE_ESM_EXT_PCO, NULL);
+
     /* 1D    Re-attempt indicator    Re-attempt indicator 9.11.4.17    O    TLV    3  */
     ELEM_OPT_TLV(0x1D, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_RE_ATTEMPT_IND, NULL);
 
@@ -10289,10 +9342,8 @@ nas_5gs_sm_pdu_ses_mod_cmd(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _
     ELEM_OPT_TLV(0x5A, NAS_5GS_PDU_TYPE_COMMON, DE_NAS_5GS_CMN_S_NSSAI, " - Alternative S-NSSAI");
     /* 70    N3QAI    N3QAI 9.11.4.36    O    TLV-E    9-n */
     ELEM_OPT_TLV_E(0x70, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_N3QAI, NULL);
-    /* 73    Protocol description    Protocol description 9.11.4.39    O    TLV-E    6-n */
-    ELEM_OPT_TLV_E(0x73, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_PROT_DESC, NULL);
-    /* 38    ECN marking for L4S indication    ECN marking for L4S indication 9.11.4.40    O    TLV    2-257 */
-    ELEM_OPT_TLV(0x38, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_ECN_MARK_L4S_IND, NULL);
+    /* 38    Protocol description    Protocol description 9.11.4.39    O    TLV-E    6-n */
+    ELEM_OPT_TLV_E(0x38, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_PROT_DESC, NULL);
 
     EXTRANEOUS_DATA_CHECK(curr_len, 0, pinfo, &ei_nas_5gs_extraneous_data);
 
@@ -10505,7 +9556,7 @@ nas_5gs_sm_serv_level_auth_cmd(tvbuff_t *tvb, proto_tree *tree, packet_info *pin
     curr_len = len;
 
     /* Direction: network to UE */
-    /* Service-level-AA container    Service-level-AA container 9.11.2.10    M    LV-E    5-65538 */
+    /* Service-level-AA container    Service-level-AA container 9.11.2.10    M    LV-E    5-n */
     ELEM_MAND_LV_E(NAS_5GS_PDU_TYPE_COMMON, DE_NAS_5GS_CMN_SERVICE_LEVEL_AA_CONT, NULL, ei_nas_5gs_missing_mandatory_element);
 
     EXTRANEOUS_DATA_CHECK(curr_len, 0, pinfo, &ei_nas_5gs_extraneous_data);
@@ -10526,7 +9577,7 @@ nas_5gs_sm_serv_level_auth_comp(tvbuff_t *tvb, proto_tree *tree, packet_info *pi
     curr_len = len;
 
     /* Direction: UE to network */
-    /* Service-level-AA container    Service-level-AA container 9.11.2.10    M    LV-E    5-65538 */
+    /* Service-level-AA container    Service-level-AA container 9.11.2.10    M    LV-E    5-n */
     ELEM_MAND_LV_E(NAS_5GS_PDU_TYPE_COMMON, DE_NAS_5GS_CMN_SERVICE_LEVEL_AA_CONT, NULL, ei_nas_5gs_missing_mandatory_element);
 
     EXTRANEOUS_DATA_CHECK(curr_len, 0, pinfo, &ei_nas_5gs_extraneous_data);
@@ -10579,7 +9630,7 @@ nas_5gs_sm_remote_ue_resp(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U
  * 6.1.6.4.4-1 n1SmInfoFromUE
  */
 static void
-nas_5gs_n1_sm_info_from_ue(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len, uint32_t message_type)
+nas_5gs_n1_sm_info_from_ue(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len)
 {
     uint32_t curr_offset;
     uint32_t consumed;
@@ -10591,100 +9642,41 @@ nas_5gs_n1_sm_info_from_ue(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _
     /* Direction: UE to network */
     pinfo->link_dir = P2P_DIR_UL;
 
-    switch(message_type) {
-        case NAS_5GS_SM_MSG_PDU_SESSION_ESTABLISHMENT_REQUEST:
-        {
-            /*9-    PDU session type    PDU session type     9.11.4.5    O    TV    1*/
-            ELEM_OPT_TV_SHORT(0x90, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_PDU_SESSION_TYPE, NULL);
+    /*9-    PDU session type    PDU session type     9.11.4.5    O    TV    1*/
+    ELEM_OPT_TV_SHORT(0x90, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_PDU_SESSION_TYPE, NULL);
 
-            /*A-    SSC mode    SSC mode     9.11.4.9    O    TV    1*/
-            ELEM_OPT_TV_SHORT(0xa0, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_SSC_MODE, NULL);
+    /*A-    SSC mode    SSC mode     9.11.4.9    O    TV    1*/
+    ELEM_OPT_TV_SHORT(0xa0, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_SSC_MODE, NULL);
 
-            /*28    5GSM capability    5GSM capability     9.11.4.10    O    TLV    3-15 */
-            ELEM_OPT_TLV(0x28, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_5GSM_CAP, NULL);
+    /*55    Maximum number of supported packet filter    Maximum number of supported packet filter   9.11.4.9    O    TV    3*/
+    ELEM_OPT_TV(0x55, NAS_5GS_PDU_TYPE_SM,  DE_NAS_5GS_SM_MAX_NUM_SUP_PKT_FLT, NULL);
 
-            /*55    Maximum number of supported packet filter    Maximum number of supported packet filter   9.11.4.9    O    TV    3*/
-            ELEM_OPT_TV(0x55, NAS_5GS_PDU_TYPE_SM,  DE_NAS_5GS_SM_MAX_NUM_SUP_PKT_FLT, NULL);
+    /* 13    Integrity protection maximum data rate    Integrity protection maximum data rate 9.11.4.7    O    TV    3 */
+    ELEM_OPT_TV(0x13, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_INT_PROT_MAX_DATA_RTE, NULL);
 
-            /*39    SM PDU DN request container    SM PDU DN request container 9.11.4.15    O    TLV    3-255 */
-            ELEM_OPT_TLV(0x39, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_PDU_DN_REQ_CONT, NULL);
+    /*39    SM PDU DN request container    SM PDU DN request container 9.11.4.15    O    TLV    3-255 */
+    ELEM_OPT_TLV(0x39, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_PDU_DN_REQ_CONT, NULL);
 
-            /*7B    Extended protocol configuration options    Extended protocol configuration options     9.11.4.2    O    TLV-E    4-65538*/
-            ELEM_OPT_TLV_E(0x7B, NAS_PDU_TYPE_ESM, DE_ESM_EXT_PCO, NULL);
+    /*7B    Extended protocol configuration options    Extended protocol configuration options     9.11.4.2    O    TLV-E    4-65538*/
+    ELEM_OPT_TLV_E(0x7B, NAS_PDU_TYPE_ESM, DE_ESM_EXT_PCO, NULL);
 
-            break;
-        }
-        case NAS_5GS_SM_MSG_PDU_SESSION_MODIFICATION_REQUEST:
-        {
-            /*28    5GSM capability    5GSM capability     9.11.4.10    O    TLV    3-15 */
-            ELEM_OPT_TLV(0x28, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_5GSM_CAP, NULL);
+    /*78    EAP message    EAP message 9.10.2.2    O    TLV - E    7 - 1503*/
+    ELEM_OPT_TLV_E(0x78,  NAS_5GS_PDU_TYPE_COMMON, DE_NAS_5GS_CMN_EAP_MESSAGE, NULL);
 
-            /* 59    5GSM cause    5GSM cause 9.11.4.2    O    TV    2 */
-            ELEM_OPT_TV(0x59, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_5GSM_CAUSE, NULL);
+    /* 7A    Requested QoS rules    QoS rules 9.11.4.13    O    TLV-E    3-65538 */
+    ELEM_OPT_TLV_E(0x7A, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_QOS_RULES, " - Requested QoS rules");
 
-            /*55    Maximum number of supported packet filter    Maximum number of supported packet filter   9.11.4.9    O    TV    3*/
-            ELEM_OPT_TV(0x55, NAS_5GS_PDU_TYPE_SM,  DE_NAS_5GS_SM_MAX_NUM_SUP_PKT_FLT, NULL);
+    /*79    Requested QoS flow descriptions     QoS flow descriptions     9.11.4.12    O    TLV-E    6-65538*/
+    ELEM_OPT_TLV_E(0x79, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_QOS_FLOW_DES, " - Requested");
 
-            /* 13    Integrity protection maximum data rate    Integrity protection maximum data rate 9.11.4.7    O    TV    3 */
-            ELEM_OPT_TV(0x13, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_INT_PROT_MAX_DATA_RTE, NULL);
+    /* 59    5GSM cause    5GSM cause 9.11.4.2    O    TV    2 */
+    ELEM_OPT_TV(0x59, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_5GSM_CAUSE, NULL);
 
-            /*7B    Extended protocol configuration options    Extended protocol configuration options     9.11.4.2    O    TLV-E    4-65538*/
-            ELEM_OPT_TLV_E(0x7B, NAS_PDU_TYPE_ESM, DE_ESM_EXT_PCO, NULL);
+    /*28    5GSM capability    5GSM capability     9.11.4.10    O    TLV    3-15 */
+    ELEM_OPT_TLV(0x28, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_5GSM_CAP, NULL);
 
-            /* 7A    Requested QoS rules    QoS rules 9.11.4.13    O    TLV-E    3-65538 */
-            ELEM_OPT_TLV_E(0x7A, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_QOS_RULES, " - Requested QoS rules");
-
-            /*79    Requested QoS flow descriptions     QoS flow descriptions     9.11.4.12    O    TLV-E    6-65538*/
-            ELEM_OPT_TLV_E(0x79, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_QOS_FLOW_DES, " - Requested");
-
-            /*75    Mapped EPS bearer contexts     Mapped EPS  bearer contexts     9.11.4.5    O    TLV-E    7-65538*/
-            ELEM_OPT_TLV_E(0x75, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_MAPPED_EPS_B_CONT, NULL);
-
-            break;
-        }
-        case NAS_5GS_SM_MSG_PDU_SESSION_MODIFICATION_COMPLETE:
-        case NAS_5GS_SM_MSG_PDU_SESSION_MODIFICATION_COMMAND_REJECT:
-        {
-            /*7B    Extended protocol configuration options    Extended protocol configuration options     9.11.4.2    O    TLV-E    4-65538*/
-            ELEM_OPT_TLV_E(0x7B, NAS_PDU_TYPE_ESM, DE_ESM_EXT_PCO, NULL);
-
-            break;
-        }
-        case NAS_5GS_SM_MSG_PDU_SESSION_AUTHENTICATION_COMPLETE:
-        {
-            /*7B    Extended protocol configuration options    Extended protocol configuration options     9.11.4.2    O    TLV-E    4-65538*/
-            ELEM_OPT_TLV_E(0x7B, NAS_PDU_TYPE_ESM, DE_ESM_EXT_PCO, NULL);
-
-            /*78    EAP message    EAP message 9.10.2.2    O    TLV - E    7 - 1503*/
-            ELEM_OPT_TLV_E(0x78,  NAS_5GS_PDU_TYPE_COMMON, DE_NAS_5GS_CMN_EAP_MESSAGE, NULL);
-
-            break;
-        }
-        case NAS_5GS_SM_MSG_PDU_SESSION_RELEASE_REQUEST:
-        case NAS_5GS_SM_MSG_PDU_SESSION_RELEASE_COMPLETE:
-        {
-            /* 59    5GSM cause    5GSM cause 9.11.4.2    O    TV    2 */
-            ELEM_OPT_TV(0x59, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_5GSM_CAUSE, NULL);
-
-            /*7B    Extended protocol configuration options    Extended protocol configuration options     9.11.4.2    O    TLV-E    4-65538*/
-            ELEM_OPT_TLV_E(0x7B, NAS_PDU_TYPE_ESM, DE_ESM_EXT_PCO, NULL);
-
-            break;
-        }
-        case NAS_5GS_SM_MSG_REMOTE_UE_REPORT:
-        {
-            /* 76    Remote UE context connected    Remote UE context list 9.11.4.29    O    TLV-E    16-65538 */
-            ELEM_OPT_TLV_E(0x76, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_REMOTE_UE_CTX_LIST, " - Connected");
-            /* 70    Remote UE context disconnected    Remote UE context list 9.11.4.29    O    TLV-E    16-65538 */
-            ELEM_OPT_TLV_E(0x70, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_REMOTE_UE_CTX_LIST, " - Disconnected");
-
-            break;
-        }
-        default:
-            proto_tree_add_expert_remaining(tree, pinfo, &ei_nas_5gs_ie_not_dis, tvb, offset);
-
-            break;
-    }
+    /*75    Mapped EPS bearer contexts     Mapped EPS  bearer contexts     9.11.4.5    O    TLV-E    7-65538*/
+    ELEM_OPT_TLV_E(0x75, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_MAPPED_EPS_B_CONT, NULL);
 
     EXTRANEOUS_DATA_CHECK(curr_len, 0, pinfo, &ei_nas_5gs_extraneous_data);
 }
@@ -10693,7 +9685,7 @@ nas_5gs_n1_sm_info_from_ue(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _
  * 6.1.6.4.4-2 n1SmInfoToUE
  */
 static void
-nas_5gs_n1_sm_info_to_ue(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len, uint32_t message_type _U_)
+nas_5gs_n1_sm_info_to_ue(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len)
 {
     uint32_t curr_offset;
     uint32_t consumed;
@@ -10705,82 +9697,26 @@ nas_5gs_n1_sm_info_to_ue(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_
     /* Direction: network to UE*/
     pinfo->link_dir = P2P_DIR_DL;
 
-    switch(message_type) {
-        case NAS_5GS_SM_MSG_PDU_SESSION_ESTABLISHMENT_RESPONSE:
-        {
-            /* 59    5GSM cause    5GSM cause 9.11.4.2    O    TV    2 */
-            ELEM_OPT_TV(0x59, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_5GSM_CAUSE, NULL);
+    /*56    RQ timer value    GPRS timer     9.11.4.3    O    TV    2*/
+    ELEM_OPT_TV(0x56, GSM_A_PDU_TYPE_GM, DE_GPRS_TIMER, " - PDU session release time");
 
-            /*56    RQ timer value    GPRS timer     9.11.4.3    O    TV    2*/
-            ELEM_OPT_TV(0x56, GSM_A_PDU_TYPE_GM, DE_GPRS_TIMER, " - PDU session release time");
+    /*78    EAP message    EAP message 9.10.2.2    O    TLV - E    7 - 1503*/
+    ELEM_OPT_TLV_E(0x78,  NAS_5GS_PDU_TYPE_COMMON, DE_NAS_5GS_CMN_EAP_MESSAGE, NULL);
 
-            /*75    Mapped EPS bearer contexts     Mapped EPS  bearer contexts     9.11.4.5    O    TLV-E    7-65538*/
-            ELEM_OPT_TLV_E(0x75, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_MAPPED_EPS_B_CONT, NULL);
+    /*F-    Allowed SSC mode    Allowed SSC mode 9.11.4.3    O    TV    1*/
+    ELEM_OPT_TV_SHORT(0xF0, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_5GSM_ALLOWED_SSC_MODE, NULL);
 
-            /*78    EAP message    EAP message 9.10.2.2    O    TLV - E    7 - 1503*/
-            ELEM_OPT_TLV_E(0x78,  NAS_5GS_PDU_TYPE_COMMON, DE_NAS_5GS_CMN_EAP_MESSAGE, NULL);
+    /*7B    Extended protocol configuration options    Extended protocol configuration options     9.11.4.2    O    TLV-E    4-65538*/
+    ELEM_OPT_TLV_E(0x7B, NAS_PDU_TYPE_ESM, DE_ESM_EXT_PCO, NULL);
 
-            /*7B    Extended protocol configuration options    Extended protocol configuration options     9.11.4.2    O    TLV-E    4-65538*/
-            ELEM_OPT_TLV_E(0x7B, NAS_PDU_TYPE_ESM, DE_ESM_EXT_PCO, NULL);
+    /* 59    5GSM cause    5GSM cause 9.11.4.2    O    TV    2 */
+    ELEM_OPT_TV(0x59, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_5GSM_CAUSE, NULL);
 
-            /* 77    ATSSS container    ATSSS container 9.11.4.22    O    TLV-E    3-65538  */
-            ELEM_OPT_TLV_E(0x77, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_ATSSS_CONT, NULL);
+    /*75    Mapped EPS bearer contexts     Mapped EPS  bearer contexts     9.11.4.5    O    TLV-E    7-65538*/
+    ELEM_OPT_TLV_E(0x75, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_MAPPED_EPS_B_CONT, NULL);
 
-            break;
-        }
-        case NAS_5GS_SM_MSG_PDU_SESSION_ESTABLISHMENT_REJECT:
-        {
-            /*F-    Allowed SSC mode    Allowed SSC mode 9.11.4.3    O    TV    1*/
-            ELEM_OPT_TV_SHORT(0xF0, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_5GSM_ALLOWED_SSC_MODE, NULL);
-
-            /*78    EAP message    EAP message 9.10.2.2    O    TLV - E    7 - 1503*/
-            ELEM_OPT_TLV_E(0x78,  NAS_5GS_PDU_TYPE_COMMON, DE_NAS_5GS_CMN_EAP_MESSAGE, NULL);
-
-            /*7B    Extended protocol configuration options    Extended protocol configuration options     9.11.4.2    O    TLV-E    4-65538*/
-            ELEM_OPT_TLV_E(0x7B, NAS_PDU_TYPE_ESM, DE_ESM_EXT_PCO, NULL);
-
-            break;
-        }
-        case NAS_5GS_SM_MSG_PDU_SESSION_AUTHENTICATION_COMMAND:
-        case NAS_5GS_SM_MSG_PDU_SESSION_AUTHENTICATION_RESULT:
-        case NAS_5GS_SM_MSG_PDU_SESSION_RELEASE_COMMAND:
-        {
-            /*78    EAP message    EAP message 9.10.2.2    O    TLV - E    7 - 1503*/
-            ELEM_OPT_TLV_E(0x78,  NAS_5GS_PDU_TYPE_COMMON, DE_NAS_5GS_CMN_EAP_MESSAGE, NULL);
-
-            /*7B    Extended protocol configuration options    Extended protocol configuration options     9.11.4.2    O    TLV-E    4-65538*/
-            ELEM_OPT_TLV_E(0x7B, NAS_PDU_TYPE_ESM, DE_ESM_EXT_PCO, NULL);
-
-            break;
-        }
-        case NAS_5GS_SM_MSG_PDU_SESSION_MODIFICATION_COMMAND:
-        {
-            /* 59    5GSM cause    5GSM cause 9.11.4.2    O    TV    2 */
-            ELEM_OPT_TV(0x59, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_5GSM_CAUSE, NULL);
-
-            /*56    RQ timer value    GPRS timer     9.11.4.3    O    TV    2*/
-            ELEM_OPT_TV(0x56, GSM_A_PDU_TYPE_GM, DE_GPRS_TIMER, " - PDU session release time");
-
-            /*75    Mapped EPS bearer contexts     Mapped EPS  bearer contexts     9.11.4.5    O    TLV-E    7-65538*/
-            ELEM_OPT_TLV_E(0x75, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_MAPPED_EPS_B_CONT, NULL);
-
-            /*7B    Extended protocol configuration options    Extended protocol configuration options     9.11.4.2    O    TLV-E    4-65538*/
-            ELEM_OPT_TLV_E(0x7B, NAS_PDU_TYPE_ESM, DE_ESM_EXT_PCO, NULL);
-
-            /* 77    ATSSS container    ATSSS container 9.11.4.22    O    TLV-E    3-65538  */
-            ELEM_OPT_TLV_E(0x77, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_ATSSS_CONT, NULL);
-
-            break;
-        }
-        case NAS_5GS_SM_MSG_PDU_SESSION_MODIFICATION_REJECT:
-        case NAS_5GS_SM_MSG_PDU_SESSION_RELEASE_REJECT:
-        {
-            /*7B    Extended protocol configuration options    Extended protocol configuration options     9.11.4.2    O    TLV-E    4-65538*/
-            ELEM_OPT_TLV_E(0x7B, NAS_PDU_TYPE_ESM, DE_ESM_EXT_PCO, NULL);
-
-            break;
-        }
-    }
+    /* 77    ATSSS container    ATSSS container 9.11.4.22    O    TLV-E    3-65538  */
+    ELEM_OPT_TLV_E(0x77, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_ATSSS_CONT, NULL);
 
     EXTRANEOUS_DATA_CHECK(curr_len, 0, pinfo, &ei_nas_5gs_extraneous_data);
 }
@@ -10789,7 +9725,7 @@ nas_5gs_n1_sm_info_to_ue(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_
  * 6.1.6.4.4 unknownN1SmInfo
  */
 static void
-nas_5gs_unknown_n1_sm_info(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len, uint32_t message_type _U_)
+nas_5gs_unknown_n1_sm_info(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len)
 {
     uint32_t curr_offset;
     unsigned   curr_len;
@@ -10828,8 +9764,6 @@ static const value_string nas_5gs_ursp_traff_desc_component_type_values[] = {
     { 0x92, "Regular expression" },
     { 0xa0, "OS App Id type" },
     { 0xa1, "Destination MAC address range type"},
-    { 0xa2, "PIN ID type" },
-    { 0xa3, "Connectivity group ID type" },
     { 0, NULL }
 };
 
@@ -10838,28 +9772,17 @@ static const range_string nas_5gs_ursp_traff_desc_conn_cap_values[] = {
     { 0x02, 0x02, "MMS" },
     { 0x04, 0x04, "SUPL" },
     { 0x08, 0x08, "Internet" },
-    { 0x10, 0x10, "LCS user plane positioning" },
-    { 0x20, 0xA0, "Operator specific" },
-    { 0xA1, 0xA1, "IoT delay-tolerant" },
-    { 0xA2, 0xA2, "IoT non-delay-tolerant" },
-    { 0xA3, 0xA3, "Downlink streaming" },
-    { 0xA4, 0xA4, "Uplink streaming" },
-    { 0xA5, 0xA5, "Vehicular communications" },
-    { 0xA6, 0xA6, "Real time interactive" },
-    { 0xA7, 0xA7, "Unified communications" },
-    { 0xA8, 0xA8, "Background" },
-    { 0xA9, 0xA9, "Mission critical communications" },
-    { 0xAA, 0xAA, "Time critical communications" },
-    { 0xAB, 0xAB, "Low latency loss tolerant communications in un-acknowledged mode" },
+    { 0x20, 0x3f, "Operator specific" },
     { 0, 0, NULL }
 };
 
 static void
 de_nas_5gs_ursp_traff_desc(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree)
 {
-    unsigned len = tvb_reported_length(tvb);
-    uint32_t traff_desc, length, i, bmp;
-    unsigned offset = 0;
+    int len = tvb_reported_length(tvb);
+    uint32_t traff_desc;
+    int offset = 0;
+    uint32_t length, i;
 
     /*
     Traffic descriptor (octets v+5 to w)
@@ -10925,7 +9848,6 @@ de_nas_5gs_ursp_traff_desc(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree)
             proto_tree_add_item(tree, hf_nas_5gs_ursp_traff_desc_remote_port_range_high, tvb, offset, 2, ENC_BIG_ENDIAN);
             offset += 2;
             break;
-        case 0x52:
             /* For "IP 3 tuple type", the traffic descriptor component value field shall be encoded as a
                sequence of a one octet IP 3 tuple information bitmap field where:
                - bit 1 set to zero indicates that the IPv4 address field is absent;
@@ -10962,35 +9884,6 @@ de_nas_5gs_ursp_traff_desc(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree)
                address field, IPv6 remote address/prefix length field, the protocol identifier/next
                header field, the single remote port field and the remote port range field, otherwise the
                receiving entity shall ignore the URSP rule. */
-               proto_tree_add_item_ret_uint(tree, hf_nas_5gs_ursp_traff_desc_ip_3_tuple_bitmap, tvb, offset, 1, ENC_NA, &bmp);
-               offset += 1;
-               if (bmp & 0x01) {
-                   proto_tree_add_item(tree, hf_nas_5gs_ursp_traff_desc_ipv4, tvb, offset, 4, ENC_BIG_ENDIAN);
-                   offset += 4;
-                   proto_tree_add_item(tree, hf_nas_5gs_ursp_traff_desc_ipv4_mask, tvb, offset, 4, ENC_BIG_ENDIAN);
-                   offset += 4;
-               }
-               if (bmp & 0x02) {
-                   proto_tree_add_item(tree, hf_nas_5gs_ursp_traff_desc_ipv6, tvb, offset, 16, ENC_NA);
-                   offset += 16;
-                   proto_tree_add_item(tree, hf_nas_5gs_ursp_traff_desc_ipv6_prefix_len, tvb, offset, 1, ENC_NA);
-                   offset += 1;
-               }
-               if (bmp & 0x04) {
-                   proto_tree_add_item(tree, hf_nas_5gs_ursp_traff_desc_next_hdr, tvb, offset, 1, ENC_BIG_ENDIAN);
-                   offset += 1;
-               }
-               if (bmp & 0x08) {
-                   proto_tree_add_item(tree, hf_nas_5gs_ursp_traff_desc_single_remote_port, tvb, offset, 2, ENC_BIG_ENDIAN);
-                   offset += 2;
-               }
-               if (bmp & 0x10) {
-                   proto_tree_add_item(tree, hf_nas_5gs_ursp_traff_desc_remote_port_range_low, tvb, offset, 2, ENC_BIG_ENDIAN);
-                   offset += 2;
-                   proto_tree_add_item(tree, hf_nas_5gs_ursp_traff_desc_remote_port_range_high, tvb, offset, 2, ENC_BIG_ENDIAN);
-                   offset += 2;
-               }
-               break;
         case 0x60:
             /* For "security parameter index type", the traffic descriptor component value field shall be encoded as
                four octets which specify the IPSec security parameter index. */
@@ -11065,7 +9958,7 @@ de_nas_5gs_ursp_traff_desc(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree)
             offset += length;
             break;
         case 0x90:
-            /* For "connection capabilities" type, the traffic descriptor component value field shall be encoded as
+            /* For "connection capabilities” type, the traffic descriptor component value field shall be encoded as
                a sequence of one octet for number of network capabilities followed by one or more octets,
                each containing a connection capability identifier encoded as follows:
                Bits
@@ -11087,7 +9980,7 @@ de_nas_5gs_ursp_traff_desc(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree)
                The destination FQDN value field shall be encoded as defined in IETF RFC 1035 [12]. */
             proto_tree_add_item_ret_uint(tree, hf_nas_5gs_ursp_traff_desc_dest_fqdn_len, tvb, offset, 1, ENC_NA, &length);
             offset += 1;
-            proto_tree_add_item(tree, hf_nas_5gs_ursp_traff_desc_dest_fqdn, tvb, offset, length, ENC_APN_STR);
+            proto_tree_add_item(tree, hf_nas_5gs_ursp_traff_desc_dest_fqdn, tvb, offset, length, ENC_APN_STR|ENC_NA);
             offset += length;
             break;
             /* For "regular expression" type, the traffic descriptor component value field shall be
@@ -11095,12 +9988,6 @@ de_nas_5gs_ursp_traff_desc(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree)
                expression value of variable size. The regular expression value field shall take the form
                of Extended Regular Expressions (ERE) as defined in chapter 9 in IEEE 1003.1-
                2004 Part 1 [19]. */
-        case 0x92: /* Regular expression */
-            proto_tree_add_item_ret_uint(tree, hf_nas_5gs_ursp_traff_desc_regex_len, tvb, offset, 1, ENC_NA, &length);
-            offset += 1;
-            proto_tree_add_item(tree, hf_nas_5gs_ursp_traff_desc_regex, tvb, offset, length, ENC_UTF_8);
-            offset += length;
-            break;
         case 0xa0:
             /* For "OS App Id type", the traffic descriptor component value field shall be encoded as
                a one octet OS App Id length field and an OS App Id field. */
@@ -11119,26 +10006,8 @@ de_nas_5gs_ursp_traff_desc(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree)
             proto_tree_add_item(tree, hf_nas_5gs_ursp_traff_desc_dest_mac_addr_range_high, tvb, offset, 6, ENC_NA);
             offset += 6;
             break;
-        case 0xa2: /* PIN ID */
-            /* For "PIN ID type", the traffic descriptor component value field shall be
-               encoded as a sequence of a one octet length field and a PIN ID value field
-               containing a UTF-8 string. TS 24.526 Section 5.2 */
-            proto_tree_add_item_ret_uint(tree, hf_nas_5gs_ursp_traff_desc_pin_id_len, tvb, offset, 1, ENC_NA, &length);
-            offset += 1;
-            proto_tree_add_item(tree, hf_nas_5gs_ursp_traff_desc_pin_id, tvb, offset, length, ENC_UTF_8);
-            offset += length;
-            break;
-        case 0xa3: /* Connectivity group ID */
-            /* For "connectivity group ID type", the traffic descriptor component value field
-               shall be encoded as a sequence of a one octet length field and a connectivity
-               group ID value field containing a UTF-8 string. TS 24.526 Section 5.2 */
-            proto_tree_add_item_ret_uint(tree, hf_nas_5gs_ursp_traff_desc_conn_group_id_len, tvb, offset, 1, ENC_NA, &length);
-            offset += 1;
-            proto_tree_add_item(tree, hf_nas_5gs_ursp_traff_desc_conn_group_id, tvb, offset, length, ENC_UTF_8);
-            offset += length;
-            break;
         default:
-            proto_tree_add_expert_remaining(tree, pinfo, &ei_nas_5gs_ie_not_dis, tvb, offset);
+            proto_tree_add_expert(tree, pinfo, &ei_nas_5gs_ie_not_dis, tvb, offset, -1);
             return;
         }
     }
@@ -11171,14 +10040,6 @@ Bits
 All other values are spare. If received they shall be interpreted as unknown.
 
 */
-static const value_string nas_5gs_ursp_r_sel_desc_loc_area_type_values[] = {
-    { 0x01, "E-UTRA cell identities list" },
-    { 0x02, "NR cell identities list" },
-    { 0x03, "Global RAN node identities list" },
-    { 0x04, "TAI list" },
-    { 0, NULL }
-};
-
 static const value_string nas_5gs_ursp_r_sel_desc_comp_type_values[] = {
     { 0x01, "SSC mode" },
     { 0x02, "S-NSSAI" },
@@ -11192,16 +10053,15 @@ static const value_string nas_5gs_ursp_r_sel_desc_comp_type_values[] = {
     { 0x81, "5G ProSe layer-3 UE-to-network relay offload type" },
     { 0x82, "PDU session pair ID type" },
     { 0x83, "RSN type" },
-    { 0x84, "5G ProSe multi-path preference type" },
     { 0, NULL }
 };
 
 static void
 de_nas_5gs_ursp_r_sel_desc(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree)
 {
-    unsigned len = tvb_reported_length(tvb);
+    int len = tvb_reported_length(tvb);
     uint32_t type_id;
-    unsigned offset = 0;
+    int offset = 0;
     uint32_t length;
 
     while (offset < len) {
@@ -11276,96 +10136,8 @@ de_nas_5gs_ursp_r_sel_desc(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree)
                in a route selection descriptor, there shall be no route selection descriptor component with a type other than
                "non-seamless non-3GPP offload indication type" in the route selection descriptor.*/
             break;
-        case 0x40: /* Location criteria */
-            /* For "Location criteria type", the route selection descriptor component value field
-               shall be encoded as a sequence of a one octet length field and a location criteria
-               value field. TS 24.526 Section 5.2 */
-        {
-            uint32_t loc_len;
-            proto_tree_add_item_ret_uint(tree, hf_nas_5gs_ursp_r_sel_desc_loc_crit_len, tvb, offset, 1, ENC_BIG_ENDIAN, &loc_len);
-            offset++;
-            unsigned loc_end = offset + loc_len;
-            while (offset < loc_end) {
-                uint32_t loc_area_type;
-                proto_tree_add_item_ret_uint(tree, hf_nas_5gs_ursp_r_sel_desc_loc_area_type, tvb, offset, 1, ENC_BIG_ENDIAN, &loc_area_type);
-                offset++;
-                switch (loc_area_type) {
-                case 0x01: /* E-UTRA cell identities */
-                case 0x02: /* NR cell identities */
-                case 0x03: /* Global RAN node identities */
-                {
-                    uint32_t num_cells;
-                    int cell_id_len = (loc_area_type == 0x02) ? 5 : 4;
-                    int hf_num = (loc_area_type == 0x02) ? hf_nas_5gs_ursp_r_sel_desc_loc_num_nr_cells :
-                                 (loc_area_type == 0x01) ? hf_nas_5gs_ursp_r_sel_desc_loc_num_eutra_cells :
-                                 hf_nas_5gs_ursp_r_sel_desc_loc_num_gnb_ids;
-                    proto_tree_add_item_ret_uint(tree, hf_num, tvb, offset, 1, ENC_BIG_ENDIAN, &num_cells);
-                    offset++;
-                    for (uint32_t i = 0; i < num_cells; i++) {
-                        proto_tree *cell_tree;
-                        proto_item *cell_item;
-                        const char *cell_label = (loc_area_type == 0x02) ? "NR cell id" :
-                                                 (loc_area_type == 0x01) ? "E-UTRA cell id" :
-                                                 "Global gNB id";
-                        cell_tree = proto_tree_add_subtree_format(tree, tvb, offset, 3 + cell_id_len,
-                            ett_nas_5gs_ursp_r_sel_desc_cont, &cell_item, "%s %u", cell_label, i + 1);
-                        dissect_e212_mcc_mnc(tvb, pinfo, cell_tree, offset, E212_5GSTAI, true);
-                        offset += 3;
-                        if (loc_area_type == 0x02) {
-                            proto_tree_add_item(cell_tree, hf_nas_5gs_ursp_r_sel_desc_loc_nr_cell_id, tvb, offset, 5, ENC_BIG_ENDIAN);
-                        } else if (loc_area_type == 0x01) {
-                            proto_tree_add_item(cell_tree, hf_nas_5gs_ursp_r_sel_desc_loc_eutra_cell_id, tvb, offset, 4, ENC_BIG_ENDIAN);
-                        } else {
-                            proto_tree_add_item(cell_tree, hf_nas_5gs_ursp_r_sel_desc_loc_gnb_id, tvb, offset, 4, ENC_BIG_ENDIAN);
-                        }
-                        offset += cell_id_len;
-                    }
-                    break;
-                }
-                case 0x04: /* TAI list */
-                {
-                    uint32_t tai_len;
-                    proto_tree_add_item_ret_uint(tree, hf_nas_5gs_ursp_r_sel_desc_loc_tai_len, tvb, offset, 1, ENC_BIG_ENDIAN, &tai_len);
-                    offset++;
-                    de_nas_5gs_mm_5gs_ta_id_list(tvb, tree, pinfo, offset, tai_len, NULL, 0);
-                    offset += tai_len;
-                    break;
-                }
-                default:
-                    offset = loc_end;
-                    break;
-                }
-            }
-            break;
-        }
-        case 0x80: /* Time window */
-            /* For "Time window type", the route selection descriptor component value field
-               shall be encoded as a sequence of a four octet start time field,
-               a four octet start time fraction field, a four octet stop time field,
-               and a four octet stop time fraction field.
-               The time values use UNIX epoch with 1/2^32 fractional seconds.
-               TS 24.526 Section 5.2 */
-            proto_tree_add_item(tree, hf_nas_5gs_ursp_r_sel_desc_time_win_start, tvb, offset, 8, ENC_TIME_RTPS | ENC_BIG_ENDIAN);
-            offset += 8;
-            proto_tree_add_item(tree, hf_nas_5gs_ursp_r_sel_desc_time_win_stop, tvb, offset, 8, ENC_TIME_RTPS | ENC_BIG_ENDIAN);
-            offset += 8;
-            break;
-        case 0x82: /* PDU session pair ID */
-            /* For "PDU session pair ID type", the route selection descriptor component
-               value field shall be encoded as one octet which specifies the PDU session
-               pair identifier value. TS 24.526 Section 5.2 */
-            proto_tree_add_item(tree, hf_nas_5gs_ursp_r_sel_desc_pdu_sess_pair_id, tvb, offset, 1, ENC_BIG_ENDIAN);
-            offset++;
-            break;
-        case 0x83: /* RSN */
-            /* For "RSN type", the route selection descriptor component value field
-               shall be encoded as one octet which specifies the RSN value.
-               TS 24.526 Section 5.2 */
-            proto_tree_add_item(tree, hf_nas_5gs_ursp_r_sel_desc_rsn, tvb, offset, 1, ENC_BIG_ENDIAN);
-            offset++;
-            break;
         default:
-            proto_tree_add_expert_remaining(tree, pinfo, &ei_nas_5gs_ie_not_dis, tvb, offset);
+            proto_tree_add_expert(tree, pinfo, &ei_nas_5gs_ie_not_dis, tvb, offset, -1);
             return;
         }
     }
@@ -11433,660 +10205,6 @@ de_nas_5gs_ue_policies_ursp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree)
             curr_offset += r_sel_desc_cont_len;
         }
         curr_offset = offset + r_sel_desc_lst_len;
-    }
-
-}
-
-static const value_string nas_5gs_andsp_info_type_values[] = {
-    { 0x00, "Reserved" },
-    { 0x01, "WLANSP" },
-    { 0x02, "N3AN node configuration information" },
-    { 0, NULL }
-};
-
-//Selection criteria set type(bits 5 - 8 of octet 19) is coded as follows.
-//Bits
-//8 7 6 5
-static const value_string nas_5gs_andsp_wlansp_sel_crit_set_type_vals[] = {
-    { 0x00, "Reserved" },
-    { 0x01, "Preferred SSID list" },
-    { 0x02, "Preferred roaming partner list" },
-    { 0x03, "Required protocol port tuple" },
-    { 0x04, "SP exclusion list" },
-    { 0x05, "Minimum backhaul threshold" },
-    { 0, NULL }
-};
-
-static const value_string nas_5gs_andsp_wlansp_loc_entry_type_vals[] = {
-    { 0x01, "3GPP location" },
-    { 0x02, "WLAN location" },
-    { 0x03, " Geo location" },
-    { 0, NULL }
-};
-
-static const value_string nas_5gs_andsp_wlansp_location_field_type_vals[] = {
-    { 0x01, "TAC" },
-    { 0x02, "EUTRA CI" },
-    { 0x04, "NR CI" },
-    { 0x81, "HESSID" },
-    { 0x82, "SSID" },
-    { 0x84, "BSSID" },
-    { 0, NULL }
-};
-
-static const value_string nas_5gs_wlansp_sp_excl_list_nw_type_vals[] = {
-    { 0x00, "Home" },
-    { 0x01, "Roaming" },
-    { 0, NULL }
-};
-
-static void
-de_nas_5gs_ue_policies_andsp_wlansp_rule(tvbuff_t* tvb, packet_info* pinfo _U_, proto_tree* tree)
-{
-    int offset = 0, current_offset;
-    proto_tree* sub_tree, *sel_crit_sub_tree, *val_tree, *sel_crit_entry_sub_tree, *time_tree, *sel_crit_set_sub_tree;
-    proto_item* item;
-    int len = tvb_reported_length(tvb);
-    uint32_t /*curr_offset = 0,*/ info_len, sel_crit_len, sel_crit_ent_len, sel_crit_set_type, sub_ent_len;
-    uint32_t num_sub_entr, val_area_len, time_of_day_len, sel_crit_set_len, num_loc_entr, num_sel_crit_ent;
-
-    static int* const flags1[] = {
-    &hf_nas_5gs_roaming_ind,
-    &hf_nas_5gs_validity_area_ind,
-    &hf_nas_5gs_3gpp_loc_ind,
-    &hf_nas_5gs_wlan_loc_ind,
-    &hf_nas_5gs_geo_loc_ind,
-    &hf_nas_5gs_time_of_day_ind,
-    &hf_nas_5gs_spare_b1,
-    &hf_nas_5gs_spare_b0,
-    NULL
-    };
-
-    static int* const flags2[] = {
-    &hf_nas_5gs_spare_b7,
-    &hf_nas_5gs_wlansp_maxbssload_ind,
-    &hf_nas_5gs_wlansp_homenetwork_ind,
-    &hf_nas_5gs_wlansp_criteria_priority,
-    NULL
-    };
-
-    static int* const flags3[] = {
-    &hf_nas_5gs_wlansp_pref_ssid_list_hessid_ind,
-    &hf_nas_5gs_wlansp_pref_ssid_list_ssid_ind,
-    NULL
-    };
-
-    /* Figure 5.3.2.4g */
-    static int* const flags4[] = {
-    &hf_nas_5gs_wlansp_sp_excl_list_ulbi_ind,
-    &hf_nas_5gs_wlansp_sp_excl_list_dlbi_ind,
-    &hf_nas_5gs_wlansp_sp_excl_list_nw_type,
-    NULL
-    };
-
-    /* 5.3.2 Encoding of WLANSP */
-    /* WLANSP rule */
-    int i = 0;
-    while (offset < len) {
-        i++;
-        uint64_t retval1, retval2;
-        sub_tree = proto_tree_add_subtree_format(tree, tvb, offset, -1, ett_nas_5gs_wlansp_rule, &item, "WLANSP Rule %u", i);
-        /* Length of WLANSP rule */
-        proto_tree_add_item_ret_uint(sub_tree, hf_nas_5gs_wlansp_rule_len, tvb, offset, 2, ENC_BIG_ENDIAN, &info_len);
-        proto_item_set_len(item, info_len + 2);
-        offset += 2;
-        /* Rule identifier */
-        proto_tree_add_item(sub_tree, hf_nas_5gs_wlansp_rule_id, tvb, offset, 1, ENC_BIG_ENDIAN);
-        offset++;
-        /* Rule priority */
-        proto_tree_add_item(sub_tree, hf_nas_5gs_wlansp_rule_prio, tvb, offset, 1, ENC_BIG_ENDIAN);
-        offset++;
-        /* Roaming | validity area ind | 3GPP loc ind | WLAN loc ind | Geo loc ind | time of day ind | spare  spare*/
-        proto_tree_add_bitmask_list_ret_uint64(sub_tree, tvb, offset, 1, flags1, ENC_BIG_ENDIAN, &retval1);
-        offset++;
-        /* 5.3.2.4: Selection criteria */
-        sel_crit_sub_tree = proto_tree_add_subtree_format(sub_tree, tvb, offset, -1, ett_nas_5gs_wlansp_sel_crit, &item, "Selection criteria");
-        /* Length of selection criteria */
-        proto_tree_add_item_ret_uint(sel_crit_sub_tree, hf_nas_5gs_wlansp_sel_crit_len, tvb, offset, 2, ENC_BIG_ENDIAN, &sel_crit_len);
-        proto_item_set_len(item, sel_crit_len + 2);
-        offset += 2;
-        /* number of selection criteria entries */
-        proto_tree_add_item_ret_uint(sel_crit_sub_tree, hf_nas_5gs_wlansp_num_sel_crit_ent, tvb, offset, 1, ENC_BIG_ENDIAN, &num_sel_crit_ent);
-        offset++;
-        /* Selection criteria entry %n*/
-        uint32_t j = 0;
-        for (j = 0; j < num_sel_crit_ent; j++) {
-            sel_crit_entry_sub_tree = proto_tree_add_subtree_format(sel_crit_sub_tree, tvb, offset, -1, ett_nas_5gs_wlansp_sel_crit_ent, &item, "Selection criteria entry %u", j+1);
-            /* 5.3.2.4a: Selection criteria entry */
-            /* Length of selection criteria entry */
-            proto_tree_add_item_ret_uint(sel_crit_entry_sub_tree, hf_nas_5gs_wlansp_sel_crit_ent_len, tvb, offset, 2, ENC_BIG_ENDIAN, &sel_crit_ent_len);
-            proto_item_set_len(item, sel_crit_ent_len + 2);
-            offset += 2;
-            /* Spare MaxBS Sload ind Home network ind Criteria priority*/
-            proto_tree_add_bitmask_list_ret_uint64(sel_crit_entry_sub_tree, tvb, offset, 1, flags2, ENC_BIG_ENDIAN, &retval2);
-            offset++;
-            /* Maximum BSS load value */
-            if ((retval2 & 0x40) == 0x40) {
-                proto_tree_add_item(sel_crit_entry_sub_tree, hf_nas_5gs_wlansp_max_bss_ld_val, tvb, offset, 2, ENC_BIG_ENDIAN);
-                offset += 2;
-            }
-            /* Selection criteria set %n */
-            int end_offset = offset + sel_crit_ent_len - 3;
-            int m = 0;
-            while (offset < end_offset) {
-                m++;
-                uint64_t retval;
-                /* 5.3.2.4b: Selection criteria set */
-                sel_crit_set_sub_tree = proto_tree_add_subtree_format(sel_crit_entry_sub_tree, tvb, offset, -1, ett_nas_5gs_wlansp_sel_crit_ent, &item, "Selection criteria set %u", m);
-                /* Length of selection criteria set */
-                proto_tree_add_item_ret_uint(sel_crit_set_sub_tree, hf_nas_5gs_wlansp_sel_crit_set_len, tvb, offset, 2, ENC_BIG_ENDIAN, &sel_crit_set_len);
-                proto_item_set_len(item, sel_crit_set_len + 2);
-                offset += 2;
-                proto_tree_add_item_ret_uint(sel_crit_set_sub_tree, hf_nas_5gs_wlansp_sel_crit_set_type, tvb, offset, 1, ENC_BIG_ENDIAN, &sel_crit_set_type);
-                proto_item_append_text(item, " %s", val_to_str_const(sel_crit_set_type, nas_5gs_andsp_wlansp_sel_crit_set_type_vals, "Unknown"));
-
-                proto_tree_add_item_ret_uint(sel_crit_set_sub_tree, hf_nas_5gs_wlansp_sel_crit_num_sub_entr, tvb, offset, 1, ENC_BIG_ENDIAN, &num_sub_entr);
-                offset++;
-                uint32_t k, req_prot_port_len, ssid_len, fqdn_match_len, country_len, num_ports;
-                for (k = 0; k < num_sub_entr; k++) {
-                    switch (sel_crit_set_type) {
-                    case 1: /* preferred SSID list*/
-                        /* Length of sub entry {set type = preferred SSID list} */
-                        proto_tree_add_item_ret_uint(sel_crit_set_sub_tree, hf_nas_5gs_wlansp_sub_ent_len, tvb, offset, 1, ENC_BIG_ENDIAN, &sub_ent_len);
-                        offset++;
-                        /* WLAN priority */
-                        proto_tree_add_item(sel_crit_set_sub_tree, hf_nas_5gs_wlansp_pref_ssid_list_wlan_prio, tvb, offset, 1, ENC_BIG_ENDIAN);
-                        offset++;
-                        /* 0 Spare HESS ID ind SSID ind */
-                        uint64_t retval3;
-                        proto_tree_add_bitmask_list_ret_uint64(sel_crit_set_sub_tree, tvb, offset, 1, flags3, ENC_BIG_ENDIAN, &retval3);
-                        offset++;
-                        /* SSID length */
-                        proto_tree_add_item_ret_uint(sel_crit_set_sub_tree, hf_nas_5gs_wlansp_ssid_len, tvb, offset, 1, ENC_BIG_ENDIAN, &ssid_len);
-                        offset++;
-                        /* SSID */
-                        if ((retval3 & 0x01) == 0x01) {
-                            proto_tree_add_item(sel_crit_set_sub_tree, hf_nas_5gs_wlansp_pref_ssid_list_ssid, tvb, offset, ssid_len, ENC_UTF_8);
-                            offset += ssid_len;
-                        }
-                        /* HESSID */
-                        if ((retval3 & 0x02) == 0x02) {
-                            proto_tree_add_item(sel_crit_set_sub_tree, hf_nas_5gs_wlansp_pref_ssid_list_hessid, tvb, offset, 6, ENC_NA);
-                            offset += 6;
-                        }
-                        break;
-                    case 2: /* preferred roaming partner list*/
-                        /* Length of sub entry {set type =  preferred roaming partner list} */
-                        proto_tree_add_item_ret_uint(sel_crit_set_sub_tree, hf_nas_5gs_wlansp_sub_ent_len, tvb, offset, 1, ENC_BIG_ENDIAN, &sub_ent_len);
-                        offset++;
-                        /* Priority */
-                        proto_tree_add_item(sel_crit_set_sub_tree, hf_nas_5gs_wlansp_pref_roam_part_list_prio, tvb, offset, 1, ENC_BIG_ENDIAN);
-                        offset++;
-                        /* FQDN_Match length */
-                        proto_tree_add_item_ret_uint(sel_crit_set_sub_tree, hf_nas_5gs_wlansp_fqdn_match_len, tvb, offset, 1, ENC_BIG_ENDIAN, &fqdn_match_len);
-                        offset++;
-                        /* FQDN_Match */
-                        proto_tree_add_item(sel_crit_set_sub_tree, hf_nas_5gs_wlansp_fqdn_match, tvb, offset, fqdn_match_len, ENC_UTF_8);
-                        offset += fqdn_match_len;
-                        /* Country length */
-                        proto_tree_add_item_ret_uint(sel_crit_set_sub_tree, hf_nas_5gs_wlansp_country_len, tvb, offset, 1, ENC_BIG_ENDIAN, &country_len);
-                        offset++;
-                        /* Country */
-                        proto_tree_add_item(sel_crit_set_sub_tree, hf_nas_5gs_wlansp_country, tvb, offset, country_len, ENC_UTF_8);
-                        offset += country_len;
-                        break;
-                    case 3: /* Required protocol port tuple */
-                        /* Length of sub entry {set type =  Required protocol port tuple} */
-                        proto_tree_add_item_ret_uint(sel_crit_set_sub_tree, hf_nas_5gs_wlansp_sub_ent_len, tvb, offset, 1, ENC_BIG_ENDIAN, &sub_ent_len);
-                        offset++;
-                        /* IP protocol */
-                        proto_tree_add_item(sel_crit_set_sub_tree, hf_nas_5gs_wlansp_req_prot_ip_prot, tvb, offset, 1, ENC_BIG_ENDIAN);
-                        offset++;
-                        /* Length of port number */
-                        proto_tree_add_item_ret_uint(sel_crit_set_sub_tree, hf_nas_5gs_wlansp_req_prot_port_len, tvb, offset, 1, ENC_BIG_ENDIAN, &req_prot_port_len);
-                        offset++;
-                        /* Port number */
-                        num_ports = req_prot_port_len >> 1;
-                        for (k = 0; k < num_ports; k++){
-                            proto_tree_add_item(sel_crit_set_sub_tree, hf_nas_5gs_wlansp_req_prot_port, tvb, offset, 2, ENC_BIG_ENDIAN);
-                            offset += 2;
-                        }
-                        break;
-                    case 4: /* SP exclusion list */
-                        /* Length of sub entry {set type = SP exclusion list} */
-                        proto_tree_add_item_ret_uint(sel_crit_set_sub_tree, hf_nas_5gs_wlansp_sub_ent_len, tvb, offset, 1, ENC_BIG_ENDIAN, &sub_ent_len);
-                        offset++;
-                        /* SSID */
-                        proto_tree_add_item(sel_crit_set_sub_tree, hf_nas_5gs_wlansp_sel_crit_sp_exc, tvb, offset, sub_ent_len, ENC_NA);
-                        offset += sub_ent_len;
-                        break;
-                    case 5: /* minimum backhaul threshold */
-                        /* Spare ULBI DLBI Network type */
-                        proto_tree_add_bitmask_list_ret_uint64(sel_crit_set_sub_tree, tvb, offset, 1, flags4, ENC_BIG_ENDIAN, &retval);
-                        offset++;
-                        /* Downlink bandwidth */
-                        if ((retval & 0x04) == 0x04) {
-                            proto_tree_add_item(sel_crit_set_sub_tree, hf_nas_5gs_wlansp_sp_excl_list_dlb, tvb, offset, 4, ENC_BIG_ENDIAN);
-                            offset += 4;
-                        }
-                        /* Uplink bandwidth */
-                        if ((retval & 0x08) == 0x08) {
-                            proto_tree_add_item(sel_crit_set_sub_tree, hf_nas_5gs_wlansp_sp_excl_list_ulb, tvb, offset, 4, ENC_BIG_ENDIAN);
-                            offset += 4;
-                        }
-                        break;
-                    default:
-                        /* Skip over the list*/
-                        k = num_sub_entr;
-                        offset += sel_crit_set_len - 1;
-                        break;
-                    }
-                }
-            }
-        }
-        /* Validity area */
-        if ((retval1 & 0x40) == 0x40) {
-            uint32_t loc_entry_len = 0, loc_entry_type;
-            val_tree = proto_tree_add_subtree_format(sub_tree, tvb, offset, -1, ett_nas_5gs_wlansp_val_area, &item, "Validity area");
-            /* length of validity area */
-            proto_tree_add_item_ret_uint(val_tree, hf_nas_5gs_wlansp_val_area_len, tvb, offset, 2, ENC_BIG_ENDIAN, &val_area_len);
-            proto_item_set_len(item, val_area_len + 2);
-            offset += 2;
-            /* number of location entries */
-            proto_tree_add_item_ret_uint(val_tree, hf_nas_5gs_wlansp_num_loc_entr, tvb, offset, 1, ENC_BIG_ENDIAN, &num_loc_entr);
-            offset++;
-            /* location entry %n*/
-            proto_tree* loc_tree;
-            uint32_t l = 0, tgpp_num_loc_fields;
-            proto_tree* loc_tree_sub_tree;
-            for (l = 0; l < num_loc_entr; l++) {
-                loc_tree = proto_tree_add_subtree_format(val_tree, tvb, offset, -1, ett_nas_5gs_wlansp_val_area, &item, "Location entry %u", l+1);
-                /* Length of location entry */
-                proto_tree_add_item_ret_uint(loc_tree, hf_nas_5gs_wlansp_loc_entry_len, tvb, offset, 2, ENC_BIG_ENDIAN, &loc_entry_len);
-                proto_item_set_len(item, loc_entry_len + 2);
-                offset += 2;
-                /* entry type {3GPP, WLAN, Geo} number of sub entries */
-                proto_tree_add_item_ret_uint(loc_tree, hf_nas_5gs_wlansp_loc_entry_type, tvb, offset, 1, ENC_BIG_ENDIAN, &loc_entry_type);
-                /* number of sub entries */
-                uint32_t loc_num_sub_entries;
-                proto_tree_add_item_ret_uint(loc_tree, hf_nas_5gs_wlansp_loc_num_sub_entries, tvb, offset, 1, ENC_BIG_ENDIAN, &loc_num_sub_entries);
-                offset++;
-                uint32_t m;
-                current_offset = offset;
-                for (m = 0; m < loc_num_sub_entries; m++) {
-                    uint32_t tgpp_sub_ent_len, wlan_sub_ent_len, wlan_sub_ent_type, loc_field_len, loc_field_type, num_loc_fields;
-                    loc_tree_sub_tree = proto_tree_add_subtree_format(loc_tree, tvb, current_offset, -1, ett_nas_5gs_loc_3gpp_sub_ent, &item, "%s sub entry %u",
-                        val_to_str_const(loc_entry_type, nas_5gs_andsp_wlansp_loc_entry_type_vals, "Unknown"), m + 1);
-                    switch (loc_entry_type) {
-                    case 1: /* 3GPP location */
-                        /* Length of 3GPP location sub entry */
-                        proto_tree_add_item_ret_uint(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_3gpp_sub_ent_len, tvb, current_offset, 2, ENC_BIG_ENDIAN, &tgpp_sub_ent_len);
-                        proto_item_set_len(item, tgpp_sub_ent_len + 2);
-                        current_offset += 2;
-                        /*
-                        * MCC digit 2 MCC digit 1 octet r+9
-                        * MNC digit 3 MCC digit 3 octet r+10
-                        * MNC digit 2 MNC digit 1 octet r+11
-                        */
-                        current_offset = dissect_e212_mcc_mnc(tvb, pinfo, loc_tree_sub_tree, current_offset, E212_NONE, true);
-                        /* number of location fields */
-                        proto_tree_add_item_ret_uint(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_3gpp_num_loc_fields, tvb, current_offset, 1, ENC_BIG_ENDIAN, &tgpp_num_loc_fields);
-                        current_offset++;
-                        /* 3GPP location field n*/
-                        uint32_t n = 0;
-                        for (n = 0; n < tgpp_num_loc_fields; n++) {
-                            /* Length of 3GPP location field */
-                            proto_tree_add_item_ret_uint(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_3gpp_loc_field_len, tvb, current_offset, 1, ENC_BIG_ENDIAN, &loc_field_len);
-                            current_offset++;
-                            /* field type  */
-                            proto_tree_add_item_ret_uint(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_3gpp_loc_field_type, tvb, current_offset, 1, ENC_BIG_ENDIAN, &loc_field_type);
-                            current_offset++;
-                            switch (loc_field_type) {
-                            case 1: /* TAC */
-                                proto_tree_add_item(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_3gpp_loc_tac, tvb, current_offset, loc_field_len - 1, ENC_BIG_ENDIAN);
-                                current_offset += loc_field_len - 1;
-                                break;
-                            case 2: /* EUTRA CI */
-                                proto_tree_add_item(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_3gpp_loc_eutra_ci, tvb, current_offset, 2, ENC_BIG_ENDIAN);
-                                current_offset += 2;
-                                break;
-                            case 4: /* NR CI */
-                                proto_tree_add_item(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_3gpp_loc_nr_ci, tvb, current_offset, 3, ENC_BIG_ENDIAN);
-                                current_offset += 3;
-                                break;
-                            default:
-                                current_offset += loc_field_len - 1;
-                                break;
-                            }
-                        }
-                        break;
-                    case 2: /* WLAN location */
-                        /* Fall trough */
-                    case 3: /* Geo location */
-                        /* Figure 5.3.2.10a: Location sub entry {entry type= WLAN location or Geo location} */
-                        /* Length of location sub entry */
-                        proto_tree_add_item_ret_uint(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_sub_ent_len, tvb, current_offset, 2, ENC_BIG_ENDIAN, &wlan_sub_ent_len);
-                        proto_item_set_len(item, wlan_sub_ent_len + 2);
-                        current_offset += 2;
-                        /* number of location fields */
-                        proto_tree_add_item_ret_uint(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_num_loc_fields, tvb, current_offset, 1, ENC_BIG_ENDIAN, &num_loc_fields);
-                        current_offset++;
-                        uint32_t o;
-                        for (o = 0; o < num_loc_fields; o++) {
-                            if (loc_entry_type == 2) {
-                                    /* WLAN location */
-                                    /* Length of WLAN location field */
-                                proto_tree_add_item_ret_uint(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_wlan_loc_field_len, tvb, current_offset, 1, ENC_BIG_ENDIAN, &wlan_sub_ent_len);
-                                current_offset++;
-                                /* WLAN location field type */
-                                proto_tree_add_item_ret_uint(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_wlan_sub_ent_type, tvb, current_offset, 1, ENC_BIG_ENDIAN, &wlan_sub_ent_type);
-                                current_offset++;
-                                /* WLAN location field contents */
-                                switch (wlan_sub_ent_type) {
-                                case 0x81: /* HESSID */
-                                    proto_tree_add_item(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_hessid, tvb, current_offset, 6, ENC_BIG_ENDIAN);
-                                    current_offset += 6;
-                                    break;
-                                case 0x82: /* SSID */
-                                    proto_tree_add_item(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_ssid, tvb, current_offset, wlan_sub_ent_len - 1, ENC_NA);
-                                    current_offset += wlan_sub_ent_len - 1;
-                                    break;
-                                case 0x84: /* BSSID */
-                                    proto_tree_add_item(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_bssid, tvb, current_offset, 6, ENC_BIG_ENDIAN);
-                                    current_offset += 6;
-                                    break;
-                                default:
-                                    current_offset += wlan_sub_ent_len - 3;
-                                    break;
-                                }
-                            } else {
-                                /* Geo location */
-                                /* Anchor latitude  */
-                                proto_tree_add_item(loc_tree_sub_tree, hf_nas_5gs_geo_loc_anc_lat, tvb, current_offset, 4, ENC_BIG_ENDIAN);
-                                current_offset += 4;
-                                /* Anchor longitude */
-                                proto_tree_add_item(loc_tree_sub_tree, hf_nas_5gs_geo_loc_anc_long, tvb, current_offset, 4, ENC_BIG_ENDIAN);
-                                current_offset += 4;
-                                /* Radius */
-                                proto_tree_add_item(loc_tree_sub_tree, hf_nas_5gs_geo_loc_rad, tvb, current_offset, 2, ENC_BIG_ENDIAN);
-                                current_offset += 2;
-                            }
-                        }
-                        break;
-                    default:
-                        break;
-                    }
-                }
-                offset += loc_entry_len - 1;
-            } /* Location entry */
-        }
-        /* Time of day */
-        if ((retval1 & 0x04) == 0x04) {
-            time_tree = proto_tree_add_subtree_format(sub_tree, tvb, offset, -1, ett_nas_5gs_wlansp_tod, &item, "Time of day");
-            /* Length of time of day */
-            proto_tree_add_item_ret_uint(time_tree, hf_nas_5gs_wlansp_time_of_day_len, tvb, offset, 2, ENC_BIG_ENDIAN, &time_of_day_len);
-            proto_item_set_len(item, time_of_day_len + 2);
-            offset += 2;
-            offset += time_of_day_len;
-            /* number of time of day entries */
-            /* Time of day entry %n*/
-
-        }
-    }
-
-}
-
-static const value_string nas_5gs_n3nan_node_conf_inf_type_vals[] = {
-    { 0x01, "Home N3IWF identifier configuration" },
-    { 0x02, "Home ePDG identifier configuration" },
-    { 0x03, "Extended home N3IWF identifier configuration" },
-    { 0x04, "Slice-specific N3IWF prefix configuration" },
-    { 0, NULL }
-};
-
-static const value_string nas_5gs_n3nan_n3nan_home_n3iwf_id_type_vals[] = {
-    { 0x01, "IPv4" },
-    { 0x02, "IPv6" },
-    { 0x03, "IPv4v6" },
-    { 0x04, "FQDN" },
-    { 0x05, "SNPN FQDN" },
-    { 0, NULL }
-};
-
-
-static void
-de_nas_5gs_n3nan_home_n3iwf_identifier_conf(tvbuff_t* tvb, packet_info* pinfo _U_, proto_tree* tree, int offset, int length)
-{
-    proto_tree* entry_tree;
-    proto_item *item;
-    uint32_t type, fqdnlen;
-    int end_offset = offset + length;
-
-    int i = 0;
-    while ( offset < end_offset) {
-        i++;
-        entry_tree = proto_tree_add_subtree_format(tree, tvb, offset, -1, ett_nas_5gs_n3iwf_identifier_entry, &item, "Home N3IWF identifier entry %i", i);
-        /* Home N3IWF identifier type */
-        proto_tree_add_item_ret_uint(entry_tree, hf_nas_5gs_n3nan_home_n3iwf_id_type, tvb, offset, 1, ENC_BIG_ENDIAN, &type);
-        offset++;
-        switch (type) {
-        case 1: /* IPv4 */
-            proto_tree_add_item(entry_tree, hf_nas_5gs_home_n3iwf_ipv4_addr, tvb, offset, 4, ENC_BIG_ENDIAN);
-            offset += 4;
-            proto_item_set_len(item, 4 + 2);
-            break;
-        case 2: /* ipv6 */
-            proto_tree_add_item(entry_tree, hf_nas_5gs_home_n3iwf_ipv6_addr, tvb, offset, 16, ENC_NA);
-            offset += 16;
-            proto_item_set_len(item, 16 + 2);
-            break;
-        case 3: /* IPv4v6*/
-            proto_tree_add_item(entry_tree, hf_nas_5gs_home_n3iwf_ipv4_addr, tvb, offset, 4, ENC_BIG_ENDIAN);
-            offset += 4;
-            proto_tree_add_item(entry_tree, hf_nas_5gs_home_n3iwf_ipv6_addr, tvb, offset, 16, ENC_NA);
-            offset += 16;
-            proto_item_set_len(item, 20 + 2);
-            break;
-        case 4:
-            /* Length of home N3IWF FQDN */
-            proto_tree_add_item_ret_uint(entry_tree, hf_nas_5gs_home_n3iwf_fqdn_len, tvb, offset, 1, ENC_BIG_ENDIAN, &fqdnlen);
-            offset++;
-            /* Home N3IWF FQDN */
-            proto_tree_add_item(entry_tree, hf_nas_5gs_home_n3iwf_fqdn, tvb, offset, fqdnlen, ENC_APN_STR);
-            offset += fqdnlen;
-            proto_item_set_len(item, fqdnlen + 2);
-            break;
-        case 5:  /* SNPN FQDN */
-            /* Length of Home N3IWF identifier contents */
-            proto_tree_add_item_ret_uint(entry_tree, hf_nas_5gs_home_n3iwf_id_cont_len, tvb, offset, 1, ENC_BIG_ENDIAN, &fqdnlen);
-            offset++;
-            /*  MCC digit 2         MCC digit 1
-                0    0    0    0    MCC digit 3
-                Spare    Spare   Spare    Spare */
-            offset = dissect_e212_mcc_mnc(tvb, pinfo, entry_tree, offset, E212_NONE, true);
-            /* Home N3IWF FQDN */
-            proto_tree_add_item(entry_tree, hf_nas_5gs_home_n3iwf_fqdn, tvb, offset, fqdnlen, ENC_APN_STR);
-            offset += fqdnlen;
-            proto_item_set_len(item, fqdnlen + 2);
-            break;
-        default:
-            return;
-        }
-    }
-}
-
-static void
-de_nas_5gs_n3nan_home_epdg_identifier_conf(tvbuff_t* tvb, packet_info* pinfo _U_, proto_tree* tree, int offset, int length)
-{
-
-    proto_tree* entry_tree;
-    proto_item* item;
-    uint32_t type, fqdnlen;
-    int end_offset = offset + length;
-
-    int i = 0;
-    while (offset < end_offset) {
-        i++;
-        entry_tree = proto_tree_add_subtree_format(tree, tvb, offset, -1, ett_nas_5gs_epdg_identifier_entry, &item, "Home ePDG identifier entry %i", i);
-        /*Home ePDG identifier type */
-        proto_tree_add_item_ret_uint(entry_tree, hf_nas_5gs_n3nan_home_epdg_id_type, tvb, offset, 1, ENC_BIG_ENDIAN, &type);
-        offset++;
-        switch (type) {
-        case 1: /* IPv4 */
-            proto_tree_add_item(entry_tree, hf_nas_5gs_home_epdg_ipv4_addr, tvb, offset, 4, ENC_BIG_ENDIAN);
-            offset += 4;
-            break;
-        case 2: /* ipv6 */
-            proto_tree_add_item(entry_tree, hf_nas_5gs_home_epdg_ipv6_addr, tvb, offset, 16, ENC_NA);
-            offset += 16;
-            break;
-        case 3: /* IPv4v6*/
-            proto_tree_add_item(entry_tree, hf_nas_5gs_home_epdg_ipv4_addr, tvb, offset, 4, ENC_BIG_ENDIAN);
-            offset += 4;
-            proto_tree_add_item(entry_tree, hf_nas_5gs_home_epdg_ipv6_addr, tvb, offset, 16, ENC_NA);
-            offset += 16;
-            break;
-        case 4:
-            /* Length of home N3IWF FQDN */
-            proto_tree_add_item_ret_uint(entry_tree, hf_nas_5gs_home_epdg_fqdn_len, tvb, offset, 1, ENC_BIG_ENDIAN, &fqdnlen);
-            offset++;
-            /* Home N3IWF FQDN */
-            proto_tree_add_item(entry_tree, hf_nas_5gs_home_epdg_fqdn, tvb, offset, fqdnlen, ENC_APN_STR);
-            offset += fqdnlen;
-            break;
-        default:
-            return;
-        }
-    }
-}
-
-static void
-de_nas_5gs_n3nan_ext_home_n3iwf_identifier_conf(tvbuff_t* tvb, packet_info* pinfo _U_, proto_tree* tree, int offset, int length)
-{
-    /* Home N3IWF identifier entry */
-    /* S-NSSAI list */
-    proto_tree_add_expert(tree, pinfo, &ei_nas_5gs_msg_not_dis, tvb, offset, length);
-}
-
-static void
-de_nas_5gs_n3nan_ext_slice_specific_n3iwf_prefix_conf(tvbuff_t* tvb, packet_info* pinfo _U_, proto_tree* tree, int offset, int length)
-{
-    proto_tree_add_expert(tree, pinfo, &ei_nas_5gs_msg_not_dis, tvb, offset, length);
-}
-
-
-static void
-de_nas_5gs_ue_policies_andsp_n3nan(tvbuff_t* tvb, packet_info* pinfo _U_, proto_tree* tree)
-{
-    proto_tree* sub_tree, *entry_tree, * conf_inf_tree;
-    proto_item* item;
-    unsigned offset = 0;
-    uint32_t inf_len, node_sel_entry_len, type, node_conf_len;
-    uint32_t len = tvb_reported_length(tvb);
-
-    sub_tree = proto_tree_add_subtree_format(tree, tvb, offset, -1, ett_nas_5gs_n3nan_sel_len, &item, "N3AN node selection information");
-    /* Length of N3AN node selection information */
-    proto_tree_add_item_ret_uint(sub_tree, hf_nas_5gs_n3nan_sel_len, tvb, offset, 2, ENC_BIG_ENDIAN, &inf_len);
-    proto_item_set_len(item, inf_len + 2);
-    offset += 2;
-    /* If the N3AN node configuration information is provided by VPLMN,
-     * then length of N3AN node selection information field shall be set to zero
-     */
-    if (len == 0) {
-        return;
-    }
-
-    /* Content of N3AN node selection information */
-    int i = 0;
-    while (offset < inf_len) {
-        i++;
-        entry_tree = proto_tree_add_subtree_format(sub_tree, tvb, offset, -1, ett_nas_5gs_n3nan_sel_info_entry, &item, "N3AN node selection information entry %i", i);
-        /* Length of N3AN node selection information entry */
-        proto_tree_add_item_ret_uint(entry_tree, hf_nas_5gs_n3nan_node_sel_entry_len, tvb, offset, 1, ENC_BIG_ENDIAN, &node_sel_entry_len);
-        proto_item_set_len(item, node_sel_entry_len + 2);
-        offset++;
-        /*  MCC digit 2 MCC digit 1 */
-        /*  MNC digit 3 MCC digit 3*/
-        /*  MNC digit 2	MNC digit 1*/
-        offset = dissect_e212_mcc_mnc(tvb, pinfo, entry_tree, offset, E212_NONE, true);
-        /*  FQDN format Preference Priority */
-        static int* const flags[] = {
-        &hf_nas_5gs_node_sel_entry_fqdn_format,
-        &hf_nas_5gs_node_sel_entry_pref,
-        &hf_nas_5gs_node_sel_entry_prio,
-        NULL
-        };
-
-        proto_tree_add_bitmask_list(entry_tree, tvb, offset, 1, flags, ENC_NA);
-        offset++;
-    }
-
-    while (offset < len) {
-        conf_inf_tree = proto_tree_add_subtree_format(tree, tvb, offset, -1, ett_nas_5gs_n3nan_conf_inf, &item, "N3AN node configuration information");
-        /* N3AN node configuration information type */
-        proto_tree_add_item_ret_uint(conf_inf_tree, hf_nas_5gs_n3nan_node_conf_inf_type, tvb, offset, 1, ENC_BIG_ENDIAN, &type);
-        proto_item_append_text(item, " - %s", val_to_str_const(type, nas_5gs_n3nan_node_conf_inf_type_vals, "Unknown"));
-        offset++;
-        proto_tree_add_item_ret_uint(conf_inf_tree, hf_nas_5gs_n3nan_node_sel_entry_len, tvb, offset, 2, ENC_BIG_ENDIAN, &node_conf_len);
-        offset += 2;
-        proto_item_set_len(item, node_conf_len + 3);
-        switch (type)
-        {
-        case 1:/* Home N3IWF identifier configuration */
-            de_nas_5gs_n3nan_home_n3iwf_identifier_conf(tvb, pinfo, conf_inf_tree, offset, node_conf_len);
-            offset += node_conf_len;
-            break;
-        case 2: /* Home ePDG identifier configuration */
-            de_nas_5gs_n3nan_home_epdg_identifier_conf(tvb, pinfo, conf_inf_tree, offset, node_conf_len);
-            offset += node_conf_len;
-            break;
-        case 3: /* Extended home N3IWF identifier configuration */
-            de_nas_5gs_n3nan_ext_home_n3iwf_identifier_conf(tvb, pinfo, conf_inf_tree, offset, node_conf_len);
-            offset += node_conf_len;
-            break;
-        case 4: /* Slice-specific N3IWF prefix configuration */
-            de_nas_5gs_n3nan_ext_slice_specific_n3iwf_prefix_conf(tvb, pinfo, conf_inf_tree, offset, node_conf_len);
-            offset += node_conf_len;
-            break;
-        default:
-            offset += node_conf_len;
-            break;
-        }
-    }
-}
-
-static void
-de_nas_5gs_ue_policies_andsp(tvbuff_t* tvb, packet_info* pinfo _U_, proto_tree* tree)
-{
-    proto_tree* sub_tree;
-    proto_item* item;
-    uint32_t len = tvb_reported_length(tvb);
-    uint32_t curr_offset = 0, andsp_info_type, info_len;
-
-    int i = 0;
-    while ((curr_offset) < len) {
-        i++;
-        sub_tree = proto_tree_add_subtree_format(tree, tvb, curr_offset, -1, ett_nas_5gs_ue_policies_andp, &item, "ANDSP info %u", i);
-        /* 0 0 0 0 ANDSP Info type octet k */
-        proto_tree_add_bits_item(sub_tree, hf_nas_5gs_spare_bits, tvb, (curr_offset << 3), 4, ENC_BIG_ENDIAN);
-        proto_tree_add_item_ret_uint(sub_tree, hf_nas_5gs_andsp_info_type, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &andsp_info_type);
-        curr_offset++;
-        /* Length of ANDSP info contents */
-        proto_tree_add_item_ret_uint(sub_tree, hf_nas_5gs_andsp_info_len, tvb, curr_offset, 2, ENC_BIG_ENDIAN, &info_len);
-        proto_item_set_len(item, info_len + 2);
-        curr_offset += 2;
-        /* ANDSP info contents */
-        proto_tree_add_item(sub_tree, hf_nas_5gs_andsp_info_contents, tvb, curr_offset, info_len, ENC_NA);
-        switch (andsp_info_type) {
-        case 1: /* WLANSP */
-            de_nas_5gs_ue_policies_andsp_wlansp_rule(tvb_new_subset_length(tvb, curr_offset, info_len), pinfo, sub_tree);
-            break;
-        case 2: /* N3NAN TS 24.526 */
-            de_nas_5gs_ue_policies_andsp_n3nan(tvb_new_subset_length(tvb, curr_offset, info_len), pinfo, sub_tree);
-        default:
-            break;
-        }
-        curr_offset += info_len;
     }
 
 }
@@ -12159,9 +10277,6 @@ de_nas_5gs_updp_ue_policy_section_mgm_lst(tvbuff_t* tvb, proto_tree* tree, packe
                 switch (ue_policy_type) {
                 case 1: /* 5.2 Encoding of UE policy part type URSP */
                     de_nas_5gs_ue_policies_ursp(tvb_new_subset_length(tvb, curr_offset, policy_len - 1), pinfo, sub_tree3);
-                    break;
-                case 2: /* 5.3 Encoding of UE policy part type ANDSP */
-                    de_nas_5gs_ue_policies_andsp(tvb_new_subset_length(tvb, curr_offset, policy_len - 1), pinfo, sub_tree3);
                     break;
                 default:
                     proto_tree_add_item(sub_tree3, hf_nas_5gs_updp_ue_policy_part_cont, tvb, curr_offset, policy_len - 1, ENC_NA);
@@ -12270,10 +10385,10 @@ de_nas_5gs_updp_ue_policy_cm(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo
     &hf_nas_5gs_spare_b7,
     &hf_nas_5gs_spare_b6,
     &hf_nas_5gs_spare_b5,
-    &hf_nas_5gs_e802cstag,
-    &hf_nas_5gs_sup_rure,
-    &hf_nas_5gs_svpsu,
-    &hf_nas_5gs_epsurdp,
+    &hf_nas_5gs_spare_b4,
+    &hf_nas_5gs_spare_b3,
+    &hf_nas_5gs_spare_b2,
+    &hf_nas_5gs_spare_b1,
     &hf_nas_5gs_sup_andsp,
     NULL
     };
@@ -12334,7 +10449,7 @@ static const value_string nas_5gs_updp_upds_cause_vals[] = {
     { 0x60, "Invalid mandatory information"},
     { 0x61, "Message type non-existent or not implemented"},
     { 0x62, "Message type not compatible with the protocol state"},
-    { 0x63, "Information element non-existent or not implemented"},
+    { 0x53, "Information element non-existent or not implemented"},
     { 0x64, "Conditional IE error"},
     { 0x6f, "Protocol error, unspecified"},
     { 0,    NULL }
@@ -12413,7 +10528,7 @@ value_string_ext nas_5gs_updp_elem_strings_ext = VALUE_STRING_EXT_INIT(nas_5gs_u
 #define NUM_NAS_5GS_UPDP_ELEM array_length(nas_5gs_updp_elem_strings)
 int ett_nas_5gs_updp_elem[NUM_NAS_5GS_UPDP_ELEM];
 
-uint16_t(* const nas_5gs_updp_elem_fcn[])(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo,
+uint16_t(*nas_5gs_updp_elem_fcn[])(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo,
     uint32_t offset, unsigned len,
     char* add_string, int string_len) = {
         /*  5GS session management (5GSM) information elements */
@@ -12616,7 +10731,7 @@ static value_string_ext nas_5gs_mm_msg_strings_ext = VALUE_STRING_EXT_INIT(nas_5
 
 #define NUM_NAS_5GS_MM_MSG array_length(nas_5gs_mm_message_type_vals)
 static int ett_nas_5gs_mm_msg[NUM_NAS_5GS_MM_MSG];
-static void(* const nas_5gs_mm_msg_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len) = {
+static void(*nas_5gs_mm_msg_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len) = {
     nas_5gs_mm_registration_req,                /* 0x41    Registration request */
     nas_5gs_mm_registration_accept,             /* 0x42    Registration accept */
     nas_5gs_mm_registration_complete,           /* 0x43    Registration complete */
@@ -12672,47 +10787,48 @@ static void(* const nas_5gs_mm_msg_fcn[])(tvbuff_t *tvb, proto_tree *tree, packe
 
 };
 
-/* 5GS session management messages */
-static const value_string nas_5gs_sm_message_type_vals[] = {
 
-    { NAS_5GS_SM_MSG_PDU_SESSION_ESTABLISHMENT_REQUEST,         "PDU session establishment request"},
-    { NAS_5GS_SM_MSG_PDU_SESSION_ESTABLISHMENT_RESPONSE,        "PDU session establishment accept"},
-    { NAS_5GS_SM_MSG_PDU_SESSION_ESTABLISHMENT_REJECT,          "PDU session establishment reject"},
+    /* 5GS session management messages */
+    static const value_string nas_5gs_sm_message_type_vals[] = {
 
-    { 0xc4,                                                     "Not used in current version"},
+    { 0xc1,    "PDU session establishment request"},
+    { 0xc2,    "PDU session establishment accept"},
+    { 0xc3,    "PDU session establishment reject"},
 
-    { NAS_5GS_SM_MSG_PDU_SESSION_AUTHENTICATION_COMMAND,        "PDU session authentication command"},
-    { NAS_5GS_SM_MSG_PDU_SESSION_AUTHENTICATION_COMPLETE,       "PDU session authentication complete"},
-    { NAS_5GS_SM_MSG_PDU_SESSION_AUTHENTICATION_RESULT,         "PDU session authentication result"},
+    { 0xc4,    "Not used in current version"},
 
-    { 0xc8,                                                     "Not used in current version"},
+    { 0xc5,    "PDU session authentication command"},
+    { 0xc6,    "PDU session authentication complete"},
+    { 0xc7,    "PDU session authentication result"},
 
-    { NAS_5GS_SM_MSG_PDU_SESSION_MODIFICATION_REQUEST,          "PDU session modification request"},
-    { NAS_5GS_SM_MSG_PDU_SESSION_MODIFICATION_REJECT,           "PDU session modification reject"},
-    { NAS_5GS_SM_MSG_PDU_SESSION_MODIFICATION_COMMAND,          "PDU session modification command"},
-    { NAS_5GS_SM_MSG_PDU_SESSION_MODIFICATION_COMPLETE,         "PDU session modification complete"},
-    { NAS_5GS_SM_MSG_PDU_SESSION_MODIFICATION_COMMAND_REJECT,   "PDU session modification command reject"},
+    { 0xc8,    "Not used in current version"},
 
-    { 0xce,                                                     "Not used in current version"},
-    { 0xcf,                                                     "Not used in current version"},
-    { 0xd0,                                                     "Not used in current version"},
+    { 0xc9,    "PDU session modification request"},
+    { 0xca,    "PDU session modification reject"},
+    { 0xcb,    "PDU session modification command"},
+    { 0xcc,    "PDU session modification complete"},
+    { 0xcd,    "PDU session modification command reject"},
 
-    { NAS_5GS_SM_MSG_PDU_SESSION_RELEASE_REQUEST,               "PDU session release request"},
-    { NAS_5GS_SM_MSG_PDU_SESSION_RELEASE_REJECT,                "PDU session release reject"},
-    { NAS_5GS_SM_MSG_PDU_SESSION_RELEASE_COMMAND,               "PDU session release command"},
-    { NAS_5GS_SM_MSG_PDU_SESSION_RELEASE_COMPLETE,              "PDU session release complete"},
+    { 0xce,    "Not used in current version"},
+    { 0xcf,    "Not used in current version"},
+    { 0xd0,    "Not used in current version"},
 
-    { 0xd5,                                                     "Not used in current version"},
+    { 0xd1,    "PDU session release request"},
+    { 0xd2,    "PDU session release reject"},
+    { 0xd3,    "PDU session release command"},
+    { 0xd4,    "PDU session release complete"},
 
-    { NAS_5GS_SM_MSG_5GSM_STATUS,                               "5GSM status"},
+    { 0xd5,    "Not used in current version"},
 
-    { 0xd7,                                                     "Not used in current version"},
+    { 0xd6,    "5GSM status"},
 
-    { NAS_5GS_SM_MSG_SERVICE_LEVEL_AUTHENTICATION_COMMAND,      "Service-level authentication command"},
-    { NAS_5GS_SM_MSG_SERVICE_LEVEL_AUTHENTICATION_COMPLETE,     "Service-level authentication complete"},
+    { 0xd7,    "Not used in current version"},
 
-    { NAS_5GS_SM_MSG_REMOTE_UE_REPORT,                          "Remote UE report"},
-    { NAS_5GS_SM_MSG_REMOTE_UE_REPORT_RESPONSE,                 "Remote UE report response"},
+    { 0xd8,    "Service-level authentication command"},
+    { 0xd9,    "Service-level authentication complete"},
+
+    { 0xda,    "Remote UE report"},
+    { 0xdb,    "Remote UE report response"},
     { 0,    NULL }
 };
 static value_string_ext nas_5gs_sm_msg_strings_ext = VALUE_STRING_EXT_INIT(nas_5gs_sm_message_type_vals);
@@ -12720,7 +10836,7 @@ static value_string_ext nas_5gs_sm_msg_strings_ext = VALUE_STRING_EXT_INIT(nas_5
 #define NUM_NAS_5GS_SM_MSG array_length(nas_5gs_sm_message_type_vals)
 static int ett_nas_5gs_sm_msg[NUM_NAS_5GS_SM_MSG];
 
-static void(* const nas_5gs_sm_msg_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len) = {
+static void(*nas_5gs_sm_msg_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len) = {
     nas_5gs_sm_pdu_ses_est_req,            /* 0xc1     PDU session establishment request */
     nas_5gs_sm_pdu_ses_est_acc,            /* 0xc2     PDU session establishment accept */
     nas_5gs_sm_pdu_ses_est_rej,            /* 0xc3     PDU session establishment reject */
@@ -12780,7 +10896,7 @@ static value_string_ext nas_5gs_updp_msg_strings_ext = VALUE_STRING_EXT_INIT(nas
 #define NUM_NAS_5GS_UPDP_MSG array_length(nas_5gs_updp_msg_strings)
 static int ett_nas_5gs_updp_msg[NUM_NAS_5GS_UPDP_MSG];
 
-static void(* const nas_5gs_updp_msg_fcn[])(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo, uint32_t offset, unsigned len) = {
+static void(*nas_5gs_updp_msg_fcn[])(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo, uint32_t offset, unsigned len) = {
     nas_5gs_exp_not_dissected_yet,         /* 0x0     Reserved */
     nas_5gs_updp_manage_ue_policy_cmd,     /* 0x1     MANAGE UE POLICY COMMAND */
     nas_5gs_updp_manage_ue_policy_cmd_cmpl,/* 0x2     MANAGE UE POLICY COMPLETE */
@@ -12940,8 +11056,7 @@ static void
 dissect_nas_5gs_sm_info(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, int offset, const char *n1_msg_class)
 {
     uint32_t     len;
-    uint32_t     message_type;
-    void(*msg_fcn_p)(tvbuff_t * tvb, proto_tree * tree, packet_info * pinfo, uint32_t offset, unsigned len, uint32_t message_type);
+    void(*msg_fcn_p)(tvbuff_t * tvb, proto_tree * tree, packet_info * pinfo, uint32_t offset, unsigned len);
 
     /* make entry in the Protocol column on summary display */
     col_append_sep_str(pinfo->cinfo, COL_PROTOCOL, "/", "NAS-5GS");
@@ -12956,7 +11071,7 @@ dissect_nas_5gs_sm_info(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, int
     } else if (!strcmp(n1_msg_class, UNKNOWN_N1_SMINFO)) {
         msg_fcn_p = nas_5gs_unknown_n1_sm_info;
     } else {
-        proto_tree_add_expert_format_remaining(tree, pinfo, &ei_nas_5gs_sm_unknown_msg_type, tvb, offset, "Unknown Message Type");
+        proto_tree_add_expert_format(tree, pinfo, &ei_nas_5gs_sm_unknown_msg_type, tvb, offset, -1, "Unknown Message Type");
         return;
     }
 
@@ -12965,13 +11080,13 @@ dissect_nas_5gs_sm_info(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, int
     /*
     * Add PDCP message name
     */
-    proto_tree_add_item_ret_uint(tree, hf_nas_5gs_sm_msg_type, tvb, offset, 1, ENC_BIG_ENDIAN, &message_type);
+    proto_tree_add_item(tree, hf_nas_5gs_sm_msg_type, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset++;
 
     /*
     * decode elements
     */
-    (*msg_fcn_p)(tvb, tree, pinfo, offset, len - offset, message_type);
+    (*msg_fcn_p)(tvb, tree, pinfo, offset, len - offset);
 
 }
 
@@ -13102,7 +11217,7 @@ dissect_nas_5gs_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int 
             /* dissect Test Procedure messages */
             return call_dissector_with_data(gsm_a_dtap_handle, tvb_new_subset_remaining(tvb, offset - 1), pinfo, sub_tree, data);
         }
-        proto_tree_add_expert_format_remaining(sub_tree, pinfo, &ei_nas_5gs_unknown_pd, tvb, offset, "Not a NAS 5GS PD %u (%s)",
+        proto_tree_add_expert_format(sub_tree, pinfo, &ei_nas_5gs_unknown_pd, tvb, offset, -1, "Not a NAS 5GS PD %u (%s)",
             epd, val_to_str_const(epd, nas_5gs_epd_vals, "Unknown"));
         return 0;
 
@@ -13131,7 +11246,7 @@ dissect_nas_5gs(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 {
     proto_item *item;
     proto_tree *nas_5gs_tree, *sub_tree;
-    unsigned offset = 0;
+    int offset = 0;
     uint8_t sec_hdr_type, ext_pd;
     struct nas5gs_private_data *nas5gs_data = nas5gs_get_private_data(pinfo);
 
@@ -13175,7 +11290,7 @@ dissect_nas_5gs(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
         g_nas_5gs_null_decipher) {
         return dissect_nas_5gs_common(tvb, pinfo, nas_5gs_tree, offset, data);
     } else {
-        proto_tree_add_item(sub_tree, hf_nas_5gs_ciphered_msg, tvb, offset, -1, ENC_NA);
+        proto_tree_add_subtree(nas_5gs_tree, tvb, offset, -1, ett_nas_5gs_enc, NULL, "Encrypted data");
     }
 
     return tvb_reported_length(tvb);
@@ -13190,7 +11305,7 @@ static true_false_string nas_5gs_kacf_tfs = {
 void
 de_nas_5gs_intra_n1_mode_nas_transparent_cont(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_)
 {
-    unsigned offset = 0;
+    int offset = 0;
 
     static int * const flags[] = {
         &hf_nas_5gs_spare_b7,
@@ -13223,7 +11338,7 @@ de_nas_5gs_n1_mode_to_s1_mode_nas_transparent_cont(tvbuff_t *tvb, proto_tree *tr
 void
 de_nas_5gs_s1_mode_to_n1_mode_nas_transparent_cont(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_)
 {
-    unsigned offset = 0;
+    int offset = 0;
 
     static int * const oct8_flags[] = {
         &hf_nas_5gs_spare_b7,
@@ -13260,7 +11375,7 @@ dissect_nas_5gs_media_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
     if (!json_tvb || !content_info || !content_info->content_id)
         return 0;
 
-    json_data = (char*)tvb_get_string_enc(pinfo->pool, json_tvb, 0, tvb_reported_length(json_tvb), ENC_UTF_8|ENC_NA);
+    json_data = tvb_get_string_enc(pinfo->pool, json_tvb, 0, tvb_reported_length(json_tvb), ENC_UTF_8|ENC_NA);
     ret = json_parse(json_data, NULL, 0);
     if (ret <= 0)
         return 0;
@@ -13356,7 +11471,7 @@ dissect_nas_5gs_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *d
 static bool dissect_nas_5gs_heur(tvbuff_t *tvb, packet_info *pinfo,
                                      proto_tree *tree, void *data _U_)
 {
-    unsigned offset = 0;
+    int offset = 0;
     tvbuff_t *nas_tvb;
 
     /* Needs to be at least as long as:
@@ -13471,11 +11586,6 @@ proto_register_nas_5gs(void)
         { &hf_nas_5gs_seq_no,
         { "Sequence number",   "nas-5gs.seq_no",
             FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_ciphered_msg,
-        { "Ciphered message",   "nas-5gs.ciphered_msg",
-            FT_BYTES, BASE_NONE, NULL, 0x0,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_msg_type,
@@ -13759,13 +11869,13 @@ proto_register_nas_5gs(void)
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_cag_info_entry_lci,
-        { "Length of CAG-ID without additional information list (LCI)",   "nas-5gs.mm.cag_info.entry.lci",
-            FT_BOOLEAN, 8, TFS(&tfs_present_absent), 0x04,
+        { "Length of CAG-IDs indicator (LCI)",   "nas-5gs.mm.cag_info.entry.lci",
+            FT_BOOLEAN, 8, TFS(&tfs_present_absent), 0x02,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_cag_info_entry_caili,
         { "CAG-ID with additional information list indicator (CAILI)",   "nas-5gs.mm.cag_info.entry.caili",
-            FT_BOOLEAN, 8, TFS(&tfs_present_absent), 0x08,
+            FT_BOOLEAN, 8, TFS(&tfs_present_absent), 0x04,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_cag_info_entry_cag_without_add_info_list_len,
@@ -13804,7 +11914,7 @@ proto_register_nas_5gs(void)
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_cag_info_entry_time_period,
-        { "Time period",   "nas-5gs.mm.cag_info.entry.time_period",
+        { "Number of time periods",   "nas-5gs.mm.cag_info.entry.time_period",
             FT_BYTES, BASE_NONE, NULL, 0x0,
             NULL, HFILL }
         },
@@ -14028,41 +12138,6 @@ proto_register_nas_5gs(void)
             FT_BOOLEAN, 8, TFS(&tfs_applicable_not_applicable), 0x04,
             NULL, HFILL }
         },
-        { &hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_2_17a,
-        { "Ciphering data set for E-UTRA positioning SIB type 2-17a","nas-5gs.mm.ciph_key_data.eutra_pos_sib_type_2_17a",
-            FT_BOOLEAN, 8, TFS(&tfs_applicable_not_applicable), 0x02,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_2_18a,
-        { "Ciphering data set for E-UTRA positioning SIB type 2-18a","nas-5gs.mm.ciph_key_data.eutra_pos_sib_type_2_18a",
-            FT_BOOLEAN, 8, TFS(&tfs_applicable_not_applicable), 0x01,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_2_20a,
-        { "Ciphering data set for E-UTRA positioning SIB type 2-20a","nas-5gs.mm.ciph_key_data.eutra_pos_sib_type_2_20a",
-            FT_BOOLEAN, 8, TFS(&tfs_applicable_not_applicable), 0x80,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_2_26,
-        { "Ciphering data set for E-UTRA positioning SIB type 2-26","nas-5gs.mm.ciph_key_data.eutra_pos_sib_type_2_26",
-            FT_BOOLEAN, 8, TFS(&tfs_applicable_not_applicable), 0x40,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_2_27,
-        { "Ciphering data set for E-UTRA positioning SIB type 2-27","nas-5gs.mm.ciph_key_data.eutra_pos_sib_type_2_27",
-            FT_BOOLEAN, 8, TFS(&tfs_applicable_not_applicable), 0x20,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_1_11,
-        { "Ciphering data set for E-UTRA positioning SIB type 1-11","nas-5gs.mm.ciph_key_data.eutra_pos_sib_type_1_11",
-            FT_BOOLEAN, 8, TFS(&tfs_applicable_not_applicable), 0x10,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mm_ciph_key_data_eutra_pos_sib_type_1_12,
-        { "Ciphering data set for E-UTRA positioning SIB type 1-12","nas-5gs.mm.ciph_key_data.eutra_pos_sib_type_1_12",
-            FT_BOOLEAN, 8, TFS(&tfs_applicable_not_applicable), 0x08,
-            NULL, HFILL }
-        },
         { &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_1_1,
         { "Ciphering data set for NR positioning SIB type 1-1","nas-5gs.mm.ciph_key_data.nr_pos_sib_type_1_1",
             FT_BOOLEAN, 8, TFS(&tfs_applicable_not_applicable), 0x80,
@@ -14281,66 +12356,6 @@ proto_register_nas_5gs(void)
         { &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_2_25,
         { "Ciphering data set for NR positioning SIB type 2-25","nas-5gs.mm.ciph_key_data.nr_pos_sib_type_2_25",
             FT_BOOLEAN, 8, TFS(&tfs_applicable_not_applicable), 0x10,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_2_17a,
-        { "Ciphering data set for NR positioning SIB type 2-17a","nas-5gs.mm.ciph_key_data.nr_pos_sib_type_2_17a",
-            FT_BOOLEAN, 8, TFS(&tfs_applicable_not_applicable), 0x08,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_2_18a,
-        { "Ciphering data set for NR positioning SIB type 2-18a","nas-5gs.mm.ciph_key_data.nr_pos_sib_type_2_18a",
-            FT_BOOLEAN, 8, TFS(&tfs_applicable_not_applicable), 0x04,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_2_20a,
-        { "Ciphering data set for NR positioning SIB type 2-20a","nas-5gs.mm.ciph_key_data.nr_pos_sib_type_2_20a",
-            FT_BOOLEAN, 8, TFS(&tfs_applicable_not_applicable), 0x02,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_2_26,
-        { "Ciphering data set for NR positioning SIB type 2-26","nas-5gs.mm.ciph_key_data.nr_pos_sib_type_2_26",
-            FT_BOOLEAN, 8, TFS(&tfs_applicable_not_applicable), 0x01,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_2_27,
-        { "Ciphering data set for NR positioning SIB type 2-27","nas-5gs.mm.ciph_key_data.nr_pos_sib_type_2_27",
-            FT_BOOLEAN, 8, TFS(&tfs_applicable_not_applicable), 0x80,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_1_11,
-        { "Ciphering data set for NR positioning SIB type 1-11","nas-5gs.mm.ciph_key_data.nr_pos_sib_type_1_11",
-            FT_BOOLEAN, 8, TFS(&tfs_applicable_not_applicable), 0x40,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_1_12,
-        { "Ciphering data set for NR positioning SIB type 1-12","nas-5gs.mm.ciph_key_data.nr_pos_sib_type_1_12",
-            FT_BOOLEAN, 8, TFS(&tfs_applicable_not_applicable), 0x20,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_6_7,
-        { "Ciphering data set for NR positioning SIB type 6-7","nas-5gs.mm.ciph_key_data.nr_pos_sib_type_6_7",
-            FT_BOOLEAN, 8, TFS(&tfs_applicable_not_applicable), 0x10,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_7_1,
-        { "Ciphering data set for NR positioning SIB type 7-1","nas-5gs.mm.ciph_key_data.nr_pos_sib_type_7_1",
-            FT_BOOLEAN, 8, TFS(&tfs_applicable_not_applicable), 0x08,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_7_2,
-        { "Ciphering data set for NR positioning SIB type 7-2","nas-5gs.mm.ciph_key_data.nr_pos_sib_type_7_2",
-            FT_BOOLEAN, 8, TFS(&tfs_applicable_not_applicable), 0x04,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_7_3,
-        { "Ciphering data set for NR positioning SIB type 7-3","nas-5gs.mm.ciph_key_data.nr_pos_sib_type_7_3",
-            FT_BOOLEAN, 8, TFS(&tfs_applicable_not_applicable), 0x02,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mm_ciph_key_data_nr_pos_sib_type_7_4,
-        { "Ciphering data set for NR positioning SIB type 7-4","nas-5gs.mm.ciph_key_data.nr_pos_sib_type_7_4",
-            FT_BOOLEAN, 8, TFS(&tfs_applicable_not_applicable), 0x01,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_ciph_key_data_ciphering_set_id,
@@ -14579,7 +12594,7 @@ proto_register_nas_5gs(void)
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_ssnpnsi_b3,
-        { "SOR SNPN SI",   "nas-5gs.mm.ssnpnsi_b3",
+        { "SOR-SNPN-SI (SSNPNSI)",   "nas-5gs.mm.ssnpnsi_b3",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x08,
             NULL, HFILL }
         },
@@ -14599,217 +12614,147 @@ proto_register_nas_5gs(void)
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_mpsiu_b7,
-        { "MPS indicator update (MPSIU)",   "nas-5gs.mm.mpsiu_b7",
+        { "MPSIU",   "nas-5gs.mm.mpsiu_b7",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x80,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_rcmap_b0,
-        { "Registration complete message for acknowledging negotiated PEIPS assistance information (RCMAP)",   "nas-5gs.mm.rcmap_b0",
+        { "RCMAP",   "nas-5gs.mm.rcmap_b0",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x01,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_rcman_b1,
-        { "Registration complete message for acknowledging NSAG information (RCMAN)",   "nas-5gs.mm.rcman_b1",
+        { "RCMAN",   "nas-5gs.mm.rcman_b1",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x02,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_esi_b2,
-        { "Equivalent SNPNs indicator (ESI)",   "nas-5gs.mm.esi_b2",
+        { "ESI",   "nas-5gs.mm.esi_b2",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x04,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_eci_b3,
-        { "Enhanced CAG information (ECI)",   "nas-5gs.mm.eci_b3",
+        { "ECI",   "nas-5gs.mm.eci_b3",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x08,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_rantiming_b4,
-        { "Reconnection to the network due to RAN timing synchronization status change (RANtiming)",   "nas-5gs.mm.rantiming_b4",
+        { "RANtiming",   "nas-5gs.mm.rantiming_b4",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x10,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_ladn_ds_b5,
-        { "LADN per DNN and S-NSSAI support (LADN-DS)",   "nas-5gs.mm.ladn_ds_b5",
+        { "LADN-DS",   "nas-5gs.mm.ladn_ds_b5",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x20,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_nsr_b6,
-        { "Network slice replacement (NSR)",   "nas-5gs.mm.nsr_b6",
+        { "NSR",   "nas-5gs.mm.nsr_b6",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x40,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_sbts_b7,
-        { "Slice-based TNGF selection support (SBTS)",   "nas-5gs.mm.sbts_b7",
+        { "SBTS",   "nas-5gs.mm.sbts_b7",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x80,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_a2xepc5_b0,
-        { "A2X over E-UTRA-PC5 (A2XEPC5)",   "nas-5gs.mm.a2xepc5_b0",
+        { "A2XEPC5",   "nas-5gs.mm.a2xepc5_b0",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x01,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_a2xnpc5_b1,
-        { "A2X over NR-PC5 (A2XNPC5)",   "nas-5gs.mm.a2xnpc5_b1",
+        { "A2XNPC5",   "nas-5gs.mm.a2xnpc5_b1",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x02,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_un_per_b2,
-        { "Unavailability period (UN-PER)",   "nas-5gs.mm.un_per_b2",
+        { "UN-PER",   "nas-5gs.mm.un_per_b2",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x04,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_sbns_b3,
-        { "Slice-based N3IWFselection support (SBNS)",   "nas-5gs.mm.sbns_b3",
+        { "SBNS",   "nas-5gs.mm.sbns_b3",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x08,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_rslps_b4,
-        { "SL positioning server UE (RSLPS)",   "nas-5gs.mm.rslps_b4",
+        { "RSLPS",   "nas-5gs.mm.rslps_b4",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x10,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_5g_prose_l2u2u_relay_b5,
-        { "5G ProSe layer-2 UE-to-UE relay (5G ProSe-l2U2U relay)",   "nas-5gs.mm.5g_prose_l2u2u_relay_b5",
+        { "5G ProSe-l2U2U relay",   "nas-5gs.mm.5g_prose_l2u2u_relay_b5",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x20,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_5g_prose_l3u2u_relay_b6,
-        { "5G ProSe layer-3 UE-to-UE relay (5G ProSe-l3U2U relay)",   "nas-5gs.mm.5g_prose_l3u2u_relay_b6",
+        { "5G ProSe-l3U2U relay",   "nas-5gs.mm.5g_prose_l3u2u_relay_b6",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x40,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_5g_prose_l2end_b7,
-        { "5G ProSe layer-2 end UE (5G ProSe-l2end)",   "nas-5gs.mm.5g_prose_l2end_b7",
+        { "5G ProSe-l2end",   "nas-5gs.mm.5g_prose_l2end_b7",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x80,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_5g_prose_l3end_b0,
-        { "5G ProSe layer-3 end UE (5G ProSe-l3end)",   "nas-5gs.mm.5g_prose_l3end_b0",
+        { "5G ProSe-l3end",   "nas-5gs.mm.5g_prose_l3end_b0",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x01,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_rslp_b1,
-        { "Ranging and sidelink positioning support (RSLP)",   "nas-5gs.mm.rslp_b1",
+        { "RSLP",   "nas-5gs.mm.rslp_b1",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x02,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_pns_b2,
-        { "Partial network slice (PNS)",   "nas-5gs.mm.pns_b2",
+        { "PNS",   "nas-5gs.mm.pns_b2",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x04,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_lcs_upp_b3,
-        { "LCS-UPP user plane positioning (LCS-UPP)",   "nas-5gs.mm.lcs_upp_b3",
+        { "LCS-UPP",   "nas-5gs.mm.lcs_upp_b3",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x08,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_supl_b4,
-        { "SUPL user plane positioning (SUPL)",   "nas-5gs.mm.supl_b4",
+        { "SUPL",   "nas-5gs.mm.supl_b4",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x10,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_tempns_b5,
-        { "S-NSSAI time validity information (TempNS)",   "nas-5gs.mm.tempns_b5",
+        { "TempNS",   "nas-5gs.mm.tempns_b5",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x20,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_slvi_b6,
-        { "S-NSSAI location validity information (SLVI)",   "nas-5gs.mm.slvi_b6",
+        { "SLVI",   "nas-5gs.mm.slvi_b6",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x40,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_a2x_uu_b7,
-        { "A2X over Uu capability (A2X-Uu)",   "nas-5gs.mm.a2x_uu_b7",
+        { "A2X-Uu",   "nas-5gs.mm.a2x_uu_b7",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x80,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_mcsiu_b0,
-        { "MCS indicator update (MCSIU)",   "nas-5gs.mm.mcsiu_b0",
+        { "MCSIU",   "nas-5gs.mm.mcsiu_b0",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x01,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_nvl_satnr_b1,
-        { "Network verified UE location over satellite NG-RAN (NVL-SATNR)",   "nas-5gs.mm.nvl_satnr_b1",
+        { "NVL-SATNR",   "nas-5gs.mm.nvl_satnr_b1",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x02,
             NULL, HFILL }
         },
         { &hf_nas_5gs_rslpl_b2,
-        { "Ranging and sidelink positioning over PC5 for located UE support (RSLPL)",   "nas-5gs.mm.rslpl_b2",
+        { "RSLPL",   "nas-5gs.mm.rslpl_b2",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x04,
             NULL, HFILL }
         },
         { &hf_nas_5gs_nsuc_b3,
-        { "Network slice usage control (NSUC)",   "nas-5gs.mm.nsuc_b3",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x08,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_rslpvu_b4,
-        { "Ranging and sidelink positioning with V2X capable UE (RSLPVU)",   "nas-5gs.mm.rslpvu_b4",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x10,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_rslppu_b5,
-        { "Ranging and sidelink positioning with 5G ProSe capable UE support (RSLPPU)",   "nas-5gs.mm.rslppu_b5",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x20,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_atuc_b6,
-        { "Access technology utilization control (ATUC)",   "nas-5gs.mm.atuc_b6",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x40,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_lp_wuspsai_si_b7,
-        { "LP-WUSPS assistance information support indication (LP-WUSPSAI-SI)",   "nas-5gs.mm.lp_wuspsai_si_b7",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x80,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_ophpae_b0,
-        { "Operator policy for high priority access exemptions for service area restrictions (OPHPAE)",   "nas-5gs.mm.ophpae_b0",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x01,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_5g_prose_mci_b1,
-        { "5G ProSe Multi-hop relay communication indication (5G ProSe-MCI)",   "nas-5gs.mm.5g_prose_mci_b1",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x02,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mlcsup_b2,
-        { "Multiple LCS secured user plane connections (MLCSUP)",   "nas-5gs.mm.mlcsup_b2",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x04,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_5g_prose_l3imrelay_b3,
-        { "5G ProSe layer-3 intermediate UE-to-network relay UE (5G ProSe-L3IMrelay)",   "nas-5gs.mm.5g_prose_l3imrelay_b3",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x08,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_5g_prose_l2imrelay_b4,
-        { "5G ProSe layer-2 intermediate UE-to-network relay UE (5G ProSe-L2IMrelay)",   "nas-5gs.mm.5g_prose_l2imrelay_b4",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x10,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mint_eps_b5,
-        { "Minimization of service interruption support in EPS (MINT-EPS)",   "nas-5gs.mm.mint_eps_b5",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x20,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_ef5l_b6,
-        { "ExtendedFacility IE for 5G LCS (EF5L)",   "nas-5gs.mm.ef5l_b6",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x40,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_lwd_b7,
-        { "LP-WUS disabling (LWD)",   "nas-5gs.mm.lwd_b7",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x80,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_nonsatlsp_b0,
-        { "Non satellite lower PLMN selection (NonSATLSP)",   "nas-5gs.mm.nonsatlsp_b0",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x01,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_lcscdl_b3,
-        { "Location service continuity between 5GS and EPS for deferred location (LCSCDL)",   "nas-5gs.mm.lcscdl_b3",
+        { "NSUC",   "nas-5gs.mm.nsuc_b3",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x08,
             NULL, HFILL }
         },
@@ -15538,279 +13483,6 @@ proto_register_nas_5gs(void)
             FT_UINT8, BASE_DEC, VALS(nas_5gs_sm_pdu_session_rsn_vals), 0x0,
             NULL, HFILL }
         },
-        { &hf_nas_5gs_sm_ecn_mark_l4s_ind_qri,
-        { "ECN marking for L4S indication QRI", "nas-5gs.sm.ecn_mark_l4s_ind.qri",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-
-        { &hf_nas_5gs_sm_remote_ue_ctx_list_nb_ue_ctx,
-        { "Number of remote UE contexts", "nas-5gs.sm.remote_ue_ctx_list.nb_ue_ctx",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_remote_ue_ctx_len,
-        { "Length of remote UE context", "nas-5gs.sm.remote_ue_ctx.len",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_remote_ue_ctx_addr_type,
-        { "Address type", "nas-5gs.sm.remote_ue_ctx.addr_type",
-            FT_UINT8, BASE_HEX, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_remote_ue_ctx_userid_len,
-        { "User ID length", "nas-5gs.sm.remote_ue_ctx.userid_len",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_remote_ue_ctx_userid,
-        { "User ID", "nas-5gs.sm.remote_ue_ctx.userid",
-            FT_BYTES, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_remote_ue_ctx_ipv4,
-        { "IPv4 address", "nas-5gs.sm.remote_ue_ctx.ipv4",
-            FT_IPv4, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_remote_ue_ctx_ipv6,
-        { "IPv6 address", "nas-5gs.sm.remote_ue_ctx.ipv6",
-            FT_IPv6, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_remote_ue_ctx_ipv6_pfx_len,
-        { "IPv6 prefix length", "nas-5gs.sm.remote_ue_ctx.ipv6_pfx_len",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-
-        { &hf_nas_5gs_sm_req_mbs_cont_num_sess,
-        { "Number of MBS session infos", "nas-5gs.sm.req_mbs_cont.num_sess",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_req_mbs_sess_info_len,
-        { "MBS session info length", "nas-5gs.sm.req_mbs.sess_info_len",
-            FT_UINT16, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_req_mbs_sess_op,
-        { "MBS session operation", "nas-5gs.sm.req_mbs.sess_op",
-            FT_UINT8, BASE_DEC, VALS(nas_5gs_sm_req_mbs_sess_op_vals), 0x80,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_req_mbs_sess_id_type,
-        { "Type of MBS session ID", "nas-5gs.sm.req_mbs.sess_id_type",
-            FT_UINT8, BASE_DEC, VALS(nas_5gs_sm_mbs_sess_id_type_vals), 0x03,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_req_mbs_tmgi,
-        { "TMGI", "nas-5gs.sm.req_mbs.tmgi",
-            FT_BYTES, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_req_mbs_src_ipv4,
-        { "Source IPv4 address", "nas-5gs.sm.req_mbs.src_ipv4",
-            FT_IPv4, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_req_mbs_mcast_ipv4,
-        { "Multicast IPv4 address", "nas-5gs.sm.req_mbs.mcast_ipv4",
-            FT_IPv4, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_req_mbs_src_ipv6,
-        { "Source IPv6 address", "nas-5gs.sm.req_mbs.src_ipv6",
-            FT_IPv6, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_req_mbs_mcast_ipv6,
-        { "Multicast IPv6 address", "nas-5gs.sm.req_mbs.mcast_ipv6",
-            FT_IPv6, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-
-        { &hf_nas_5gs_sm_rec_mbs_cont_num_sess,
-        { "Number of received MBS infos", "nas-5gs.sm.rec_mbs_cont.num_sess",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_rec_mbs_info_len,
-        { "Received MBS info length", "nas-5gs.sm.rec_mbs.info_len",
-            FT_UINT16, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_rec_mbs_decision,
-        { "MBS decision", "nas-5gs.sm.rec_mbs.decision",
-            FT_UINT8, BASE_DEC, VALS(nas_5gs_sm_rec_mbs_decision_vals), 0x70,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_rec_mbs_sess_id_type,
-        { "Type of MBS session ID", "nas-5gs.sm.rec_mbs.sess_id_type",
-            FT_UINT8, BASE_DEC, VALS(nas_5gs_sm_mbs_sess_id_type_vals), 0x03,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_rec_mbs_cause,
-        { "MBS cause", "nas-5gs.sm.rec_mbs.cause",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-
-        { &hf_nas_5gs_sm_n3qai_num_qfis,
-        { "Number of QFIs", "nas-5gs.sm.n3qai.num_qfis",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_n3qai_qfi,
-        { "QFI", "nas-5gs.sm.n3qai.qfi",
-            FT_UINT8, BASE_DEC, NULL, 0x3f,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_n3qai_num_params,
-        { "Number of N3QAI parameters", "nas-5gs.sm.n3qai.num_params",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_n3qai_param_id,
-        { "N3QAI parameter identifier", "nas-5gs.sm.n3qai.param_id",
-            FT_UINT8, BASE_HEX, VALS(nas_5gs_sm_n3qai_param_id_vals), 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_n3qai_param_len,
-        { "Length of N3QAI parameter contents", "nas-5gs.sm.n3qai.param_len",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_n3qai_param_contents,
-        { "N3QAI parameter contents", "nas-5gs.sm.n3qai.param_contents",
-            FT_BYTES, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-
-        { &hf_nas_5gs_sm_n3gpp_delay_budget_val,
-        { "Non-3GPP delay budget value", "nas-5gs.sm.n3gpp_delay_budget.value",
-            FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_milliseconds), 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_n3gpp_delay_budget_flags,
-        { "Flags", "nas-5gs.sm.n3gpp_delay_budget.flags",
-            FT_UINT8, BASE_HEX, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_n3gpp_delay_budget_qfipi,
-        { "QFIPI", "nas-5gs.sm.n3gpp_delay_budget.qfipi",
-            FT_BOOLEAN, 8, TFS(&tfs_present_not_present), 0x02,
-            "QoS flow identifier presence indicator", HFILL }
-        },
-        { &hf_nas_5gs_sm_n3gpp_delay_budget_pfpi,
-        { "PFPI", "nas-5gs.sm.n3gpp_delay_budget.pfpi",
-            FT_BOOLEAN, 8, TFS(&tfs_present_not_present), 0x01,
-            "Packet filter presence indicator", HFILL }
-        },
-        { &hf_nas_5gs_sm_n3gpp_delay_budget_num_qfis,
-        { "Number of QFIs", "nas-5gs.sm.n3gpp_delay_budget.num_qfis",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_n3gpp_delay_budget_qfi,
-        { "QFI", "nas-5gs.sm.n3gpp_delay_budget.qfi",
-            FT_UINT8, BASE_DEC, NULL, 0x3f,
-            NULL, HFILL }
-        },
-
-        { &hf_nas_5gs_sm_ursp_report_num_conn_caps,
-        { "Number of connection capability identifiers", "nas-5gs.sm.ursp_report.num_conn_caps",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_ursp_report_conn_cap_id,
-        { "Connection capability identifier", "nas-5gs.sm.ursp_report.conn_cap_id",
-            FT_UINT8, BASE_HEX, NULL, 0x0,
-            NULL, HFILL }
-        },
-
-        { &hf_nas_5gs_sm_prot_desc_len,
-        { "Length of protocol description", "nas-5gs.sm.prot_desc.len",
-            FT_UINT16, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_prot_desc_qri,
-        { "QoS Rule Identifier", "nas-5gs.sm.prot_desc.qri",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_prot_desc_tp,
-        { "Transport Protocol", "nas-5gs.sm.prot_desc.tp",
-            FT_UINT8, BASE_DEC, VALS(nas_5gs_sm_prot_desc_tp_vals), 0x0f,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_prot_desc_heipi,
-        { "HEIPI", "nas-5gs.sm.prot_desc.heipi",
-            FT_BOOLEAN, 8, TFS(&tfs_included_not_included), 0x10,
-            "RTP header extension information presence indicator", HFILL }
-        },
-        { &hf_nas_5gs_sm_prot_desc_pilpi,
-        { "PILPI", "nas-5gs.sm.prot_desc.pilpi",
-            FT_BOOLEAN, 8, TFS(&tfs_included_not_included), 0x20,
-            "RTP payload information list presence indicator", HFILL }
-        },
-        { &hf_nas_5gs_sm_prot_desc_rtp_hdr_ext_type,
-        { "RTP header extension type", "nas-5gs.sm.prot_desc.rtp_hdr_ext_type",
-            FT_UINT8, BASE_DEC, VALS(nas_5gs_sm_prot_desc_rtp_hdr_ext_type_vals), 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_prot_desc_rtp_hdr_ext_id,
-        { "RTP header extension id", "nas-5gs.sm.prot_desc.rtp_hdr_ext_id",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_prot_desc_rtp_payload_info_list_len,
-        { "Length of RTP payload information list", "nas-5gs.sm.prot_desc.rtp_payload_info_list_len",
-            FT_UINT16, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_prot_desc_rtp_payload_format,
-        { "RTP payload format", "nas-5gs.sm.prot_desc.rtp_payload_format",
-            FT_UINT8, BASE_DEC, VALS(nas_5gs_sm_prot_desc_rtp_payload_format_vals), 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_prot_desc_rtp_num_payload_types,
-        { "Number of RTP payload types", "nas-5gs.sm.prot_desc.rtp_num_payload_types",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_prot_desc_rtp_payload_type,
-        { "RTP payload type", "nas-5gs.sm.prot_desc.rtp_payload_type",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-
-        { &hf_nas_5gs_sm_n3gpp_dev_info_pdu_sess_type,
-        { "PDU session type", "nas-5gs.sm.n3gpp_dev_info.pdu_sess_type",
-            FT_UINT8, BASE_DEC, VALS(nas_5gs_pdu_session_type_values), 0x07,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_n3gpp_dev_info_entry_len,
-        { "Length of non-3GPP device information", "nas-5gs.sm.n3gpp_dev_info.entry_len",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_n3gpp_dev_info_id_len,
-        { "Length of non-3GPP device identifier", "nas-5gs.sm.n3gpp_dev_info.id_len",
-            FT_UINT8, BASE_DEC, NULL, 0x7f,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_n3gpp_dev_info_id,
-        { "Non-3GPP device identifier", "nas-5gs.sm.n3gpp_dev_info.id",
-            FT_BYTES, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_n3gpp_dev_info_conn_info,
-        { "Connection information", "nas-5gs.sm.n3gpp_dev_info.conn_info",
-            FT_BYTES, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
         { &hf_nas_5gs_sm_sel_sc_mode,
         { "Selected SSC mode",   "nas-5gs.sm.sel_sc_mode",
             FT_UINT8, BASE_DEC, VALS(nas_5gs_sc_mode_values), 0x70,
@@ -15841,31 +13513,6 @@ proto_register_nas_5gs(void)
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x01,
             NULL, HFILL }
         },
-        { &hf_nas_5gs_sm_mpquic_ip_b7,
-        { "Supporting MPQUIC-IP functionality with any steering mode (MPQUIC-IP)",   "nas-5gs.sm.mpquic_ip",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x80,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_mpquic_udp_b6,
-        { "Supporting MPQUIC functionality with any steering mode (MPQUIC-UDP)",   "nas-5gs.sm.mpquic_udp",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x40,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_mptcp_b5,
-        { "Supporting MPTCP functionality with any steering mode (MPTCP)",   "nas-5gs.sm.mptcp",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x20,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_atsss_ll_b3_b4,
-        { "ATSSS-LL functionality support (ATSSS-LL)",   "nas-5gs.sm.atsss_ll",
-            FT_UINT8, BASE_DEC, VALS(nas_nas_5gs_sm_atsss_ll_b3_b4_vals), 0x18,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_rtpmmii_b2,
-        { "(S)RTP multiplexed media identification information (RTPMMII)",   "nas-5gs.sm.rtpmmii",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x04,
-            NULL, HFILL }
-        },
         { &hf_nas_5gs_sm_sdnaepc_b1,
         { "Secondary DN authentication and authorization over EPC (SDNAEPC)",   "nas-5gs.sm.sdnaepc",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x02,
@@ -15873,16 +13520,6 @@ proto_register_nas_5gs(void)
         },
         { &hf_nas_5gs_sm_apmqf_b0,
         { "Access performance measurements per QoS flow rule (APMQF)",   "nas-5gs.sm.apmqf",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x01,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_e8pcpdei_b1,
-        { "Supporting extended 802.1Q C-TAG/S-TAG PCP/DEI (E8PCPDEI)",   "nas-5gs.sm.e8pcpdei",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x02,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sm_mpquic_e_b0,
-        { "Supporting MPQUIC-E functionality with any steering mode (MPQUIC-E)",   "nas-5gs.sm.mpquic_e",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x01,
             NULL, HFILL }
         },
@@ -16416,16 +14053,8 @@ proto_register_nas_5gs(void)
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x08,
             NULL, HFILL }
         },
-        { &hf_nas_5gs_nw_feat_sup_mlcsup,
-        { "Multiple LCS secured user plane connections (MLCSUP)",   "nas-5gs.nw_feat_sup.mlcsup",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x10,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_nw_feat_sup_ef5l,
-        { "ExtendedFacility IE for 5G LCS (EF5L)",   "nas-5gs.nw_feat_sup.ef5l",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x20,
-            NULL, HFILL }
-        },
+
+
         { &hf_nas_5gs_tac,
         { "TAC",   "nas-5gs.tac",
             FT_UINT24, BASE_DEC, NULL, 0x0,
@@ -16801,16 +14430,6 @@ proto_register_nas_5gs(void)
             FT_UINT16, BASE_HEX, NULL, 0x0fff,
             NULL, HFILL }
         },
-        { &hf_nas_5gs_vlan_tag_pcp_ind,
-        { "PCP indicator", "nas-5gs.vlan_tag_pcp_ind",
-            FT_BOOLEAN, 8, NULL, 0x20,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_vlan_tag_dei_ind,
-        { "DEI indicator", "nas-5gs.vlan_tag_dei_ind",
-            FT_BOOLEAN, 8, NULL, 0x10,
-            NULL, HFILL }
-        },
         { &hf_nas_5gs_vlan_tag_pcp,
         { "PCP", "nas-5gs.vlan_tag_pcp",
             FT_UINT8, BASE_HEX, NULL, 0x0e,
@@ -16834,71 +14453,6 @@ proto_register_nas_5gs(void)
         { &hf_nas_5gs_mac_addr_high,
         { "MAC address range high limit", "nas-5gs.mac_addr",
             FT_ETHER, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_srtp_mult_media_id_info_rptpi,
-        { "RTCP packet type presence indicator (RPTPI)", "nas-5gs.srtp_mult_media_id_info.rptpi",
-            FT_BOOLEAN, 8, TFS(&tfs_included_not_included), 0x10,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_srtp_mult_media_id_info_rshempi,
-        { "RRTP SDES header extension id for MID presence indicator (RSHEMPI)", "nas-5gs.srtp_mult_media_id_info.rshempi",
-            FT_BOOLEAN, 8, TFS(&tfs_included_not_included), 0x08,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_srtp_mult_media_id_info_mitpi,
-        { "MID identification-tag presence indicator (MITPI)", "nas-5gs.srtp_mult_media_id_info.mitpi",
-            FT_BOOLEAN, 8, TFS(&tfs_included_not_included), 0x04,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_srtp_mult_media_id_info_ptpi,
-        { "Payload type presence indicator (PTPI)", "nas-5gs.srtp_mult_media_id_info.ptpi",
-            FT_BOOLEAN, 8, TFS(&tfs_included_not_included), 0x02,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_srtp_mult_media_id_info_ssrcpi,
-        { "SSRC presence indicator (SSRCPI)", "nas-5gs.srtp_mult_media_id_info.ssrcpi",
-            FT_BOOLEAN, 8, TFS(&tfs_included_not_included), 0x01,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_srtp_mult_media_id_info_nb,
-        { "Number of (S)RTP multiplexed media identification information entries", "nas-5gs.srtp_mult_media_id_info.nb",
-            FT_UINT8, BASE_DEC, NULL, 0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_srtp_mult_media_id_info_len,
-        { "Length of value part of (S)RTP multiplexed media identification information", "nas-5gs.srtp_mult_media_id_info.len",
-            FT_UINT8, BASE_DEC, NULL, 0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_srtp_mult_media_id_info_ssrc,
-        { "Synchronization source (SSRC)", "nas-5gs.srtp_mult_media_id_info.ssrc",
-            FT_UINT32, BASE_HEX, NULL, 0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_srtp_mult_media_id_info_payload_type,
-        { "Payload type", "nas-5gs.srtp_mult_media_id_info.payload_type",
-            FT_UINT8, BASE_DEC, NULL, 0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_srtp_mult_media_id_info_mid_id_tag_len,
-        { "MID identification-tag length", "nas-5gs.srtp_mult_media_id_info.mid_id_tag_len",
-            FT_UINT8, BASE_DEC, NULL, 0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_srtp_mult_media_id_info_mid_id_tag,
-        { "MID identification-tag", "nas-5gs.srtp_mult_media_id_info.mid_id_tag",
-            FT_BYTES, BASE_NONE, NULL, 0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_srtp_mult_media_id_info_sdes_hdr_ext_id,
-        { "RTP SDES header extension id for MID", "nas-5gs.srtp_mult_media_id_info.sdes_hdr_ext_id",
-            FT_BYTES, BASE_NONE, NULL, 0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_srtp_mult_media_id_info_rtcp_pkt_type,
-        { "RTCP packet type", "nas-5gs.srtp_mult_media_id_info.rtcp_pkt_type",
-            FT_UINT8, BASE_DEC, NULL, 0,
             NULL, HFILL }
         },
         { &hf_nas_5gs_updp_ue_pol_sect_sublst_len,
@@ -17011,11 +14565,6 @@ proto_register_nas_5gs(void)
             FT_UINT16, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
         },
-        { &hf_nas_5gs_ursp_traff_desc_ip_3_tuple_bitmap,
-            { "IP 3 tuple bitmap", "nas-5gs.ursp.traff_desc.ip_3_tuple_bitmap",
-                FT_UINT8, BASE_HEX, NULL, 0x0,
-                NULL, HFILL }
-            },
         { &hf_nas_5gs_ursp_traff_desc_sec_param_index,
         { "Security parameter index", "nas-5gs.ursp.traff_desc.sec_param_index",
             FT_UINT32, BASE_HEX, NULL, 0x0,
@@ -17096,16 +14645,6 @@ proto_register_nas_5gs(void)
             FT_STRING, BASE_NONE, NULL, 0x0,
             NULL, HFILL }
         },
-        { &hf_nas_5gs_ursp_traff_desc_regex_len,
-        { "Regular expression length", "nas-5gs.ursp.traff_desc.regex_len",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_ursp_traff_desc_regex,
-        { "Regular expression", "nas-5gs.ursp.traff_desc.regex",
-            FT_STRING, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
         { &hf_nas_5gs_ursp_traff_desc_dest_mac_addr_range_low,
         { "Destination MAC address range low", "nas-5gs.ursp.traff_desc.dest_mac_addr_range_low",
             FT_ETHER, BASE_NONE, NULL, 0x0,
@@ -17114,26 +14653,6 @@ proto_register_nas_5gs(void)
         { &hf_nas_5gs_ursp_traff_desc_dest_mac_addr_range_high,
         { "Destination MAC address range high", "nas-5gs.ursp.traff_desc.dest_mac_addr_range_high",
             FT_ETHER, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_ursp_traff_desc_pin_id_len,
-        { "PIN ID length", "nas-5gs.ursp.traff_desc.pin_id_len",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_ursp_traff_desc_pin_id,
-        { "PIN ID", "nas-5gs.ursp.traff_desc.pin_id",
-            FT_STRING, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_ursp_traff_desc_conn_group_id_len,
-        { "Connectivity group ID length", "nas-5gs.ursp.traff_desc.conn_group_id_len",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_ursp_traff_desc_conn_group_id,
-        { "Connectivity group ID", "nas-5gs.ursp.traff_desc.conn_group_id",
-            FT_STRING, BASE_NONE, NULL, 0x0,
             NULL, HFILL }
         },
         { &hf_nas_5gs_ursp_traff_desc_len,
@@ -17156,98 +14675,13 @@ proto_register_nas_5gs(void)
             FT_UINT8, BASE_DEC, VALS(nas_5gs_ursp_r_sel_desc_comp_type_values), 0x0,
             NULL, HFILL }
         },
-        { &hf_nas_5gs_ursp_r_sel_desc_loc_crit_len,
-        { "Length of location criteria", "nas-5gs.ursp.r_sel_desc.loc_crit_len",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_ursp_r_sel_desc_loc_area_type,
-        { "Type of location area", "nas-5gs.ursp.r_sel_desc.loc_area_type",
-            FT_UINT8, BASE_DEC, VALS(nas_5gs_ursp_r_sel_desc_loc_area_type_values), 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_ursp_r_sel_desc_loc_num_eutra_cells,
-        { "Number of E-UTRA cell identities", "nas-5gs.ursp.r_sel_desc.loc_num_eutra_cells",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_ursp_r_sel_desc_loc_num_nr_cells,
-        { "Number of NR cell identities", "nas-5gs.ursp.r_sel_desc.loc_num_nr_cells",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_ursp_r_sel_desc_loc_num_gnb_ids,
-        { "Number of Global gNB identities", "nas-5gs.ursp.r_sel_desc.loc_num_gnb_ids",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_ursp_r_sel_desc_loc_nr_cell_id,
-        { "NR Cell ID", "nas-5gs.ursp.r_sel_desc.nr_cell_id",
-            FT_UINT40, BASE_HEX, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_ursp_r_sel_desc_loc_eutra_cell_id,
-        { "E-UTRA Cell ID", "nas-5gs.ursp.r_sel_desc.eutra_cell_id",
-            FT_UINT32, BASE_HEX, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_ursp_r_sel_desc_loc_gnb_id,
-        { "gNB ID", "nas-5gs.ursp.r_sel_desc.gnb_id",
-            FT_UINT32, BASE_HEX, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_ursp_r_sel_desc_loc_tai_len,
-        { "Length", "nas-5gs.ursp.r_sel_desc.loc_tai_len",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_ursp_r_sel_desc_time_win_start,
-        { "Start time", "nas-5gs.ursp.r_sel_desc.time_window.start",
-            FT_ABSOLUTE_TIME, ABSOLUTE_TIME_UTC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_ursp_r_sel_desc_time_win_stop,
-        { "Stop time", "nas-5gs.ursp.r_sel_desc.time_window.stop",
-            FT_ABSOLUTE_TIME, ABSOLUTE_TIME_UTC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_ursp_r_sel_desc_pdu_sess_pair_id,
-        { "PDU session pair ID", "nas-5gs.ursp.r_sel_desc.pdu_session_pair_id",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_ursp_r_sel_desc_rsn,
-        { "RSN", "nas-5gs.ursp.r_sel_desc.rsn",
-            FT_UINT8, BASE_DEC, VALS(nas_5gs_sm_pdu_session_rsn_vals), 0x0,
-            NULL, HFILL }
-        },
         { &hf_nas_5gs_dnn_len,
         { "Length", "nas-5gs.dnn_len",
             FT_UINT8, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
         },
-        { &hf_nas_5gs_e802cstag,
-        { "Support of extended 802.1Q C-TAG/S-TAG PCP/DEI traffic descriptor",   "nas-5gs.e802cstag",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x10,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_sup_rure,
-        { "Support of Reporting URSP Rule Enforcement by the UE",   "nas-5gs.sup_rure",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x08,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_svpsu,
-        { "Support of VPS URSP",   "nas-5gs.svpsu",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x04,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_epsurdp,
-        { "Support of URSP provisioning in EPS by the UE",   "nas-5gs.epsurdp",
-            FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x02,
-            NULL, HFILL }
-        },
         { &hf_nas_5gs_sup_andsp,
-        { "Support of ANDSP by the UE",   "nas-5gs.sup_andsp",
+        { "Support ANDSP",   "nas-5gs.sup_andsp",
             FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x01,
             NULL, HFILL }
         },
@@ -17641,7 +15075,7 @@ proto_register_nas_5gs(void)
         },
         { &hf_nas_5gs_mm_s_nssai_loc_valid_info_per_s_nssai_nb_nr_cgi,
         { "Number of NR CGIs", "nas-5gs.mm.s_nssai_loc_valid_info.nb_nr_cgi",
-            FT_UINT16, BASE_DEC, NULL, 0x0,
+            FT_UINT8, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_s_nssai_loc_valid_info_per_s_nssai_nr_cell_id,
@@ -17689,11 +15123,6 @@ proto_register_nas_5gs(void)
             FT_BOOLEAN, 8, TFS(&tfs_requested_not_requested), 0x01,
             NULL, HFILL }
         },
-        { &hf_nas_5gs_mm_feat_auth_ind_hpase,
-        { "High priority access service area restriction exempt (HPASE)", "nas-5gs.mm.feat_auth_ind.hpase",
-            FT_BOOLEAN, 8, TFS(&tfs_nas_5gs_mm_feat_auth_ind_hpase), 0x04,
-            NULL, HFILL }
-        },
         { &hf_nas_5gs_mm_feat_auth_ind_mbsrai,
         { "MBSR authorization indication (MBSRAI)", "nas-5gs.mm.feat_auth_ind.mbsrai",
             FT_UINT8, BASE_DEC, VALS(nas_5gs_mm_feat_auth_ind_mbsrai_vals), 0x03,
@@ -17734,450 +15163,9 @@ proto_register_nas_5gs(void)
             FT_BOOLEAN, 8, TFS(&tfs_nas_5gs_mm_ext_5gmm_cause_sat_nr), 0x01,
             NULL, HFILL }
         },
-        { &hf_nas_5gs_mm_lp_wusps_assist_info_type,
-        { "Type of information", "nas-5gs.mm.lp_wusps_assist_info.type",
-            FT_UINT8, BASE_DEC, VALS(nas_5gs_mm_lp_wusps_assist_info_type_vals), 0xe0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mm_lp_wusps_assist_info_paging_subgroup_id,
-        { "LP-WUSPS paging subgroup ID value", "nas-5gs.mm.lp_wusps_assist_info.paging_subgroup_id",
-            FT_UINT8, BASE_DEC, NULL, 0x1f,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mm_lp_wusps_assist_info_ue_paging_prob_info,
-        { "UE paging probability information value", "nas-5gs.mm.lp_wusps_assist_info.ue_paging_prob_info",
-            FT_UINT8, BASE_DEC, VALS(nas_5gs_mm_peips_assist_info_ue_paging_probability_info_vals), 0x1f,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_mm_lws,
-        { "LP-WUS status indication (LWS)", "nas-5gs.mm.lws",
-            FT_BOOLEAN, 8, TFS(&tfs_enabled_disabled), 0x01,
-            NULL, HFILL }
-        },
         { &hf_nas_5gs_ue_os_id,
         { "UE OS ID UUID", "nas-5gs.ue_os_id",
             FT_GUID, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_andsp_info_type,
-        { "ANDSP info type", "nas-5gs.andsp.info_type",
-            FT_UINT8, BASE_DEC, VALS(nas_5gs_andsp_info_type_values), 0x0f,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_andsp_info_len,
-        { "ANDSP info length", "nas-5gs.andsp.info_length",
-            FT_UINT16, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_andsp_info_contents,
-        { "ANDSP info contents", "nas-5gs.andsp.info",
-            FT_BYTES, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_rule_len,
-        { "Length of WLANSP rule", "nas-5gs.andsp.wlansp.rule_len",
-            FT_UINT16, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_rule_id,
-        { "Rule identifier", "nas-5gs.andsp.wlansp.rule_id",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_rule_prio,
-        { "Rule priority", "nas-5gs.andsp.wlansp.rule_prio",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_roaming_ind,
-        { "Roaming", "nas-5gs.andsp.wlansp.roaming_ind",
-            FT_BOOLEAN, 8, NULL, 0x80,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_validity_area_ind,
-        { "Validity area ind", "nas-5gs.andsp.wlansp.validity_area_ind",
-            FT_BOOLEAN, 8, NULL, 0x40,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_3gpp_loc_ind,
-        { "3gpp loc ind", "nas-5gs.andsp.wlansp.3gpp_loc_ind",
-            FT_BOOLEAN, 8, NULL, 0x20,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlan_loc_ind,
-        { "WLAN loc ind", "nas-5gs.andsp.wlansp.wlan_loc_ind",
-            FT_BOOLEAN, 8, NULL, 0x10,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_geo_loc_ind,
-        { "Geo loc ind", "nas-5gs.andsp.wlansp.geo_loc_ind",
-            FT_BOOLEAN, 8, NULL, 0x08,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_time_of_day_ind,
-        { "Time of day ind", "nas-5gs.andsp.wlansp.time_of_day_ind",
-            FT_BOOLEAN, 8, NULL, 0x04,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_sel_crit_len,
-        { "Length of selection criteria", "nas-5gs.andsp.wlansp.sel_crit_len",
-            FT_UINT16, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_num_sel_crit_ent,
-        { "Number of selection criteria entries", "nas-5gs.andsp.wlansp.num_sel_crit_ent",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_sel_crit_ent_len,
-        { "Length of selection criteria entry", "nas-5gs.andsp.wlansp.sel_crit_ent_len",
-            FT_UINT16, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_maxbssload_ind,
-        { "MaxBSSload ind", "nas-5gs.andsp.wlansp.maxbssload_ind",
-            FT_BOOLEAN, 8, NULL, 0x40,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_homenetwork_ind,
-        { "Homenetwork ind", "nas-5gs.andsp.wlansp.homenetwork_ind",
-            FT_BOOLEAN, 8, NULL, 0x20,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_max_bss_ld_val,
-        { "Maximum BSS load value", "nas-5gs.andsp.wlansp_max_bss_ld_val",
-            FT_UINT16, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_criteria_priority,
-        { "Criteria priority", "nas-5gs.andsp.wlansp.criteria_priority",
-            FT_UINT8, BASE_DEC, NULL, 0x1f,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_sel_crit_set_len,
-        { "Length of selection criteria set", "nas-5gs.andsp.wlansp.sel_crit_set_len",
-            FT_UINT16, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_sel_crit_set_type,
-        { "Selection criteria set type", "nas-5gs.andsp.wlansp.sel_crit_set_type",
-            FT_UINT8, BASE_DEC, VALS(nas_5gs_andsp_wlansp_sel_crit_set_type_vals), 0xf0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_sel_crit_num_sub_entr,
-        { "Number of sub entries", "nas-5gs.andsp.wlansp.sel_crit_num_sub_entr",
-            FT_UINT8, BASE_DEC, NULL, 0x0f,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_pref_ssid_list_wlan_prio,
-        { "WLAN priority", "nas-5gs.andsp.wlansp.wlansp_pref_ssid_list_wlan_prio",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_ssid_len,
-        { "SSID length", "nas-5gs.andsp.wlansp.pref_ssid_list_ssid_len",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_pref_ssid_list_ssid,
-        { "SSID", "nas-5gs.andsp.wlansp.pref_ssid_list_ssid",
-            FT_STRING, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_pref_ssid_list_hessid,
-        { "HESSID", "nas-5gs.andsp.wlansp.pref_ssid_list_hessid",
-            FT_BYTES, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_pref_roam_part_list_prio,
-        { "Priority", "nas-5gs.andsp.wlansp.pref_roam_part_list_prio",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_fqdn_match_len,
-        { "FQDN_Match length", "nas-5gs.andsp.wlansp.fqdn_match_len",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_fqdn_match,
-        { "FQDN_Match", "nas-5gs.andsp.wlansp.fqdn_match",
-            FT_STRING, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_country_len,
-        { "Country length", "nas-5gs.andsp.wlansp.country_len",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_country,
-        { "Country", "nas-5gs.andsp.wlansp.country",
-            FT_STRING, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_pref_ssid_list_ssid_ind,
-        { "SSID ind", "nas-5gs.andsp.wlansp.pref_ssid_list_ssid_ind",
-            FT_BOOLEAN, 8, NULL, 0x01,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_pref_ssid_list_hessid_ind,
-        { "HESSID ind", "nas-5gs.andsp.wlansp.pref_ssid_list_hessid_ind",
-            FT_BOOLEAN, 8, NULL, 0x02,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_sub_ent_len,
-        { "Length of sub entry", "nas-5gs.andsp.wlansp.sub_ent_len",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_req_prot_ip_prot,
-        { "IP protocol", "nas-5gs.andsp.wlansp.req_prot_port_tup",
-            FT_UINT8, BASE_DEC | BASE_EXT_STRING,& ipproto_val_ext, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_req_prot_port_len,
-        { "Length of port number", "nas-5gs.andsp.wlansp.req_prot_port_len",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_req_prot_port,
-        { "Port number", "nas-5gs.andsp.wlansp.req_prot_port",
-            FT_UINT16, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_sel_crit_sp_exc,
-        { "SSID", "nas-5gs.andsp.wlansp.sel_crit_sp_exc",
-            FT_BYTES, BASE_SHOW_UTF_8_PRINTABLE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_sp_excl_list_ulbi_ind,
-        { "Uplink bandwidth field", "nas-5gs.andsp.wlansp.sp_excl_list_ulbi_ind",
-            FT_BOOLEAN, 8, TFS(&tfs_present_not_present), 0x08,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_sp_excl_list_dlbi_ind,
-        { "Downlink bandwidth field", "nas-5gs.andsp.wlansp.sp_excl_list_dlbi_ind",
-            FT_BOOLEAN, 8, TFS(&tfs_present_not_present), 0x04,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_sp_excl_list_nw_type,
-        { "Network type", "nas-5gs.andsp.wlansp.sp_excl_list_nw_type",
-            FT_UINT8, BASE_DEC, VALS(nas_5gs_wlansp_sp_excl_list_nw_type_vals), 0x03,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_sp_excl_list_ulb,
-        { "Uplink bandwidth", "nas-5gs.andsp.wlansp.sp_excl_list_ulb",
-            FT_UINT32, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_sp_excl_list_dlb,
-        { "Downlink bandwidth", "nas-5gs.andsp.wlansp.sp_excl_list_dlb",
-            FT_UINT32, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_val_area_len,
-        { "length of validity area", "nas-5gs.andsp.wlansp.val_area_len",
-            FT_UINT16, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_time_of_day_len,
-        { "Length of time of day", "nas-5gs.andsp.wlansp.time_of_day_len",
-            FT_UINT16, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_num_loc_entr,
-        { "Number of location entries", "nas-5gs.andsp.wlansp.num_loc_entr",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_loc_entry_len,
-        { "Length of location entry", "nas-5gs.andsp.wlansp.loc_entry_len",
-            FT_UINT16, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_loc_entry_type,
-        { "Entry type", "nas-5gs.andsp.wlansp.loc_entry_type",
-            FT_UINT8, BASE_DEC, VALS(nas_5gs_andsp_wlansp_loc_entry_type_vals), 0xc0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_loc_num_sub_entries,
-        { "number of sub entries", "nas-5gs.andsp.wlansp.loc_num_sub_entries",
-            FT_UINT8, BASE_DEC, NULL, 0x3f,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_loc_3gpp_sub_ent_len,
-        { "Length of 3GPP location sub entry", "nas-5gs.andsp.wlansp.3gpp_sub_ent_len",
-            FT_UINT16, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_loc_3gpp_num_loc_fields,
-        { "Number of location fields", "nas-5gs.andsp.wlansp.3gpp_num_loc_fields",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_loc_3gpp_loc_field_len,
-        { "Length of 3GPP location field", "nas-5gs.andsp.wlansp.3gpp_loc_field_len",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_loc_3gpp_loc_field_type,
-        { "Field type", "nas-5gs.andsp.wlansp.3gpp_loc_field_type",
-            FT_UINT8, BASE_DEC, VALS(nas_5gs_andsp_wlansp_location_field_type_vals), 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_loc_3gpp_loc_tac,
-        { "TAC", "nas-5gs.andsp.wlansp.3gpp_loc_tac",
-            FT_UINT24, BASE_HEX, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_loc_3gpp_loc_eutra_ci,
-        { "EUTRA CI", "nas-5gs.andsp.wlansp.3gpp_loc_eutra_ci",
-            FT_UINT16, BASE_HEX, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_loc_3gpp_loc_nr_ci,
-        { "NR CI", "nas-5gs.andsp.wlansp.3gpp_loc_nr_ci",
-            FT_UINT24, BASE_HEX, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_loc_sub_ent_len,
-        { "Length of location sub entry", "nas-5gs.andsp.wlansp.loc_sub_ent_len",
-            FT_UINT16, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_loc_num_loc_fields,
-        { "Number of location fields", "nas-5gs.andsp.wlansp.oc_num_loc_fields",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_loc_wlan_loc_field_len,
-        { "Length of WLAN location field", "nas-5gs.andsp.wlansp.wlan_sub_ent_len",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_loc_wlan_sub_ent_type,
-        { "WLAN location field type", "nas-5gs.andsp.wlansp.wlan_sub_ent_type",
-            FT_UINT16, BASE_DEC, VALS(nas_5gs_andsp_wlansp_location_field_type_vals), 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_loc_hessid,
-        { "HESSID", "nas-5gs.andsp.wlansp.loc_hessid",
-            FT_UINT48, BASE_HEX, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_loc_ssid,
-        { "SSID", "nas-5gs.andsp.wlansp.loc_ssid",
-            FT_BYTES, BASE_SHOW_UTF_8_PRINTABLE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_wlansp_loc_bssid,
-        { "BSSID", "nas-5gs.andsp.wlansp.loc_bssid",
-            FT_UINT48, BASE_HEX, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_geo_loc_anc_lat,
-        { "Anchor latitude", "nas-5gs.andsp.wlansp.geo_loc_anc_lat",
-            FT_UINT32, BASE_CUSTOM, CF_FUNC(nas_5gs_degreesLatitude_fmt), 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_geo_loc_anc_long,
-        { "Anchor longitude", "nas-5gs.andsp.wlansp.geo_loc_anc_long",
-            FT_UINT32, BASE_CUSTOM, CF_FUNC(nas_5gs_degreesLongitude_fmt), 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_geo_loc_rad,
-        { "Radius", "nas-5gs.andsp.wlansp.geo_loc_rad",
-            FT_UINT32, BASE_CUSTOM, CF_FUNC(nas_5gs_radius_fmt), 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_n3nan_sel_len,
-        { "N3AN node selection information length", "nas-5gs.andsp.n3nan.sel_len",
-            FT_UINT16, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_n3nan_node_sel_entry_len,
-        { "Length of N3AN node selection information entry", "nas-5gs.andsp.n3nan.node_sel_entry_len",
-            FT_UINT16, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_node_sel_entry_fqdn_format,
-        { "FQDN format", "nas-5gs.andsp.n3nan.node_sel_entry_fqdn_format",
-            FT_UINT8, BASE_DEC, NULL, 0xc0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_node_sel_entry_pref,
-        { "Preference", "nas-5gs.andsp.n3nan.node_sel_entry_pref",
-            FT_UINT8, BASE_DEC, NULL, 0x20,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_node_sel_entry_prio,
-        { "Priority", "nas-5gs.andsp.n3nan.node_sel_entry_prio",
-            FT_UINT8, BASE_DEC, NULL, 0x1f,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_n3nan_node_conf_inf_type,
-        { "N3AN node configuration information type", "nas-5gs.andsp.n3nan.wlan_sub_ent_type",
-            FT_UINT8, BASE_DEC, VALS(nas_5gs_n3nan_node_conf_inf_type_vals), 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_n3nan_home_n3iwf_id_type,
-        { "Home N3IWF identifier type", "nas-5gs.andsp.n3nan.n3nan_home_n3iwf_id_type",
-            FT_UINT8, BASE_DEC, VALS(nas_5gs_n3nan_n3nan_home_n3iwf_id_type_vals), 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_home_n3iwf_ipv4_addr,
-        { "Home N3IWF IPv4 addresses", "nas-5gs.andsp.n3nan.home_n3iwf_ipv4_addr",
-            FT_IPv4, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_home_n3iwf_ipv6_addr,
-        { "Home N3IWF IPv6 addresses", "nas-5gs.andsp.n3nan.home_n3iwf_ipv6_addr",
-            FT_IPv6, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_home_n3iwf_fqdn_len,
-        { "Length of home N3IWF FQDN", "nas-5gs.andsp.n3nan.home_n3iwf_fqdn_len",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_home_n3iwf_id_cont_len,
-        { "Length of Home N3IWF identifier contents", "nas-5gs.andsp.n3nan.home_n3iwf_id_cont_len",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_home_n3iwf_fqdn,
-        { "Home N3IWF FQDN", "nas-5gs.andsp.n3nan.home_n3iwf_fqdn",
-            FT_STRING, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-
-        { &hf_nas_5gs_n3nan_home_epdg_id_type,
-        { "Home N3IWF identifier type", "nas-5gs.andsp.n3nan.n3nan_home_epdg_id_type",
-            FT_UINT8, BASE_DEC, VALS(nas_5gs_n3nan_n3nan_home_n3iwf_id_type_vals), 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_home_epdg_ipv4_addr,
-        { "Home ePDG IPv4 addresses", "nas-5gs.andsp.n3nan.home_epdg_ipv4_addr",
-            FT_IPv4, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_home_epdg_ipv6_addr,
-        { "Home ePDG IPv6 addresses", "nas-5gs.andsp.n3nan.home_epdg_ipv6_addr",
-            FT_IPv6, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_home_epdg_fqdn_len,
-        { "Length of home ePDG FQDN", "nas-5gs.andsp.n3nan.home_epdg_fqdn_len",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_home_epdg_id_cont_len,
-        { "Length of Home ePDG identifier contents", "nas-5gs.andsp.n3nan.home_epdg_id_cont_len",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
-            NULL, HFILL }
-        },
-        { &hf_nas_5gs_home_epdg_fqdn,
-        { "Home ePDG FQDN", "nas-5gs.andsp.n3nan.home_n3iwf_fqdn",
-            FT_STRING, BASE_NONE, NULL, 0x0,
             NULL, HFILL }
         },
     };
@@ -18186,7 +15174,7 @@ proto_register_nas_5gs(void)
     unsigned  last_offset;
 
     /* Setup protocol subtree array */
-#define NUM_INDIVIDUAL_ELEMS    75
+#define NUM_INDIVIDUAL_ELEMS    53
     int *ett[NUM_INDIVIDUAL_ELEMS +
         NUM_NAS_5GS_COMMON_ELEM +
         NUM_NAS_5GS_MM_MSG + NUM_NAS_5GS_MM_ELEM +
@@ -18205,70 +15193,48 @@ proto_register_nas_5gs(void)
     ett[8] = &ett_nas_5gs_mm_part_tal;
     ett[9] = &ett_nas_5gs_sm_mapd_eps_b_cont;
     ett[10] = &ett_nas_5gs_sm_mapd_eps_b_cont_params_list;
-    ett[11] = &ett_nas_5gs_mm_ladn_indic;
-    ett[12] = &ett_nas_5gs_mm_sor;
-    ett[13] = &ett_nas_5gs_sm_pkt_filter_components;
-    ett[14] = &ett_nas_5gs_updp_ue_policy_section_mgm_lst;
-    ett[15] = &ett_nas_5gs_updp_ue_policy_section_mgm_sublst;
-    ett[16] = &ett_nas_5gs_ue_policies_ursp;
-    ett[17] = &ett_nas_5gs_ursp_traff_desc;
-    ett[18] = &ett_nas_5gs_usrp_r_sel_list;
-    ett[19] = &ett_nas_5gs_usrp_r_sel;
-    ett[20] = &ett_nas_5gs_ursp_r_sel_desc_cont;
-    ett[21] = &ett_nas_5gs_updp_upsi_list;
-    ett[22] = &ett_nas_5gs_mm_rej_nssai;
-    ett[23] = &ett_nas_5gs_mm_scheme_output;
-    ett[24] = &ett_nas_5gs_mm_pld_cont_pld_entry;
-    ett[25] = &ett_nas_5gs_mm_pld_cont_opt_ie;
-    ett[26] = &ett_nas_5gs_mm_cag_info_entry;
-    ett[27] = &ett_nas_5gs_ciot_small_data_cont_data_contents;
-    ett[28] = &ett_nas_5gs_user_data_cont;
-    ett[29] = &ett_nas_5gs_ciph_data_set;
-    ett[30] = &ett_nas_5gs_mm_mapped_nssai;
-    ett[31] = &ett_nas_5gs_mm_partial_extended_rejected_nssai_list;
-    ett[32] = &ett_nas_5gs_mm_ext_rej_nssai_back_off_timer;
-    ett[33] = &ett_nas_5gs_mm_ext_rej_nssai;
-    ett[34] = &ett_nas_5gs_mm_op_def_acc_cat_def;
-    ett[35] = &ett_nas_5gs_mm_op_def_acc_cat_criteria_component;
-    ett[36] = &ett_nas_5gs_mm_op_def_acc_cat_criteria;
-    ett[37] = &ett_nas_5gs_cmn_service_level_aa_cont_param;
-    ett[38] = &ett_nas_5gs_mm_pld_cont_event_notif_ind;
-    ett[39] = &ett_nas_5gs_mm_peips_assist_info;
-    ett[40] = &ett_nas_5gs_mm_nssrg_info;
-    ett[41] = &ett_nas_5gs_mm_plmns_list_disaster_cond;
-    ett[42] = &ett_nas_5gs_mm_reg_wait_range;
-    ett[43] = &ett_nas_5gs_mm_nsag_info;
-    ett[44] = &ett_nas_5gs_mm_snpn_list;
-    ett[45] = &ett_nas_5gs_mm_ext_ladn_info;
-    ett[46] = &ett_nas_5gs_mm_alt_nssai;
-    ett[47] = &ett_nas_5gs_mm_alt_nssai_replaced;
-    ett[48] = &ett_nas_5gs_mm_alt_nssai_alternative;
-    ett[49] = &ett_nas_5gs_mm_s_nssai_loc_valid_info;
-    ett[50] = &ett_nas_5gs_mm_s_nssai_time_valid_info;
-    ett[51] = &ett_nas_5gs_mm_on_demand_nssai;
-    ett[52] = &ett_nas_5gs_ue_policies_andp;
-    ett[53] = &ett_nas_5gs_wlansp_rule;
-    ett[54] = &ett_nas_5gs_wlansp_sel_crit;
-    ett[55] = &ett_nas_5gs_wlansp_sel_crit_ent;
-    ett[56] = &ett_nas_5gs_wlansp_val_area;
-    ett[57] = &ett_nas_5gs_wlansp_tod;
-    ett[58] = &ett_nas_5gs_loc_3gpp_sub_ent;
-    ett[59] = &ett_nas_5gs_n3nan_sel_len;
-    ett[60] = &ett_nas_5gs_n3nan_sel_info_entry;
-    ett[61] = &ett_nas_5gs_n3nan_conf_inf;
-    ett[62] = &ett_nas_5gs_n3iwf_identifier_entry;
-    ett[63] = &ett_nas_5gs_epdg_identifier_entry;
-    ett[64] = &ett_nas_5gs_sm_srtp_mult_media_id_info;
-    ett[65] = &ett_nas_5gs_sm_remote_ue_ctx;
-    ett[66] = &ett_nas_5gs_sm_req_mbs_sess_info;
-    ett[67] = &ett_nas_5gs_sm_rec_mbs_info;
-    ett[68] = &ett_nas_5gs_sm_n3qai_entry;
-    ett[69] = &ett_nas_5gs_sm_n3qai_param;
-    ett[70] = &ett_nas_5gs_sm_n3gpp_delay_budget_entry;
-    ett[71] = &ett_nas_5gs_sm_ursp_report;
-    ett[72] = &ett_nas_5gs_sm_prot_desc_entry;
-    ett[73] = &ett_nas_5gs_sm_prot_desc_rtp_payload_info;
-    ett[74] = &ett_nas_5gs_sm_n3gpp_dev_info_entry;
+    ett[11] = &ett_nas_5gs_enc;
+    ett[12] = &ett_nas_5gs_mm_ladn_indic;
+    ett[13] = &ett_nas_5gs_mm_sor;
+    ett[14] = &ett_nas_5gs_sm_pkt_filter_components;
+    ett[15] = &ett_nas_5gs_updp_ue_policy_section_mgm_lst;
+    ett[16] = &ett_nas_5gs_updp_ue_policy_section_mgm_sublst;
+    ett[17] = &ett_nas_5gs_ue_policies_ursp;
+    ett[18] = &ett_nas_5gs_ursp_traff_desc;
+    ett[19] = &ett_nas_5gs_usrp_r_sel_list;
+    ett[20] = &ett_nas_5gs_usrp_r_sel;
+    ett[21] = &ett_nas_5gs_ursp_r_sel_desc_cont;
+    ett[22] = &ett_nas_5gs_updp_upsi_list;
+    ett[23] = &ett_nas_5gs_mm_rej_nssai;
+    ett[24] = &ett_nas_5gs_mm_scheme_output;
+    ett[25] = &ett_nas_5gs_mm_pld_cont_pld_entry;
+    ett[26] = &ett_nas_5gs_mm_pld_cont_opt_ie;
+    ett[27] = &ett_nas_5gs_mm_cag_info_entry;
+    ett[28] = &ett_nas_5gs_ciot_small_data_cont_data_contents;
+    ett[29] = &ett_nas_5gs_user_data_cont;
+    ett[30] = &ett_nas_5gs_ciph_data_set;
+    ett[31] = &ett_nas_5gs_mm_mapped_nssai;
+    ett[32] = &ett_nas_5gs_mm_partial_extended_rejected_nssai_list;
+    ett[33] = &ett_nas_5gs_mm_ext_rej_nssai_back_off_timer;
+    ett[34] = &ett_nas_5gs_mm_ext_rej_nssai;
+    ett[35] = &ett_nas_5gs_mm_op_def_acc_cat_def;
+    ett[36] = &ett_nas_5gs_mm_op_def_acc_cat_criteria_component;
+    ett[37] = &ett_nas_5gs_mm_op_def_acc_cat_criteria;
+    ett[38] = &ett_nas_5gs_cmn_service_level_aa_cont_param;
+    ett[39] = &ett_nas_5gs_mm_pld_cont_event_notif_ind;
+    ett[40] = &ett_nas_5gs_mm_peips_assist_info;
+    ett[41] = &ett_nas_5gs_mm_nssrg_info;
+    ett[42] = &ett_nas_5gs_mm_plmns_list_disaster_cond;
+    ett[43] = &ett_nas_5gs_mm_reg_wait_range;
+    ett[44] = &ett_nas_5gs_mm_nsag_info;
+    ett[45] = &ett_nas_5gs_mm_snpn_list;
+    ett[46] = &ett_nas_5gs_mm_ext_ladn_info;
+    ett[47] = &ett_nas_5gs_mm_alt_nssai;
+    ett[48] = &ett_nas_5gs_mm_alt_nssai_replaced;
+    ett[49] = &ett_nas_5gs_mm_alt_nssai_alternative;
+    ett[50] = &ett_nas_5gs_mm_s_nssai_loc_valid_info;
+    ett[51] = &ett_nas_5gs_mm_s_nssai_time_valid_info;
+    ett[52] = &ett_nas_5gs_mm_on_demand_nssai;
 
     last_offset = NUM_INDIVIDUAL_ELEMS;
 
@@ -18309,7 +15275,7 @@ proto_register_nas_5gs(void)
     }
 
     static ei_register_info ei[] = {
-    { &ei_nas_5gs_extraneous_data, { "nas-5gs.extraneous_data", PI_PROTOCOL, PI_NOTE, "Extraneous Data, dissector bug or later version spec (report to wireshark.org)", EXPFILL }},
+    { &ei_nas_5gs_extraneous_data, { "nas-5gs.extraneous_data", PI_PROTOCOL, PI_NOTE, "Extraneous Data, dissector bug or later version spec(report to wireshark.org)", EXPFILL }},
     { &ei_nas_5gs_unknown_pd,{ "nas-5gs.unknown_pd", PI_PROTOCOL, PI_ERROR, "Unknown protocol discriminator", EXPFILL } },
     { &ei_nas_5gs_mm_unknown_msg_type,{ "nas-5gs.mm.unknown_msg_type", PI_PROTOCOL, PI_WARN, "Unknown Message Type", EXPFILL } },
     { &ei_nas_5gs_sm_unknown_msg_type,{ "nas-5gs.sm.unknown_msg_type", PI_PROTOCOL, PI_WARN, "Unknown Message Type", EXPFILL } },
@@ -18327,7 +15293,7 @@ proto_register_nas_5gs(void)
     module_t *nas_5GS_module;
 
     /* Register protocol */
-    proto_nas_5gs = proto_register_protocol("Non-Access-Stratum 5GS (NAS)PDU", "NAS-5GS", "nas-5gs");
+    proto_nas_5gs = proto_register_protocol(PNAME, PSNAME, PFNAME);
     /* Register fields and subtrees */
     proto_register_field_array(proto_nas_5gs, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
@@ -18338,7 +15304,7 @@ proto_register_nas_5gs(void)
     proto_register_alias(proto_nas_5gs, "nas_5gs");
 
     /* Register dissector */
-    nas_5gs_handle = register_dissector("nas-5gs", dissect_nas_5gs, proto_nas_5gs);
+    nas_5gs_handle = register_dissector(PFNAME, dissect_nas_5gs, proto_nas_5gs);
 
     nas_5GS_module = prefs_register_protocol(proto_nas_5gs, proto_reg_handoff_nas_5gs);
 

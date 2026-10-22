@@ -13,7 +13,7 @@
 #include <epan/packet.h>
 #include "packet-llc.h"
 #include <epan/oui.h>
-#include "packet-cisco-pid.h"
+#include <epan/cisco_pid.h>
 
 void proto_register_cisco_pid(void);
 

@@ -12,9 +12,7 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
-#include "packet-xdlc.h"
+#include <epan/xdlc.h>
 
 void proto_register_v120(void);
 

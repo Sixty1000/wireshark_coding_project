@@ -270,7 +270,8 @@ raknet_dissect_system_address(proto_tree *tree, int hf,
        an empty string? */
     ti = proto_tree_add_string(tree, hf, tvb, *offset, -1, "");
     sub_tree = proto_item_add_subtree(ti, ett_raknet_system_address);
-    proto_tree_add_item_ret_uint8(sub_tree, hf_raknet_ip_version, tvb, *offset, 1, ENC_NA, &ip_version);
+    ip_version = tvb_get_uint8(tvb, *offset);
+    proto_tree_add_item(sub_tree, hf_raknet_ip_version, tvb, *offset, 1, ENC_NA);
     (*offset)++;
     switch (ip_version) {
     case 4:
@@ -284,7 +285,8 @@ raknet_dissect_system_address(proto_tree *tree, int hf,
         addr_str = address_to_display(pinfo->pool, &addr);
         proto_tree_add_ipv4(sub_tree, hf_raknet_ipv4_address, tvb, *offset, 4, v4_addr);
         *offset += 4;
-        proto_tree_add_item_ret_uint16(sub_tree, hf_raknet_port, tvb, *offset, 2, ENC_BIG_ENDIAN, &port);
+        port = tvb_get_ntohs(tvb, *offset);
+        proto_tree_add_item(sub_tree, hf_raknet_port, tvb, *offset, 2, ENC_BIG_ENDIAN);
         *offset += 2;
         proto_item_set_len(ti, 1 + 4 + 2);
         proto_item_append_text(ti, "%s:%" PRIu16, addr_str, port);
@@ -293,7 +295,8 @@ raknet_dissect_system_address(proto_tree *tree, int hf,
         addr_str = tvb_ip6_to_str(pinfo->pool, tvb, *offset);
         proto_tree_add_item(sub_tree, hf_raknet_ipv6_address, tvb, *offset, 16, ENC_NA);
         *offset += 16;
-        proto_tree_add_item_ret_uint16(sub_tree, hf_raknet_port, tvb, *offset, 2, ENC_BIG_ENDIAN, &port);
+        port = tvb_get_ntohs(tvb, *offset);
+        proto_tree_add_item(sub_tree, hf_raknet_port, tvb, *offset, 2, ENC_BIG_ENDIAN);
         *offset += 2;
         proto_item_set_len(ti, 1 + 16 + 2);
         proto_item_append_text(ti, "[%s]:%" PRIu16, addr_str, port);
@@ -556,7 +559,7 @@ raknet_dissect_unconnected_pong(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
     offset += 2;
 
     proto_tree_add_item(sub_tree, hf_raknet_0x1C_server_id_str, tvb, offset,
-                        str_size, ENC_ASCII);
+                        str_size, ENC_NA|ENC_ASCII);
     offset += str_size;
 
     return offset;
@@ -810,7 +813,7 @@ init_raknet_offline_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     *offset += 1;
 
     col_add_str(pinfo->cinfo, COL_INFO,
-                val_to_str(pinfo->pool, message_id, raknet_offline_message_names, "Unknown offline message: %#x"));
+                val_to_str(message_id, raknet_offline_message_names, "Unknown offline message: %#x"));
 
     /*
      * Append description to the raknet item.
@@ -824,7 +827,7 @@ static int
 raknet_dissect_ACK(tvbuff_t *tvb, packet_info *pinfo,
                    proto_tree *tree, void* data)
 {
-    unsigned offset = 0;
+    int offset = 0;
     proto_tree *sub_tree;
     uint32_t count;
     uint32_t i;
@@ -904,7 +907,7 @@ raknet_dissect_ACK(tvbuff_t *tvb, packet_info *pinfo,
 static int
 raknet_dissect_common_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *raknet_tree, void *data)
 {
-    unsigned offset = 0;
+    int offset = 0;
     bool *has_multiple_messages;
     proto_item *ti;
     proto_item *raknet_ti;
@@ -1064,7 +1067,7 @@ raknet_dissect_common_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *rak
      */
     if (! *has_multiple_messages) {
         *has_multiple_messages =
-            tvb_reported_length_remaining(tvb, offset) > payload_octets
+            tvb_reported_length_remaining(tvb, offset) > (int)payload_octets
             ? true : false;
     }
 
@@ -1103,13 +1106,13 @@ raknet_dissect_common_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *rak
         payload_tree = proto_item_add_subtree(ti, ett_raknet_system_message);
 
         proto_item_append_text(ti, " (%s)",
-                               val_to_str(pinfo->pool, message_id, raknet_system_message_names, "Unknown ID: %#x"));
+                               val_to_str(message_id, raknet_system_message_names, "Unknown ID: %#x"));
 
         proto_item_append_text(msg_ti, "ID %#x (%s)", message_id,
                                val_to_str_const(message_id, raknet_system_message_names, "Unknown"));
 
         col_add_str(pinfo->cinfo, COL_INFO,
-                    val_to_str(pinfo->pool, message_id, raknet_system_message_names, "Unknown system message ID: %#x"));
+                    val_to_str(message_id, raknet_system_message_names, "Unknown system message ID: %#x"));
 
         proto_tree_add_item(payload_tree, hf_raknet_system_message_id,
                             next_tvb, 0, 1, ENC_NA);
@@ -1230,7 +1233,7 @@ raknet_dissect_connected_message(tvbuff_t *tvb, packet_info *pinfo,
     proto_item *ti;
     proto_tree *raknet_tree;
     int item_size;
-    unsigned offset = 0;
+    int offset = 0;
     uint8_t msg_type;
 
     state = raknet_get_session_state(pinfo);
@@ -1406,7 +1409,7 @@ dissect_raknet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 
     message_id = tvb_get_uint8(tvb, 0);
 
-    dissected = dissector_try_uint_with_data(raknet_offline_message_dissectors, message_id, tvb,
+    dissected = dissector_try_uint_new(raknet_offline_message_dissectors, message_id, tvb,
                                        pinfo, tree, true, data);
     if (!dissected) {
         raknet_dissect_connected_message(tvb, pinfo, tree, data);
@@ -1941,7 +1944,11 @@ proto_register_raknet(void)
     /*
      * Register the protocol with Wireshark.
      */
-    proto_raknet = proto_register_protocol ("RakNet game networking protocol", "RakNet", "raknet");
+    proto_raknet = proto_register_protocol (
+            "RakNet game networking protocol", /* name */
+            "RakNet", /* short name */
+            "raknet"  /* abbrev */
+            );
 
     /*
      * Register expert support.

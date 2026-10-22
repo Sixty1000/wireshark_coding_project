@@ -47,10 +47,8 @@
       <widget class="LayoutPreferencesFrame" name="layoutFrame"/>
       <widget class="ColumnPreferencesFrame" name="columnFrame"/>
       <widget class="FontColorPreferencesFrame" name="fontandcolorFrame"/>
-      <widget class="WelcomePagePreferencesFrame" name="welcomePageFrame"/>
       <widget class="CapturePreferencesFrame" name="captureFrame"/>
       <widget class="UatFrame" name="expertFrame"/>
-      <widget class="UatFrame" name="aggregationFrame"/>
       <widget class="UatFrame" name="filterExpressonsFrame"/>
       <widget class="RsaKeysFrame" name="rsaKeysFrame"/>
       <widget class="QFrame" name="advancedFrame">
@@ -100,12 +98,6 @@
           <property name="uniformRowHeights">
            <bool>true</bool>
           </property>
-          <property name="selectionMode">
-           <enum>QAbstractItemView::ContiguousSelection</enum>
-          </property>
-          <property name="selectionBehavior">
-           <enum>QAbstractItemView::SelectRows</enum>
-          </property>
          </widget>
         </item>
        </layout>
@@ -148,12 +140,6 @@
    <class>FontColorPreferencesFrame</class>
    <extends>QFrame</extends>
    <header>font_color_preferences_frame.h</header>
-   <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>WelcomePagePreferencesFrame</class>
-   <extends>QFrame</extends>
-   <header>welcome_page_preferences_frame.h</header>
    <container>1</container>
   </customwidget>
   <customwidget>

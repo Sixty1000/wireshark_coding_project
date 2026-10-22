@@ -24,7 +24,8 @@
 #include <QFileInfo>
 #include <QVariant>
 
-#include <ui/qt/utils/theme_manager.h>
+#include <epan/prefs.h>
+#include <ui/qt/utils/color_utils.h>
 
 #include <ui/all_files_wildcard.h>
 
@@ -47,21 +48,16 @@ QWidget * ExtcapArgumentFileSelection::createEditor(QWidget * parent)
     QString buttonText(UTF8_HORIZONTAL_ELLIPSIS);
     QString buttonClearText(tr("Clear"));
 
-    bool isFolder = (_argument->arg_type == EXTCAP_ARG_FOLDERSELECT);
-
     QWidget * fileWidget = new QWidget(parent);
     QHBoxLayout * editLayout = new QHBoxLayout();
     QMargins margins = editLayout->contentsMargins();
     editLayout->setContentsMargins(0, 0, 0, margins.bottom());
     fileWidget->setContentsMargins(margins.left(), margins.right(), 0, margins.bottom());
-
     QPushButton * buttonSelect = new QPushButton(buttonText, fileWidget);
     QPushButton * buttonClear = new QPushButton(buttonClearText, fileWidget);
 
     textBox = new QLineEdit(text, parent);
-    /* When the entry isn't required to already exist, allow the user to type a path
-     * directly instead of only being able to pick one via the buttons below. */
-    textBox->setReadOnly(fileExists());
+    textBox->setReadOnly(true);
 
     /* Value is empty if no file is selected */
     const char *prefval = (_argument->pref_valptr && (*_argument->pref_valptr)) ? *_argument->pref_valptr : NULL;
@@ -80,11 +76,8 @@ QWidget * ExtcapArgumentFileSelection::createEditor(QWidget * parent)
         buttonSelect->setToolTip(QString().fromUtf8(_argument->tooltip));
     }
 
-    connect(buttonSelect, &QPushButton::clicked, this,
-            isFolder ? &ExtcapArgumentFileSelection::openFolderDialog : &ExtcapArgumentFileSelection::openFileDialog);
+    connect(buttonSelect, &QPushButton::clicked, this, &ExtcapArgumentFileSelection::openFileDialog);
     connect(buttonClear, &QPushButton::clicked, this, &ExtcapArgumentFileSelection::clearFilename);
-    if (! textBox->isReadOnly())
-        connect(textBox, &QLineEdit::textChanged, this, &ExtcapArgumentFileSelection::onStringChanged);
 
     editLayout->addWidget(textBox);
     editLayout->addWidget(buttonSelect);
@@ -123,7 +116,7 @@ void ExtcapArgumentFileSelection::openFileDialog()
     {
         /* UI should check that the file exists */
         filename = WiresharkFileDialog::getOpenFileName((QWidget*)(textBox->parent()),
-            tr("%1 Open File").arg(QString::fromUtf8(_argument->display)),
+            QString().fromUtf8(_argument->display) + " " + tr("Open File"),
             workingDir.absolutePath(), fileExt);
     }
     else
@@ -132,33 +125,13 @@ void ExtcapArgumentFileSelection::openFileDialog()
          * (e.g. boolflag argument if user wants to always overwrite the file)
          */
         filename = WiresharkFileDialog::getSaveFileName((QWidget*)(textBox->parent()),
-            tr("%1 Select File").arg(QString::fromUtf8(_argument->display)),
+            QString().fromUtf8(_argument->display) + " " + tr("Select File"),
             workingDir.absolutePath(), fileExt, nullptr, QFileDialog::Option::DontConfirmOverwrite);
     }
 
     if (! filename.isEmpty() && (! fileExists() || QFileInfo(filename).exists()))
     {
         textBox->setText(filename);
-        emit valueChanged();
-    }
-}
-
-/* opens the folder dialog */
-void ExtcapArgumentFileSelection::openFolderDialog()
-{
-    QString filename = textBox->text();
-
-    QDir workingDir = QDir::currentPath();
-    if (QFileInfo(filename).exists())
-        workingDir = QFileInfo(filename).isDir() ? QDir(filename) : QFileInfo(filename).dir();
-
-    QString dirName = WiresharkFileDialog::getExistingDirectory((QWidget*)(textBox->parent()),
-        tr("%1 Select Folder").arg(QString::fromUtf8(_argument->display)),
-        workingDir.absolutePath());
-
-    if (! dirName.isEmpty())
-    {
-        textBox->setText(dirName);
         emit valueChanged();
     }
 }
@@ -171,22 +144,21 @@ void ExtcapArgumentFileSelection::clearFilename()
 
 bool ExtcapArgumentFileSelection::isValid()
 {
-    bool valid = true;
+    bool valid = false;
 
     if (textBox->text().length() > 0)
     {
-        QFileInfo info(textBox->text());
-
         if (_argument->fileexists)
-            valid = info.exists();
-
-        if (valid && info.exists())
-            valid = (_argument->arg_type == EXTCAP_ARG_FOLDERSELECT) ? info.isDir() : info.isFile();
+            valid = QFileInfo(textBox->text()).exists();
+        else
+            valid = true;
     }
-    else if (isRequired())
-        valid = false;
+    else if (! isRequired())
+        valid = true;
 
-    ThemeManager::setValidationState(textBox, valid ? QString() : QStringLiteral("invalid"));
+    QString lblInvalidColor = ColorUtils::fromColorT(prefs.gui_text_invalid).name();
+    QString txtStyle("QLineEdit { background-color: %1; } ");
+    textBox->setStyleSheet(txtStyle.arg(valid ? QString("") : lblInvalidColor));
 
     return valid;
 }

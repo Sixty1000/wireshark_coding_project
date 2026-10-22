@@ -1,4 +1,4 @@
-/* packet-xmpp-core.c
+/* xmpp-core.c
  * Wireshark's XMPP dissector.
  *
  * Copyright 2011, Mariusz Okroj <okrojmariusz[]gmail.com>

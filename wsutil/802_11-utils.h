@@ -51,12 +51,8 @@ WS_DLL_PUBLIC
 char*
 ieee80211_mhz_to_str(unsigned freq);
 
-/**
- * @brief Get Frequency given a Channel number and band.
- * @param chan Channel number
- * @param is_bg true if the channel is a b/g channel, false otherwise.
- * @param is_6ghz true if the channel is a 6 GHz channel, false otherwise.
- * @return The equivalent frequency or 0 if no match is found.
+/*
+ * Get Frequency given a Channel number and band.
  */
 WS_DLL_PUBLIC
 unsigned

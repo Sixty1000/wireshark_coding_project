@@ -2,7 +2,8 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-# from suite_dfilter.dfiltertest import *
+import pytest
+from suite_dfilter.dfiltertest import *
 
 class TestFunctionString:
     trace_file = "dhcp.pcap"
@@ -70,11 +71,6 @@ class TestFunctionMaxMin:
         dfilter = 'max(5060, 5070) == udp.srcport'
         checkDFilterCount(dfilter, 1)
 
-    def text_max_6(self, checkDFilterCount):
-        # Extraneous negative numbers don't affect anything.
-        dfilter = 'max(udp.srcport, udp.dstport, -200) == 5060'
-        checkDFilterCount(dfilter, 2)
-
 class TestFunctionAbs:
     trace_file = "dhcp.pcapng"
 
@@ -124,24 +120,4 @@ class TestFunctionNested:
         # udp.payload does not exist. Check that len(udp.payload) + 2
         # resolves to NULL, not to 2.
         dfilter = 'min(len(tcp.payload[2:]) + 2, len(udp.payload[2:]) + 2) == 153'
-        checkDFilterCount(dfilter, 1)
-
-class TestFunctionDouble:
-    trace_file = "dhcp.pcapng"
-
-    # Observer differences in precision and how they affect equality tests
-    def test_function_double_1(self, checkDFilterCount):
-        dfilter = 'double(len(udp.payload)) / double(udp.time_relative) == 3883.9942311262157'
-        checkDFilterCount(dfilter, 1)
-
-    def test_function_double_2(self, checkDFilterCount):
-        dfilter = 'float(double(len(udp.payload)) / double(udp.time_relative)) == 3883.994140625'
-        checkDFilterCount(dfilter, 1)
-
-    def test_function_float_1(self, checkDFilterCount):
-        dfilter = 'float(len(udp.payload)) / float(udp.time_relative) == 3883.9941111147282'
-        checkDFilterCount(dfilter, 1)
-
-    def test_function_float_2(self, checkDFilterCount):
-        dfilter = 'float(float(len(udp.payload)) / float(udp.time_relative)) == 3883.994140625'
         checkDFilterCount(dfilter, 1)

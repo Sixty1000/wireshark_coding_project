@@ -19,8 +19,7 @@
 #include <epan/conversation.h>
 #include <epan/reassemble.h>
 #include <epan/proto_data.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
+
 #include <wsutil/str_util.h>
 
 #include "packet-ber.h"
@@ -743,7 +742,7 @@ dissect_parameter_group(tvbuff_t *tvb, int offset, proto_tree *tree,
 		param_type = tvb_get_uint8(tvb, offset);
 		param_tree = proto_tree_add_subtree(pg_tree, tvb, offset, -1,
 			ett_ses_param, &ti,
-			val_to_str_ext(pinfo->pool, param_type, &param_vals_ext, "Unknown parameter type (0x%02x)"));
+			val_to_str_ext(param_type, &param_vals_ext, "Unknown parameter type (0x%02x)"));
 		param_str = val_to_str_ext_const(param_type, &param_vals_ext, "Unknown");
 		proto_tree_add_item(param_tree, hf_ses_parameter_type, tvb, offset, 1, ENC_BIG_ENDIAN);
 		offset++;
@@ -812,7 +811,7 @@ dissect_parameters(tvbuff_t *tvb, int offset, uint16_t len, proto_tree *tree,
 	{
 		param_type = tvb_get_uint8(tvb, offset);
 		param_tree = proto_tree_add_subtree(ses_tree, tvb, offset, -1, ett_ses_param, &ti,
-		    val_to_str_ext(pinfo->pool, param_type, &param_vals_ext,
+		    val_to_str_ext(param_type, &param_vals_ext,
 		      "Unknown parameter type (0x%02x)"));
 		param_str = val_to_str_ext_const(param_type, &param_vals_ext, "Unknown");
 		proto_tree_add_item(param_tree, hf_ses_parameter_type, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -903,7 +902,7 @@ dissect_spdu(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree,
 
 	if(connectionless) {
 		col_add_str(pinfo->cinfo, COL_INFO,
-			    val_to_str_ext(pinfo->pool, type, &ses_vals_ext, "Unknown SPDU type (0x%02x)"));
+			    val_to_str_ext(type, &ses_vals_ext, "Unknown SPDU type (0x%02x)"));
 		if (tree) {
 			ti = proto_tree_add_item(tree, proto_clses, tvb, offset,
 				-1, ENC_NA);
@@ -915,7 +914,7 @@ dissect_spdu(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree,
 	}
 	else if (tokens) {
 		col_add_str(pinfo->cinfo, COL_INFO,
-			    val_to_str(pinfo->pool, type, ses_category0_vals, "Unknown SPDU type (0x%02x)"));
+			    val_to_str(type, ses_category0_vals, "Unknown SPDU type (0x%02x)"));
 		if (tree) {
 			ti = proto_tree_add_item(tree, proto_ses, tvb, offset,
 			    -1, ENC_NA);
@@ -925,7 +924,7 @@ dissect_spdu(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree,
 		}
 	} else {
 		col_add_str(pinfo->cinfo, COL_INFO,
-			    val_to_str_ext(pinfo->pool, type, &ses_vals_ext, "Unknown SPDU type (0x%02x)"));
+			    val_to_str_ext(type, &ses_vals_ext, "Unknown SPDU type (0x%02x)"));
 		if (tree) {
 			ti = proto_tree_add_item(tree, proto_ses, tvb, offset,
 				-1, ENC_NA);
@@ -1040,7 +1039,7 @@ dissect_spdu(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree,
 static int
 dissect_ses(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	uint8_t type;
 	bool is_clsp = false;
 
@@ -1074,7 +1073,7 @@ static bool
 dissect_ses_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void *data)
 {
 	/* must check that this really is a ses packet */
-	unsigned offset = 0;
+	int offset = 0;
 	uint8_t type;
 	int len_len;
 	uint16_t len;

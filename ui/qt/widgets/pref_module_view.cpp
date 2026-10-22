@@ -62,7 +62,6 @@ void PrefModuleTreeView::setPane(const QString module_name)
     setCurrentIndex(newIndex);
 }
 
-// NOLINTNEXTLINE(misc-no-recursion)
 QModelIndex PrefModuleTreeView::findModule(QModelIndex& parent, const QString& name)
 {
     QModelIndex findIndex, modelIndex;
@@ -77,7 +76,6 @@ QModelIndex PrefModuleTreeView::findModule(QModelIndex& parent, const QString& n
             break;
         }
         if (model()->rowCount(modelIndex) > 0) {
-            // We recurse here, but our depth is limited
             findIndex = findModule(modelIndex, name);
             if (findIndex.isValid())
                 break;

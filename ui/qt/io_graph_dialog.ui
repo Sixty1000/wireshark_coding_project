@@ -55,10 +55,6 @@
 &lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;Move left 1 pixel&lt;/td&gt;&lt;/th&gt;
 &lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;Move up 1 pixel&lt;/td&gt;&lt;/th&gt;
 &lt;tr&gt;&lt;th&gt;&lt;i&gt;Shift+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;Move down 1 pixel&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;Move right 100 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;Move left 100 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;Move up 100 pixels&lt;/td&gt;&lt;/th&gt;
-&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;Move down 100 pixels&lt;/td&gt;&lt;/th&gt;
 
 &lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;Go to packet under cursor&lt;/td&gt;&lt;/th&gt;
 
@@ -101,14 +97,14 @@
      <item>
       <widget class="StockIconToolButton" name="deleteToolButton">
        <property name="toolTip">
-        <string>Remove the selected graphs.</string>
+        <string>Remove the selected graph(s).</string>
        </property>
       </widget>
      </item>
      <item>
       <widget class="StockIconToolButton" name="copyToolButton">
        <property name="toolTip">
-        <string>Duplicate the selected graphs.</string>
+        <string>Duplicate the selected graph(s).</string>
        </property>
        <property name="text">
         <string/>
@@ -121,7 +117,7 @@
         <bool>false</bool>
        </property>
        <property name="toolTip">
-        <string>Move the selected graphs upwards.</string>
+        <string>Move the selected graph(s) upwards.</string>
        </property>
       </widget>
      </item>
@@ -131,7 +127,7 @@
         <bool>false</bool>
        </property>
        <property name="toolTip">
-        <string>Move the selected graphs downwards.</string>
+        <string>Move the selected graph(s) downwards.</string>
        </property>
       </widget>
      </item>
@@ -215,6 +211,46 @@
       <widget class="QComboBox" name="intervalComboBox"/>
      </item>
      <item>
+      <spacer name="horizontalSpacer_2">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="todCheckBox">
+       <property name="text">
+        <string>Time of day</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer_5">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="logCheckBox">
+       <property name="text">
+        <string>Log scale</string>
+       </property>
+      </widget>
+     </item>
+     <item>
       <spacer name="horizontalSpacer_1">
        <property name="orientation">
         <enum>Qt::Horizontal</enum>
@@ -231,6 +267,26 @@
       <widget class="QCheckBox" name="automaticUpdateCheckBox">
        <property name="text">
         <string>Automatic update</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer_6">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="enableLegendCheckBox">
+       <property name="text">
+        <string>Enable legend</string>
        </property>
       </widget>
      </item>
@@ -368,50 +424,6 @@
     <string>Shift+Down</string>
    </property>
   </action>
-  <action name="actionMoveUp100">
-   <property name="text">
-    <string>Move Up 100 Pixels</string>
-   </property>
-   <property name="toolTip">
-    <string>Move Up 100 Pixels</string>
-   </property>
-   <property name="shortcut">
-    <string>Alt+Up</string>
-   </property>
-  </action>
-  <action name="actionMoveLeft100">
-   <property name="text">
-    <string>Move Left 100 Pixels</string>
-   </property>
-   <property name="toolTip">
-    <string>Move Left 100 Pixels</string>
-   </property>
-   <property name="shortcut">
-    <string>Alt+Left</string>
-   </property>
-  </action>
-  <action name="actionMoveRight100">
-   <property name="text">
-    <string>Move Right 100 Pixels</string>
-   </property>
-   <property name="toolTip">
-    <string>Move Right 100 Pixels</string>
-   </property>
-   <property name="shortcut">
-    <string>Alt+Right</string>
-   </property>
-  </action>
-  <action name="actionMoveDown100">
-   <property name="text">
-    <string>Move Down 100 Pixels</string>
-   </property>
-   <property name="toolTip">
-    <string>Move Down 100 Pixels</string>
-   </property>
-   <property name="shortcut">
-    <string>Alt+Down</string>
-   </property>
-  </action>
   <action name="actionGoToPacket">
    <property name="text">
     <string>Go To Packet Under Cursor</string>
@@ -443,39 +455,6 @@
    </property>
    <property name="shortcut">
     <string>T</string>
-   </property>
-  </action>
-  <action name="actionTimeOfDay">
-   <property name="text">
-    <string>Time of day</string>
-   </property>
-   <property name="toolTip">
-    <string>Toggle X-axis between relative time and time of day</string>
-   </property>
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
-  </action>
-  <action name="actionLogScale">
-   <property name="text">
-    <string>Log scale</string>
-   </property>
-   <property name="toolTip">
-    <string>Toggle Y-axis between logarithmic and linear scale</string>
-   </property>
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
-  </action>
-  <action name="actionMA">
-   <property name="text">
-    <string>EWMA moving average</string>
-   </property>
-   <property name="toolTip">
-    <string>Toggle Moving Average algorithm between EWMA and SMA</string>
-   </property>
-   <property name="checkable">
-    <bool>true</bool>
    </property>
   </action>
   <action name="actionCrosshairs">

@@ -1,7 +1,7 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-ess.c                                                               */
-/* asn2wrs.py -b -k -q -L -p ess -c ./ess.cnf -s ./packet-ess-template -D . -O ../.. ExtendedSecurityServices.asn */
+/* asn2wrs.py -b -k -C -q -L -p ess -c ./ess.cnf -s ./packet-ess-template -D . -O ../.. ExtendedSecurityServices.asn */
 
 /* packet-ess.c
  * Routines for RFC 2634 and RFC 5035 Extended Security Services packet
@@ -29,6 +29,10 @@
 #include "packet-cms.h"
 #include "packet-x509ce.h"
 #include "packet-x509af.h"
+
+#define PNAME  "Extended Security Services"
+#define PSNAME "ESS"
+#define PFNAME "ess"
 
 void proto_register_ess(void);
 void proto_reg_handoff_ess(void);
@@ -242,8 +246,8 @@ ess_dissect_attribute_flags (tvbuff_t *tvb, asn1_ctx_t *actx)
 
 
 
-static unsigned
-dissect_ess_ContentIdentifier(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_ContentIdentifier(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_octet_string(implicit_tag, actx, tree, tvb, offset, hf_index,
                                        NULL);
 
@@ -258,8 +262,8 @@ static const value_string ess_AllOrFirstTier_vals[] = {
 };
 
 
-static unsigned
-dissect_ess_AllOrFirstTier(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_AllOrFirstTier(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 NULL);
 
@@ -271,8 +275,8 @@ static const ber_sequence_t SEQUENCE_OF_GeneralNames_sequence_of[1] = {
   { &hf_ess_receiptList_item, BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_x509ce_GeneralNames },
 };
 
-static unsigned
-dissect_ess_SEQUENCE_OF_GeneralNames(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_SEQUENCE_OF_GeneralNames(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       SEQUENCE_OF_GeneralNames_sequence_of, hf_index, ett_ess_SEQUENCE_OF_GeneralNames);
 
@@ -292,8 +296,8 @@ static const ber_choice_t ReceiptsFrom_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ess_ReceiptsFrom(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_ReceiptsFrom(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  ReceiptsFrom_choice, hf_index, ett_ess_ReceiptsFrom,
                                  NULL);
@@ -306,8 +310,8 @@ static const ber_sequence_t SEQUENCE_SIZE_1_ub_receiptsTo_OF_GeneralNames_sequen
   { &hf_ess_receiptsTo_item , BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_x509ce_GeneralNames },
 };
 
-static unsigned
-dissect_ess_SEQUENCE_SIZE_1_ub_receiptsTo_OF_GeneralNames(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_SEQUENCE_SIZE_1_ub_receiptsTo_OF_GeneralNames(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_constrained_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                                   1, ub_receiptsTo, SEQUENCE_SIZE_1_ub_receiptsTo_OF_GeneralNames_sequence_of, hf_index, ett_ess_SEQUENCE_SIZE_1_ub_receiptsTo_OF_GeneralNames);
 
@@ -322,8 +326,8 @@ static const ber_sequence_t ReceiptRequest_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ess_ReceiptRequest(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_ReceiptRequest(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ReceiptRequest_sequence, hf_index, ett_ess_ReceiptRequest);
 
@@ -337,8 +341,8 @@ static const value_string ess_ESSVersion_vals[] = {
 };
 
 
-static unsigned
-dissect_ess_ESSVersion(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_ESSVersion(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 NULL);
 
@@ -347,8 +351,8 @@ dissect_ess_ESSVersion(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset
 
 
 
-static unsigned
-dissect_ess_OCTET_STRING(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_OCTET_STRING(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_octet_string(implicit_tag, actx, tree, tvb, offset, hf_index,
                                        NULL);
 
@@ -364,8 +368,8 @@ static const ber_sequence_t Receipt_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ess_Receipt(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_Receipt(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   col_set_str(actx->pinfo->cinfo, COL_PROTOCOL, "ESS");
   col_set_str(actx->pinfo->cinfo, COL_INFO, "Signed Receipt");
     offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
@@ -378,8 +382,8 @@ dissect_ess_Receipt(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U
 
 
 
-static unsigned
-dissect_ess_UTF8String_SIZE_1_MAX(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_UTF8String_SIZE_1_MAX(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_constrained_restricted_string(implicit_tag, BER_UNI_TAG_UTF8String,
                                                         actx, tree, tvb, offset,
                                                         1, NO_BOUND, hf_index, NULL);
@@ -394,8 +398,8 @@ static const ber_sequence_t ContentHints_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ess_ContentHints(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_ContentHints(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ContentHints_sequence, hf_index, ett_ess_ContentHints);
 
@@ -404,8 +408,8 @@ dissect_ess_ContentHints(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offs
 
 
 
-static unsigned
-dissect_ess_MsgSigDigest(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_MsgSigDigest(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_octet_string(implicit_tag, actx, tree, tvb, offset, hf_index,
                                        NULL);
 
@@ -420,8 +424,8 @@ static const ber_sequence_t ContentReference_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ess_ContentReference(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_ContentReference(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ContentReference_sequence, hf_index, ett_ess_ContentReference);
 
@@ -430,8 +434,8 @@ dissect_ess_ContentReference(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned 
 
 
 
-static unsigned
-dissect_ess_SecurityPolicyIdentifier(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_SecurityPolicyIdentifier(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_object_identifier(implicit_tag, actx, tree, tvb, offset, hf_index, NULL);
 
   return offset;
@@ -449,8 +453,8 @@ static const value_string ess_SecurityClassification_vals[] = {
 };
 
 
-static unsigned
-dissect_ess_SecurityClassification(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_SecurityClassification(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_constrained_integer(implicit_tag, actx, tree, tvb, offset,
                                                             0U, ub_integer_options, hf_index, NULL);
 
@@ -459,8 +463,8 @@ dissect_ess_SecurityClassification(bool implicit_tag _U_, tvbuff_t *tvb _U_, uns
 
 
 
-static unsigned
-dissect_ess_PrintableString_SIZE_1_ub_privacy_mark_length(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_PrintableString_SIZE_1_ub_privacy_mark_length(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_constrained_restricted_string(implicit_tag, BER_UNI_TAG_PrintableString,
                                                         actx, tree, tvb, offset,
                                                         1, ub_privacy_mark_length, hf_index, NULL);
@@ -481,8 +485,8 @@ static const ber_choice_t ESSPrivacyMark_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ess_ESSPrivacyMark(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_ESSPrivacyMark(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  ESSPrivacyMark_choice, hf_index, ett_ess_ESSPrivacyMark,
                                  NULL);
@@ -492,8 +496,8 @@ dissect_ess_ESSPrivacyMark(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned of
 
 
 
-static unsigned
-dissect_ess_T_type(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_T_type(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_object_identifier_str(implicit_tag, actx, tree, tvb, offset, hf_ess_SecurityCategory_type_OID, &object_identifier_id);
 
   return offset;
@@ -501,8 +505,8 @@ dissect_ess_T_type(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_
 
 
 
-static unsigned
-dissect_ess_T_value(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_T_value(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset=call_ber_oid_callback(object_identifier_id, tvb, offset, actx->pinfo, tree, NULL);
 
 
@@ -516,8 +520,8 @@ static const ber_sequence_t SecurityCategory_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ess_SecurityCategory(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_SecurityCategory(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    SecurityCategory_sequence, hf_index, ett_ess_SecurityCategory);
 
@@ -529,8 +533,8 @@ static const ber_sequence_t SecurityCategories_set_of[1] = {
   { &hf_ess_SecurityCategories_item, BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_ess_SecurityCategory },
 };
 
-static unsigned
-dissect_ess_SecurityCategories(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_SecurityCategories(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_constrained_set_of(implicit_tag, actx, tree, tvb, offset,
                                              1, ub_security_categories, SecurityCategories_set_of, hf_index, ett_ess_SecurityCategories);
 
@@ -546,8 +550,8 @@ static const ber_sequence_t ESSSecurityLabel_set[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ess_ESSSecurityLabel(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_ESSSecurityLabel(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set(implicit_tag, actx, tree, tvb, offset,
                               ESSSecurityLabel_set, hf_index, ett_ess_ESSSecurityLabel);
 
@@ -556,8 +560,8 @@ dissect_ess_ESSSecurityLabel(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned 
 
 
 
-static unsigned
-dissect_ess_T_restrictiveTagName(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_T_restrictiveTagName(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_object_identifier_str(implicit_tag, actx, tree, tvb, offset, hf_index, &object_identifier_id);
 
   return offset;
@@ -565,17 +569,15 @@ dissect_ess_T_restrictiveTagName(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsig
 
 
 
-static unsigned
-dissect_ess_T_restrictiveAttributeFlags(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  tvbuff_t *attributes = NULL;
+static int
+dissect_ess_T_restrictiveAttributeFlags(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  tvbuff_t *attributes;
 
     offset = dissect_ber_bitstring(implicit_tag, actx, tree, tvb, offset,
                                     NULL, 0, hf_index, -1,
                                     &attributes);
 
-  if (attributes != NULL) {
-    ess_dissect_attribute_flags (attributes, actx);
-  }
+  ess_dissect_attribute_flags (attributes, actx);
 
 
   return offset;
@@ -588,8 +590,8 @@ static const ber_sequence_t RestrictiveTag_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ess_RestrictiveTag(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_RestrictiveTag(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    RestrictiveTag_sequence, hf_index, ett_ess_RestrictiveTag);
 
@@ -598,8 +600,8 @@ dissect_ess_RestrictiveTag(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned of
 
 
 
-static unsigned
-dissect_ess_T_tagName(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_T_tagName(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_object_identifier_str(implicit_tag, actx, tree, tvb, offset, hf_index, &object_identifier_id);
 
   return offset;
@@ -607,8 +609,8 @@ dissect_ess_T_tagName(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset 
 
 
 
-static unsigned
-dissect_ess_SecurityAttribute(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_SecurityAttribute(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   uint32_t attribute;
 
     offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
@@ -625,8 +627,8 @@ static const ber_sequence_t SET_OF_SecurityAttribute_set_of[1] = {
   { &hf_ess_attributeList_item, BER_CLASS_UNI, BER_UNI_TAG_INTEGER, BER_FLAGS_NOOWNTAG, dissect_ess_SecurityAttribute },
 };
 
-static unsigned
-dissect_ess_SET_OF_SecurityAttribute(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_SET_OF_SecurityAttribute(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_set_of(implicit_tag, actx, tree, tvb, offset,
                                  SET_OF_SecurityAttribute_set_of, hf_index, ett_ess_SET_OF_SecurityAttribute);
 
@@ -640,8 +642,8 @@ static const ber_sequence_t EnumeratedTag_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ess_EnumeratedTag(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_EnumeratedTag(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    EnumeratedTag_sequence, hf_index, ett_ess_EnumeratedTag);
 
@@ -650,8 +652,8 @@ dissect_ess_EnumeratedTag(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned off
 
 
 
-static unsigned
-dissect_ess_T_permissiveTagName(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_T_permissiveTagName(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_object_identifier_str(implicit_tag, actx, tree, tvb, offset, hf_index, &object_identifier_id);
 
   return offset;
@@ -659,17 +661,15 @@ dissect_ess_T_permissiveTagName(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsign
 
 
 
-static unsigned
-dissect_ess_T_permissiveAttributeFlags(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  tvbuff_t *attributes = NULL;
+static int
+dissect_ess_T_permissiveAttributeFlags(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  tvbuff_t *attributes;
 
     offset = dissect_ber_bitstring(implicit_tag, actx, tree, tvb, offset,
                                     NULL, 0, hf_index, -1,
                                     &attributes);
 
-  if (attributes != NULL) {
-    ess_dissect_attribute_flags (attributes, actx);
-  }
+  ess_dissect_attribute_flags (attributes, actx);
 
 
   return offset;
@@ -682,8 +682,8 @@ static const ber_sequence_t PermissiveTag_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ess_PermissiveTag(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_PermissiveTag(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    PermissiveTag_sequence, hf_index, ett_ess_PermissiveTag);
 
@@ -692,8 +692,8 @@ dissect_ess_PermissiveTag(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned off
 
 
 
-static unsigned
-dissect_ess_T_informativeTagName(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_T_informativeTagName(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_object_identifier_str(implicit_tag, actx, tree, tvb, offset, hf_index, &object_identifier_id);
 
   return offset;
@@ -701,17 +701,15 @@ dissect_ess_T_informativeTagName(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsig
 
 
 
-static unsigned
-dissect_ess_T_informativeAttributeFlags(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  tvbuff_t *attributes = NULL;
+static int
+dissect_ess_T_informativeAttributeFlags(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  tvbuff_t *attributes;
 
     offset = dissect_ber_bitstring(implicit_tag, actx, tree, tvb, offset,
                                     NULL, 0, hf_index, -1,
                                     &attributes);
 
-  if (attributes != NULL) {
-    ess_dissect_attribute_flags (attributes, actx);
-  }
+  ess_dissect_attribute_flags (attributes, actx);
 
 
   return offset;
@@ -730,8 +728,8 @@ static const ber_choice_t FreeFormField_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ess_FreeFormField(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_FreeFormField(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  FreeFormField_choice, hf_index, ett_ess_FreeFormField,
                                  NULL);
@@ -746,8 +744,8 @@ static const ber_sequence_t InformativeTag_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ess_InformativeTag(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_InformativeTag(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    InformativeTag_sequence, hf_index, ett_ess_InformativeTag);
 
@@ -759,8 +757,8 @@ static const ber_sequence_t EquivalentLabels_sequence_of[1] = {
   { &hf_ess_EquivalentLabels_item, BER_CLASS_UNI, BER_UNI_TAG_SET, BER_FLAGS_NOOWNTAG, dissect_ess_ESSSecurityLabel },
 };
 
-static unsigned
-dissect_ess_EquivalentLabels(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_EquivalentLabels(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       EquivalentLabels_sequence_of, hf_index, ett_ess_EquivalentLabels);
 
@@ -780,8 +778,8 @@ static const ber_choice_t EntityIdentifier_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ess_EntityIdentifier(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_EntityIdentifier(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  EntityIdentifier_choice, hf_index, ett_ess_EntityIdentifier,
                                  NULL);
@@ -791,8 +789,8 @@ dissect_ess_EntityIdentifier(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned 
 
 
 
-static unsigned
-dissect_ess_GeneralizedTime(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_GeneralizedTime(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_GeneralizedTime(implicit_tag, actx, tree, tvb, offset, hf_index);
 
   return offset;
@@ -800,8 +798,8 @@ dissect_ess_GeneralizedTime(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned o
 
 
 
-static unsigned
-dissect_ess_NULL(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_NULL(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_null(implicit_tag, actx, tree, tvb, offset, hf_index);
 
   return offset;
@@ -812,8 +810,8 @@ static const ber_sequence_t SEQUENCE_SIZE_1_MAX_OF_GeneralNames_sequence_of[1] =
   { &hf_ess_insteadOf_item  , BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_x509ce_GeneralNames },
 };
 
-static unsigned
-dissect_ess_SEQUENCE_SIZE_1_MAX_OF_GeneralNames(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_SEQUENCE_SIZE_1_MAX_OF_GeneralNames(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_constrained_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                                   1, NO_BOUND, SEQUENCE_SIZE_1_MAX_OF_GeneralNames_sequence_of, hf_index, ett_ess_SEQUENCE_SIZE_1_MAX_OF_GeneralNames);
 
@@ -835,8 +833,8 @@ static const ber_choice_t MLReceiptPolicy_choice[] = {
   { 0, NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ess_MLReceiptPolicy(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_MLReceiptPolicy(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  MLReceiptPolicy_choice, hf_index, ett_ess_MLReceiptPolicy,
                                  NULL);
@@ -852,8 +850,8 @@ static const ber_sequence_t MLData_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ess_MLData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_MLData(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    MLData_sequence, hf_index, ett_ess_MLData);
 
@@ -865,8 +863,8 @@ static const ber_sequence_t MLExpansionHistory_sequence_of[1] = {
   { &hf_ess_MLExpansionHistory_item, BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_ess_MLData },
 };
 
-static unsigned
-dissect_ess_MLExpansionHistory(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_MLExpansionHistory(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_constrained_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                                   1, ub_ml_expansion_history, MLExpansionHistory_sequence_of, hf_index, ett_ess_MLExpansionHistory);
 
@@ -875,8 +873,8 @@ dissect_ess_MLExpansionHistory(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigne
 
 
 
-static unsigned
-dissect_ess_Hash(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_Hash(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_octet_string(implicit_tag, actx, tree, tvb, offset, hf_index,
                                        NULL);
 
@@ -890,8 +888,8 @@ static const ber_sequence_t IssuerSerial_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ess_IssuerSerial(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_IssuerSerial(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    IssuerSerial_sequence, hf_index, ett_ess_IssuerSerial);
 
@@ -905,8 +903,8 @@ static const ber_sequence_t ESSCertID_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ess_ESSCertID(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_ESSCertID(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ESSCertID_sequence, hf_index, ett_ess_ESSCertID);
 
@@ -918,8 +916,8 @@ static const ber_sequence_t SEQUENCE_OF_ESSCertID_sequence_of[1] = {
   { &hf_ess_certs_item      , BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_ess_ESSCertID },
 };
 
-static unsigned
-dissect_ess_SEQUENCE_OF_ESSCertID(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_SEQUENCE_OF_ESSCertID(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       SEQUENCE_OF_ESSCertID_sequence_of, hf_index, ett_ess_SEQUENCE_OF_ESSCertID);
 
@@ -931,8 +929,8 @@ static const ber_sequence_t SEQUENCE_OF_PolicyInformation_sequence_of[1] = {
   { &hf_ess_policies_item   , BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_x509ce_PolicyInformation },
 };
 
-static unsigned
-dissect_ess_SEQUENCE_OF_PolicyInformation(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_SEQUENCE_OF_PolicyInformation(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       SEQUENCE_OF_PolicyInformation_sequence_of, hf_index, ett_ess_SEQUENCE_OF_PolicyInformation);
 
@@ -946,8 +944,8 @@ static const ber_sequence_t SigningCertificate_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ess_SigningCertificate(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_SigningCertificate(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    SigningCertificate_sequence, hf_index, ett_ess_SigningCertificate);
 
@@ -962,8 +960,8 @@ static const ber_sequence_t ESSCertIDv2_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ess_ESSCertIDv2(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_ESSCertIDv2(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ESSCertIDv2_sequence, hf_index, ett_ess_ESSCertIDv2);
 
@@ -975,8 +973,8 @@ static const ber_sequence_t SEQUENCE_OF_ESSCertIDv2_sequence_of[1] = {
   { &hf_ess_certsV2_item    , BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_ess_ESSCertIDv2 },
 };
 
-static unsigned
-dissect_ess_SEQUENCE_OF_ESSCertIDv2(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_SEQUENCE_OF_ESSCertIDv2(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence_of(implicit_tag, actx, tree, tvb, offset,
                                       SEQUENCE_OF_ESSCertIDv2_sequence_of, hf_index, ett_ess_SEQUENCE_OF_ESSCertIDv2);
 
@@ -990,8 +988,8 @@ static const ber_sequence_t SigningCertificateV2_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-static unsigned
-dissect_ess_SigningCertificateV2(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+static int
+dissect_ess_SigningCertificateV2(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    SigningCertificateV2_sequence, hf_index, ett_ess_SigningCertificateV2);
 
@@ -1001,105 +999,105 @@ dissect_ess_SigningCertificateV2(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsig
 /*--- PDUs ---*/
 
 static int dissect_ReceiptRequest_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_ess_ReceiptRequest(false, tvb, offset, &asn1_ctx, tree, hf_ess_ReceiptRequest_PDU);
   return offset;
 }
 static int dissect_ContentIdentifier_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_ess_ContentIdentifier(false, tvb, offset, &asn1_ctx, tree, hf_ess_ContentIdentifier_PDU);
   return offset;
 }
 static int dissect_Receipt_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_ess_Receipt(false, tvb, offset, &asn1_ctx, tree, hf_ess_Receipt_PDU);
   return offset;
 }
 static int dissect_ContentHints_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_ess_ContentHints(false, tvb, offset, &asn1_ctx, tree, hf_ess_ContentHints_PDU);
   return offset;
 }
 static int dissect_MsgSigDigest_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_ess_MsgSigDigest(false, tvb, offset, &asn1_ctx, tree, hf_ess_MsgSigDigest_PDU);
   return offset;
 }
 static int dissect_ContentReference_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_ess_ContentReference(false, tvb, offset, &asn1_ctx, tree, hf_ess_ContentReference_PDU);
   return offset;
 }
 int dissect_ess_ESSSecurityLabel_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_ess_ESSSecurityLabel(false, tvb, offset, &asn1_ctx, tree, hf_ess_ess_ESSSecurityLabel_PDU);
   return offset;
 }
 static int dissect_RestrictiveTag_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_ess_RestrictiveTag(false, tvb, offset, &asn1_ctx, tree, hf_ess_RestrictiveTag_PDU);
   return offset;
 }
 static int dissect_EnumeratedTag_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_ess_EnumeratedTag(false, tvb, offset, &asn1_ctx, tree, hf_ess_EnumeratedTag_PDU);
   return offset;
 }
 static int dissect_PermissiveTag_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_ess_PermissiveTag(false, tvb, offset, &asn1_ctx, tree, hf_ess_PermissiveTag_PDU);
   return offset;
 }
 static int dissect_InformativeTag_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_ess_InformativeTag(false, tvb, offset, &asn1_ctx, tree, hf_ess_InformativeTag_PDU);
   return offset;
 }
 static int dissect_EquivalentLabels_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_ess_EquivalentLabels(false, tvb, offset, &asn1_ctx, tree, hf_ess_EquivalentLabels_PDU);
   return offset;
 }
 static int dissect_MLExpansionHistory_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_ess_MLExpansionHistory(false, tvb, offset, &asn1_ctx, tree, hf_ess_MLExpansionHistory_PDU);
   return offset;
 }
 static int dissect_SigningCertificate_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_ess_SigningCertificate(false, tvb, offset, &asn1_ctx, tree, hf_ess_SigningCertificate_PDU);
   return offset;
 }
 static int dissect_SigningCertificateV2_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_ess_SigningCertificateV2(false, tvb, offset, &asn1_ctx, tree, hf_ess_SigningCertificateV2_PDU);
@@ -1259,11 +1257,11 @@ void proto_register_ess(void) {
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_ess_restrictiveTagName,
-      { "tagName", "ess.restrictiveTagName",
+      { "tagName", "ess.tagName",
         FT_OID, BASE_NONE, NULL, 0,
         "T_restrictiveTagName", HFILL }},
     { &hf_ess_restrictiveAttributeFlags,
-      { "attributeFlags", "ess.restrictiveAttributeFlags",
+      { "attributeFlags", "ess.attributeFlags",
         FT_BYTES, BASE_NONE, NULL, 0,
         "T_restrictiveAttributeFlags", HFILL }},
     { &hf_ess_tagName,
@@ -1279,15 +1277,15 @@ void proto_register_ess(void) {
         FT_INT32, BASE_DEC, NULL, 0,
         NULL, HFILL }},
     { &hf_ess_permissiveTagName,
-      { "tagName", "ess.permissiveTagName",
+      { "tagName", "ess.tagName",
         FT_OID, BASE_NONE, NULL, 0,
         "T_permissiveTagName", HFILL }},
     { &hf_ess_permissiveAttributeFlags,
-      { "attributeFlags", "ess.permissiveAttributeFlags",
+      { "attributeFlags", "ess.attributeFlags",
         FT_BYTES, BASE_NONE, NULL, 0,
         "T_permissiveAttributeFlags", HFILL }},
     { &hf_ess_informativeTagName,
-      { "tagName", "ess.informativeTagName",
+      { "tagName", "ess.tagName",
         FT_OID, BASE_NONE, NULL, 0,
         "T_informativeTagName", HFILL }},
     { &hf_ess_attributes,
@@ -1295,7 +1293,7 @@ void proto_register_ess(void) {
         FT_UINT32, BASE_DEC, VALS(ess_FreeFormField_vals), 0,
         "FreeFormField", HFILL }},
     { &hf_ess_informativeAttributeFlags,
-      { "bitSetAttributes", "ess.informativeAttributeFlags",
+      { "bitSetAttributes", "ess.bitSetAttributes",
         FT_BYTES, BASE_NONE, NULL, 0,
         "T_informativeAttributeFlags", HFILL }},
     { &hf_ess_securityAttributes,
@@ -1371,7 +1369,7 @@ void proto_register_ess(void) {
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_ess_certsV2,
-      { "certs", "ess.certsV2",
+      { "certs", "ess.certs",
         FT_UINT32, BASE_DEC, NULL, 0,
         "SEQUENCE_OF_ESSCertIDv2", HFILL }},
     { &hf_ess_certsV2_item,
@@ -1461,7 +1459,7 @@ void proto_register_ess(void) {
   static module_t *ess_module;
 
   /* Register protocol */
-  proto_ess = proto_register_protocol("Extended Security Services", "ESS", "ess");
+  proto_ess = proto_register_protocol(PNAME, PSNAME, PFNAME);
 
   /* Register fields and subtrees */
   proto_register_field_array(proto_ess, hf, array_length(hf));

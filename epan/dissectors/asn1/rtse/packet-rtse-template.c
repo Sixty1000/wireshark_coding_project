@@ -17,7 +17,6 @@
 #include <epan/reassemble.h>
 #include <epan/asn1.h>
 #include <epan/expert.h>
-#include <epan/proto_data.h>
 
 #include <wsutil/array.h>
 #include <wsutil/str_util.h>
@@ -28,6 +27,10 @@
 #include "packet-ros.h"
 #include "packet-rtse.h"
 
+#define PNAME  "X.228 OSI Reliable Transfer Service"
+#define PSNAME "RTSE"
+#define PFNAME "rtse"
+
 void proto_register_rtse(void);
 void proto_reg_handoff_rtse(void);
 
@@ -36,6 +39,8 @@ static int proto_rtse;
 
 static bool open_request=false;
 static uint32_t app_proto=0;
+
+static proto_tree *top_tree;
 
 /* Preferences */
 static bool rtse_reassemble = true;
@@ -129,7 +134,7 @@ call_rtse_oid_callback(const char *oid, tvbuff_t *tvb, int offset, packet_info *
 
     next_tvb = tvb_new_subset_remaining(tvb, offset);
 
-    if ((len = dissector_try_string_with_data(rtse_oid_dissector_table, oid, next_tvb, pinfo, tree, true, data)) == 0) {
+    if ((len = dissector_try_string(rtse_oid_dissector_table, oid, next_tvb, pinfo, tree, data)) == 0) {
         proto_item *item;
         proto_tree *next_tree;
 
@@ -146,11 +151,10 @@ call_rtse_oid_callback(const char *oid, tvbuff_t *tvb, int offset, packet_info *
     return offset;
 }
 
-static unsigned
-call_rtse_external_type_callback(bool implicit_tag _U_, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_)
+static int
+call_rtse_external_type_callback(bool implicit_tag _U_, tvbuff_t *tvb, int offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_)
 {
     const char    *oid = NULL;
-    proto_tree    *top_tree;
 
     if (actx->external.indirect_ref_present) {
 
@@ -163,7 +167,6 @@ call_rtse_external_type_callback(bool implicit_tag _U_, tvbuff_t *tvb, unsigned 
         oid = actx->external.direct_reference;
     }
 
-    top_tree = p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_rtse, 0);
     if (oid)
         offset = call_rtse_oid_callback(oid, tvb, offset, actx->pinfo, top_tree ? top_tree : tree, actx->private_data);
 
@@ -178,8 +181,8 @@ call_rtse_external_type_callback(bool implicit_tag _U_, tvbuff_t *tvb, unsigned 
 static int
 dissect_rtse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* data)
 {
-    unsigned offset = 0;
-    unsigned old_offset;
+    int offset = 0;
+    int old_offset;
     proto_item *item;
     proto_tree *tree;
     proto_tree *next_tree=NULL;
@@ -200,7 +203,7 @@ dissect_rtse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* d
     session = (struct SESSION_DATA_STRUCTURE*)data;
 
     /* save parent_tree so subdissectors can create new top nodes */
-    p_add_proto_data(pinfo->pool, pinfo, proto_rtse, 0, parent_tree);
+    top_tree=parent_tree;
 
     asn1_ctx.private_data = session;
 
@@ -258,7 +261,7 @@ dissect_rtse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* d
             /* ROS won't do this for us */
             session->ros_op = (ROS_OP_INVOKE | ROS_OP_ARGUMENT);
             /*offset=*/dissect_ber_external_type(false, tree, next_tvb, 0, &asn1_ctx, -1, call_rtse_external_type_callback);
-            p_set_proto_data(pinfo->pool, pinfo, proto_rtse, 0, NULL);
+            top_tree = NULL;
             /* Return other than 0 to indicate that we handled this packet */
             return 1;
         } else {
@@ -282,7 +285,7 @@ dissect_rtse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* d
         }
     }
 
-    p_set_proto_data(pinfo->pool, pinfo, proto_rtse, 0, NULL);
+    top_tree = NULL;
     return tvb_captured_length(tvb);
 }
 
@@ -351,7 +354,7 @@ void proto_register_rtse(void) {
   module_t *rtse_module;
 
   /* Register protocol */
-  proto_rtse = proto_register_protocol("X.228 OSI Reliable Transfer Service", "RTSE", "rtse");
+  proto_rtse = proto_register_protocol(PNAME, PSNAME, PFNAME);
   rtse_handle = register_dissector("rtse", dissect_rtse, proto_rtse);
   /* Register fields and subtrees */
   proto_register_field_array(proto_rtse, hf, array_length(hf));

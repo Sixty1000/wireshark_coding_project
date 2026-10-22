@@ -21,6 +21,7 @@ import os
 import re
 import sys
 
+
 this_dir = os.path.dirname(__file__)
 
 
@@ -181,7 +182,7 @@ def main():
     for tap_name in tap_config.sections():
         tap_d = tap_config[tap_name]
         enum_types = []
-        if 'enum_types' in tap_d:
+        if 'enum_types' in tap_d.keys():
             enum_types = tap_d['enum_types'].split(' ')
         (code, doc, file_enums) = get_tap_info(tap_name, tap_d['header_file'], tap_d['struct_name'], enum_types)
         c_body += code

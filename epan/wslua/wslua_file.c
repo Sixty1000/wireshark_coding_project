@@ -444,26 +444,17 @@ WSLUA_METHOD File_write(lua_State* L) {
 }
 
 WSLUA_METAMETHOD File__tostring(lua_State* L) {
-    /* Returns a short label of the form `File: mode=<mode>` where
-       <mode> is `reader` or `writer`, with `(expired)` appended
-       once the FileHandler callback that produced it has returned.
-       The previous form exposed the raw C pointer as `<ptr>` which
-       added no useful information. */
+    /* Generates a string of debug info for the File object */
     File f = toFile(L,1);
 
     if (!f) {
-        lua_pushstring(L, "File: (null)");
-        WSLUA_RETURN(1);
-    }
-
-    const char *mode = f->wdh ? "writer" : "reader";
-    if (f->expired) {
-        lua_pushfstring(L, "File: mode=%s (expired)", mode);
+        lua_pushstring(L,"File pointer is NULL!");
     } else {
-        lua_pushfstring(L, "File: mode=%s", mode);
+        lua_pushfstring(L,"File expired=%s, handle=%s, is %s", f->expired? "true":"false", f->file? "<ptr>":"<NULL>",
+            f->wdh? "writer":"reader");
     }
 
-    WSLUA_RETURN(1); /* A short label identifying the file. */
+    WSLUA_RETURN(1); /* String of debug information. */
 }
 
 /* We free the struct we malloc'ed, but not the FILE_T/dumper in it of course */
@@ -483,7 +474,7 @@ static int File_get_compressed(lua_State* L) {
     if (file_is_reader(f)) {
         lua_pushboolean(L, file_iscompressed(f->file));
     } else {
-        lua_pushboolean(L, f->wdh->compression_type != WS_FILE_UNCOMPRESSED);
+        lua_pushboolean(L, f->wdh->compression_type != WTAP_UNCOMPRESSED);
     }
     return 1;
 }

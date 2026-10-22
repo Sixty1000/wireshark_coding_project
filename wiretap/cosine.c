@@ -11,7 +11,7 @@
 
 #include "config.h"
 #include "cosine.h"
-#include "wtap_module.h"
+#include "wtap-int.h"
 #include "file_wrappers.h"
 
 #include <stdlib.h>
@@ -149,13 +149,14 @@ static bool empty_line(const char *line);
 static int64_t cosine_seek_next_packet(wtap *wth, int *err, char **err_info,
 	char *hdr);
 static bool cosine_check_file_type(wtap *wth, int *err, char **err_info);
-static bool cosine_read(wtap *wth, wtap_rec *rec,
+static bool cosine_read(wtap *wth, wtap_rec *rec, Buffer *buf,
 	int *err, char **err_info, int64_t *data_offset);
 static bool cosine_seek_read(wtap *wth, int64_t seek_off,
-	wtap_rec *rec, int *err, char **err_info);
-static bool parse_cosine_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
+	wtap_rec *rec, Buffer *buf, int *err, char **err_info);
+static bool parse_cosine_packet(FILE_T fh, wtap_rec *rec, Buffer* buf,
 	char *line, int *err, char **err_info);
-static int parse_single_hex_dump_line(char* rec, Buffer *buf);
+static int parse_single_hex_dump_line(char* rec, uint8_t *buf,
+	unsigned byte_offset);
 
 static int cosine_file_type_subtype = -1;
 
@@ -277,7 +278,7 @@ wtap_open_return_val cosine_open(wtap *wth, int *err, char **err_info)
 }
 
 /* Find the next packet and parse it; called from wtap_read(). */
-static bool cosine_read(wtap *wth, wtap_rec *rec,
+static bool cosine_read(wtap *wth, wtap_rec *rec, Buffer *buf,
     int *err, char **err_info, int64_t *data_offset)
 {
 	int64_t	offset;
@@ -290,13 +291,13 @@ static bool cosine_read(wtap *wth, wtap_rec *rec,
 	*data_offset = offset;
 
 	/* Parse the header and convert the ASCII hex dump to binary data */
-	return parse_cosine_packet(wth, wth->fh, rec, line, err, err_info);
+	return parse_cosine_packet(wth->fh, rec, buf, line, err, err_info);
 }
 
 /* Used to read packets in random-access fashion */
 static bool
 cosine_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
-	int *err, char **err_info)
+	Buffer *buf, int *err, char **err_info)
 {
 	char	line[COSINE_LINE_LENGTH];
 
@@ -312,7 +313,8 @@ cosine_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
 	}
 
 	/* Parse the header and convert the ASCII hex dump to binary data */
-	return parse_cosine_packet(wth, wth->random_fh, rec, line, err, err_info);
+	return parse_cosine_packet(wth->random_fh, rec, buf, line, err,
+	    err_info);
 }
 
 /* Parses a packet record header. There are two possible formats:
@@ -321,7 +323,7 @@ cosine_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
     2) output to PE without date and time
         l2-tx (FR:3/7/1:1), Length:18, Pro:0, Off:0, Pri:0, RM:0, Err:0 [0x4000, 0x0] */
 static bool
-parse_cosine_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
+parse_cosine_packet(FILE_T fh, wtap_rec *rec, Buffer *buf,
     char *line, int *err, char **err_info)
 {
 	union wtap_pseudo_header *pseudo_header = &rec->rec_header.packet_header.pseudo_header;
@@ -331,6 +333,7 @@ parse_cosine_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
 	unsigned	code1, code2;
 	char	if_name[COSINE_MAX_IF_NAME_LEN] = "", direction[6] = "";
 	struct	tm tm;
+	uint8_t *pd;
 	int	i, hex_lines, n, caplen = 0;
 
 	if (sscanf(line, "%4d-%2d-%2d,%2d:%2d:%2d.%9d:",
@@ -379,7 +382,7 @@ parse_cosine_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
 		return false;
 	}
 
-	wtap_setup_packet_rec(rec, wth->file_encap);
+	rec->rec_type = REC_TYPE_PACKET;
 	rec->block = wtap_block_create(WTAP_BLOCK_PACKET);
 	rec->presence_flags = WTAP_HAS_TS|WTAP_HAS_CAP_LEN;
 	tm.tm_year = yy - 1900;
@@ -428,7 +431,8 @@ parse_cosine_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
 	pseudo_header->cosine.err = error;
 
 	/* Make sure we have enough room for the packet */
-	ws_buffer_assure_space(&rec->data, pkt_len);
+	ws_buffer_assure_space(buf, pkt_len);
+	pd = ws_buffer_start_ptr(buf);
 
 	/* Calculate the number of hex dump lines, each
 	 * containing 16 bytes of data */
@@ -445,7 +449,7 @@ parse_cosine_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
 		if (empty_line(line)) {
 			break;
 		}
-		if ((n = parse_single_hex_dump_line(line, &rec->data)) == -1) {
+		if ((n = parse_single_hex_dump_line(line, pd, i*16)) == -1) {
 			*err = WTAP_ERR_BAD_FILE;
 			*err_info = g_strdup("cosine: hex dump line doesn't have 16 numbers");
 			return false;
@@ -462,23 +466,25 @@ parse_cosine_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
  *
  * Returns number of bytes successfully read, -1 if bad.  */
 static int
-parse_single_hex_dump_line(char* rec, Buffer *buf)
+parse_single_hex_dump_line(char* rec, uint8_t *buf, unsigned byte_offset)
 {
-	int num_items_scanned;
-	unsigned char bytes[16];
+	int num_items_scanned, i;
+	unsigned int bytes[16];
 
-	num_items_scanned = sscanf(rec, "%02hhx %02hhx %02hhx %02hhx %02hhx %02hhx %02hhx %02hhx %02hhx %02hhx %02hhx %02hhx %02hhx %02hhx %02hhx %02hhx",
+	num_items_scanned = sscanf(rec, "%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
 			       &bytes[0], &bytes[1], &bytes[2], &bytes[3],
 			       &bytes[4], &bytes[5], &bytes[6], &bytes[7],
 			       &bytes[8], &bytes[9], &bytes[10], &bytes[11],
 			       &bytes[12], &bytes[13], &bytes[14], &bytes[15]);
-	if (num_items_scanned <= 0)
+	if (num_items_scanned == 0)
 		return -1;
 
 	if (num_items_scanned > 16)
 		num_items_scanned = 16;
 
-	ws_buffer_append(buf, bytes, num_items_scanned);
+	for (i=0; i<num_items_scanned; i++) {
+		buf[byte_offset + i] = (uint8_t)bytes[i];
+	}
 
 	return num_items_scanned;
 }

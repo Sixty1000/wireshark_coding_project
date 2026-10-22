@@ -21,7 +21,7 @@
 
 #include <epan/packet.h>
 #include <epan/capture_dissectors.h>
-#include <epan/tfs.h>
+#include <epan/exceptions.h>
 #include <epan/ptvcursor.h>
 #include <epan/prefs.h>
 #include <epan/expert.h>
@@ -29,7 +29,6 @@
 #include <wsutil/802_11-utils.h>
 #include <wsutil/pint.h>
 #include <wsutil/str_util.h>
-#include <wsutil/array.h>
 
 /*
  * Per-Packet Information (PPI) header.
@@ -324,9 +323,6 @@ static dissector_handle_t pcap_pktdata_handle;
 static dissector_handle_t ppi_gps_handle, ppi_vector_handle, ppi_sensor_handle, ppi_antenna_handle;
 static dissector_handle_t ppi_fnet_handle;
 
-/* Cached protocol identifier */
-static int proto_aggregate;
-
 static const true_false_string tfs_ppi_head_flag_alignment = { "32-bit aligned", "Not aligned" };
 static const true_false_string tfs_tsft_ms = { "milliseconds", "microseconds" };
 static const true_false_string tfs_ht20_40 = { "HT40", "HT20" };
@@ -366,11 +362,11 @@ capture_ppi(const unsigned char *pd, int offset _U_, int len, capture_packet_inf
     uint32_t dlt;
     unsigned ppi_len;
 
-    ppi_len = pletohu16(pd+2);
+    ppi_len = pletoh16(pd+2);
     if(ppi_len < PPI_V0_HEADER_LEN || !BYTES_ARE_IN_FRAME(0, len, ppi_len))
         return false;
 
-    dlt = pletohu32(pd+4);
+    dlt = pletoh32(pd+4);
 
     return try_capture_dissector("ppi", dlt, pd, ppi_len, len, cpinfo, pseudo_header);
 }
@@ -407,20 +403,20 @@ ptvcursor_add_invalid_check(ptvcursor_t *csr, int hf, int len, uint64_t invalid_
 }
 
 static void
-add_ppi_field_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned *offset)
+add_ppi_field_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int *offset)
 {
     ptvcursor_t *csr;
 
     csr = ptvcursor_new(pinfo->pool, tree, tvb, *offset);
     ptvcursor_add(csr, hf_ppi_field_type, 2, ENC_LITTLE_ENDIAN);
     ptvcursor_add(csr, hf_ppi_field_len, 2, ENC_LITTLE_ENDIAN);
-    *offset=ptvcursor_current_offset(csr);
     ptvcursor_free(csr);
+    *offset=ptvcursor_current_offset(csr);
 }
 
 /* XXX - The main dissection function in the 802.11 dissector has the same name. */
 static void
-dissect_80211_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, unsigned data_len, struct ieee_802_11_phdr *phdr)
+dissect_80211_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, int data_len, struct ieee_802_11_phdr *phdr)
 {
     proto_tree  *ftree;
     proto_item  *ti;
@@ -605,7 +601,7 @@ dissect_80211_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsign
 }
 
 static void
-dissect_80211n_mac(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, unsigned data_len, bool add_subtree, uint32_t *n_mac_flags, uint32_t *ampdu_id, struct ieee_802_11_phdr *phdr)
+dissect_80211n_mac(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, int data_len, bool add_subtree, uint32_t *n_mac_flags, uint32_t *ampdu_id, struct ieee_802_11_phdr *phdr)
 {
     proto_tree  *ftree       = tree;
     ptvcursor_t *csr;
@@ -668,7 +664,7 @@ dissect_80211n_mac(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned
 }
 
 static void
-dissect_80211n_mac_phy(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, unsigned data_len, uint32_t *n_mac_flags, uint32_t *ampdu_id, struct ieee_802_11_phdr *phdr)
+dissect_80211n_mac_phy(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, int data_len, uint32_t *n_mac_flags, uint32_t *ampdu_id, struct ieee_802_11_phdr *phdr)
 {
     proto_tree  *ftree;
     proto_item  *ti;
@@ -752,7 +748,7 @@ dissect_80211n_mac_phy(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsi
 }
 
 static void
-dissect_aggregation_extension(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, unsigned data_len)
+dissect_aggregation_extension(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, int data_len)
 {
     proto_tree *ftree;
     ptvcursor_t *csr;
@@ -773,7 +769,7 @@ dissect_aggregation_extension(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
 }
 
 static void
-dissect_8023_extension(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, unsigned data_len)
+dissect_8023_extension(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, int data_len)
 {
     proto_tree  *ftree;
     ptvcursor_t *csr;
@@ -816,9 +812,9 @@ dissect_ppi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
     proto_tree    *agg_tree    = NULL;
     proto_item    *ti          = NULL;
     tvbuff_t      *next_tvb;
-    unsigned       offset      = 0;
+    int            offset      = 0;
     unsigned       version, flags;
-    unsigned       tot_len, data_len;
+    int            tot_len, data_len;
     unsigned       data_type;
     uint32_t       dlt;
     uint32_t       n_ext_flags = 0;
@@ -925,7 +921,7 @@ dissect_ppi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
             else /* we found a suitable dissector */
             {
                 /* skip over the ppi_fieldheader, and pass it off to the dedicated GPS dissector */
-                next_tvb = tvb_new_subset_length(tvb, offset + 4, data_len - 4);
+                next_tvb = tvb_new_subset_length_caplen(tvb, offset + 4, data_len - 4 , -1);
                 call_dissector(ppi_gps_handle, next_tvb, pinfo, ppi_tree);
             }
             break;
@@ -938,7 +934,7 @@ dissect_ppi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
             else /* we found a suitable dissector */
             {
                 /* skip over the ppi_fieldheader, and pass it off to the dedicated VECTOR dissector */
-                next_tvb = tvb_new_subset_length(tvb, offset + 4, data_len - 4);
+                next_tvb = tvb_new_subset_length_caplen(tvb, offset + 4, data_len - 4 , -1);
                 call_dissector(ppi_vector_handle, next_tvb, pinfo, ppi_tree);
             }
             break;
@@ -951,7 +947,7 @@ dissect_ppi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
             else /* we found a suitable dissector */
             {
                 /* skip over the ppi_fieldheader, and pass it off to the dedicated SENSOR dissector */
-                next_tvb = tvb_new_subset_length(tvb, offset + 4, data_len - 4);
+                next_tvb = tvb_new_subset_length_caplen(tvb, offset + 4, data_len - 4 , -1);
                 call_dissector(ppi_sensor_handle, next_tvb, pinfo, ppi_tree);
             }
             break;
@@ -964,7 +960,7 @@ dissect_ppi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
             else /* we found a suitable dissector */
             {
                 /* skip over the ppi_fieldheader, and pass it off to the dedicated ANTENNA dissector */
-                next_tvb = tvb_new_subset_length(tvb, offset + 4, data_len - 4);
+                next_tvb = tvb_new_subset_length_caplen(tvb, offset + 4, data_len - 4 , -1);
                 call_dissector(ppi_antenna_handle, next_tvb, pinfo, ppi_tree);
             }
             break;
@@ -977,7 +973,7 @@ dissect_ppi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
             else /* we found a suitable dissector */
             {
                 /* skip over the ppi_fieldheader, and pass it off to the dedicated FNET dissector */
-                next_tvb = tvb_new_subset_length(tvb, offset + 4, data_len - 4);
+                next_tvb = tvb_new_subset_length_caplen(tvb, offset + 4, data_len - 4 , -1);
                 call_dissector(ppi_fnet_handle, next_tvb, pinfo, ppi_tree);
             }
             break;
@@ -1117,7 +1113,7 @@ dissect_ppi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
             }
         }
         if (ampdu_len > AGGREGATE_MAX) {
-            proto_tree_add_expert_format_remaining(ppi_tree, pinfo, &ei_ppi_invalid_length, tvb, offset, "Aggregate length greater than maximum (%u)", AGGREGATE_MAX);
+            proto_tree_add_expert_format(ppi_tree, pinfo, &ei_ppi_invalid_length, tvb, offset, -1, "Aggregate length greater than maximum (%u)", AGGREGATE_MAX);
             return offset;
         }
 
@@ -1167,7 +1163,8 @@ dissect_ppi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
         if (fd_head && !DOT11N_MORE_AGGREGATES(n_ext_flags)) {
             if (tree) {
-                ti = proto_tree_add_protocol_format(tree, proto_aggregate,
+                ti = proto_tree_add_protocol_format(tree,
+                    proto_get_id_by_filter_name("wlan_aggregate"),
                     tvb, 0, tot_len, "IEEE 802.11 Aggregate MPDU");
                 agg_tree = proto_item_add_subtree(ti, ett_ampdu);
             }
@@ -1586,8 +1583,6 @@ proto_reg_handoff_ppi(void)
     dissector_add_uint("wtap_encap", WTAP_ENCAP_PPI, ppi_handle);
     ppi_cap_handle = create_capture_dissector_handle(capture_ppi, proto_ppi);
     capture_dissector_add_uint("wtap_encap", WTAP_ENCAP_PPI, ppi_cap_handle);
-
-    proto_aggregate = proto_get_id_by_filter_name("wlan_aggregate");
 }
 
 /*

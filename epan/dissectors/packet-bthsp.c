@@ -18,8 +18,6 @@
 #include <epan/strutil.h>
 #include <epan/unit_strings.h>
 
-#include <wsutil/strtoi.h>
-
 #include "packet-btrfcomm.h"
 #include "packet-btsdp.h"
 
@@ -78,13 +76,6 @@ enum reassemble_state_t {
     REASSEMBLE_DONE
 };
 
-/* Upper bound on the length of a reassembled message. V.250 and the
- * HSP/HFP specifications don't limit the length of an AT command or
- * response. This limit is arbitrary, well above any real command line;
- * it keeps the offsets from overflowing and stops an unterminated stream
- * from growing the same message without end. */
-#define MAX_REASSEMBLED_LENGTH  (64 * 1024)
-
 typedef struct _fragment_t {
     uint32_t                 interface_id;
     uint32_t                 adapter_id;
@@ -96,7 +87,6 @@ typedef struct _fragment_t {
     unsigned                 length;
     uint8_t                 *data;
     struct _fragment_t      *previous_fragment;
-    struct _fragment_t      *first_fragment;
 
     unsigned                 reassemble_start_offset;
     unsigned                 reassemble_end_offset;
@@ -143,12 +133,15 @@ static const unit_name_string units_slash15 = { "/15", NULL };
 void proto_register_bthsp(void);
 void proto_reg_handoff_bthsp(void);
 
-static uint32_t get_uint_parameter(const uint8_t *parameter_stream, int parameter_length)
+static uint32_t get_uint_parameter(uint8_t *parameter_stream, int parameter_length)
 {
-    uint32_t       value;
-    const uint8_t *unused;
+    uint32_t     value;
+    char *val;
 
-    ws_buftou32(parameter_stream, parameter_length, &unused, &value);
+    val = (uint8_t *) wmem_alloc(wmem_packet_scope(), parameter_length + 1);
+    memcpy(val, parameter_stream, parameter_length);
+    val[parameter_length] = '\0';
+    value = (uint32_t) g_ascii_strtoull(val, NULL, 10);
 
     return value;
 }
@@ -299,7 +292,7 @@ dissect_at_command(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         return tvb_reported_length(tvb);
 
     if (!command_number) {
-        proto_tree_add_item(tree, hf_data, tvb, offset, length, ENC_ASCII);
+        proto_tree_add_item(tree, hf_data, tvb, offset, length, ENC_NA | ENC_ASCII);
         col_str = (char *) wmem_alloc(pinfo->pool, length + 1);
         tvb_memcpy(tvb, col_str, offset, length);
         col_str[length] = '\0';
@@ -335,12 +328,12 @@ dissect_at_command(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
                 if (i_char) {
                     proto_tree_add_item(command_tree, hf_at_ignored, tvb, offset,
-                        i_char, ENC_NA);
+                        i_char, ENC_NA | ENC_ASCII);
                     offset += i_char;
                 }
 
                 proto_tree_add_item(command_tree, hf_at_command_line_prefix,
-                        tvb, offset, 2, ENC_ASCII);
+                        tvb, offset, 2, ENC_NA | ENC_ASCII);
                 offset += 2;
                 i_char += 2;
                 at_command = at_stream;
@@ -380,14 +373,14 @@ dissect_at_command(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         i_at_cmd = at_cmds;
         if (at_command[0] == '\r') {
             pitem = proto_tree_add_item(command_tree, hf_at_cmd, tvb, offset - 2,
-                    2, ENC_ASCII);
+                    2, ENC_NA | ENC_ASCII);
             i_at_cmd = NULL;
         } else {
             pitem = NULL;
             while (i_at_cmd->name) {
                 if (g_str_has_prefix(&at_command[0], i_at_cmd->name)) {
                     pitem = proto_tree_add_item(command_tree, hf_at_cmd, tvb, offset,
-                            (int) strlen(i_at_cmd->name), ENC_ASCII);
+                            (int) strlen(i_at_cmd->name), ENC_NA | ENC_ASCII);
                     proto_item_append_text(pitem, " (%s)", i_at_cmd->long_name);
                     break;
                 }
@@ -396,7 +389,7 @@ dissect_at_command(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
             if (!pitem) {
                 pitem = proto_tree_add_item(command_tree, hf_at_cmd, tvb, offset,
-                        i_char, ENC_ASCII);
+                        i_char, ENC_NA | ENC_ASCII);
             }
         }
 
@@ -555,14 +548,14 @@ dissect_at_command(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                 if (type == TYPE_ACTION || type == TYPE_RESPONSE) {
                     if (i_at_cmd && (i_at_cmd->dissect_parameter != NULL &&
                             !i_at_cmd->dissect_parameter(tvb, pinfo, parameters_tree, offset, role,
-                            type, (uint8_t*)&at_command[i_char], parameter_number, parameter_length, &data) )) {
+                            type, &at_command[i_char], parameter_number, parameter_length, &data) )) {
                         pitem = proto_tree_add_item(parameters_tree,
                                 hf_unknown_parameter, tvb, offset,
-                                parameter_length, ENC_ASCII);
+                                parameter_length, ENC_NA | ENC_ASCII);
                         expert_add_info(pinfo, pitem, &ei_unknown_parameter);
                     } else if (i_at_cmd && i_at_cmd->dissect_parameter == NULL) {
                         proto_tree_add_item(parameters_tree, hf_parameter, tvb, offset,
-                                parameter_length, ENC_ASCII);
+                                parameter_length, ENC_NA | ENC_ASCII);
                     }
                 }
             }
@@ -766,7 +759,7 @@ dissect_bthsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     if (role == ROLE_UNKNOWN) {
         col_append_fstr(pinfo->cinfo, COL_INFO, "Data: %s",
                 tvb_format_text(pinfo->pool, tvb, 0, tvb_reported_length(tvb)));
-        proto_tree_add_item(main_tree, hf_data, tvb, 0, tvb_captured_length(tvb), ENC_ASCII);
+        proto_tree_add_item(main_tree, hf_data, tvb, 0, tvb_captured_length(tvb), ENC_NA | ENC_ASCII);
         return tvb_reported_length(tvb);
     }
 
@@ -799,12 +792,6 @@ dissect_bthsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
             previous_fragment = NULL;
         }
 
-        if (previous_fragment &&
-                (uint64_t)previous_fragment->idx + previous_fragment->length + tvb_reported_length(tvb) > MAX_REASSEMBLED_LENGTH) {
-            /* Too long; give up on the previous message and start a new one */
-            previous_fragment = NULL;
-        }
-
         frame_number = pinfo->num;
 
         key[0].length = 1;
@@ -833,7 +820,6 @@ dissect_bthsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         fragment->length            = tvb_reported_length(tvb);
         fragment->data              = (uint8_t *) wmem_alloc(wmem_file_scope(), fragment->length);
         fragment->previous_fragment = previous_fragment;
-        fragment->first_fragment    = (fragment->idx > 0) ? previous_fragment->first_fragment : fragment;
         tvb_memcpy(tvb, fragment->data, offset, fragment->length);
 
         wmem_tree_insert32_array(fragments, key, fragment);
@@ -882,7 +868,10 @@ dissect_bthsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
                     fragment->chandle == chandle &&
                     fragment->dlci == dlci &&
                     fragment->role == role) {
-                i_fragment = fragment->first_fragment;
+                i_fragment = fragment;
+                while (i_fragment && i_fragment->idx > 0) {
+                    i_fragment = i_fragment->previous_fragment;
+                }
 
                 if (i_length + 1 == length &&
                         role == ROLE_HS &&
@@ -975,7 +964,7 @@ dissect_bthsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
         if (fragment->idx > 0 && fragment->length > 0) {
             proto_tree_add_item(main_tree, hf_fragment, tvb, offset,
-                    tvb_captured_length_remaining(tvb, offset), ENC_ASCII);
+                    tvb_captured_length_remaining(tvb, offset), ENC_ASCII | ENC_NA);
             reassembled_tvb = tvb_new_child_real_data(tvb, at_data,
                     fragment->idx + fragment->length, fragment->idx + fragment->length);
             add_new_data_source(pinfo, reassembled_tvb, "Reassembled HSP");

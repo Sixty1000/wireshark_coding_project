@@ -20,7 +20,6 @@
 #include <QPropertyAnimation>
 
 #include <ui/qt/widgets/stock_icon_tool_button.h>
-#include <ui/qt/utils/themes/contrast_adapt_icon.h>
 #include "main_application.h"
 
 // To do:
@@ -63,7 +62,7 @@ delayed_create_progress_dlg(void *top_level_window, const char *task_title, cons
                             float progress)
 {
     progdlg_t *progress_dialog = create_progress_dlg(top_level_window, task_title, item_title, terminate_is_stop, stop_flag);
-    update_progress_dlg(progress_dialog, progress, NULL);
+    update_progress_dlg(progress_dialog, progress, item_title);
     return progress_dialog;
 }
 
@@ -71,12 +70,12 @@ delayed_create_progress_dlg(void *top_level_window, const char *task_title, cons
  * Update the progress information of the progress bar box.
  */
 void
-update_progress_dlg(progdlg_t *dlg, float percentage, const char *status)
+update_progress_dlg(progdlg_t *dlg, float percentage, const char *)
 {
     if (!dlg) return;
 
     dlg->progress_frame->setValue((int)(percentage * 100));
-    dlg->progress_frame->setStatus(status);
+
     /*
      * Flush out the update and process any input events.
      */
@@ -107,37 +106,19 @@ ProgressFrame::ProgressFrame(QWidget *parent) :
 {
     ui->setupUi(this);
 
-    setAccessibleName(tr("Task progress"));
-    setAccessibleDescription(tr("Shows the progress of the current background task."));
-
-    ui->progressBar->setAccessibleName(tr("Progress bar"));
-    ui->progressBar->setAccessibleDescription(tr("Shows the percentage of the task that has been completed."));
-    ui->stopButton->setAccessibleName(tr("Stop"));
-    ui->stopButton->setAccessibleDescription(tr("Stops the current background task."));
-
     progress_dialog_.progress_frame = this;
     progress_dialog_.top_level_window = window();
 
-#ifdef Q_OS_MACOS
+#ifdef Q_OS_MAC
     ui->label->setAttribute(Qt::WA_MacSmallSize, true);
 #endif
 
-    ui->label->setStyleSheet(QStringLiteral(
+    ui->label->setStyleSheet(QString(
             "QLabel {"
             "  background: transparent;"
             "}"));
 
-    ui->progressBar->setStyleSheet(
-#if !defined(Q_OS_MACOS) && !defined(Q_OS_WIN)
-    // Many platform themes and styles customize QProgressBar to look
-    // native, and Qt warns that if a style sheet is set for one part,
-    // then other sub-controls must be styled as well. On KDE, at least,
-    // (and also the old QGnomePlatform theme), setting a style sheet
-    // for the progress bar without also setting a style for the chunk
-    // makes the bar not work properly at all. The Highlight (or Accent)
-    // color is the normal one for the QProgressBar chunk; use that.
-    // https://doc.qt.io/qt-6/stylesheet-examples.html#customizing-qprogressbar
-        QStringLiteral(
+    ui->progressBar->setStyleSheet(QString(
             "QProgressBar {"
             "  max-width: 20em;"
             "  min-height: 0.5em;"
@@ -145,26 +126,9 @@ ProgressFrame::ProgressFrame(QWidget *parent) :
             "  border-bottom: 0px;"
             "  border-top: 0px;"
             "  background: transparent;"
-            "}"
-            "QProgressBar::chunk {"
-            "  background-color: palette(highlight);"
-            "}"
-    )
-#else
-        QStringLiteral(
-            "QProgressBar {"
-            "  max-width: 20em;"
-            "  min-height: 0.5em;"
-            "  max-height: 1em;"
-            "  border-bottom: 0px;"
-            "  border-top: 0px;"
-            "  background: transparent;"
-            "}"
-        )
-#endif
-    );
+            "}"));
 
-    ui->stopButton->setIcon(ContrastAdaptIcon("filter-clear"));
+    ui->stopButton->setStockIcon("x-filter-clear");
     ui->stopButton->setIconSize(QSize(14, 14));
     ui->stopButton->setStyleSheet(
             "QToolButton {"
@@ -181,7 +145,8 @@ ProgressFrame::ProgressFrame(QWidget *parent) :
 
     effect_ = new QGraphicsOpacityEffect(this);
     animation_ = new QPropertyAnimation(effect_, "opacity", this);
-    connect(this, &ProgressFrame::showRequested, this, &ProgressFrame::show);
+    connect(this, SIGNAL(showRequested(bool,bool,bool*)),
+            this, SLOT(show(bool,bool,bool*)));
     hide();
 }
 
@@ -190,50 +155,18 @@ ProgressFrame::~ProgressFrame()
     delete ui;
 }
 
-QString ProgressFrame::elideLabel(const QString &title) const
-{
-    int max_w = fontMetrics().height() * 10; // em-widths, arbitrary
-    int title_w = fontMetrics().horizontalAdvance(title);
-    if (title_w > max_w) {
-        return fontMetrics().elidedText(title, Qt::ElideRight, max_w);
-    }
-
-    return title;
-}
-
-void ProgressFrame::updateLabel()
-{
-    // If we're in the main status bar, should we push this as a status message instead?
-    // Note that the QProgressBar has its own text, but this always ignored
-    // under some styles, e.g. QMacStyle.
-    QString labelString = message_;
-
-    if (!status_.isNull()) {
-        if (!labelString.isNull())
-            labelString.append(QStringLiteral(" "));
-        labelString.append(status_);
-    }
-
-    ui->label->setText(elideLabel(labelString));
-}
-
-void ProgressFrame::setTitle(const QString &title)
-{
-    message_ = title;
-    updateLabel();
-}
-
-void ProgressFrame::setStatus(const QString &status)
-{
-    status_ = status;
-    updateLabel();
-}
-
 struct progdlg *ProgressFrame::showProgress(const QString &title, bool animate, bool terminate_is_stop, bool *stop_flag, int value)
 {
     setMaximumValue(100);
     ui->progressBar->setValue(value);
-    setTitle(title);
+    QString elided_title = title;
+    int max_w = fontMetrics().height() * 20; // em-widths, arbitrary
+    int title_w = fontMetrics().horizontalAdvance(title);
+    if (title_w > max_w) {
+        elided_title = fontMetrics().elidedText(title, Qt::ElideRight, max_w);
+    }
+    // If we're in the main status bar, should we push this as a status message instead?
+    ui->label->setText(elided_title);
     emit showRequested(animate, terminate_is_stop, stop_flag);
     return &progress_dialog_;
 }
@@ -272,24 +205,29 @@ void ProgressFrame::addToButtonBox(QDialogButtonBox *button_box, QObject *main_w
 
     int one_em = progress_frame->fontMetrics().height();
     progress_frame->setMaximumWidth(one_em * 8);
-    connect(main_progress_frame, &ProgressFrame::showRequested, progress_frame, &ProgressFrame::show);
-    connect(main_progress_frame, &ProgressFrame::maximumValueChanged, progress_frame, &ProgressFrame::setMaximumValue);
-    connect(main_progress_frame, &ProgressFrame::valueChanged, progress_frame, &ProgressFrame::setValue);
-    connect(main_progress_frame, &ProgressFrame::setHidden, progress_frame, &ProgressFrame::hide);
+    connect(main_progress_frame, SIGNAL(showRequested(bool,bool,bool*)),
+            progress_frame, SLOT(show(bool,bool,bool*)));
+    connect(main_progress_frame, SIGNAL(maximumValueChanged(int)),
+            progress_frame, SLOT(setMaximumValue(int)));
+    connect(main_progress_frame, SIGNAL(valueChanged(int)),
+            progress_frame, SLOT(setValue(int)));
+    connect(main_progress_frame, SIGNAL(setHidden()),
+            progress_frame, SLOT(hide()));
 
-    connect(progress_frame, &ProgressFrame::stopLoading, main_progress_frame, &ProgressFrame::stopLoading);
+    connect(progress_frame, SIGNAL(stopLoading()),
+            main_progress_frame, SIGNAL(stopLoading()));
 }
 
 void ProgressFrame::captureFileClosing()
 {
     // Hide any paired ProgressFrames and disconnect from them.
-    // Old-style connect
     emit setHidden();
-    disconnect(this, &ProgressFrame::showRequested, nullptr, nullptr);
-    disconnect(this, &ProgressFrame::maximumValueChanged, nullptr, nullptr);
-    disconnect(this, &ProgressFrame::valueChanged, nullptr, nullptr);
+    disconnect(SIGNAL(showRequested(bool,bool,bool*)));
+    disconnect(SIGNAL(maximumValueChanged(int)));
+    disconnect(SIGNAL(valueChanged(int)));
 
-    connect(this, &ProgressFrame::showRequested, this, &ProgressFrame::show);
+    connect(this, SIGNAL(showRequested(bool,bool,bool*)),
+            this, SLOT(show(bool,bool,bool*)));
 }
 
 void ProgressFrame::setValue(int value)
@@ -325,7 +263,7 @@ void ProgressFrame::hide()
     QFrame::hide();
 #ifdef QWINTASKBARPROGRESS_H
     if (taskbar_progress_) {
-        disconnect(this, &ProgressFrame::valueChanged, taskbar_progress_, &QWinTaskbarProgress::setValue);
+        disconnect(this, SIGNAL(valueChanged(int)), taskbar_progress_, SLOT(setValue(int)));
         taskbar_progress_->reset();
         taskbar_progress_->hide();
     }
@@ -369,7 +307,7 @@ void ProgressFrame::show(bool animate, bool terminate_is_stop, bool *stop_flag)
     if (taskbar_progress_) {
         taskbar_progress_->show();
         taskbar_progress_->reset();
-        connect(this, &ProgressFrame::valueChanged, taskbar_progress_, &QWinTaskbarProgress::setValue);
+        connect(this, SIGNAL(valueChanged(int)), taskbar_progress_, SLOT(setValue(int)));
     }
 #endif
 }

@@ -272,11 +272,6 @@ void proto_reg_handoff_dcm(void);
 static bool global_dcm_export_header = true;
 static unsigned global_dcm_export_minsize = 4096;           /* Filter small objects in export */
 
-/* The maximum size for a file in Export Objects can be larger than what
- * we'll put in a tvbuffer, but still put some kind of limit on it. The
- * limit has to be smaller for 32-bit platforms. */
-#define DICOM_EO_MAXSIZE (MIN((uint64_t)SSIZE_MAX,UINT64_C(0x2000000000)))
-
 static bool global_dcm_seq_subtree = true;
 static bool global_dcm_tag_subtree;             /* Only useful for debugging */
 static bool global_dcm_cmd_details = true;              /* Show details in header and info column */
@@ -431,7 +426,7 @@ typedef struct _dicom_eo_t {
     const char    *hostname;
     const char    *filename;
     const char    *content_type;
-    size_t payload_len;
+    uint32_t payload_len;
     const uint8_t *payload_data;
 } dicom_eo_t;
 
@@ -761,39 +756,25 @@ dcm_init(void)
     unsigned   i;
 
     /* Create three hash tables for quick lookups */
-    /* XXX - These are constant hashmaps based on constant structs,
-     * produced by tools/dissector_generators/generate-dcm.py
-     * The two with integer keys could use binary search (alter the
-     * Python script to sort). If a hash table is desired, GNU gperf
-     * or some perfect hash function generator should be used instead
-     * of inserting these on startup. */
     /* Add UID objects to hash table */
-    if (dcm_uid_table == NULL) {
-        dcm_uid_table = wmem_map_new(wmem_epan_scope(), wmem_str_hash, g_str_equal);
-        wmem_map_reserve(dcm_uid_table, array_length(dcm_uid_data));
-        for (i = 0; i < array_length(dcm_uid_data); i++) {
-            wmem_map_insert(dcm_uid_table, (void *) dcm_uid_data[i].value,
-            (void *) &dcm_uid_data[i]);
-        }
+    dcm_uid_table = wmem_map_new(wmem_file_scope(), wmem_str_hash, g_str_equal);
+    for (i = 0; i < array_length(dcm_uid_data); i++) {
+        wmem_map_insert(dcm_uid_table, (void *) dcm_uid_data[i].value,
+        (void *) &dcm_uid_data[i]);
     }
 
     /* Add Tag objects to hash table */
-    if (dcm_tag_table == NULL) {
-        dcm_tag_table = wmem_map_new(wmem_epan_scope(), g_direct_hash, g_direct_equal);
-        wmem_map_reserve(dcm_tag_table, array_length(dcm_tag_data));
-        for (i = 0; i < array_length(dcm_tag_data); i++) {
-            wmem_map_insert(dcm_tag_table, GUINT_TO_POINTER(dcm_tag_data[i].tag),
-            (void *) &dcm_tag_data[i]);
-        }
+    dcm_tag_table = wmem_map_new(wmem_file_scope(), g_direct_hash, g_direct_equal);
+    for (i = 0; i < array_length(dcm_tag_data); i++) {
+        wmem_map_insert(dcm_tag_table, GUINT_TO_POINTER(dcm_tag_data[i].tag),
+        (void *) &dcm_tag_data[i]);
     }
 
-    /* Add Status Values to hash table */
-    if (dcm_status_table == NULL) {
-        dcm_status_table = wmem_map_new(wmem_epan_scope(), g_direct_hash, g_direct_equal);
-        for (i = 0; i < array_length(dcm_status_data); i++) {
-            wmem_map_insert(dcm_status_table, GUINT_TO_POINTER((uint32_t)dcm_status_data[i].value),
-            (void *)&dcm_status_data[i]);
-        }
+   /* Add Status Values to hash table */
+    dcm_status_table = wmem_map_new(wmem_file_scope(), g_direct_hash, g_direct_equal);
+    for (i = 0; i < array_length(dcm_status_data); i++) {
+        wmem_map_insert(dcm_status_table, GUINT_TO_POINTER((uint32_t)dcm_status_data[i].value),
+        (void *)&dcm_status_data[i]);
     }
 }
 
@@ -1287,7 +1268,7 @@ Supports both modes:
   and process_reassembled_data(). In this case all data will be in the last
   PDV, and all its predecessors will have zero data.
 
-- DICOM PDVs are kept separate. Every PDV contains data.
+- DICOM PDVs are keep separate. Every PDV contains data.
 */
 static void
 dcm_export_create_object(packet_info *pinfo, dcm_state_assoc_t *assoc, dcm_state_pdv_t *pdv)
@@ -1302,7 +1283,7 @@ dcm_export_create_object(packet_info *pinfo, dcm_state_assoc_t *assoc, dcm_state
     uint8_t    *pdv_combined = NULL;
     uint8_t    *pdv_combined_curr = NULL;
     uint8_t    *dcm_header = NULL;
-    size_t      pdv_combined_len = 0;
+    uint32_t    pdv_combined_len = 0;
     uint32_t    dcm_header_len = 0;
     uint16_t    cnt_same_pkt = 1;
     char       *filename;
@@ -1318,11 +1299,7 @@ dcm_export_create_object(packet_info *pinfo, dcm_state_assoc_t *assoc, dcm_state
 
     while (pdv_curr->prev && !pdv_curr->prev->is_last_fragment) {
         pdv_curr = pdv_curr->prev;
-        if (ckd_add(&pdv_combined_len, pdv_combined_len, pdv_curr->data_len) ||
-                pdv_combined_len > DICOM_EO_MAXSIZE) {
-            pdv_combined_len = DICOM_EO_MAXSIZE;
-            // We can't break here because we want to rewind to the beginning
-        }
+        pdv_combined_len += pdv_curr->data_len;
     }
 
     /* Count number of PDVs with the same Packet Number */
@@ -1381,58 +1358,28 @@ dcm_export_create_object(packet_info *pinfo, dcm_state_assoc_t *assoc, dcm_state
         }
     }
 
-    if (ckd_add(&pdv_combined_len, pdv_combined_len, dcm_header_len) ||
-            pdv_combined_len > DICOM_EO_MAXSIZE) {
-        pdv_combined_len = DICOM_EO_MAXSIZE;
-    }
 
-    if (pdv_combined_len >= global_dcm_export_minsize) {
+    if (dcm_header_len + pdv_combined_len >= global_dcm_export_minsize) {
         /* Allocate the final size */
 
-        pdv_combined = (uint8_t *)wmem_alloc0(pinfo->pool, pdv_combined_len);
+        pdv_combined = (uint8_t *)wmem_alloc0(pinfo->pool, dcm_header_len + pdv_combined_len);
 
         pdv_combined_curr = pdv_combined;
-        size_t curr_len = 0, next_len;
 
         if (dcm_header_len != 0) {  /* Will be 0 when global_dcm_export_header is false */
             memmove(pdv_combined, dcm_header, dcm_header_len);
             pdv_combined_curr += dcm_header_len;
-            curr_len += dcm_header_len;
         }
 
         /* Copy PDV per PDV to target buffer */
-        while (curr_len < pdv_combined_len && !pdv_curr->is_last_fragment) {
-            if (pdv_curr->data) {
-                // In C2y memmove(..., NULL, 0) will no longer be UB
-                size_t to_copy = pdv_curr->data_len;
-                if (ckd_add(&next_len, curr_len, to_copy) ||
-                        next_len > pdv_combined_len) {
-                    to_copy = pdv_combined_len - curr_len;
-                    next_len = pdv_combined_len;
-                }
-                memmove(pdv_combined_curr, pdv_curr->data, to_copy);
-                pdv_combined_curr += to_copy;
-                curr_len = next_len;
-                DISSECTOR_ASSERT(curr_len <= pdv_combined_len);
-            }
+        while (!pdv_curr->is_last_fragment) {
+            memmove(pdv_combined_curr, pdv_curr->data, pdv_curr->data_len);         /* this is a copy not move */
+            pdv_combined_curr += pdv_curr->data_len;
             pdv_curr = pdv_curr->next;
         }
 
-        /* Last packet.
-         *
-         * In the ordinary case, pdv_combined_len equals
-         *   sum(prev PDV data_len) + pdv->data_len + dcm_header_len
-         * so pdv_combined_len - curr_len == pdv->data_len and the MIN
-         * below is a no-op.
-         *
-         * The MIN matters only when the initial summation was clamped
-         * to DICOM_EO_MAXSIZE (or ckd_add overflowed), in which case
-         * the pre-loop above may have already filled the allocated
-         * buffer and pdv_combined_len - curr_len can be as small as 0.
-         */
-        DISSECTOR_ASSERT(curr_len <= pdv_combined_len);
-        memmove(pdv_combined_curr, pdv->data,
-                MIN(pdv->data_len, pdv_combined_len - curr_len));
+        /* Last packet */
+        memmove(pdv_combined_curr, pdv->data, pdv->data_len);       /* this is a copy not a move */
 
         /* Add to list */
         /* The tap will copy the values and free the copies; this only
@@ -1442,7 +1389,7 @@ dcm_export_create_object(packet_info *pinfo, dcm_state_assoc_t *assoc, dcm_state
         eo_info->filename = filename;
         eo_info->content_type = pdv->desc;
 
-        eo_info->payload_len  = pdv_combined_len;
+        eo_info->payload_len  = dcm_header_len + pdv_combined_len;
         eo_info->payload_data = pdv_combined;
 
         tap_queue_packet(dicom_eo_tap, pinfo, eo_info);
@@ -1896,13 +1843,15 @@ dissect_dcm_assoc_user_identify(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
     proto_tree_add_item(assoc_item_user_identify_tree, hf_dcm_assoc_item_len, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
-    proto_tree_add_item_ret_uint8(assoc_item_user_identify_tree, hf_dcm_info_user_identify_type, tvb, offset, 1, ENC_BIG_ENDIAN, &type);
+    type = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item(assoc_item_user_identify_tree, hf_dcm_info_user_identify_type, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
 
     proto_tree_add_item(assoc_item_user_identify_tree, hf_dcm_info_user_identify_response_requested, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
 
-    proto_tree_add_item_ret_uint16(assoc_item_user_identify_tree, hf_dcm_info_user_identify_primary_field_length, tvb, offset, 2, ENC_BIG_ENDIAN, &primary_field_length);
+    primary_field_length = tvb_get_ntohs(tvb, offset);
+    proto_tree_add_item(assoc_item_user_identify_tree, hf_dcm_info_user_identify_primary_field_length, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
     proto_tree_add_item(assoc_item_user_identify_tree, hf_dcm_info_user_identify_primary_field, tvb, offset, primary_field_length, ENC_UTF_8);
@@ -1910,8 +1859,8 @@ dissect_dcm_assoc_user_identify(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
     offset += primary_field_length;
 
     if (type == 2) {
-        proto_tree_add_item_ret_uint16(assoc_item_user_identify_tree, hf_dcm_info_user_identify_secondary_field_length, tvb, offset, 2,
-                                       ENC_BIG_ENDIAN, &secondary_field_length);
+        secondary_field_length = tvb_get_ntohs(tvb, offset);
+        proto_tree_add_item(assoc_item_user_identify_tree, hf_dcm_info_user_identify_secondary_field_length, tvb, offset, 2, ENC_BIG_ENDIAN);
         offset += 2;
 
         proto_tree_add_item(assoc_item_user_identify_tree, hf_dcm_info_user_identify_secondary_field, tvb, offset, secondary_field_length, ENC_UTF_8);
@@ -2728,7 +2677,7 @@ dissect_dcm_tag_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, dcm_s
 
         uint16_t at_grp;
         uint16_t at_elm;
-        wmem_strbuf_t *at_value = wmem_strbuf_create(pinfo->pool);
+        char *at_value = "";
 
         /* In on capture the reported length for this tag was 2 bytes. And since vl_max is unsigned long, -3 caused it to be 2^32-1
            So make it at least one loop so set it to at least 4.
@@ -2743,13 +2692,13 @@ dissect_dcm_tag_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, dcm_s
             at_elm = tvb_get_uint16(tvb, offset+ i*vm_item_len+2, encoding);
 
             proto_tree_add_uint_format_value(tree, hf_dcm_tag_value_32u, tvb, offset + i*vm_item_len, vm_item_len,
-                ((unsigned)at_grp << 16) | at_elm, "%04x,%04x", at_grp, at_elm);
+                (at_grp << 16) | at_elm, "%04x,%04x", at_grp, at_elm);
 
-            wmem_strbuf_append_printf(at_value, "(%04x,%04x)", at_grp, at_elm);
+            at_value = wmem_strdup_printf(pinfo->pool,"%s(%04x,%04x)", at_value, at_grp, at_elm);
 
             i++;
         }
-        *tag_value = wmem_strbuf_finalize(at_value);
+        *tag_value = at_value;
     }
     else if (strncmp(vr, "FL", 2) == 0)  {      /* Single Float. Can be VM > 1, but not yet supported */
 
@@ -2925,7 +2874,7 @@ dcm_tag_lookup(uint16_t grp, uint16_t elm)
             tag_def = (dcm_tag_t const *)wmem_map_lookup(dcm_tag_table, GUINT_TO_POINTER(((uint32_t)grp << 16) | (elm & 0x000F)));
         }
         else if (grp == 0x1010) {
-            tag_def = (dcm_tag_t const *)wmem_map_lookup(dcm_tag_table, GUINT_TO_POINTER(((uint32_t)grp << 16)));
+            tag_def = (dcm_tag_t const *)wmem_map_lookup(dcm_tag_table, GUINT_TO_POINTER(((uint32_t)grp << 16) | (elm & 0x0000)));
         }
 
         if (tag_def == NULL) {
@@ -3239,7 +3188,7 @@ dissect_dcm_tag(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     */
 
     proto_tree_add_uint_format_value(tag_ptree, hf_dcm_tag, tvb, offset_tag, 4,
-        ((unsigned)grp << 16) | elm, "%04x,%04x (%s)", grp, elm, tag_def->description);
+        (grp << 16) | elm, "%04x,%04x (%s)", grp, elm, tag_def->description);
 
     /* Add VR to tag detail, except for sequence items */
     if (!is_item)  {
@@ -3717,8 +3666,10 @@ dissect_dcm_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     proto_tree *pdv_ptree;      /* Tree for item details */
     proto_item *pdv_pitem, *pdvlen_item;
 
-    wmem_strbuf_t *buf_desc = NULL;    /* PDU description */
+    char   *buf_desc = NULL;            /* PDU description */
     char   *pdv_description = NULL;
+
+    bool first_pdv = true;
 
     uint32_t endpos = 0;
     uint32_t pdv_len = 0;
@@ -3752,19 +3703,20 @@ dissect_dcm_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
         /* The following doesn't seem to work anymore */
         if (pdv_description) {
-            if (buf_desc == NULL) {
-                buf_desc = wmem_strbuf_new(pinfo->pool, pdv_description);
+            if (first_pdv) {
+                buf_desc = wmem_strdup(pinfo->pool, pdv_description);
             }
             else {
-                wmem_strbuf_append_printf(buf_desc, ", %s", pdv_description);
+                buf_desc = wmem_strdup_printf(pinfo->pool, "%s, %s", buf_desc, pdv_description);
             }
-            proto_item_append_text(pdv_pitem, ", %s", pdv_description);
         }
+
+        proto_item_append_text(pdv_pitem, ", %s", pdv_description);
+        first_pdv=false;
 
     }
 
-    /* wmem_strbuf_finalize returns NULL on NULL input. */
-    *pdu_data_description = wmem_strbuf_finalize(buf_desc);
+    *pdu_data_description = buf_desc;
 
     return offset;
 }
@@ -3839,7 +3791,7 @@ dissect_dcm_main(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, bool is_po
     uint32_t pdu_len = 0;
     uint32_t tlen = 0;
 
-    unsigned offset = 0;
+    int offset = 0;
 
     /*
         TCP packets are assembled well by wireshark in conjunction with the dissectors.
@@ -4028,10 +3980,12 @@ dissect_dcm_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint32_t of
     dcm_ptree = proto_item_add_subtree(dcm_pitem, ett_dcm);
 
     /* PDU type is only one byte, then one byte reserved */
-    proto_tree_add_item_ret_uint8(dcm_ptree, hf_dcm_pdu_type, tvb, offset, 1, ENC_BIG_ENDIAN, &pdu_type);
+    pdu_type = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item(dcm_ptree, hf_dcm_pdu_type, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 2;
 
-    proto_tree_add_item_ret_uint(dcm_ptree, hf_dcm_pdu_len, tvb, offset, 4, ENC_BIG_ENDIAN, &pdu_len);
+    pdu_len = tvb_get_ntohl(tvb, offset);
+    proto_tree_add_item(dcm_ptree, hf_dcm_pdu_len, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
 
     /* Find previously detected association, else create a new one object*/
@@ -4266,7 +4220,7 @@ proto_register_dcm(void)
         { &ei_dcm_assoc_item_len, { "dicom.assoc.item.len.invalid", PI_MALFORMED, PI_ERROR, "Invalid Association Item Length", EXPFILL }},
         { &ei_dcm_pdv_ctx, { "dicom.pdv.ctx.invalid", PI_MALFORMED, PI_ERROR, "Invalid Presentation Context ID", EXPFILL }},
         { &ei_dcm_pdv_flags, { "dicom.pdv.flags.invalid", PI_MALFORMED, PI_ERROR, "Invalid Flags", EXPFILL }},
-        { &ei_dcm_status_msg, { "dicom.status_msg", PI_RESPONSE_CODE, PI_WARN, "Status Message", EXPFILL }},
+        { &ei_dcm_status_msg, { "dicom.status_msg", PI_RESPONSE_CODE, PI_WARN, "%s", EXPFILL }},
         { &ei_dcm_data_tag, { "dicom.data.tag.missing", PI_MALFORMED, PI_ERROR, "Early termination of tag. Data is missing", EXPFILL }},
         { &ei_dcm_pdv_len, { "dicom.pdv.len.invalid", PI_MALFORMED, PI_ERROR, "Invalid PDV length", EXPFILL }},
         { &ei_dcm_invalid_pdu_length, { "dicom.pdu_length.invalid", PI_MALFORMED, PI_ERROR, "Invalid PDU length", EXPFILL }},

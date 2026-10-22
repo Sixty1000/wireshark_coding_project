@@ -10,9 +10,7 @@
 import re
 import subprocess
 import types
-
 import pytest
-
 
 @pytest.fixture
 def wireshark_features(request, cmd_wireshark, make_env):
@@ -36,10 +34,10 @@ def wireshark_features(request, cmd_wireshark, make_env):
         )
         wireshark_v = re.sub(r'\s+', ' ', wireshark_v)
     except subprocess.CalledProcessError as ex:
-        print(f'Failed to detect Wireshark features: {ex}')
+        print('Failed to detect Wireshark features: %s' % (ex,))
         wireshark_v = ''
     return types.SimpleNamespace(
-        have_automatic_updates='+automatic updates' in wireshark_v,
+        have_automatic_updates='with automatic updates' in wireshark_v,
     )
 
 class TestReleaseAutomaticUpdates:

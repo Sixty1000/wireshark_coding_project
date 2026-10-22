@@ -22,9 +22,6 @@
  */
 
 #include "config.h"
-#define WS_LOG_DOMAIN "packet-mgcp"
-
-#include <wireshark.h>
 
 #include <stdlib.h>
 
@@ -247,7 +244,7 @@ static const value_string mgcp_reason_code_vals[] = {
 
 /*
  * Define the trees for mgcp
- * We need one for MGCP itself, one for the MGCP parameters and one
+ * We need one for MGCP itself, one for the MGCP paramters and one
  * for each of the dissected parameters
  */
 static int ett_mgcp;
@@ -284,8 +281,9 @@ static bool global_mgcp_raw_text;
 static bool global_mgcp_message_count;
 
 /* Some basic utility functions that are specific to this dissector */
-static bool is_mgcp_verb(tvbuff_t *tvb, unsigned offset, int maxlength, const char **verb_name);
-static bool is_mgcp_rspcode(tvbuff_t *tvb, unsigned offset, int maxlength);
+static bool is_mgcp_verb(tvbuff_t *tvb, int offset, int maxlength, const char **verb_name);
+static bool is_mgcp_rspcode(tvbuff_t *tvb, int offset, int maxlength);
+static int tvb_parse_param(tvbuff_t *tvb, int offset, int maxlength, int** hf, mgcp_info_t* mi);
 
 /*
  * The various functions that either dissect some
@@ -295,19 +293,19 @@ static bool is_mgcp_rspcode(tvbuff_t *tvb, unsigned offset, int maxlength);
 static void dissect_mgcp_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 				 proto_tree *mgcp_tree, proto_tree *ti);
 static void dissect_mgcp_firstline(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, mgcp_info_t* mi);
-static void dissect_mgcp_params(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, mgcp_info_t* mi);
-static void dissect_mgcp_connectionparams(proto_tree *parent_tree, packet_info* pinfo, tvbuff_t *tvb,
-					  unsigned offset, unsigned param_type_len,
-					  unsigned param_val_len);
-static void dissect_mgcp_localconnectionoptions(proto_tree *parent_tree, packet_info* pinfo, tvbuff_t *tvb,
-						unsigned offset, unsigned param_type_len,
-						unsigned param_val_len);
-static void dissect_mgcp_localvoicemetrics(proto_tree *parent_tree, packet_info* pinfo, tvbuff_t *tvb,
-						unsigned offset, unsigned param_type_len,
-						unsigned param_val_len);
-static void dissect_mgcp_remotevoicemetrics(proto_tree *parent_tree, packet_info* pinfo, tvbuff_t *tvb,
-						unsigned offset, unsigned param_type_len,
-						unsigned param_val_len);
+static void dissect_mgcp_params(tvbuff_t *tvb, proto_tree *tree, mgcp_info_t* mi);
+static void dissect_mgcp_connectionparams(proto_tree *parent_tree, tvbuff_t *tvb,
+					  int offset, int param_type_len,
+					  int param_val_len);
+static void dissect_mgcp_localconnectionoptions(proto_tree *parent_tree, tvbuff_t *tvb,
+						int offset, int param_type_len,
+						int param_val_len);
+static void dissect_mgcp_localvoicemetrics(proto_tree *parent_tree, tvbuff_t *tvb,
+						int offset, int param_type_len,
+						int param_val_len);
+static void dissect_mgcp_remotevoicemetrics(proto_tree *parent_tree, tvbuff_t *tvb,
+						int offset, int param_type_len,
+						int param_val_len);
 
 static void mgcp_raw_text_add(tvbuff_t *tvb, proto_tree *tree);
 
@@ -411,12 +409,13 @@ mgcpstat_packet(void *pms, packet_info *pinfo, epan_dissect_t *edt _U_, const vo
  * Some functions which should be moved to a library
  * as I think that people may find them of general usefulness.
  */
-static unsigned tvb_find_null_line_remaining(tvbuff_t* tvb, unsigned offset, unsigned* next_offset);
-static bool tvb_find_dot_line_remaining(tvbuff_t* tvb, unsigned offset, unsigned* sectionlen, unsigned* next_offset);
+static int tvb_find_null_line(tvbuff_t* tvb, int offset, int len, int* next_offset);
+static int tvb_find_dot_line(tvbuff_t* tvb, int offset, int len, int* next_offset);
 
 static dissector_handle_t sdp_handle;
 static dissector_handle_t mgcp_handle;
-extern void dissect_asciitpkt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
+extern void
+dissect_asciitpkt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 		  dissector_handle_t subdissector_handle);
 extern uint16_t is_asciitpkt(tvbuff_t *tvb);
 
@@ -456,9 +455,9 @@ static unsigned mgcp_call_hash(const void *k)
  ************************************************************************/
 static int dissect_mgcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-	unsigned sectionlen;
+	int sectionlen;
 	uint32_t num_messages;
-	unsigned tvb_sectionend, tvb_sectionbegin, tvb_len;
+	int tvb_sectionend, tvb_sectionbegin, tvb_len;
 	proto_tree *mgcp_tree = NULL;
 	proto_item *ti = NULL, *tii;
 	const char *verb_name = "";
@@ -496,9 +495,11 @@ static int dissect_mgcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 		ti = proto_tree_add_item(tree, proto_mgcp, tvb, 0, -1, ENC_NA);
 		mgcp_tree = proto_item_add_subtree(ti, ett_mgcp);
 
-		if (tvb_find_dot_line_remaining(tvb, tvb_sectionbegin, &sectionlen , &tvb_sectionend))
+		sectionlen = tvb_find_dot_line(tvb, tvb_sectionbegin, -1, &tvb_sectionend);
+		if (sectionlen != -1)
 		{
-			dissect_mgcp_message(tvb_new_subset_length(tvb, tvb_sectionbegin, sectionlen),
+			dissect_mgcp_message(tvb_new_subset_length_caplen(tvb, tvb_sectionbegin,
+						sectionlen, sectionlen),
 					pinfo, tree, mgcp_tree, ti);
 			tvb_sectionbegin = tvb_sectionend;
 		}
@@ -530,7 +531,8 @@ static int dissect_mgcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 		}
 	}
 
-	(void) tvb_find_line_end_remaining(tvb, tvb_sectionbegin, &sectionlen , &tvb_sectionend);
+	sectionlen = tvb_find_line_end(tvb, tvb_sectionbegin, -1,
+			&tvb_sectionend, false);
 	col_prepend_fstr(pinfo->cinfo, COL_INFO, "%s",
 			tvb_format_text(pinfo->pool, tvb, tvb_sectionbegin, sectionlen));
 
@@ -575,8 +577,8 @@ static void dissect_mgcp_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 				 proto_tree *mgcp_tree, proto_tree *ti)
 {
 	/* Declare variables */
-	unsigned sectionlen;
-	unsigned tvb_sectionend, tvb_sectionbegin, tvb_len;
+	int sectionlen;
+	int tvb_sectionend, tvb_sectionbegin, tvb_len;
 	tvbuff_t *next_tvb;
 	const char *verb_name = "";
 	mgcp_info_t* mi = wmem_new0(pinfo->pool, mgcp_info_t);
@@ -598,21 +600,25 @@ static void dissect_mgcp_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 		/* dissect first line */
 		tvb_sectionbegin = 0;
 		tvb_sectionend = tvb_sectionbegin;
-		(void) tvb_find_line_end_remaining(tvb, 0, &sectionlen , &tvb_sectionend);
+		sectionlen = tvb_find_line_end(tvb, 0, -1, &tvb_sectionend, false);
 		if (sectionlen > 0)
 		{
-			dissect_mgcp_firstline(tvb_new_subset_length(tvb, tvb_sectionbegin,
-			                       sectionlen), pinfo,
+			dissect_mgcp_firstline(tvb_new_subset_length_caplen(tvb, tvb_sectionbegin,
+			                       sectionlen, sectionlen), pinfo,
 			                       mgcp_tree, mi);
 		}
 		tvb_sectionbegin = tvb_sectionend;
 
 		/* Dissect params */
-		sectionlen = tvb_find_null_line_remaining(tvb, tvb_sectionbegin, &tvb_sectionend);
-		if (sectionlen > 0)
+		if (tvb_sectionbegin < tvb_len)
 		{
-			dissect_mgcp_params(tvb_new_subset_length(tvb, tvb_sectionbegin, sectionlen),
-							   pinfo, mgcp_tree, mi);
+			sectionlen = tvb_find_null_line(tvb, tvb_sectionbegin, -1,
+			                                &tvb_sectionend);
+			if (sectionlen > 0)
+			{
+				dissect_mgcp_params(tvb_new_subset_length_caplen(tvb, tvb_sectionbegin, sectionlen, sectionlen),
+				                                   mgcp_tree, mi);
+			}
 		}
 
 		/* Set the mgcp payload length correctly so we don't include any
@@ -645,13 +651,13 @@ static void dissect_mgcp_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
  */
 static void mgcp_raw_text_add(tvbuff_t *tvb, proto_tree *tree)
 {
-	unsigned tvb_linebegin, tvb_lineend, linelen;
+	int tvb_linebegin, tvb_lineend, linelen;
 
 	tvb_linebegin = 0;
 
 	do
 	{
-		(void) tvb_find_line_end_remaining(tvb, tvb_linebegin, NULL, &tvb_lineend);
+		tvb_find_line_end(tvb, tvb_linebegin, -1, &tvb_lineend, false);
 		linelen = tvb_lineend - tvb_linebegin;
 		proto_tree_add_format_text(tree, tvb, tvb_linebegin, linelen);
 		tvb_linebegin = tvb_lineend;
@@ -671,14 +677,14 @@ static void mgcp_raw_text_add(tvbuff_t *tvb, proto_tree *tree)
  *
  * Return: true if there is an MGCP verb at offset in tvb, otherwise false
  */
-static bool is_mgcp_verb(tvbuff_t *tvb, unsigned offset, int maxlength, const char **verb_name)
+static bool is_mgcp_verb(tvbuff_t *tvb, int offset, int maxlength, const char **verb_name)
 {
 	bool returnvalue = false;
 	char word[5];
 
 	/* This function is used for checking if a packet is actually an
 	   mgcp packet. Make sure that we do not throw an exception
-	   during such a check. If we did throw an exception, we could
+	   during such a check. If we did throw an exeption, we could
 	   not refuse the packet and give other dissectors the chance to
 	   look at it. */
 	if (tvb_captured_length_remaining(tvb, offset) < (int)sizeof(word))
@@ -731,7 +737,7 @@ static bool is_mgcp_verb(tvbuff_t *tvb, unsigned offset, int maxlength, const ch
  * Return: true if there is an MGCP response code at offset in tvb,
  *         otherwise false
  */
-static bool is_mgcp_rspcode(tvbuff_t *tvb, unsigned offset, int maxlength)
+static bool is_mgcp_rspcode(tvbuff_t *tvb, int offset, int maxlength)
 {
 	bool returnvalue = false;
 	char word[4];
@@ -778,7 +784,7 @@ static bool is_mgcp_rspcode(tvbuff_t *tvb, unsigned offset, int maxlength)
  * Returns: The offset in tvb where the value of the MGCP parameter
  *          begins.
  */
-static int tvb_parse_param(tvbuff_t* tvb, packet_info* pinfo, unsigned offset, unsigned len, int** hf, mgcp_info_t* mi)
+static int tvb_parse_param(tvbuff_t* tvb, int offset, int len, int** hf, mgcp_info_t* mi)
 {
 	int returnvalue = -1, tvb_current_offset, ext_off;
 	uint8_t tempchar, plus_minus;
@@ -893,7 +899,7 @@ static int tvb_parse_param(tvbuff_t* tvb, packet_info* pinfo, unsigned offset, u
 					if (tempchar == ':')
 					{
 						/* Looks like a valid vendor param name */
-						ws_debug("MGCP Extension: %s", tvb_get_string_enc(pinfo->pool, tvb, tvb_current_offset, ext_off, ENC_ASCII));
+						//fprintf(stderr, "MGCP Extension: %s\n", tvb_get_string_enc(wmem_packet_scope(), tvb, tvb_current_offset, ext_off, ENC_ASCII));
 						switch (plus_minus)
 						{
 							case '+':
@@ -1085,7 +1091,7 @@ static int tvb_parse_param(tvbuff_t* tvb, packet_info* pinfo, unsigned offset, u
 
 			/* set the observedEvents or signalReq used in Voip Calls analysis */
 			if (buf != NULL) {
-				*buf = (char*)tvb_get_string_enc(pinfo->pool, tvb, tvb_current_offset, (len - tvb_current_offset + offset), ENC_ASCII);
+				*buf = tvb_get_string_enc(wmem_packet_scope(), tvb, tvb_current_offset, (len - tvb_current_offset + offset), ENC_ASCII);
 			}
 		}
 	}
@@ -1125,8 +1131,8 @@ static int tvb_parse_param(tvbuff_t* tvb, packet_info* pinfo, unsigned offset, u
  */
 static void dissect_mgcp_firstline(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, mgcp_info_t* mi)
 {
-	unsigned tvb_current_offset, tvb_previous_offset, tvb_len, tvb_current_len;
-	unsigned tokennum, tokenlen;
+	int tvb_current_offset, tvb_previous_offset, tvb_len, tvb_current_len;
+	int tokennum, tokenlen;
 	proto_item* hidden_item;
 	char *transid = NULL;
 	char *code = NULL;
@@ -1155,7 +1161,8 @@ static void dissect_mgcp_firstline(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 		do
 		{
 			tvb_current_len = tvb_reported_length_remaining(tvb, tvb_previous_offset);
-			if (!tvb_find_uint8_length(tvb, tvb_previous_offset, tvb_current_len, ' ', &tvb_current_offset))
+			tvb_current_offset = tvb_find_uint8(tvb, tvb_previous_offset, tvb_current_len, ' ');
+			if (tvb_current_offset == -1)
 			{
 				tvb_current_offset = tvb_len;
 				tokenlen = tvb_current_len;
@@ -1226,7 +1233,8 @@ static void dissect_mgcp_firstline(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 				{
 					if (tvb_current_offset < tvb_len)
 					{
-						(void) tvb_find_line_end_remaining(tvb, tvb_previous_offset, &tokenlen , &tvb_current_offset);
+						tokenlen = tvb_find_line_end(tvb, tvb_previous_offset,
+						                             -1, &tvb_current_offset, false);
 					}
 					else
 					{
@@ -1244,7 +1252,8 @@ static void dissect_mgcp_firstline(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 			{
 				if (tvb_current_offset < tvb_len )
 				{
-					(void) tvb_find_line_end_remaining(tvb, tvb_previous_offset, &tokenlen, &tvb_current_offset);
+					tokenlen = tvb_find_line_end(tvb, tvb_previous_offset,
+					                             -1, &tvb_current_offset, false);
 				}
 				else
 				{
@@ -1507,12 +1516,11 @@ static void dissect_mgcp_firstline(tvbuff_t *tvb, packet_info *pinfo, proto_tree
  * tree - The tree from which to hang the structured information parsed
  *        from the parameters of the MGCP message.
  */
-static void dissect_mgcp_params(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, mgcp_info_t* mi)
+static void dissect_mgcp_params(tvbuff_t *tvb, proto_tree *tree, mgcp_info_t* mi)
 {
-	unsigned linelen, tokenlen;
-	int *my_param;
-	unsigned tvb_lineend, tvb_linebegin, tvb_len, old_lineend;
-	unsigned tvb_tokenbegin;
+	int linelen, tokenlen, *my_param;
+	int tvb_lineend, tvb_linebegin, tvb_len, old_lineend;
+	int tvb_tokenbegin;
 	proto_tree *mgcp_param_ti, *mgcp_param_tree;
 
 	tvb_len = tvb_reported_length(tvb);
@@ -1528,28 +1536,28 @@ static void dissect_mgcp_params(tvbuff_t *tvb, packet_info* pinfo, proto_tree *t
 	while (tvb_offset_exists(tvb, tvb_lineend))
 	{
 		old_lineend = tvb_lineend;
-		(void) tvb_find_line_end_remaining(tvb, tvb_linebegin, &linelen, &tvb_lineend);
-		tvb_tokenbegin = tvb_parse_param(tvb, pinfo, tvb_linebegin, linelen, &my_param, mi);
+		linelen = tvb_find_line_end(tvb, tvb_linebegin, -1, &tvb_lineend, false);
+		tvb_tokenbegin = tvb_parse_param(tvb, tvb_linebegin, linelen, &my_param, mi);
 
 		if (my_param)
 		{
-			(void) tvb_find_line_end_remaining(tvb, tvb_tokenbegin, &tokenlen, &tvb_lineend);
+			tokenlen = tvb_find_line_end(tvb, tvb_tokenbegin, -1, &tvb_lineend, false);
 			if (*my_param == hf_mgcp_param_connectionparam) {
-				dissect_mgcp_connectionparams(mgcp_param_tree, pinfo, tvb, tvb_linebegin,
+				dissect_mgcp_connectionparams(mgcp_param_tree, tvb, tvb_linebegin,
 							      tvb_tokenbegin - tvb_linebegin, tokenlen);
 			} else if (*my_param == hf_mgcp_param_localconnoptions) {
-				dissect_mgcp_localconnectionoptions(mgcp_param_tree, pinfo, tvb, tvb_linebegin,
+				dissect_mgcp_localconnectionoptions(mgcp_param_tree, tvb, tvb_linebegin,
 								    tvb_tokenbegin - tvb_linebegin, tokenlen);
 			} else if (*my_param == hf_mgcp_param_localvoicemetrics) {
-				dissect_mgcp_localvoicemetrics(mgcp_param_tree, pinfo, tvb, tvb_linebegin,
+				dissect_mgcp_localvoicemetrics(mgcp_param_tree, tvb, tvb_linebegin,
 							       tvb_tokenbegin - tvb_linebegin, tokenlen);
 			} else if (*my_param == hf_mgcp_param_remotevoicemetrics) {
-				dissect_mgcp_remotevoicemetrics(mgcp_param_tree, pinfo, tvb, tvb_linebegin,
+				dissect_mgcp_remotevoicemetrics(mgcp_param_tree, tvb, tvb_linebegin,
 								tvb_tokenbegin - tvb_linebegin, tokenlen);
 			} else if (*my_param == hf_mgcp_param_x_osmux) {
 					proto_tree_add_string(mgcp_param_tree, *my_param, tvb,
 							      tvb_linebegin, linelen,
-							      tvb_format_text(pinfo->pool,
+							      tvb_format_text(wmem_packet_scope(),
 									      tvb, tvb_tokenbegin, tokenlen));
 					/* Mark that Osmux is used, so that packet-sdp.c doesn't call
 					 * srtp_add_address() and decodes it as RTP. */
@@ -1557,7 +1565,7 @@ static void dissect_mgcp_params(tvbuff_t *tvb, packet_info* pinfo, proto_tree *t
 			} else {
 				proto_tree_add_string(mgcp_param_tree, *my_param, tvb,
 						      tvb_linebegin, linelen,
-						      tvb_format_text(pinfo->pool,
+						      tvb_format_text(wmem_packet_scope(),
 								      tvb, tvb_tokenbegin, tokenlen));
 			}
 		}
@@ -1574,7 +1582,7 @@ static void dissect_mgcp_params(tvbuff_t *tvb, packet_info* pinfo, proto_tree *t
 
 /* Dissect the connection params */
 static void
-dissect_mgcp_connectionparams(proto_tree *parent_tree, packet_info* pinfo, tvbuff_t *tvb, unsigned offset, unsigned param_type_len, unsigned param_val_len)
+dissect_mgcp_connectionparams(proto_tree *parent_tree, tvbuff_t *tvb, int offset, int param_type_len, int param_val_len)
 {
 	proto_tree *tree;
 	proto_item *item;
@@ -1588,10 +1596,10 @@ dissect_mgcp_connectionparams(proto_tree *parent_tree, packet_info* pinfo, tvbuf
 
 	/* The P: line */
 	offset += param_type_len; /* skip the P: */
-	tokenline = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, param_val_len, ENC_ASCII);
+	tokenline = tvb_get_string_enc(wmem_packet_scope(), tvb, offset, param_val_len, ENC_ASCII);
 
 	/* Split into type=value pairs separated by comma */
-	tokens = wmem_strsplit(pinfo->pool, tokenline, ",", -1);
+	tokens = wmem_strsplit(wmem_packet_scope(), tokenline, ",", -1);
 
 	for (i = 0; tokens[i] != NULL; i++)
 	{
@@ -1600,8 +1608,8 @@ dissect_mgcp_connectionparams(proto_tree *parent_tree, packet_info* pinfo, tvbuf
 		int hf_uint = 0;
 		int hf_string = 0;
 
-		tokenlen = (unsigned)strlen(tokens[i]);
-		typval = wmem_strsplit(pinfo->pool, tokens[i], "=", 2);
+		tokenlen = (int)strlen(tokens[i]);
+		typval = wmem_strsplit(wmem_packet_scope(), tokens[i], "=", 2);
 		if ((typval[0] != NULL) && (typval[1] != NULL))
 		{
 			if (!g_ascii_strcasecmp(g_strstrip(typval[0]), "PS"))
@@ -1676,7 +1684,7 @@ dissect_mgcp_connectionparams(proto_tree *parent_tree, packet_info* pinfo, tvbuf
 
 /* Dissect the local connection option */
 static void
-dissect_mgcp_localconnectionoptions(proto_tree *parent_tree, packet_info* pinfo, tvbuff_t *tvb, unsigned offset, unsigned param_type_len, unsigned param_val_len)
+dissect_mgcp_localconnectionoptions(proto_tree *parent_tree, tvbuff_t *tvb, int offset, int param_type_len, int param_val_len)
 {
 	proto_tree *tree;
 	proto_item *item;
@@ -1690,10 +1698,10 @@ dissect_mgcp_localconnectionoptions(proto_tree *parent_tree, packet_info* pinfo,
 
 	/* The L: line */
 	offset += param_type_len; /* skip the L: */
-	tokenline = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, param_val_len, ENC_ASCII);
+	tokenline = tvb_get_string_enc(wmem_packet_scope(), tvb, offset, param_val_len, ENC_ASCII);
 
 	/* Split into type=value pairs separated by comma */
-	tokens = wmem_strsplit(pinfo->pool, tokenline, ",", -1);
+	tokens = wmem_strsplit(wmem_packet_scope(), tokenline, ",", -1);
 	for (i = 0; tokens[i] != NULL; i++)
 	{
 		char **typval;
@@ -1705,7 +1713,7 @@ dissect_mgcp_localconnectionoptions(proto_tree *parent_tree, packet_info* pinfo,
 		hf_string = -1;
 
 		tokenlen = (int)strlen(tokens[i]);
-		typval = wmem_strsplit(pinfo->pool, tokens[i], ":", 2);
+		typval = wmem_strsplit(wmem_packet_scope(), tokens[i], ":", 2);
 		if ((typval[0] != NULL) && (typval[1] != NULL))
 		{
 			if (!g_ascii_strcasecmp(g_strstrip(typval[0]), "p"))
@@ -1833,7 +1841,7 @@ dissect_mgcp_localconnectionoptions(proto_tree *parent_tree, packet_info* pinfo,
 
 /* Dissect the Local Voice Metrics option */
 static void
-dissect_mgcp_localvoicemetrics(proto_tree *parent_tree, packet_info* pinfo, tvbuff_t *tvb, unsigned offset, unsigned param_type_len, unsigned param_val_len)
+dissect_mgcp_localvoicemetrics(proto_tree *parent_tree, tvbuff_t *tvb, int offset, int param_type_len, int param_val_len)
 {
 	proto_tree *tree = parent_tree;
 	proto_item *item = NULL;
@@ -1853,15 +1861,15 @@ dissect_mgcp_localvoicemetrics(proto_tree *parent_tree, packet_info* pinfo, tvbu
 
 	/* The XRM/LVM: line */
 	offset += 9; /* skip the XRM/LVM: */
-	tokenline = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, param_val_len - 9, ENC_ASCII);
+	tokenline = tvb_get_string_enc(wmem_packet_scope(), tvb, offset, param_val_len - 9, ENC_ASCII);
 
 	/* Split into type=value pairs separated by comma and WSP */
-	tokens = wmem_strsplit(pinfo->pool, tokenline, ",", -1);
+	tokens = wmem_strsplit(wmem_packet_scope(), tokenline, ",", -1);
 	for (i = 0; tokens[i] != NULL; i++)
 	{
 
 		tokenlen = (int)strlen(tokens[i]);
-		typval = wmem_strsplit(pinfo->pool, tokens[i], "=", 2);
+		typval = wmem_strsplit(wmem_packet_scope(), tokens[i], "=", 2);
 		if ((typval[0] != NULL) && (typval[1] != NULL))
 		{
 			if (!g_ascii_strcasecmp(g_strstrip(typval[0]), "NLR"))
@@ -1984,7 +1992,7 @@ dissect_mgcp_localvoicemetrics(proto_tree *parent_tree, packet_info* pinfo, tvbu
 
 /* Dissect the Remote Voice Metrics option */
 static void
-dissect_mgcp_remotevoicemetrics(proto_tree *parent_tree, packet_info* pinfo, tvbuff_t *tvb, unsigned offset, unsigned param_type_len, unsigned param_val_len)
+dissect_mgcp_remotevoicemetrics(proto_tree *parent_tree, tvbuff_t *tvb, int offset, int param_type_len, int param_val_len)
 {
 	proto_tree *tree = parent_tree;
 	proto_item *item = NULL;
@@ -2004,14 +2012,14 @@ dissect_mgcp_remotevoicemetrics(proto_tree *parent_tree, packet_info* pinfo, tvb
 
 	/* The XRM/RVM: line */
 	offset += 9; /* skip the XRM/RVM: */
-	tokenline = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, param_val_len - 9, ENC_ASCII);
+	tokenline = tvb_get_string_enc(wmem_packet_scope(), tvb, offset, param_val_len - 9, ENC_ASCII);
 
 	/* Split into type=value pairs separated by comma and WSP */
-	tokens = wmem_strsplit(pinfo->pool, tokenline, ",", -1);
+	tokens = wmem_strsplit(wmem_packet_scope(), tokenline, ",", -1);
 	for (i = 0; tokens[i] != NULL; i++)
 	{
 		tokenlen = (int)strlen(tokens[i]);
-		typval = wmem_strsplit(pinfo->pool, tokens[i], "=", 2);
+		typval = wmem_strsplit(wmem_packet_scope(), tokens[i], "=", 2);
 		if ((typval[0] != NULL) && (typval[1] != NULL))
 		{
 			if (!g_ascii_strcasecmp(g_strstrip(typval[0]), "NLR"))
@@ -2133,48 +2141,59 @@ dissect_mgcp_remotevoicemetrics(proto_tree *parent_tree, packet_info* pinfo, tvb
 }
 
 /*
- * tvb_find_null_line_remaining - Returns the length from offset to the first
- *                      null line found (a null line is a line that begins
+ * tvb_find_null_line - Returns the length from offset to the first null
+ *                      line found (a null line is a line that begins
  *                      with a CR or LF.  The offset to the first character
- *                      after the null line is written into the unsigned int
- *                      pointed to by next_offset.
+ *                      after the null line is written into the int pointed
+ *                      to by next_offset.
  *
  * Parameters:
  * tvb - The tvbuff in which we are looking for a null line.
  * offset - The offset in tvb at which we will begin looking for
  *          a null line.
+ * len - The maximum distance from offset in tvb that we will look for
+ *       a null line.  If it is -1 we will look to the end of the buffer.
  *
  * next_offset - The location to write the offset of first character
  *               FOLLOWING the null line.
  *
  * Returns: The length from offset to the first character BEFORE
- *          the null line.
+ *          the null line..
  */
-static unsigned tvb_find_null_line_remaining(tvbuff_t* tvb, unsigned offset, unsigned* next_offset)
+static int tvb_find_null_line(tvbuff_t* tvb, int offset, int len, int* next_offset)
 {
-	unsigned tvb_lineend, tvb_current_len, tvb_linebegin;
+	int tvb_lineend, tvb_current_len, tvb_linebegin, maxoffset;
 	unsigned tempchar;
-
-	if (!tvb_reported_length_remaining(tvb, offset)) {
-		*next_offset = offset;
-		return 0;
-	}
 
 	tvb_linebegin = offset;
 	tvb_lineend = tvb_linebegin;
 
-	/* Loop around until we either find a line beginning with a carriage
-	   return or newline character or until we hit the end of the tvbuff. */
+	/* Simple setup to allow for the traditional -1 search to the end of the tvbuff */
+	if (len != -1)
+	{
+		tvb_current_len = len;
+	}
+	else
+	{
+		tvb_current_len = tvb_reported_length_remaining(tvb, offset);
+	}
+
+	maxoffset = (tvb_current_len - 1) + offset;
+
+	/* Loop around until we either find a line beginning with a carriage return
+	   or newline character or until we hit the end of the tvbuff. */
 	do
 	{
 		tvb_linebegin = tvb_lineend;
-		(void) tvb_find_line_end_remaining(tvb, tvb_linebegin, NULL, &tvb_lineend);
+		tvb_current_len = tvb_reported_length_remaining(tvb, tvb_linebegin);
+		tvb_find_line_end(tvb, tvb_linebegin, tvb_current_len, &tvb_lineend, false);
 		tempchar = tvb_get_uint8(tvb, tvb_linebegin);
-	} while (tempchar != '\r' && tempchar != '\n' && tvb_offset_exists(tvb, tvb_lineend));
+	} while (tempchar != '\r' && tempchar != '\n' && tvb_lineend <= maxoffset && tvb_offset_exists(tvb, tvb_lineend));
+
 
 	*next_offset = tvb_lineend;
 
-	if (tvb_offset_exists(tvb, tvb_lineend))
+	if (tvb_lineend <= maxoffset)
 	{
 		tvb_current_len = tvb_linebegin - offset;
 	}
@@ -2187,45 +2206,51 @@ static unsigned tvb_find_null_line_remaining(tvbuff_t* tvb, unsigned offset, uns
 }
 
 /*
- * tvb_find_dot_line_remaining -  Returns true if a line containing
-                                  only a dot (.) character is found. A line
- *                                containing only a dot is used to indicate a
- *                                separation between multiple MGCP messages
- *                                piggybacked in the same UDP packet.
+ * tvb_find_dot_line -  Returns the length from offset to the first line
+ *                      containing only a dot (.) character.  A line
+ *                      containing only a dot is used to indicate a
+ *                      separation between multiple MGCP messages
+ *                      piggybacked in the same UDP packet.
  *
  * Parameters:
  * tvb - The tvbuff in which we are looking for a dot line.
  * offset - The offset in tvb at which we will begin looking for
  *          a dot line.
+ * len - The maximum distance from offset in tvb that we will look for
+ *       a dot line.  If it is -1 we will look to the end of the buffer.
  *
- *  sectionlen -  Returns the length from offset to the first line
-- *               containing only a dot (.) character. or to the end of
-                  the tvb if no dot found.
  * next_offset - The location to write the offset of first character
  *               FOLLOWING the dot line.
  *
- * Returns: true if a dot is found or false if the character at offset is a .
+ * Returns: The length from offset to the first character BEFORE
+ *          the dot line or -1 if the character at offset is a .
  *          followed by a newline or a carriage return.
  */
-static bool
-tvb_find_dot_line_remaining(tvbuff_t* tvb, unsigned offset, unsigned* sectionlen, unsigned* next_offset)
+static int tvb_find_dot_line(tvbuff_t* tvb, int offset, int len, int* next_offset)
 {
-	unsigned tvb_current_offset, tvb_current_len, maxoffset, tvb_len;
+	int tvb_current_offset, tvb_current_len, maxoffset, tvb_len;
 	uint8_t tempchar;
-	bool dot_found;
-	tvb_current_len = tvb_captured_length_remaining(tvb, offset);
+	tvb_current_len = len;
 	tvb_len = tvb_reported_length(tvb);
 
-	maxoffset = tvb_len - 1;
+	if (len == -1)
+	{
+		maxoffset = tvb_len - 1;
+	}
+	else
+	{
+		maxoffset = (len - 1) + offset;
+	}
 	tvb_current_offset = offset -1;
 
 	do
 	{
-		dot_found = tvb_find_uint8_length(tvb, tvb_current_offset+1, tvb_current_len, '.', &tvb_current_offset);
+		tvb_current_offset = tvb_find_uint8(tvb, tvb_current_offset+1,
+		                                     tvb_current_len, '.');
 		tvb_current_len = maxoffset - tvb_current_offset + 1;
 
 		/* If we didn't find a . then break out of the loop */
-		if (dot_found == false)
+		if (tvb_current_offset == -1)
 		{
 			break;
 		}
@@ -2237,7 +2262,7 @@ tvb_find_dot_line_remaining(tvbuff_t* tvb, unsigned offset, unsigned* sectionlen
 			/* Are the characters that follow the dot a newline or carriage return ? */
 			if (tempchar == '\r' || tempchar == '\n')
 			{
-				/* Do we have any characters that precede the . ? */
+				/* Do we have any characters that proceed the . ? */
 				if (tvb_current_offset == 0)
 				{
 					break;
@@ -2246,7 +2271,7 @@ tvb_find_dot_line_remaining(tvbuff_t* tvb, unsigned offset, unsigned* sectionlen
 				{
 					tempchar = tvb_get_uint8(tvb, tvb_current_offset-1);
 
-					/* Are the characters that precede the dot a newline or a
+					/* Are the characters that follow the dot a newline or a
 					   carriage return ? */
 					if (tempchar == '\r' || tempchar == '\n')
 					{
@@ -2278,28 +2303,26 @@ tvb_find_dot_line_remaining(tvbuff_t* tvb, unsigned offset, unsigned* sectionlen
 	 * So now we either have the tvb_current_offset of a . in a dot line
 	 * or a tvb_current_offset of -1
 	 */
-	if (dot_found == false)
+	if (tvb_current_offset == -1)
 	{
 		tvb_current_offset = maxoffset +1;
 		*next_offset = maxoffset + 1;
 	}
 	else
 	{
-		tvb_find_line_end_length(tvb, tvb_current_offset, tvb_current_len, NULL, next_offset);
+		tvb_find_line_end(tvb, tvb_current_offset, tvb_current_len, next_offset, false);
 	}
-
 
 	if (tvb_current_offset == offset)
 	{
-		*sectionlen = *next_offset - offset;
-		return false;
+		tvb_current_len = -1;
 	}
 	else
 	{
-		*sectionlen = tvb_current_offset - offset;
-		return true;
+		tvb_current_len = tvb_current_offset - offset;
 	}
 
+	return tvb_current_len;
 }
 
 /* Register all the bits needed with the filtering engine */
@@ -2320,10 +2343,10 @@ void proto_register_mgcp(void)
 			  { "Response", "mgcp.rsp", FT_BOOLEAN, BASE_NONE, NULL, 0x0,
 			    "true if MGCP response", HFILL }},
 			{ &hf_mgcp_req_frame,
-			  { "Request Frame", "mgcp.reqframe", FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_REQUEST), 0,
+			  { "Request Frame", "mgcp.reqframe", FT_FRAMENUM, BASE_NONE, NULL, 0,
 			    NULL, HFILL }},
 			{ &hf_mgcp_rsp_frame,
-			  { "Response Frame", "mgcp.rspframe", FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_RESPONSE), 0,
+			  { "Response Frame", "mgcp.rspframe", FT_FRAMENUM, BASE_NONE, NULL, 0,
 			    NULL, HFILL }},
 			{ &hf_mgcp_time,
 			  { "Time from request", "mgcp.time", FT_RELATIVE_TIME, BASE_NONE, NULL, 0,

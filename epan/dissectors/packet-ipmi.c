@@ -10,8 +10,8 @@
  */
 
 #include "config.h"
-#define WS_LOG_DOMAIN "packet-ipmi"
-#include <wireshark.h>
+
+
 
 #include <epan/packet.h>
 #include <epan/conversation.h>
@@ -30,6 +30,9 @@ void proto_reg_handoff_ipmi(void);
  *
  *	http://www.intel.com/design/servers/ipmi/
  */
+
+/* Define IPMI_DEBUG to enable printing the process of request-response pairing */
+/* #define IPMI_DEBUG */
 
 /* Top-level search structure: list of registered handlers for a given netFn */
 struct ipmi_netfn_root {
@@ -128,8 +131,8 @@ static bool dissect_bus_commands;
 static bool fru_langcode_is_english = true;
 static unsigned response_after_req = 5000;
 static unsigned response_before_req;
-static int message_format = MSGFMT_GUESS;
-static int selected_oem = IPMI_OEM_NONE;
+static unsigned message_format = MSGFMT_GUESS;
+static unsigned selected_oem = IPMI_OEM_NONE;
 
 static int hf_ipmi_command_data;
 static int hf_ipmi_session_handle;
@@ -244,20 +247,22 @@ get_matched_request(ipmi_packet_data_t * data, const ipmi_header_t * rs_hdr,
 
 	/* TODO: copy prefix bytes */
 
-	ws_debug("%d, %d: rq_hdr : {"
-			"\tchannel=%d"
-			"\tdir=%d"
-			"\trs_sa=%x"
-			"\trs_lun=%d"
-			"\tnetfn=%x"
-			"\trq_sa=%x"
-			"\trq_lun=%d"
-			"\trq_seq=%x"
-			"\tcmd=%x }",
+#ifdef DEBUG
+	fprintf(stderr, "%d, %d: rq_hdr : {\n"
+			"\tchannel=%d\n"
+			"\tdir=%d\n"
+			"\trs_sa=%x\n"
+			"\trs_lun=%d\n"
+			"\tnetfn=%x\n"
+			"\trq_sa=%x\n"
+			"\trq_lun=%d\n"
+			"\trq_seq=%x\n"
+			"\tcmd=%x\n}\n",
 			data->curr_frame_num, data->curr_level,
 			rq_hdr.channel, rq_hdr.dir, rq_hdr.rs_sa, rq_hdr.rs_lun,
 			rq_hdr.netfn, rq_hdr.rq_sa, rq_hdr.rq_lun, rq_hdr.rq_seq,
 			rq_hdr.cmd);
+#endif
 
 	while (iter) {
 		ipmi_request_t * rq = (ipmi_request_t *) wmem_list_frame_data(iter);
@@ -398,20 +403,22 @@ add_request(ipmi_packet_data_t * data, const ipmi_header_t * hdr)
 		/* append request to list */
 		wmem_list_append(data->request_list, rq);
 
-	ws_debug("%d, %d: rq_hdr : {"
-			"\tchannel=%d"
-			"\tdir=%d"
-			"\trs_sa=%x"
-			"\trs_lun=%d"
-			"\tnetfn=%x"
-			"\trq_sa=%x"
-			"\trq_lun=%d"
-			"\trq_seq=%x"
-			"\tcmd=%x }",
+#ifdef DEBUG
+	fprintf(stderr, "%d, %d: hdr : {\n"
+			"\tchannel=%d\n"
+			"\tdir=%d\n"
+			"\trs_sa=%x\n"
+			"\trs_lun=%d\n"
+			"\tnetfn=%x\n"
+			"\trq_sa=%x\n"
+			"\trq_lun=%d\n"
+			"\trq_seq=%x\n"
+			"\tcmd=%x\n}\n",
 			data->curr_frame_num, data->curr_level,
 			rq->hdr.channel, rq->hdr.dir, rq->hdr.rs_sa, rq->hdr.rs_lun,
 			rq->hdr.netfn, rq->hdr.rq_sa, rq->hdr.rq_lun, rq->hdr.rq_seq,
 			rq->hdr.cmd);
+#endif
 	}
 }
 
@@ -840,7 +847,7 @@ parse_binary(char *p, tvbuff_t *tvb, unsigned offs, unsigned len)
 	}
 }
 
-static const struct ipmi_parse_typelen ptl_binary = {
+static struct ipmi_parse_typelen ptl_binary = {
 	get_len_binary, parse_binary, "Binary"
 };
 
@@ -872,7 +879,7 @@ parse_bcdplus(char *p, tvbuff_t *tvb, unsigned offs, unsigned len)
 	}
 }
 
-static const struct ipmi_parse_typelen ptl_bcdplus = {
+static struct ipmi_parse_typelen ptl_bcdplus = {
 	get_len_bcdplus, parse_bcdplus, "BCD+"
 };
 
@@ -923,7 +930,7 @@ parse_6bit_ascii(char *p, tvbuff_t *tvb, unsigned offs, unsigned len)
 	}
 }
 
-static const struct ipmi_parse_typelen ptl_6bit_ascii = {
+static struct ipmi_parse_typelen ptl_6bit_ascii = {
 	get_len_6bit_ascii, parse_6bit_ascii, "6-bit ASCII"
 };
 
@@ -960,7 +967,7 @@ parse_8bit_ascii(char *p, tvbuff_t *tvb, unsigned offs, unsigned len)
 	}
 }
 
-static const struct ipmi_parse_typelen ptl_8bit_ascii = {
+static struct ipmi_parse_typelen ptl_8bit_ascii = {
 	get_len_8bit_ascii, parse_8bit_ascii, "ASCII+Latin1"
 };
 
@@ -991,7 +998,7 @@ parse_unicode(char *p, tvbuff_t *tvb, unsigned offs, unsigned len)
 	}
 }
 
-static const struct ipmi_parse_typelen ptl_unicode = {
+static struct ipmi_parse_typelen ptl_unicode = {
 	get_len_unicode, parse_unicode, "Unicode"
 };
 
@@ -999,16 +1006,16 @@ void
 ipmi_add_typelen(packet_info *pinfo, proto_tree *tree, int hf_string, int hf_type, int hf_length, tvbuff_t *tvb,
 		unsigned offs, bool is_fru)
 {
-	static const struct ipmi_parse_typelen * const fru_eng[4] = {
+	static struct ipmi_parse_typelen *fru_eng[4] = {
 		&ptl_binary, &ptl_bcdplus, &ptl_6bit_ascii, &ptl_8bit_ascii
 	};
-	static const struct ipmi_parse_typelen * const fru_noneng[4] = {
+	static struct ipmi_parse_typelen *fru_noneng[4] = {
 		&ptl_binary, &ptl_bcdplus, &ptl_6bit_ascii, &ptl_unicode
 	};
-	static const struct ipmi_parse_typelen * const ipmi[4] = {
+	static struct ipmi_parse_typelen *ipmi[4] = {
 		&ptl_unicode, &ptl_bcdplus, &ptl_6bit_ascii, &ptl_8bit_ascii
 	};
-	const struct ipmi_parse_typelen *ptr;
+	struct ipmi_parse_typelen *ptr;
 	proto_tree *s_tree;
 	unsigned type, msk, clen, blen, len;
 	const char *unit;
@@ -1157,7 +1164,7 @@ ipmi_getnetfn(uint32_t netfn, const uint8_t *sig)
 
 	inr = &ipmi_cmd_tab[netfn >> 1];
 	for (inh = inr->list; inh; inh = inh->next) {
-		if ((inh->oem_selector == (unsigned)selected_oem || inh->oem_selector == IPMI_OEM_NONE)
+		if ((inh->oem_selector == selected_oem || inh->oem_selector == IPMI_OEM_NONE)
 				&& (!inr->siglen || !memcmp(sig, inh->sig, inr->siglen))) {
 			return inh;
 		}
@@ -1201,7 +1208,7 @@ ipmi_getcmd(ipmi_netfn_t *nf, uint32_t cmd)
 void
 ipmi_notimpl(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree)
 {
-	proto_tree_add_expert_remaining(tree, pinfo, &ei_impi_parser_not_implemented, tvb, 0);
+	proto_tree_add_expert(tree, pinfo, &ei_impi_parser_not_implemented, tvb, 0, -1);
 }
 
 void
@@ -1264,7 +1271,7 @@ ipmi_fmt_channel(char *s, uint32_t v)
 	};
 	char* tmp_str;
 
-	tmp_str = val_to_str(NULL, v, chan_vals, "Channel #%d");
+	tmp_str = val_to_str_wmem(NULL, v, chan_vals, "Channel #%d");
 	snprintf(s, ITEM_LABEL_LENGTH, "%s (0x%02x)", tmp_str, v);
 	wmem_free(NULL, tmp_str);
 }
@@ -1734,8 +1741,8 @@ proto_register_ipmi(void)
 		{ &hf_ipmi_header_completion, { "Completion Code", "ipmi.header.completion", FT_UINT8, BASE_HEX, NULL, 0, NULL, HFILL }},
 		{ &hf_ipmi_header_sig, { "Signature", "ipmi.header.signature", FT_BYTES, BASE_NONE, NULL, 0, NULL, HFILL }},
 		{ &hf_ipmi_data_crc, { "Data checksum", "ipmi.data.crc", FT_UINT8, BASE_HEX, NULL, 0, NULL, HFILL }},
-		{ &hf_ipmi_response_to, { "Response to", "ipmi.response_to", FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_REQUEST), 0, NULL, HFILL }},
-		{ &hf_ipmi_response_in, { "Response in", "ipmi.response_in", FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_RESPONSE), 0, NULL, HFILL }},
+		{ &hf_ipmi_response_to, { "Response to", "ipmi.response_to", FT_FRAMENUM, BASE_NONE, NULL, 0, NULL, HFILL }},
+		{ &hf_ipmi_response_in, { "Response in", "ipmi.response_in", FT_FRAMENUM, BASE_NONE, NULL, 0, NULL, HFILL }},
 		{ &hf_ipmi_response_time, { "Responded in", "ipmi.response_time", FT_RELATIVE_TIME, BASE_NONE, NULL, 0, NULL, HFILL }}
 	};
 	static int *ett[] = {

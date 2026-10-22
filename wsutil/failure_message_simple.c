@@ -24,6 +24,7 @@
 #include <string.h>
 #include <errno.h>
 
+#include <wiretap/wtap.h>
 #include <wsutil/filesystem.h>
 #include <wsutil/report_message.h>
 #include <wsutil/cmdarg_err.h>
@@ -33,7 +34,7 @@
 /*
  * Generic error message.
  */
-static void
+void
 failure_message_simple(const char *msg_format, va_list ap)
 {
     vcmdarg_err(msg_format, ap);
@@ -46,7 +47,7 @@ failure_message_simple(const char *msg_format, va_list ap)
  * to be a UNIX-style errno; "for_writing" is true if we're opening
  * the file for writing and false if we're opening it for reading.
  */
-static void
+void
 open_failure_message_simple(const char *filename, int err, bool for_writing)
 {
     cmdarg_err(file_open_error_message(err, for_writing), filename);
@@ -58,7 +59,7 @@ open_failure_message_simple(const char *filename, int err, bool for_writing)
  * "filename" is the name of the file being read from; "err" is assumed
  * to be a UNIX-style errno.
  */
-static void
+void
 read_failure_message_simple(const char *filename, int err)
 {
     cmdarg_err("An error occurred while reading from the file \"%s\": %s.",
@@ -71,26 +72,11 @@ read_failure_message_simple(const char *filename, int err)
  * "filename" is the name of the file being written to; "err" is assumed
  * to be a UNIX-style errno.
  */
-static void
+void
 write_failure_message_simple(const char *filename, int err)
 {
     cmdarg_err("An error occurred while writing to the file \"%s\": %s.",
                filename, g_strerror(err));
-}
-
-/*
- * Error message for a failed attempt to rename a file other than
- * a capture file.
- * "old_filename" is the name of the file being renamed; "new_filename"
- * is the name to which it's being renamed; "err" is assumed to be a
- * UNIX-style errno.
- */
-static void
-rename_failure_message_simple(const char *old_filename, const char *new_filename,
-                       int err)
-{
-    cmdarg_err("An error occurred while renaming the file \"%s\" to \"%s\": %s.",
-               old_filename, new_filename, g_strerror(err));
 }
 
 static char*
@@ -129,7 +115,7 @@ output_file_description(const char* fname)
  * to be a UNIX-style errno or a WTAP_ERR_ value; "err_info" is assumed
  * to be a string giving further information for some WTAP_ERR_ values.
  */
-static void
+void
 cfile_open_failure_message_simple(const char* filename, int err, char* err_info)
 {
     if (err < 0) {
@@ -156,7 +142,7 @@ cfile_open_failure_message_simple(const char* filename, int err, char* err_info)
  * "file_type_subtype" is a WTAP_FILE_TYPE_SUBTYPE_ value for the type
  * and subtype of file being opened.
  */
-static void
+void
 cfile_dump_open_failure_message_simple(const char* filename, int err, char* err_info,
     int file_type_subtype _U_)
 {
@@ -182,7 +168,7 @@ cfile_dump_open_failure_message_simple(const char* filename, int err, char* err_
  * to be a UNIX-style errno or a WTAP_ERR_ value; "err_info" is assumed
  * to be a string giving further information for some WTAP_ERR_ values.
  */
-static void
+void
 cfile_read_failure_message_simple(const char* filename, int err, char* err_info)
 {
     char* file_string;
@@ -213,7 +199,7 @@ cfile_read_failure_message_simple(const char* filename, int err, char* err_info)
  * occurred; "file_type_subtype" is a WTAP_FILE_TYPE_SUBTYPE_ value
  * for the type and subtype of file being written.
  */
-static void
+void
 cfile_write_failure_message_simple(const char* in_filename, const char* out_filename,
     int err, char* err_info,
     uint64_t framenum, int file_type_subtype _U_)
@@ -272,7 +258,7 @@ cfile_write_failure_message_simple(const char* in_filename, const char* out_file
  *
  * so we have to check for write errors here.
  */
-static void
+void
 cfile_close_failure_message_simple(const char* filename, int err, char* err_info)
 {
     char* file_string;
@@ -304,7 +290,6 @@ init_report_failure_message_simple(const char *friendly_program_name)
         open_failure_message_simple,
         read_failure_message_simple,
         write_failure_message_simple,
-        rename_failure_message_simple,
         cfile_open_failure_message_simple,
         cfile_dump_open_failure_message_simple,
         cfile_read_failure_message_simple,

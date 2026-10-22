@@ -25,7 +25,7 @@ static int hf_h221_nonstd_netmeeting_non_standard;
 
 /*
  * Define the trees for nonstd
- * We need one for nonstd itself and one for the nonstd parameters
+ * We need one for nonstd itself and one for the nonstd paramters
  */
 static int ett_nonstd;
 

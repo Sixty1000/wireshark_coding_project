@@ -23,8 +23,7 @@
 #include <wsutil/cmdarg_err.h>
 #include "tap-protohierstat.h"
 
-int pc_proto_id;
-static int col_proto_id;
+int pc_proto_id = -1;
 
 void register_tap_listener_protohierstat(void);
 
@@ -48,7 +47,6 @@ new_phs_t(phs_t *parent, const char *filter)
 }
 
 void
-// NOLINTNEXTLINE(misc-no-recursion)
 free_phs(phs_t *rs)
 {
 	if (!rs) {
@@ -60,13 +58,11 @@ free_phs(phs_t *rs)
 	}
 	if (rs->sibling)
 	{
-		// We recurse here, but we're limited by our tree depth checks in proto.c
 		free_phs(rs->sibling);
 		rs->sibling = NULL;
 	}
 	if (rs->child)
 	{
-		// We recurse here, but we're limited by our tree depth checks in proto.c
 		free_phs(rs->child);
 		rs->child = NULL;
 	}
@@ -94,31 +90,13 @@ protohierstat_packet(void *prs, packet_info *pinfo, epan_dissect_t *edt, const v
 	for (node=edt->tree->first_child; node; node=node->next) {
 		fi = PNODE_FINFO(node);
 
-		if (!fi || !(fi->hfinfo)) {
-			continue;
-		}
-
 		/*
 		 * If the first child is a tree of comments, skip over it.
 		 * This keeps us from having a top-level "pkt_comment"
 		 * entry that represents a nonexistent protocol,
 		 * and matches how the GUI treats comments.
-		 * Also skip the internal non-protocol for the columns
-		 * (the GUI does its own dissection with no columns instead
-		 * of adding a tap like other dialogs, so it never has the
-		 * column protocol.)
 		 */
-		if (G_UNLIKELY(fi->hfinfo->id == pc_proto_id || fi->hfinfo->id == col_proto_id)) {
-			continue;
-		}
-
-		/* Skip non protocols, e.g. top-level desegmentation items
-		 * "[Reassembled TCP Segments]", as the GUI does.
-		 *
-		 * Note the inverse issue (handling protocols that are not at
-		 * the top-level) is something done neither here nor in the GUI.
-		 */
-		if (!proto_registrar_is_protocol(fi->hfinfo->id)) {
+		if (G_UNLIKELY(fi->hfinfo->id == pc_proto_id)) {
 			continue;
 		}
 
@@ -164,7 +142,6 @@ protohierstat_packet(void *prs, packet_info *pinfo, epan_dissect_t *edt, const v
 }
 
 static void
-// NOLINTNEXTLINE(misc-no-recursion)
 phs_draw(phs_t *rs, int indentation)
 {
 	int i, stroff;
@@ -185,7 +162,6 @@ phs_draw(phs_t *rs, int indentation)
 		}
 		snprintf(str+stroff, MAXPHSLINE-stroff, "%s", rs->proto_name);
 		printf("%-40s frames:%u bytes:%" PRIu64 "\n", str, rs->frames, rs->bytes);
-		// We recurse here, but we're limited by our tree depth checks in proto.c
 		phs_draw(rs->child, indentation+1);
 	}
 }
@@ -204,7 +180,7 @@ protohierstat_draw(void *prs)
 }
 
 
-static bool
+static void
 protohierstat_init(const char *opt_arg, void *userdata _U_)
 {
 	phs_t *rs;
@@ -220,18 +196,14 @@ protohierstat_init(const char *opt_arg, void *userdata _U_)
 		}
 	} else {
 		cmdarg_err("invalid \"-z io,phs[,<filter>]\" argument");
-		return false;
+		exit(1);
 	}
 
 	pc_proto_id = proto_registrar_get_id_byname("pkt_comment");
-	/* proto_get_id_by_filter_name searches a smaller table; we can't use
-	 * it for pkt_comment, which is a PINO, but can for _ws.col
-	 */
-	col_proto_id = proto_get_id_by_filter_name("_ws.col");
 
 	rs = new_phs_t(NULL, filter);
 
-	error_string = register_tap_listener("frame", rs, filter, TL_REQUIRES_PROTO_TREE|TL_REQUIRES_PROTOCOLS, NULL, protohierstat_packet, protohierstat_draw, (tap_finish_cb)free_phs);
+	error_string = register_tap_listener("frame", rs, filter, TL_REQUIRES_PROTO_TREE, NULL, protohierstat_packet, protohierstat_draw, NULL);
 	if (error_string) {
 		/* error, we failed to attach to the tap. clean up */
 		free_phs(rs);
@@ -239,10 +211,8 @@ protohierstat_init(const char *opt_arg, void *userdata _U_)
 		cmdarg_err("Couldn't register io,phs tap: %s",
 			error_string->str);
 		g_string_free(error_string, TRUE);
-		return false;
+		exit(1);
 	}
-
-	return true;
 }
 
 static stat_tap_ui protohierstat_ui = {

@@ -55,7 +55,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "wtap_module.h"
+#include "wtap-int.h"
 #include "ascendtext.h"
 #include "ascend-int.h"
 #include "ascend_parser.h"
@@ -77,18 +77,10 @@ static int ascend_yyinput(void *buf, ascend_state_t *parser_state) {
         if (parser_state->err == 0)
         parser_state->err = WTAP_ERR_SHORT_READ;
         return YY_NULL;
+    } else {
+        *(char *) buf = c;
+        return 1;
     }
-    if (c == '\n') {
-        parser_state->line_len = 0;
-    } else if (++parser_state->line_len > ASCEND_MAX_LINE_LEN) {
-        /* No valid line is anywhere near this long. */
-        parser_state->err = WTAP_ERR_BAD_FILE;
-        parser_state->err_info = ws_strdup_printf("ascend: line longer than %u characters",
-            ASCEND_MAX_LINE_LEN);
-        return YY_NULL;
-    }
-    *(char *) buf = c;
-    return 1;
 }
 
 #define YY_INPUT(buf, result, max_size) \
@@ -120,14 +112,6 @@ static int ascend_yyinput(void *buf, ascend_state_t *parser_state) {
 
 %}
 
- /*
-  * Every pattern must have a bounded length. YY_INPUT supplies one byte
-  * at a time, and each time Flex refills its buffer it copies the partial
-  * token to the start of the buffer, so scanning an unbounded token is
-  * quadratic in its length. (A file with a few hundred kilobytes of hex
-  * digits took minutes to read.)
-  */
-
 D [0-9]
 H [A-Fa-f0-9]
 
@@ -135,16 +119,16 @@ PPP_XPFX PPP-OUT
 PPP_RPFX PPP-IN
 ISDN_XPFX PRI-XMIT-
 ISDN_RPFX PRI-RCV-
-WAN_XPFX XMIT[\-:]{0,4}
-WAN_RPFX RECV[\-:]{0,4}
+WAN_XPFX XMIT[\-:]*
+WAN_RPFX RECV[\-:]*
 ETHER_PFX ETHER
 
 WDD_DATE    "Date:"
 WDD_TIME    "Time:"
 WDD_CAUSE   "Cause an attempt to place call to "
-WDD_CALLNUM [^\n\r\t ]{1,64}
+WDD_CALLNUM [^\n\r\t ]+
 WDD_CHUNK   "WD_DIALOUT_DISP: chunk"
-WDD_TYPE    "type "[^\n\r\t ]{1,64}
+WDD_TYPE    "type "[^\n\r\t ]+
 
 %s sc_gen_task
 %s sc_gen_time_s
@@ -271,7 +255,7 @@ WDD_TYPE    "type "[^\n\r\t ]{1,64}
     return retval;
 }
 
-<sc_wds_sess>{D}{1,10} {
+<sc_wds_sess>{D}* {
     BEGIN(sc_gen_task);
     yyextra->token.u32_val = (uint32_t) strtoul(yytext, NULL, 10);
     return DECNUM;
@@ -283,7 +267,7 @@ WDD_TYPE    "type "[^\n\r\t ]{1,64}
     return HEXNUM;
 }
 
-<sc_gen_task>\"[A-Za-z0-9_ ]{1,64}\" {
+<sc_gen_task>\"[A-Za-z0-9_ ]+\" {
     return STRING;
 }
 
@@ -324,11 +308,9 @@ WDD_TYPE    "type "[^\n\r\t ]{1,64}
     BEGIN(sc_chardisp);
 }
 
-<sc_chardisp>\n {
+<sc_chardisp>.*	{
     BEGIN(sc_gen_byte);
 }
-
-<sc_chardisp>[^\n]{1,64} ;
 
 <INITIAL,sc_gen_byte>{WDD_DATE} {
     BEGIN(sc_wdd_date_m);
@@ -410,11 +392,11 @@ WDD_TYPE    "type "[^\n\r\t ]{1,64}
     return KEYWORD;
 }
 
-<sc_gen_task>\/{D}{1,10} {
+<sc_gen_task>\/{D}+ {
     return SLASH_SUFFIX;
 }
 
-(0x|0X)?{H}{1,16} { return HEXNUM; }
+(0x|0X)?{H}+ { return HEXNUM; }
 
 task:|task|at|time:|octets { return KEYWORD; }
 

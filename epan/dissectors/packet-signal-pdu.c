@@ -1,7 +1,7 @@
 /* packet-signal-pdu.c
  * Signal PDU dissector.
  * By Dr. Lars Völker <lars.voelker@technica-engineering.de>
- * Copyright 2020-2026 Dr. Lars Völker
+ * Copyright 2020-2025 Dr. Lars Völker
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
@@ -44,7 +44,9 @@
  * SOME/IP, and others.
  */
 
-#define SPDU_NAME_SIGNAL_PREFIX                             "signal_pdu.signals"
+#define SPDU_NAME                                           "Signal PDU"
+#define SPDU_NAME_LONG                                      "Signal PDU"
+#define SPDU_NAME_FILTER                                    "signal_pdu"
 
 
 /*** Configuration ***/
@@ -91,8 +93,6 @@ static bool spdu_deserializer_hide_raw_values           = true;
 static expert_field ei_spdu_payload_truncated;
 static expert_field ei_spdu_config_error;
 static expert_field ei_spdu_unaligned_data;
-static expert_field ei_spdu_payload_disabled;
-static expert_field ei_spdu_payload_not_configured;
 
 /*** Data Structure for UAT based config ***/
 static GHashTable *data_spdu_messages;
@@ -382,7 +382,7 @@ register_signal_pdu_can(void) {
 
         GList *tmp;
         for (tmp = keys; tmp != NULL; tmp = tmp->next) {
-            uint32_t id = (uint32_t)(*(uint64_t*)tmp->data);
+            int32_t id = (*(int32_t *)tmp->data);
 
             if ((id & CAN_EFF_FLAG) == CAN_EFF_FLAG) {
                 dissector_add_uint("can.extended_id", id & CAN_EFF_MASK, signal_pdu_handle_can);
@@ -409,8 +409,9 @@ register_signal_pdu_lin(void) {
 
         GList *tmp;
         for (tmp = keys; tmp != NULL; tmp = tmp->next) {
+            int32_t *id = (int32_t *)tmp->data;
             /* we register the combination of bus and frame id */
-            dissector_add_uint("lin.frame_id", (uint32_t)GPOINTER_TO_UINT(tmp->data), signal_pdu_handle_lin);
+            dissector_add_uint("lin.frame_id", *id, signal_pdu_handle_lin);
         }
 
         g_list_free(keys);
@@ -431,7 +432,9 @@ register_signal_pdu_someip(void) {
 
         GList *tmp;
         for (tmp = keys; tmp != NULL; tmp = tmp->next) {
-            dissector_add_uint("someip.messageid", (uint32_t)(*(uint64_t*)tmp->data), signal_pdu_handle_someip);
+            int64_t *id = (int64_t *)tmp->data;
+            uint32_t message_id = (uint32_t)((uint64_t)(*id)) & 0xffffffff;
+            dissector_add_uint("someip.messageid", message_id, signal_pdu_handle_someip);
         }
 
         g_list_free(keys);
@@ -452,7 +455,8 @@ register_signal_pdu_pdu_transport(void) {
 
         GList *tmp;
         for (tmp = keys; tmp != NULL; tmp = tmp->next) {
-            dissector_add_uint("pdu_transport.id", (uint32_t)GPOINTER_TO_UINT(tmp->data), signal_pdu_handle_pdu_transport);
+            int64_t *id = (int64_t *)tmp->data;
+            dissector_add_uint("pdu_transport.id", ((uint32_t)((uint64_t)(*id)) & 0xffffffff), signal_pdu_handle_pdu_transport);
         }
 
         g_list_free(keys);
@@ -473,7 +477,8 @@ register_signal_pdu_ipdum(void) {
 
         GList *tmp;
         for (tmp = keys; tmp != NULL; tmp = tmp->next) {
-            dissector_add_uint("ipdum.pdu.id", (uint32_t)GPOINTER_TO_UINT(tmp->data), signal_pdu_handle_ipdum);
+            int64_t *id = (int64_t *)tmp->data;
+            dissector_add_uint("ipdum.pdu.id", ((uint32_t)((uint64_t)(*id)) & 0xffffffff), signal_pdu_handle_ipdum);
         }
 
         g_list_free(keys);
@@ -494,7 +499,8 @@ register_signal_pdu_isobus(void) {
 
         GList *tmp;
         for (tmp = keys; tmp != NULL; tmp = tmp->next) {
-            dissector_add_uint("isobus.pgn", (uint32_t)(*(uint64_t*)tmp->data), signal_pdu_handle_isobus);
+            int64_t *id = (int64_t *)tmp->data;
+            dissector_add_uint("isobus.pgn", ((uint32_t)((uint64_t)(*id)) & 0xffffffff), signal_pdu_handle_isobus);
         }
 
         g_list_free(keys);
@@ -502,6 +508,15 @@ register_signal_pdu_isobus(void) {
 }
 
 /*** UAT Callbacks and Helpers ***/
+static void
+spdu_payload_free_key(void *key) {
+    wmem_free(wmem_epan_scope(), key);
+}
+
+static void
+spdu_payload_free_generic_data(void *data _U_) {
+    /* currently nothing to be free */
+}
 
 /* ID -> Name */
 static void *
@@ -557,6 +572,17 @@ free_generic_one_id_string_cb(void *r) {
     rec->name = NULL;
 }
 
+static void
+post_update_one_id_string_template_cb(generic_one_id_string_t *data, unsigned data_num, GHashTable *ht) {
+    unsigned   i;
+    for (i = 0; i < data_num; i++) {
+        int *key = wmem_new(wmem_epan_scope(), int);
+        *key = data[i].id;
+
+        g_hash_table_insert(ht, key, g_strdup(data[i].name));
+    }
+}
+
 
 /*** Signal PDU Messages ***/
 UAT_HEX_CB_DEF(spdu_message_ident, id, generic_one_id_string_t)
@@ -567,23 +593,23 @@ post_update_spdu_message_cb(void) {
     /* destroy old hash table, if it exists */
     if (data_spdu_messages) {
         g_hash_table_destroy(data_spdu_messages);
+        data_spdu_messages = NULL;
     }
 
     /* create new hash table */
-    data_spdu_messages = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
-
-    for (unsigned i = 0; i < spdu_message_ident_num; i++) {
-        g_hash_table_insert(data_spdu_messages, GUINT_TO_POINTER(spdu_message_ident[i].id), spdu_message_ident[i].name);
-    }
+    data_spdu_messages = g_hash_table_new_full(g_int_hash, g_int_equal, &spdu_payload_free_key, &spdu_payload_free_generic_data);
+    post_update_one_id_string_template_cb(spdu_message_ident, spdu_message_ident_num, data_spdu_messages);
 }
 
 static char *
 get_message_name(uint32_t id) {
+    uint32_t tmp = id;
+
     if (data_spdu_messages == NULL) {
         return NULL;
     }
 
-    return (char *)g_hash_table_lookup(data_spdu_messages, GUINT_TO_POINTER(id));
+    return (char *)g_hash_table_lookup(data_spdu_messages, &tmp);
 }
 
 /* UAT: Signals */
@@ -839,7 +865,7 @@ free_spdu_signal_list_cb(void *r) {
 }
 
 static void
-deregister_user_data_hfarray_prepare_for_deregister(hf_register_info **hf_array, unsigned *number_of_entries) {
+deregister_user_data_hfarray(hf_register_info **hf_array, unsigned *number_of_entries) {
     if (hf_array == NULL || number_of_entries == NULL) {
         return;
     }
@@ -848,65 +874,46 @@ deregister_user_data_hfarray_prepare_for_deregister(hf_register_info **hf_array,
     hf_register_info *dynamic_hf = *hf_array;
 
     if (dynamic_hf != NULL) {
+        /* Unregister all fields */
         for (unsigned i = 0; i < dynamic_hf_size; i++) {
-            if (dynamic_hf[i].p_id != NULL && dynamic_hf[i].hfinfo.strings != NULL) {
-                /* Workaround: do not let proto_free_field_strings (proto.c) free the hfinfo.strings as this fails. */
-                /* Since not all value_names might be used for an hf, we need to free ourselves anyhow. */
+            if (dynamic_hf[i].p_id != NULL) {
+                if (*(dynamic_hf[i].p_id) > 0) {
+                    proto_deregister_field(proto_signal_pdu, *(dynamic_hf[i].p_id));
+                }
+                g_free(dynamic_hf[i].p_id);
+                dynamic_hf[i].p_id = NULL;
+
+                /* workaround since the proto.c proto_free_field_strings would double free this... */
                 dynamic_hf[i].hfinfo.strings = NULL;
             }
         }
-    }
-}
 
-static void
-deregister_user_data_hfarray_free(hf_register_info **hf_array, unsigned *number_of_entries) {
-    if (hf_array == NULL || number_of_entries == NULL) {
-        return;
-    }
-
-    unsigned dynamic_hf_size = *number_of_entries;
-    hf_register_info *dynamic_hf = *hf_array;
-
-    if (dynamic_hf != NULL) {
-        for (unsigned i = 0; i < dynamic_hf_size; i++) {
-            if (dynamic_hf[i].p_id != NULL) {
-                g_free(dynamic_hf[i].p_id);
-                dynamic_hf[i].p_id = NULL;
-            }
-        }
         proto_add_deregistered_data(dynamic_hf);
-
         *hf_array = NULL;
         *number_of_entries = 0;
     }
 }
 
 static void
-deregister_user_data(void) {
-    deregister_user_data_hfarray_prepare_for_deregister(&dynamic_hf_base_raw, &dynamic_hf_base_raw_number);
-    deregister_user_data_hfarray_prepare_for_deregister(&dynamic_hf_agg_sum, &dynamic_hf_agg_sum_number);
-    deregister_user_data_hfarray_prepare_for_deregister(&dynamic_hf_agg_avg, &dynamic_hf_agg_avg_number);
-    deregister_user_data_hfarray_prepare_for_deregister(&dynamic_hf_agg_int, &dynamic_hf_agg_int_number);
-
-    proto_deregister_all_fields_with_prefix(proto_signal_pdu, SPDU_NAME_SIGNAL_PREFIX);
-
-    deregister_user_data_hfarray_free(&dynamic_hf_base_raw, &dynamic_hf_base_raw_number);
-    deregister_user_data_hfarray_free(&dynamic_hf_agg_sum, &dynamic_hf_agg_sum_number);
-    deregister_user_data_hfarray_free(&dynamic_hf_agg_avg, &dynamic_hf_agg_avg_number);
-    deregister_user_data_hfarray_free(&dynamic_hf_agg_int, &dynamic_hf_agg_int_number);
-
+deregister_user_data(void)
+{
+    deregister_user_data_hfarray(&dynamic_hf_base_raw, &dynamic_hf_base_raw_number);
+    deregister_user_data_hfarray(&dynamic_hf_agg_sum, &dynamic_hf_agg_sum_number);
+    deregister_user_data_hfarray(&dynamic_hf_agg_avg, &dynamic_hf_agg_avg_number);
+    deregister_user_data_hfarray(&dynamic_hf_agg_int, &dynamic_hf_agg_int_number);
     dynamic_hf_number_of_entries = 0;
 }
+
+static spdu_signal_value_name_t *get_signal_value_name_config(uint32_t id, uint16_t pos);
 
 static int*
 create_hf_entry(hf_register_info *dynamic_hf, unsigned i, uint32_t id, uint32_t pos, char *name, char *filter_string, spdu_dt_t data_type, bool scale_or_offset, uint32_t hf_type) {
     val64_string *vs = NULL;
-    uint64_t key = id | ((uint64_t)pos << 32);
 
     int *hf_id = g_new(int, 1);
     *hf_id = 0;
 
-    spdu_signal_value_name_t *sig_val = g_hash_table_lookup(data_spdu_signal_value_names, &key);
+    spdu_signal_value_name_t *sig_val = get_signal_value_name_config(id, pos);
     if (sig_val != NULL) {
         vs = sig_val->vs;
     }
@@ -917,34 +924,34 @@ create_hf_entry(hf_register_info *dynamic_hf, unsigned i, uint32_t id, uint32_t 
     switch (hf_type) {
     case HF_TYPE_RAW:
         dynamic_hf[i].hfinfo.name = ws_strdup_printf("%s_raw", name);
-        dynamic_hf[i].hfinfo.abbrev = ws_strdup_printf("%s.%s_raw", SPDU_NAME_SIGNAL_PREFIX, filter_string);
+        dynamic_hf[i].hfinfo.abbrev = ws_strdup_printf("%s.%s_raw", SPDU_NAME_FILTER, filter_string);
         break;
 
     case HF_TYPE_AGG_SUM:
         dynamic_hf[i].hfinfo.name = ws_strdup_printf("%s_sum", name);
-        dynamic_hf[i].hfinfo.abbrev = ws_strdup_printf("%s.%s_sum", SPDU_NAME_SIGNAL_PREFIX, filter_string);
+        dynamic_hf[i].hfinfo.abbrev = ws_strdup_printf("%s.%s_sum", SPDU_NAME_FILTER, filter_string);
         break;
 
     case HF_TYPE_AGG_AVG:
         dynamic_hf[i].hfinfo.name = ws_strdup_printf("%s_avg", name);
-        dynamic_hf[i].hfinfo.abbrev = ws_strdup_printf("%s.%s_avg", SPDU_NAME_SIGNAL_PREFIX, filter_string);
+        dynamic_hf[i].hfinfo.abbrev = ws_strdup_printf("%s.%s_avg", SPDU_NAME_FILTER, filter_string);
         break;
 
     case HF_TYPE_AGG_INT:
         dynamic_hf[i].hfinfo.name = ws_strdup_printf("%s_int", name);
-        dynamic_hf[i].hfinfo.abbrev = ws_strdup_printf("%s.%s_int", SPDU_NAME_SIGNAL_PREFIX, filter_string);
+        dynamic_hf[i].hfinfo.abbrev = ws_strdup_printf("%s.%s_int", SPDU_NAME_FILTER, filter_string);
         break;
 
     case HF_TYPE_BASE:
         dynamic_hf[i].hfinfo.name = ws_strdup(name);
-        dynamic_hf[i].hfinfo.abbrev = ws_strdup_printf("%s.%s", SPDU_NAME_SIGNAL_PREFIX, filter_string);
+        dynamic_hf[i].hfinfo.abbrev = ws_strdup_printf("%s.%s", SPDU_NAME_FILTER, filter_string);
         break;
 
     case HF_TYPE_NONE:
     default:
         /* we bail out but have set hf_id to 0 before */
         dynamic_hf[i].hfinfo.name = ws_strdup_printf("%s_none", name);
-        dynamic_hf[i].hfinfo.abbrev = ws_strdup_printf("%s.%s_none", SPDU_NAME_SIGNAL_PREFIX, filter_string);
+        dynamic_hf[i].hfinfo.abbrev = ws_strdup_printf("%s.%s_none", SPDU_NAME_FILTER, filter_string);
         return hf_id;
     }
     dynamic_hf[i].hfinfo.bitmask = 0;
@@ -992,12 +999,8 @@ create_hf_entry(hf_register_info *dynamic_hf, unsigned i, uint32_t id, uint32_t 
     }
 
     if (hf_type == HF_TYPE_RAW && vs != NULL) {
-        if (data_type == SPDU_DATA_TYPE_STRING || data_type == SPDU_DATA_TYPE_STRINGZ || data_type == SPDU_DATA_TYPE_UINT_STRING) {
-            ws_warning("Preference Error: Signal_PDU_signal_list Signal PDU ID: 0x%04x Signal Position: %d. String based types must not define values in Signal_PDU_signal_values!\n", id, pos);
-        } else {
-            dynamic_hf[i].hfinfo.strings = VALS64(vs);
-            dynamic_hf[i].hfinfo.display |= BASE_VAL64_STRING | BASE_SPECIAL_VALS;
-        }
+        dynamic_hf[i].hfinfo.strings = VALS64(vs);
+        dynamic_hf[i].hfinfo.display |= BASE_VAL64_STRING | BASE_SPECIAL_VALS;
     } else {
         dynamic_hf[i].hfinfo.strings = NULL;
     }
@@ -1009,11 +1012,11 @@ create_hf_entry(hf_register_info *dynamic_hf, unsigned i, uint32_t id, uint32_t 
 
 static void
 post_update_spdu_signal_list_read_in_data(spdu_signal_list_uat_t *data, unsigned data_num, GHashTable *ht) {
-    if (ht == NULL || data == NULL) {
+    if (ht == NULL || data == NULL || data_num == 0) {
         return;
     }
 
-    if (data_num > 0) {
+    if (data_num) {
         dynamic_hf_number_of_entries = data_num;
         /* lets create the dynamic_hf array (base + raw) */
         dynamic_hf_base_raw = g_new0(hf_register_info, 2 * dynamic_hf_number_of_entries);
@@ -1027,21 +1030,31 @@ post_update_spdu_signal_list_read_in_data(spdu_signal_list_uat_t *data, unsigned
         dynamic_hf_agg_int = g_new0(hf_register_info, dynamic_hf_number_of_entries);
         dynamic_hf_agg_int_number = 0;
 
-        for (unsigned i = 0; i < data_num; i++) {
-            spdu_signal_list_t *list = (spdu_signal_list_t *)g_hash_table_lookup(ht, GUINT_TO_POINTER(data[i].id));
+
+        unsigned i = 0;
+        for (i = 0; i < data_num; i++) {
+
+            /* the hash table does not know about uint64, so we use int64*/
+            int64_t *key = wmem_new(wmem_epan_scope(), int64_t);
+            *key = (uint32_t)data[i].id;
+
+            spdu_signal_list_t *list = (spdu_signal_list_t *)g_hash_table_lookup(ht, key);
             if (list == NULL) {
-                /* This doesn't leak per se, but it won't be freed until program
-                 * shutdown. Ideally this list and its items should be allocated
-                 * with an wmem_allocator that is freed when the prefs are reset.
-                 */
+
                 list = wmem_new(wmem_epan_scope(), spdu_signal_list_t);
 
                 list->id = data[i].id;
                 list->num_of_items = data[i].num_of_params;
-                list->items = wmem_alloc0_array(wmem_epan_scope(), spdu_signal_item_t, data[i].num_of_params);
+
+                spdu_signal_item_t *items = (spdu_signal_item_t *)wmem_alloc0_array(wmem_epan_scope(), spdu_signal_item_t, data[i].num_of_params);
+
+                list->items = items;
 
                 /* create new entry ... */
-                g_hash_table_insert(ht, GUINT_TO_POINTER(data[i].id), list);
+                g_hash_table_insert(ht, key, list);
+            } else {
+                /* already present, deleting key */
+                wmem_free(wmem_epan_scope(), key);
             }
 
             /* and now we add to item array */
@@ -1049,7 +1062,7 @@ post_update_spdu_signal_list_read_in_data(spdu_signal_list_uat_t *data, unsigned
                 spdu_signal_item_t *item = &(list->items[data[i].pos]);
 
                 /* we do not care if we overwrite param */
-                item->name = wmem_strdup(wmem_epan_scope(), data[i].name);
+                item->name = g_strdup(data[i].name);
                 item->pos = data[i].pos;
 
                 item->encoding = ENC_ASCII;
@@ -1133,28 +1146,35 @@ post_update_spdu_signal_list_read_in_data(spdu_signal_list_uat_t *data, unsigned
 }
 
 static void
-post_update_spdu_signal_value_names_read_in_data(spdu_signal_value_name_uat_t* data, unsigned data_num) {
-    if (data_spdu_signal_value_names == NULL || data == NULL) {
+post_update_spdu_signal_value_names_read_in_data(spdu_signal_value_name_uat_t* data, unsigned data_num, GHashTable* ht) {
+    if (ht == NULL || data == NULL || data_num == 0) {
         return;
     }
 
-    for (unsigned i = 0; i < data_num; i++) {
-        uint64_t key = (uint64_t)data[i].id | ((uint64_t)data[i].pos << 32);
-        spdu_signal_value_name_t* list = (spdu_signal_value_name_t*)g_hash_table_lookup(data_spdu_signal_value_names, &key);
+    unsigned i;
+    for (i = 0; i < data_num; i++) {
+        int64_t* key = wmem_new(wmem_epan_scope(), int64_t);
+        *key = (uint64_t)data[i].id | ((uint64_t)data[i].pos << 32);
+
+        spdu_signal_value_name_t* list = (spdu_signal_value_name_t*)g_hash_table_lookup(ht, key);
         if (list == NULL) {
+
             list = wmem_new(wmem_epan_scope(), spdu_signal_value_name_t);
             INIT_SIGNAL_VALUE_NAME(list)
 
-            list->id = data[i].id;
+                list->id = data[i].id;
             list->pos = data[i].pos;
             list->num_of_items = data[i].num_of_items;
-            list->items = wmem_alloc0_array(wmem_epan_scope(), spdu_signal_value_name_item_t, list->num_of_items);
-            list->vs = wmem_alloc0_array(wmem_epan_scope(), val64_string, list->num_of_items + 1);
+
+            list->items = (spdu_signal_value_name_item_t*)wmem_alloc0_array(wmem_epan_scope(), spdu_signal_value_name_item_t, list->num_of_items);
+            list->vs = (val64_string*)wmem_alloc0_array(wmem_epan_scope(), val64_string, list->num_of_items + 1);
 
             /* create new entry ... */
-            uint64_t* new_key = g_new(uint64_t, 1);
-            *new_key = key;
-            g_hash_table_insert(data_spdu_signal_value_names, new_key, list);
+            g_hash_table_insert(ht, key, list);
+        }
+        else {
+            /* do not need it anymore */
+            wmem_free(wmem_epan_scope(), key);
         }
 
         /* and now we add to item array */
@@ -1168,7 +1188,7 @@ post_update_spdu_signal_value_names_read_in_data(spdu_signal_value_name_uat_t* d
                 spdu_signal_value_name_item_t* item = &(list->items[j]);
                 INIT_SIGNAL_VALUE_NAME_ITEM(item)
 
-                item->value_start = data[i].value_start;
+                    item->value_start = data[i].value_start;
                 item->value_end = data[i].value_end;
                 item->name = g_strdup(data[i].value_name);
             }
@@ -1188,56 +1208,8 @@ post_update_spdu_signal_value_names_read_in_data(spdu_signal_value_name_uat_t* d
 }
 
 static void
-destroy_notify_signal_value_names(void *data) {
-    spdu_signal_value_name_t *list = (spdu_signal_value_name_t *)data;
-
-    for (unsigned i = 0; i < list->num_of_items; i++) {
-        if (list->items[i].name != NULL) {
-            g_free(list->items[i].name);
-            list->items[i].name = NULL;
-        }
-        if (list->vs[i].strptr != NULL) {
-            g_free((char *)(list->vs[i].strptr));
-            list->vs[i].strptr = NULL;
-        }
-    }
-
-    list->num_of_items = 0;
-}
-
-static void
-post_update_spdu_signal_list_cb(void) {
-    if (data_spdu_signal_list) {
-        g_hash_table_destroy(data_spdu_signal_list);
-    }
-
-    deregister_user_data();
-
-    data_spdu_signal_list = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
-    post_update_spdu_signal_list_read_in_data(spdu_signal_list, spdu_signal_list_num, data_spdu_signal_list);
-}
-
-static void
-post_update_spdu_signal_value_names_cb(void) {
-    if (data_spdu_signal_value_names) {
-        g_hash_table_destroy(data_spdu_signal_value_names);
-    }
-
-    /* deregister hfs,  */
-    deregister_user_data();
-
-    data_spdu_signal_value_names = g_hash_table_new_full(g_int64_hash, g_int64_equal, g_free, &destroy_notify_signal_value_names);
-    post_update_spdu_signal_value_names_read_in_data(spdu_signal_value_names, spdu_parameter_value_names_num);
-
-    /* We need to update signal list as the hf are affected and we do not know, if signal list post update will be called! */
-    /* It would be so much easier, if there was a working post_config_changes callback... */
-    post_update_spdu_signal_list_cb();
-}
-
-static void
-reset_spdu_signal_list_and_value_names(void) {
-    deregister_user_data();
-
+post_update_spdu_signal_list_and_value_names_cb(void) {
+    /* destroy old hash tables, if they exist */
     if (data_spdu_signal_list) {
         g_hash_table_destroy(data_spdu_signal_list);
         data_spdu_signal_list = NULL;
@@ -1246,6 +1218,19 @@ reset_spdu_signal_list_and_value_names(void) {
         g_hash_table_destroy(data_spdu_signal_value_names);
         data_spdu_signal_value_names = NULL;
     }
+
+    deregister_user_data();
+
+    data_spdu_signal_list = g_hash_table_new_full(g_int64_hash, g_int64_equal, &spdu_payload_free_key, &spdu_payload_free_generic_data);
+    data_spdu_signal_value_names = g_hash_table_new_full(g_int64_hash, g_int64_equal, &spdu_payload_free_key, &spdu_payload_free_generic_data);
+    post_update_spdu_signal_list_read_in_data(spdu_signal_list, spdu_signal_list_num, data_spdu_signal_list);
+    post_update_spdu_signal_value_names_read_in_data(spdu_signal_value_names, spdu_parameter_value_names_num, data_spdu_signal_value_names);
+}
+
+static void
+reset_spdu_signal_list(void)
+{
+    deregister_user_data();
 }
 
 static spdu_signal_list_t *
@@ -1254,7 +1239,8 @@ get_parameter_config(uint64_t id) {
         return NULL;
     }
 
-    return (spdu_signal_list_t *)g_hash_table_lookup(data_spdu_signal_list, GUINT_TO_POINTER(id));
+    int64_t key = (int64_t)id;
+    return (spdu_signal_list_t *)g_hash_table_lookup(data_spdu_signal_list, &key);
 }
 
 /* UAT: Value Names */
@@ -1319,7 +1305,7 @@ free_spdu_signal_value_name_cb(void *r) {
 
 static spdu_signal_value_name_t *
 get_signal_value_name_config(uint32_t id, uint16_t pos) {
-    if (data_spdu_signal_value_names == NULL) {
+    if (data_spdu_signal_list == NULL) {
         return NULL;
     }
 
@@ -1334,9 +1320,9 @@ UAT_HEX_CB_DEF(spdu_someip_mapping, major_version, spdu_someip_mapping_uat_t)
 UAT_HEX_CB_DEF(spdu_someip_mapping, message_type, spdu_someip_mapping_uat_t)
 UAT_HEX_CB_DEF(spdu_someip_mapping, spdu_message_id, spdu_someip_mapping_uat_t)
 
-static uint64_t
+static int64_t
 spdu_someip_key(uint16_t service_id, uint16_t method_id, uint8_t major_version, uint8_t message_type) {
-    return (uint64_t)method_id | ((uint64_t)service_id << 16) | ((uint64_t)major_version << 32) | ((uint64_t)message_type << 40);
+    return (int64_t)method_id | ((int64_t)service_id << 16) | ((int64_t)major_version << 32) | ((int64_t)message_type << 40);
 }
 
 static void *
@@ -1387,31 +1373,41 @@ post_update_spdu_someip_mapping_cb(void) {
     /* destroy old hash table, if it exists */
     if (data_spdu_someip_mappings) {
         g_hash_table_destroy(data_spdu_someip_mappings);
+        data_spdu_someip_mappings = NULL;
     }
 
     /* we don't need to free the data as long as we don't alloc it first */
-    data_spdu_someip_mappings = g_hash_table_new_full(g_int64_hash, g_int64_equal, g_free, NULL);
+    data_spdu_someip_mappings = g_hash_table_new_full(g_int64_hash, g_int64_equal, &spdu_payload_free_key, NULL);
 
-    for (unsigned i = 0; i < spdu_someip_mapping_num; i++) {
-        uint64_t *key = g_new(uint64_t, 1);
-        *key = spdu_someip_key((uint16_t)spdu_someip_mapping[i].service_id,
-                                (uint16_t)spdu_someip_mapping[i].method_id,
-                                (uint8_t)spdu_someip_mapping[i].major_version,
-                                (uint8_t)spdu_someip_mapping[i].message_type);
-        g_hash_table_insert(data_spdu_someip_mappings, key, &spdu_someip_mapping[i]);
+    if (data_spdu_someip_mappings == NULL || spdu_someip_mapping == NULL) {
+        return;
+    }
+
+    unsigned i;
+    if (spdu_someip_mapping_num > 0) {
+        for (i = 0; i < spdu_someip_mapping_num; i++) {
+            int64_t *key = wmem_new(wmem_epan_scope(), int64_t);
+            *key = spdu_someip_key((uint16_t)spdu_someip_mapping[i].service_id,
+                                   (uint16_t)spdu_someip_mapping[i].method_id,
+                                   (uint8_t)spdu_someip_mapping[i].major_version,
+                                   (uint8_t)spdu_someip_mapping[i].message_type);
+
+            g_hash_table_insert(data_spdu_someip_mappings, key, &spdu_someip_mapping[i]);
+        }
     }
 
     /* we need to make sure we register again */
     register_signal_pdu_someip();
 }
 
-static void
-reset_spdu_someip_mapping_cb(void) {
-    /* destroy hash table, if it exists */
-    if (data_spdu_someip_mappings) {
-        g_hash_table_destroy(data_spdu_someip_mappings);
-        data_spdu_someip_mappings = NULL;
+static spdu_someip_mapping_t *
+get_someip_mapping(uint16_t service_id, uint16_t method_id, uint8_t major_version, uint8_t message_type) {
+    if (data_spdu_someip_mappings == NULL) {
+        return NULL;
     }
+
+    int64_t key = spdu_someip_key(service_id, method_id, major_version, message_type);
+    return (spdu_someip_mapping_t *)g_hash_table_lookup(data_spdu_someip_mappings, &key);
 }
 
 /* UAT: CAN Mapping */
@@ -1453,46 +1449,44 @@ post_update_spdu_can_mapping_cb(void) {
     /* destroy old hash table, if it exists */
     if (data_spdu_can_mappings) {
         g_hash_table_destroy(data_spdu_can_mappings);
+        data_spdu_can_mappings = NULL;
     }
 
     /* we don't need to free the data as long as we don't alloc it first */
-    data_spdu_can_mappings = g_hash_table_new_full(g_int64_hash, g_int64_equal, g_free, NULL);
+    data_spdu_can_mappings = g_hash_table_new_full(g_int64_hash, g_int64_equal, &spdu_payload_free_key, NULL);
 
-    for (unsigned i = 0; i < spdu_can_mapping_num; i++) {
-        uint64_t *key = g_new(uint64_t, 1);
-        *key = spdu_can_mapping[i].can_id | (((uint64_t)spdu_can_mapping[i].bus_id & 0xffff) << 32);
-        g_hash_table_insert(data_spdu_can_mappings, key, &spdu_can_mapping[i]);
+    if (data_spdu_can_mappings == NULL || spdu_can_mapping == NULL) {
+        return;
+    }
+
+    if (spdu_can_mapping_num > 0) {
+        unsigned i;
+        for (i = 0; i < spdu_can_mapping_num; i++) {
+            int64_t *key = wmem_new(wmem_epan_scope(), int64_t);
+            *key = spdu_can_mapping[i].can_id;
+            *key |= ((int64_t)(spdu_can_mapping[i].bus_id & 0xffff)) << 32;
+
+            g_hash_table_insert(data_spdu_can_mappings, key, &spdu_can_mapping[i]);
+        }
     }
 
     /* we need to make sure we register again */
     register_signal_pdu_can();
 }
 
-static void
-reset_spdu_can_mapping_cb(void) {
-    /* destroy hash table, if it exists */
-    if (data_spdu_can_mappings) {
-        g_hash_table_destroy(data_spdu_can_mappings);
-        data_spdu_can_mappings = NULL;
-    }
-}
-
 static spdu_can_mapping_t *
 get_can_mapping(uint32_t id, uint16_t bus_id) {
-    uint64_t key;
-    spdu_can_mapping_t* tmp;
-
     if (data_spdu_can_mappings == NULL) {
         return NULL;
     }
 
     /* key is Bus ID, EFF Flag, CAN-ID*/
-    key = ((uint64_t)id & (CAN_EFF_MASK | CAN_EFF_FLAG)) | ((uint64_t)bus_id << 32);
-    tmp = g_hash_table_lookup(data_spdu_can_mappings, &key);
+    int64_t key = ((int64_t)id & (CAN_EFF_MASK | CAN_EFF_FLAG)) | ((int64_t)bus_id << 32);
+    spdu_can_mapping_t *tmp = (spdu_can_mapping_t *)g_hash_table_lookup(data_spdu_can_mappings, &key);
     if (tmp == NULL) {
         /* try again without Bus ID set */
         key = id & (CAN_EFF_MASK | CAN_EFF_FLAG);
-        tmp = g_hash_table_lookup(data_spdu_can_mappings, &key);
+        tmp = (spdu_can_mapping_t *)g_hash_table_lookup(data_spdu_can_mappings, &key);
     }
 
     return tmp;
@@ -1540,28 +1534,39 @@ post_update_spdu_flexray_mapping_cb(void) {
     /* destroy old hash table, if it exists */
     if (data_spdu_flexray_mappings) {
         g_hash_table_destroy(data_spdu_flexray_mappings);
+        data_spdu_flexray_mappings = NULL;
     }
 
     /* we don't need to free the data as long as we don't alloc it first */
-    data_spdu_flexray_mappings = g_hash_table_new_full(g_int64_hash, g_int64_equal, g_free, NULL);
+    data_spdu_flexray_mappings = g_hash_table_new_full(g_int64_hash, g_int64_equal, &spdu_payload_free_key, NULL);
 
-    for (unsigned i = 0; i < spdu_flexray_mapping_num; i++) {
-        uint64_t *key = g_new(uint64_t, 1);
-        *key = (spdu_flexray_mapping[i].flexray_id & 0xffff) |
-                (((uint64_t)spdu_flexray_mapping[i].cycle & 0xff) << 16) |
-                (((uint64_t)spdu_flexray_mapping[i].channel & 0xff) << 24);
-        g_hash_table_insert(data_spdu_flexray_mappings, key, &spdu_flexray_mapping[i]);
+    if (data_spdu_flexray_mappings == NULL || spdu_flexray_mapping == NULL) {
+        return;
+    }
+
+    if (spdu_flexray_mapping_num > 0) {
+        unsigned i;
+        for (i = 0; i < spdu_flexray_mapping_num; i++) {
+            int64_t *key = wmem_new(wmem_epan_scope(), int64_t);
+            *key = spdu_flexray_mapping[i].flexray_id & 0xffff;
+            *key |= (int64_t)(spdu_flexray_mapping[i].cycle & 0xff) << 16;
+            *key |= (int64_t)(spdu_flexray_mapping[i].channel & 0xff) << 24;
+
+            g_hash_table_insert(data_spdu_flexray_mappings, key, &spdu_flexray_mapping[i]);
+        }
     }
 }
 
-static void
-reset_spdu_flexray_mapping_cb(void) {
-    /* destroy hash table, if it exists */
-    if (data_spdu_flexray_mappings) {
-        g_hash_table_destroy(data_spdu_flexray_mappings);
-        data_spdu_flexray_mappings = NULL;
+static spdu_flexray_mapping_t *
+get_flexray_mapping(uint8_t channel, uint8_t cycle, uint16_t flexray_id) {
+    if (data_spdu_flexray_mappings == NULL) {
+        return NULL;
     }
+
+    int64_t key = ((int64_t)channel << 24) | ((int64_t)cycle << 16) | (int64_t)flexray_id;
+    return (spdu_flexray_mapping_t *)g_hash_table_lookup(data_spdu_flexray_mappings, &key);
 }
+
 
 /* UAT: LIN Mapping */
 UAT_HEX_CB_DEF(spdu_lin_mapping, frame_id, spdu_lin_mapping_uat_t)
@@ -1602,46 +1607,45 @@ post_update_spdu_lin_mapping_cb(void) {
     /* destroy old hash table, if it exists */
     if (data_spdu_lin_mappings) {
         g_hash_table_destroy(data_spdu_lin_mappings);
+        data_spdu_lin_mappings = NULL;
     }
 
     /* we don't need to free the data as long as we don't alloc it first */
-    data_spdu_lin_mappings = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
+    data_spdu_lin_mappings = g_hash_table_new_full(g_int_hash, g_int_equal, &spdu_payload_free_key, NULL);
 
-    for (unsigned i = 0; i < spdu_lin_mapping_num; i++) {
-        uint32_t key = (spdu_lin_mapping[i].frame_id & LIN_ID_MASK) | ((spdu_lin_mapping[i].bus_id & 0xffff) << 16);
-        g_hash_table_insert(data_spdu_lin_mappings, GUINT_TO_POINTER(key), &spdu_lin_mapping[i]);
+    if (data_spdu_lin_mappings == NULL || spdu_lin_mapping == NULL) {
+        return;
+    }
+
+    if (spdu_lin_mapping_num > 0) {
+        unsigned i;
+        for (i = 0; i < spdu_lin_mapping_num; i++) {
+            int *key = wmem_new(wmem_epan_scope(), int);
+            *key = (spdu_lin_mapping[i].frame_id) & LIN_ID_MASK;
+            *key |= ((spdu_lin_mapping[i].bus_id) & 0xffff) << 16;
+
+            g_hash_table_insert(data_spdu_lin_mappings, key, &spdu_lin_mapping[i]);
+        }
     }
 
     /* we need to make sure we register again */
     register_signal_pdu_lin();
 }
 
-static void
-reset_spdu_lin_mapping_cb(void) {
-    /* destroy hash table, if it exists */
-    if (data_spdu_lin_mappings) {
-        g_hash_table_destroy(data_spdu_lin_mappings);
-        data_spdu_lin_mappings = NULL;
-    }
-}
-
 static spdu_lin_mapping_t *
 get_lin_mapping(lin_info_t *lininfo) {
-    uint32_t key;
-    spdu_lin_mapping_uat_t* tmp;
-
     if (data_spdu_lin_mappings == NULL) {
         return NULL;
     }
 
-    key = (lininfo->id & LIN_ID_MASK) | ((lininfo->bus_id & 0xffff) << 16);
+    int32_t key = ((lininfo->id) & LIN_ID_MASK) | (((lininfo->bus_id) & 0xffff) << 16);
 
-    tmp = g_hash_table_lookup(data_spdu_lin_mappings, GUINT_TO_POINTER(key));
+    spdu_lin_mapping_uat_t *tmp = (spdu_lin_mapping_uat_t *)g_hash_table_lookup(data_spdu_lin_mappings, &key);
 
     if (tmp == NULL) {
         /* try again without Bus ID set */
         key = (lininfo->id) & LIN_ID_MASK;
-        tmp = g_hash_table_lookup(data_spdu_lin_mappings, GUINT_TO_POINTER(key));
+        tmp = (spdu_lin_mapping_uat_t *)g_hash_table_lookup(data_spdu_lin_mappings, &key);
     }
 
     return tmp;
@@ -1679,26 +1683,38 @@ post_update_spdu_pdu_transport_mapping_cb(void) {
     /* destroy old hash table, if it exists */
     if (data_spdu_pdu_transport_mappings) {
         g_hash_table_destroy(data_spdu_pdu_transport_mappings);
+        data_spdu_pdu_transport_mappings = NULL;
     }
 
     /* we don't need to free the data as long as we don't alloc it first */
-    data_spdu_pdu_transport_mappings = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
+    data_spdu_pdu_transport_mappings = g_hash_table_new_full(g_int64_hash, g_int64_equal, &spdu_payload_free_key, NULL);
 
-    for (unsigned i = 0; i < spdu_pdu_transport_mapping_num; i++) {
-        g_hash_table_insert(data_spdu_pdu_transport_mappings, GUINT_TO_POINTER(spdu_pdu_transport_mapping[i].pdu_id), &spdu_pdu_transport_mapping[i]);
+    if (data_spdu_pdu_transport_mappings == NULL || spdu_pdu_transport_mapping == NULL) {
+        return;
+    }
+
+    if (spdu_pdu_transport_mapping_num > 0) {
+        unsigned i;
+        for (i = 0; i < spdu_pdu_transport_mapping_num; i++) {
+            int64_t *key = wmem_new(wmem_epan_scope(), int64_t);
+            *key = spdu_pdu_transport_mapping[i].pdu_id;
+
+            g_hash_table_insert(data_spdu_pdu_transport_mappings, key, &spdu_pdu_transport_mapping[i]);
+        }
     }
 
     /* we need to make sure we register again */
     register_signal_pdu_pdu_transport();
 }
 
-static void
-reset_spdu_pdu_transport_cb(void) {
-    /* destroy hash table, if it exists */
-    if (data_spdu_pdu_transport_mappings) {
-        g_hash_table_destroy(data_spdu_pdu_transport_mappings);
-        data_spdu_pdu_transport_mappings = NULL;
+static spdu_pdu_transport_mapping_t *
+get_pdu_transport_mapping(uint32_t pdu_transport_id) {
+    if (data_spdu_pdu_transport_mappings == NULL) {
+        return NULL;
     }
+
+    int64_t key = pdu_transport_id;
+    return (spdu_pdu_transport_mapping_uat_t *)g_hash_table_lookup(data_spdu_pdu_transport_mappings, &key);
 }
 
 /* UAT: IPduM Mapping */
@@ -1733,26 +1749,38 @@ post_update_spdu_ipdum_mapping_cb(void) {
     /* destroy old hash table, if it exists */
     if (data_spdu_ipdum_mappings) {
         g_hash_table_destroy(data_spdu_ipdum_mappings);
+        data_spdu_ipdum_mappings = NULL;
     }
 
     /* we don't need to free the data as long as we don't alloc it first */
-    data_spdu_ipdum_mappings = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
+    data_spdu_ipdum_mappings = g_hash_table_new_full(g_int64_hash, g_int64_equal, &spdu_payload_free_key, NULL);
 
-    for (unsigned i = 0; i < spdu_ipdum_mapping_num; i++) {
-        g_hash_table_insert(data_spdu_ipdum_mappings, GUINT_TO_POINTER(spdu_ipdum_mapping[i].pdu_id), &spdu_ipdum_mapping[i]);
+    if (data_spdu_ipdum_mappings == NULL || spdu_ipdum_mapping == NULL) {
+        return;
+    }
+
+    if (spdu_ipdum_mapping_num > 0) {
+        unsigned i;
+        for (i = 0; i < spdu_ipdum_mapping_num; i++) {
+            int64_t *key = wmem_new(wmem_epan_scope(), int64_t);
+            *key = spdu_ipdum_mapping[i].pdu_id;
+
+            g_hash_table_insert(data_spdu_ipdum_mappings, key, &spdu_ipdum_mapping[i]);
+        }
     }
 
     /* we need to make sure we register again */
     register_signal_pdu_ipdum();
 }
 
-static void
-reset_spdu_ipdum_mapping_cb(void) {
-    /* destroy hash table, if it exists */
-    if (data_spdu_ipdum_mappings) {
-        g_hash_table_destroy(data_spdu_ipdum_mappings);
-        data_spdu_ipdum_mappings = NULL;
+static spdu_ipdum_mapping_uat_t *
+get_ipdum_mapping(uint32_t pdu_id) {
+    if (data_spdu_ipdum_mappings == NULL) {
+        return NULL;
     }
+
+    int64_t key = pdu_id;
+    return (spdu_ipdum_mapping_uat_t *)g_hash_table_lookup(data_spdu_ipdum_mappings, &key);
 }
 
 /* UAT: DLT Mapping */
@@ -1794,25 +1822,38 @@ post_update_spdu_dlt_mapping_cb(void) {
     /* destroy old hash table, if it exists */
     if (data_spdu_dlt_mappings) {
         g_hash_table_destroy(data_spdu_dlt_mappings);
+        data_spdu_dlt_mappings = NULL;
     }
 
     /* we don't need to free the data as long as we don't alloc it first */
-    data_spdu_dlt_mappings = g_hash_table_new_full(g_int64_hash, g_int64_equal, g_free, NULL);
+    data_spdu_dlt_mappings = g_hash_table_new_full(g_int64_hash, g_int64_equal, &spdu_payload_free_key, NULL);
 
-    for (unsigned i = 0; i < spdu_dlt_mapping_num; i++) {
-        uint64_t *key = g_new(uint64_t, 1);
-        *key = spdu_dlt_mapping[i].dlt_message_id | ((uint64_t)dlt_ecu_id_to_int32(spdu_dlt_mapping[i].ecu_id) << 32);
-        g_hash_table_insert(data_spdu_dlt_mappings, key, &spdu_dlt_mapping[i]);
+    if (data_spdu_dlt_mappings == NULL || spdu_dlt_mapping == NULL) {
+        return;
+    }
+
+    if (spdu_dlt_mapping_num > 0) {
+        unsigned i;
+        for (i = 0; i < spdu_dlt_mapping_num; i++) {
+            int64_t *key = wmem_new(wmem_epan_scope(), int64_t);
+            *key = spdu_dlt_mapping[i].dlt_message_id;
+            *key |= (int64_t)(dlt_ecu_id_to_int32(spdu_dlt_mapping[i].ecu_id)) << 32;
+
+            g_hash_table_insert(data_spdu_dlt_mappings, key, &spdu_dlt_mapping[i]);
+        }
     }
 }
 
-static void
-reset_spdu_dlt_mapping_cb(void) {
-    /* destroy hash table, if it exists */
-    if (data_spdu_dlt_mappings) {
-        g_hash_table_destroy(data_spdu_dlt_mappings);
-        data_spdu_dlt_mappings = NULL;
+static spdu_dlt_mapping_uat_t *
+get_dlt_mapping(uint32_t pdu_id, const char *ecu_id) {
+    if (data_spdu_dlt_mappings == NULL) {
+        return NULL;
     }
+
+    int64_t key = pdu_id;
+    key |= (int64_t)dlt_ecu_id_to_int32(ecu_id) << 32;
+
+    return (spdu_dlt_mapping_uat_t *)g_hash_table_lookup(data_spdu_dlt_mappings, &key);
 }
 
 /* UAT: UDS Mapping */
@@ -1841,12 +1882,12 @@ update_spdu_uds_mapping(void *r, char **err) {
     spdu_uds_mapping_uat_t *rec = (spdu_uds_mapping_uat_t *)r;
 
     if (rec->id > 0xffff) {
-        *err = g_strdup("UDS IDs are only uint16!");
+        *err = g_strdup_printf("UDS IDs are only uint16!");
         return false;
     }
 
     if (rec->service > 0xff) {
-        *err = g_strdup("UDS Services are only uint8!");
+        *err = g_strdup_printf("UDS Services are only uint8!");
         return false;
     }
 
@@ -1858,64 +1899,65 @@ post_update_spdu_uds_mapping_cb(void) {
     /* destroy old hash table, if it exists */
     if (data_spdu_uds_mappings) {
         g_hash_table_destroy(data_spdu_uds_mappings);
+        data_spdu_uds_mappings = NULL;
     }
 
     /* we don't need to free the data as long as we don't alloc it first */
-    data_spdu_uds_mappings = g_hash_table_new_full(g_int64_hash, g_int64_equal, g_free, NULL);
+    data_spdu_uds_mappings = g_hash_table_new_full(g_int64_hash, g_int64_equal, &spdu_payload_free_key, NULL);
 
-    for (unsigned i = 0; i < spdu_uds_mapping_num; i++) {
-        uint32_t sid;
-        if (spdu_uds_mapping[i].reply) {
-            sid = (0xff & spdu_uds_mapping[i].service) | UDS_REPLY_MASK;
-        }
-        else {
-            sid = (0xff & spdu_uds_mapping[i].service);
-        }
-
-        uint64_t *key = g_new(uint64_t, 1);
-        *key = spdu_uds_mapping[i].uds_address | (((uint64_t)spdu_uds_mapping[i].id & 0xffff) << 32) | ((uint64_t)sid << 48);
-        g_hash_table_insert(data_spdu_uds_mappings, key, &spdu_uds_mapping[i]);
-
-        /* Adding with 0xffffffff (ANY) as address too */
-        key = g_new(uint64_t, 1);
-        *key = (uint64_t)(0xffffffff) | ((uint64_t)(0xffff & spdu_uds_mapping[i].id) << 32) | ((uint64_t)sid << 48);
-        g_hash_table_insert(data_spdu_uds_mappings, key, &spdu_uds_mapping[i]);
+    if (data_spdu_uds_mappings == NULL || spdu_uds_mapping == NULL) {
+        return;
     }
-}
 
-static void
-reset_spdu_uds_mapping_cb(void) {
-    /* destroy hash table, if it exists */
-    if (data_spdu_uds_mappings) {
-        g_hash_table_destroy(data_spdu_uds_mappings);
-        data_spdu_uds_mappings = NULL;
+    if (spdu_uds_mapping_num > 0) {
+        unsigned i;
+        uint32_t sid;
+        for (i = 0; i < spdu_uds_mapping_num; i++) {
+            int64_t *key = wmem_new(wmem_epan_scope(), int64_t);
+            if (spdu_uds_mapping[i].reply) {
+                sid = (0xff & spdu_uds_mapping[i].service) | UDS_REPLY_MASK;
+            } else {
+                sid = (0xff & spdu_uds_mapping[i].service);
+            }
+
+            *key = (uint64_t)(spdu_uds_mapping[i].uds_address) | ((uint64_t)(0xffff & spdu_uds_mapping[i].id) << 32) | ((uint64_t)sid << 48);
+            g_hash_table_insert(data_spdu_uds_mappings, key, &spdu_uds_mapping[i]);
+
+            /* Adding with 0xffffffff (ANY) as address too */
+            key = wmem_new(wmem_epan_scope(), int64_t);
+            *key = (uint64_t)(0xffffffff) | ((uint64_t)(0xffff & spdu_uds_mapping[i].id) << 32) | ((uint64_t)sid << 48);
+            g_hash_table_insert(data_spdu_uds_mappings, key, &spdu_uds_mapping[i]);
+        }
     }
 }
 
 static spdu_uds_mapping_uat_t *
 get_uds_mapping(uds_info_t *uds_info) {
     uint32_t sid;
-    uint64_t key;
-    spdu_uds_mapping_uat_t* tmp;
 
     DISSECTOR_ASSERT(uds_info);
     if (data_spdu_uds_mappings == NULL) {
         return NULL;
     }
 
+    int64_t *key = wmem_new(wmem_epan_scope(), int64_t);
     if (uds_info->reply) {
         sid = (0xff & uds_info->service) | UDS_REPLY_MASK;
     } else {
         sid = (0xff & uds_info->service);
     }
-    key = (uint64_t)(uds_info->uds_address) | (((uint64_t)uds_info->id & 0xffff) << 32) | ((uint64_t)sid << 48);
-    tmp = g_hash_table_lookup(data_spdu_uds_mappings, &key);
+    *key = (uint64_t)(uds_info->uds_address) | ((uint64_t)(0xffff & uds_info->id) << 32) | ((uint64_t)sid << 48);
+
+    spdu_uds_mapping_uat_t *tmp = (spdu_uds_mapping_uat_t *)g_hash_table_lookup(data_spdu_uds_mappings, key);
 
     /* if we cannot find it for the Address, lets look at MAXUINT32 */
     if (tmp == NULL) {
-        key = (uint64_t)(UINT32_MAX) | (((uint64_t)uds_info->id & 0xffff) << 32) | ((uint64_t)sid << 48);
-        tmp = g_hash_table_lookup(data_spdu_uds_mappings, &key);
+        *key = (uint64_t)(UINT32_MAX) | ((uint64_t)(0xffff & uds_info->id) << 32) | ((uint64_t)sid << 48);
+
+        tmp = (spdu_uds_mapping_uat_t *)g_hash_table_lookup(data_spdu_uds_mappings, key);
     }
+
+    wmem_free(wmem_epan_scope(), key);
 
     return tmp;
 }
@@ -1954,46 +1996,44 @@ post_update_spdu_isobus_mapping_cb(void) {
     /* destroy old hash table, if it exists */
     if (data_spdu_isobus_mappings) {
         g_hash_table_destroy(data_spdu_isobus_mappings);
+        data_spdu_isobus_mappings = NULL;
     }
 
     /* we don't need to free the data as long as we don't alloc it first */
-    data_spdu_isobus_mappings = g_hash_table_new_full(g_int64_hash, g_int64_equal, g_free, NULL);
+    data_spdu_isobus_mappings = g_hash_table_new_full(g_int64_hash, g_int64_equal, &spdu_payload_free_key, NULL);
 
-    for (unsigned i = 0; i < spdu_isobus_mapping_num; i++) {
-        uint64_t *key = g_new(uint64_t, 1);
-        *key = spdu_isobus_mapping[i].pgn | (((uint64_t)spdu_isobus_mapping[i].bus_id & 0xffff) << 32);
-        g_hash_table_insert(data_spdu_isobus_mappings, key, &spdu_isobus_mapping[i]);
+    if (data_spdu_isobus_mappings == NULL || spdu_isobus_mapping == NULL) {
+        return;
+    }
+
+    if (spdu_isobus_mapping_num > 0) {
+        unsigned i;
+        for (i = 0; i < spdu_isobus_mapping_num; i++) {
+            int64_t *key = wmem_new(wmem_epan_scope(), int64_t);
+            *key = spdu_isobus_mapping[i].pgn;
+            *key |= ((int64_t)(spdu_isobus_mapping[i].bus_id & 0xffff)) << 32;
+
+            g_hash_table_insert(data_spdu_isobus_mappings, key, &spdu_isobus_mapping[i]);
+        }
     }
 
     /* we need to make sure we register again */
     register_signal_pdu_isobus();
 }
 
-static void
-reset_spdu_isobus_mapping_cb(void) {
-    /* destroy hash table, if it exists */
-    if (data_spdu_isobus_mappings) {
-        g_hash_table_destroy(data_spdu_isobus_mappings);
-        data_spdu_isobus_mappings = NULL;
-    }
-}
-
 static spdu_isobus_mapping_uat_t *
 get_isobus_mapping(uint32_t pgn, uint16_t bus_id) {
-    uint64_t key;
-    spdu_isobus_mapping_t* tmp;
-
     if (data_spdu_isobus_mappings == NULL) {
         return NULL;
     }
 
     /* key is PGN */
-    key = ((uint64_t)pgn) | ((uint64_t)bus_id << 32);
-    tmp = g_hash_table_lookup(data_spdu_isobus_mappings, &key);
+    int64_t key = ((int64_t)pgn) | ((int64_t)bus_id << 32);
+    spdu_isobus_mapping_t *tmp = (spdu_isobus_mapping_t *)g_hash_table_lookup(data_spdu_isobus_mappings, &key);
     if (tmp == NULL) {
         /* try again without Bus ID set */
-        key = (uint64_t)pgn;
-        tmp = g_hash_table_lookup(data_spdu_isobus_mappings, &key);
+        key = (int64_t)pgn;
+        tmp = (spdu_isobus_mapping_t *)g_hash_table_lookup(data_spdu_isobus_mappings, &key);
     }
 
     return tmp;
@@ -2159,7 +2199,7 @@ dissect_shifted_and_shortened_uint(tvbuff_t *tvb, int offset, int offset_bits, i
 }
 
 static int
-dissect_spdu_payload_signal(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, int offset_bits, spdu_signal_item_t *item, int *multiplexer) {
+dissect_spdu_payload_signal(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, int offset_bits, spdu_signal_item_t *item, int *multiplexer) {
     DISSECTOR_ASSERT(item != NULL);
     DISSECTOR_ASSERT(item->hf_id_effective != NULL);
 
@@ -2170,11 +2210,11 @@ dissect_spdu_payload_signal(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     int         hf_id_effective = 0;
     int         hf_id_raw = 0;
 
-    unsigned offset_end = ((8 * offset + offset_bits + item->bitlength_encoded_type) / 8);
-    unsigned offset_end_bits = ((8 * offset + offset_bits + item->bitlength_encoded_type) % 8);
+    int offset_end = (int)((8 * offset + offset_bits + item->bitlength_encoded_type) / 8);
+    int offset_end_bits = (int)((8 * offset + offset_bits + item->bitlength_encoded_type) % 8);
 
-    unsigned string_length = 0;
-    unsigned signal_length = offset_end - offset;
+    int string_length = 0;
+    int signal_length = offset_end - offset;
     if (offset_end_bits != 0) {
         signal_length++;
     }
@@ -2401,22 +2441,23 @@ dissect_spdu_payload_signal(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
 static int
 dissect_spdu_payload(tvbuff_t *tvb, packet_info *pinfo, proto_tree *root_tree, uint32_t id, bool update_column) {
-    unsigned offset = 0;
-    unsigned offset_bits = 0;
+    int offset = 0;
+    int offset_bits = 0;
     int bits_parsed = 0;
     int multiplexer = -1;
 
-    proto_item *pdu_item = proto_tree_add_item(root_tree, proto_signal_pdu, tvb, offset, -1, ENC_NA);
-    proto_tree *tree = proto_item_add_subtree(pdu_item, ett_spdu_payload);
+    proto_item *ti = proto_tree_add_item(root_tree, proto_signal_pdu, tvb, offset, -1, ENC_NA);
+    proto_tree *tree = proto_item_add_subtree(ti, ett_spdu_payload);
 
     char *name = get_message_name(id);
+
     if (name != NULL) {
-        proto_item_append_text(pdu_item, ": %s", name);
+        proto_item_append_text(ti, ": %s", name);
         if (update_column) {
             col_append_fstr(pinfo->cinfo, COL_INFO, " (PDU: %s)", name);
-            col_set_str(pinfo->cinfo, COL_PROTOCOL, "Signal PDU");
+            col_set_str(pinfo->cinfo, COL_PROTOCOL, SPDU_NAME);
         }
-        proto_item* ti = proto_tree_add_string(tree, hf_pdu_name, tvb, offset, -1, name);
+        ti = proto_tree_add_string(tree, hf_pdu_name, tvb, offset, -1, name);
         proto_item_set_generated(ti);
         proto_item_set_hidden(ti);
     }
@@ -2429,23 +2470,26 @@ dissect_spdu_payload(tvbuff_t *tvb, packet_info *pinfo, proto_tree *root_tree, u
     }
 
     if (!spdu_deserializer_activated) {
-        expert_add_info(pinfo, pdu_item, &ei_spdu_payload_disabled);
+        /* we only receive a tvb with nothing behind us */
+        proto_tree_add_text_internal(tree, tvb, 0, tvb_captured_length(tvb), "Dissection of payload is disabled. It can be enabled via protocol preferences.");
         return tvb_captured_length(tvb);
     }
 
     if (tvb_captured_length(tvb) > 0 && paramlist == NULL) {
         /* we only receive a tvb with nothing behind us */
-        expert_add_info(pinfo, pdu_item, &ei_spdu_payload_not_configured);
+        proto_tree_add_text_internal(tree, tvb, 0, tvb_captured_length(tvb), "Payload of PDU is not configured. See protocol preferences.");
         return call_data_dissector(tvb, pinfo, tree);
     }
 
     if (root_tree == NULL && !proto_field_is_referenced(root_tree, proto_signal_pdu) && !paramlist->aggregation) {
+        /* we only receive a tvb with nothing behind us */
         return tvb_captured_length(tvb);
     }
 
-    unsigned length = tvb_captured_length_remaining(tvb, 0);
+    int length = tvb_captured_length_remaining(tvb, 0);
 
-    for (unsigned i = 0; i < paramlist->num_of_items; i++) {
+    unsigned i;
+    for (i = 0; i < paramlist->num_of_items; i++) {
         if (!paramlist->items[i].sig_val_names_valid) {
             paramlist->items[i].sig_val_names = get_signal_value_name_config(paramlist->id, paramlist->items[i].pos);
             paramlist->items[i].sig_val_names_valid = true;
@@ -2475,12 +2519,7 @@ dissect_spdu_message_someip(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
     DISSECTOR_ASSERT(someip_info);
 
-    if (data_spdu_someip_mappings == NULL) {
-        return 0;
-    }
-
-    uint64_t key = spdu_someip_key(someip_info->service_id, someip_info->method_id, someip_info->major_version, someip_info->message_type);
-    spdu_someip_mapping_t *someip_mapping = g_hash_table_lookup(data_spdu_someip_mappings, &key);
+    spdu_someip_mapping_t *someip_mapping = get_someip_mapping(someip_info->service_id, someip_info->method_id, someip_info->major_version, someip_info->message_type);
 
     if (someip_mapping == NULL) {
         return 0;
@@ -2517,12 +2556,7 @@ dissect_spdu_message_flexray(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
     struct flexray_info *flexray_data = (struct flexray_info *)data;
     DISSECTOR_ASSERT(flexray_data);
 
-    if (data_spdu_flexray_mappings == NULL) {
-        return 0;
-    }
-
-    uint64_t key = ((uint64_t)flexray_data->ch << 24) | ((uint64_t)flexray_data->cc << 16) | flexray_data->id;
-    spdu_flexray_mapping_t *flexray_mapping = g_hash_table_lookup(data_spdu_flexray_mappings, &key);
+    spdu_flexray_mapping_t *flexray_mapping = get_flexray_mapping(flexray_data->ch, flexray_data->cc, flexray_data->id);
 
     if (flexray_mapping == NULL) {
         return 0;
@@ -2556,11 +2590,7 @@ dissect_spdu_message_pdu_transport(tvbuff_t *tvb, packet_info *pinfo, proto_tree
     pdu_transport_info_t *pdu_info = (pdu_transport_info_t *)data;
     DISSECTOR_ASSERT(pdu_info);
 
-    if (data_spdu_pdu_transport_mappings == NULL) {
-        return 0;
-    }
-
-    spdu_pdu_transport_mapping_t *pdu_transport_mapping = g_hash_table_lookup(data_spdu_pdu_transport_mappings, GUINT_TO_POINTER(pdu_info->id));
+    spdu_pdu_transport_mapping_t *pdu_transport_mapping = get_pdu_transport_mapping(pdu_info->id);
 
     if (pdu_transport_mapping == NULL) {
         return 0;
@@ -2574,11 +2604,7 @@ dissect_spdu_message_ipdum(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
     autosar_ipdu_multiplexer_info_t *pdu_info = (autosar_ipdu_multiplexer_info_t *)data;
     DISSECTOR_ASSERT(pdu_info);
 
-    if (data_spdu_ipdum_mappings == NULL) {
-        return 0;
-    }
-
-    spdu_ipdum_mapping_uat_t *ipdum_mapping = g_hash_table_lookup(data_spdu_ipdum_mappings, GUINT_TO_POINTER(pdu_info->pdu_id));
+    spdu_ipdum_mapping_uat_t *ipdum_mapping = get_ipdum_mapping(pdu_info->pdu_id);
 
     if (ipdum_mapping == NULL) {
         return 0;
@@ -2592,12 +2618,7 @@ dissect_spdu_message_dlt_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
     dlt_info_t *pdu_info = (dlt_info_t *)data;
     DISSECTOR_ASSERT(pdu_info);
 
-    if (data_spdu_dlt_mappings == NULL) {
-        return 0;
-    }
-
-    uint64_t key = pdu_info->message_id | ((uint64_t)dlt_ecu_id_to_int32(pdu_info->ecu_id) << 32);
-    spdu_dlt_mapping_uat_t *dlt_mapping = g_hash_table_lookup(data_spdu_dlt_mappings, &key);
+    spdu_dlt_mapping_uat_t *dlt_mapping = get_dlt_mapping(pdu_info->message_id, pdu_info->ecu_id);
 
     if (dlt_mapping == NULL) {
         return false;
@@ -2787,14 +2808,10 @@ proto_register_signal_pdu(void) {
           PI_MALFORMED, PI_ERROR, "Signal PDU: Config Error (missing filter, filter duplicate, ...)!", EXPFILL} },
         { &ei_spdu_unaligned_data, {"signal_pdu.payload.unaligned_data",
           PI_MALFORMED, PI_ERROR, "Signal PDU: Unaligned data! Strings etc. need to be aligned to bytes!", EXPFILL} },
-        { &ei_spdu_payload_disabled, {"signal_pdu.payload.disabled",
-          PI_PROTOCOL, PI_WARN, "Dissection of payload is disabled. It can be enabled via protocol preferences.", EXPFILL} },
-        { &ei_spdu_payload_not_configured, {"signal_pdu.payload.not_configured",
-          PI_PROTOCOL, PI_WARN, "Payload of PDU is not configured. See protocol preferences.", EXPFILL} },
     };
 
     /* Register ETTs */
-    proto_signal_pdu = proto_register_protocol("Signal PDU", "Signal PDU", "signal_pdu");
+    proto_signal_pdu = proto_register_protocol(SPDU_NAME_LONG, SPDU_NAME, SPDU_NAME_FILTER);
     proto_register_field_array(proto_signal_pdu, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
     expert_module_lpdu = expert_register_protocol(proto_signal_pdu);
@@ -2842,8 +2859,6 @@ proto_register_signal_pdu(void) {
         "Should the payload dissector hide raw values?",
         &spdu_deserializer_hide_raw_values);
 
-    /* Signal Value Names must be before Signal List as the later refs the first */
-
     spdu_parameter_value_names_uat = uat_new("Signal Value Names",
         sizeof(spdu_signal_value_name_uat_t),              /* record size           */
         DATAFILE_SPDU_VALUE_NAMES,                         /* filename              */
@@ -2855,8 +2870,8 @@ proto_register_signal_pdu(void) {
         copy_spdu_signal_value_name_cb,                    /* copy callback         */
         update_spdu_signal_value_name,                     /* update callback       */
         free_spdu_signal_value_name_cb,                    /* free callback         */
-        post_update_spdu_signal_value_names_cb,            /* post update callback  */
-        reset_spdu_signal_list_and_value_names,            /* reset callback        */
+        post_update_spdu_signal_list_and_value_names_cb,   /* post update callback  */
+        NULL,                                              /* reset callback        */
         spdu_parameter_value_name_uat_fields               /* UAT field definitions */
     );
 
@@ -2876,8 +2891,8 @@ proto_register_signal_pdu(void) {
         copy_spdu_signal_list_cb,                          /* copy callback         */
         update_spdu_signal_list,                           /* update callback       */
         free_spdu_signal_list_cb,                          /* free callback         */
-        post_update_spdu_signal_list_cb,                   /* post update callback  */
-        reset_spdu_signal_list_and_value_names,            /* reset callback        */
+        post_update_spdu_signal_list_and_value_names_cb,   /* post update callback  */
+        reset_spdu_signal_list,                            /* reset callback        */
         spdu_signal_list_uat_fields                        /* UAT field definitions */
     );
 
@@ -2906,7 +2921,7 @@ proto_register_signal_pdu(void) {
         update_spdu_someip_mapping,                        /* update callback       */
         NULL,                                              /* free callback         */
         post_update_spdu_someip_mapping_cb,                /* post update callback  */
-        reset_spdu_someip_mapping_cb,                      /* reset callback        */
+        NULL,                                              /* reset callback        */
         spdu_someip_mapping_uat_fields                     /* UAT field definitions */
     );
 
@@ -2926,7 +2941,7 @@ proto_register_signal_pdu(void) {
         update_spdu_can_mapping,                           /* update callback       */
         NULL,                                              /* free callback         */
         post_update_spdu_can_mapping_cb,                   /* post update callback  */
-        reset_spdu_can_mapping_cb,                         /* reset callback        */
+        NULL,                                              /* reset callback        */
         spdu_can_mapping_uat_fields                        /* UAT field definitions */
     );
 
@@ -2946,7 +2961,7 @@ proto_register_signal_pdu(void) {
         update_spdu_flexray_mapping,                       /* update callback       */
         NULL,                                              /* free callback         */
         post_update_spdu_flexray_mapping_cb,               /* post update callback  */
-        reset_spdu_flexray_mapping_cb,                     /* reset callback        */
+        NULL,                                              /* reset callback        */
         spdu_flexray_mapping_uat_fields                    /* UAT field definitions */
     );
 
@@ -2966,7 +2981,7 @@ proto_register_signal_pdu(void) {
         update_spdu_lin_mapping,                           /* update callback       */
         NULL,                                              /* free callback         */
         post_update_spdu_lin_mapping_cb,                   /* post update callback  */
-        reset_spdu_lin_mapping_cb,                         /* reset callback        */
+        NULL,                                              /* reset callback        */
         spdu_lin_mapping_uat_fields                        /* UAT field definitions */
     );
 
@@ -2986,7 +3001,7 @@ proto_register_signal_pdu(void) {
         update_spdu_pdu_transport_mapping,                 /* update callback       */
         NULL,                                              /* free callback         */
         post_update_spdu_pdu_transport_mapping_cb,         /* post update callback  */
-        reset_spdu_pdu_transport_cb,                       /* reset callback        */
+        NULL,                                              /* reset callback        */
         spdu_pdu_transport_mapping_uat_fields              /* UAT field definitions */
     );
 
@@ -3006,7 +3021,7 @@ proto_register_signal_pdu(void) {
         update_spdu_ipdum_mapping,                         /* update callback       */
         NULL,                                              /* free callback         */
         post_update_spdu_ipdum_mapping_cb,                 /* post update callback  */
-        reset_spdu_ipdum_mapping_cb,                       /* reset callback        */
+        NULL,                                              /* reset callback        */
         spdu_ipdum_mapping_uat_fields                      /* UAT field definitions */
     );
 
@@ -3026,7 +3041,7 @@ proto_register_signal_pdu(void) {
         update_spdu_dlt_mapping,                           /* update callback       */
         NULL,                                              /* free callback         */
         post_update_spdu_dlt_mapping_cb,                   /* post update callback  */
-        reset_spdu_dlt_mapping_cb,                         /* reset callback        */
+        NULL,                                              /* reset callback        */
         spdu_dlt_mapping_uat_fields                        /* UAT field definitions */
     );
 
@@ -3046,7 +3061,7 @@ proto_register_signal_pdu(void) {
         update_spdu_uds_mapping,                           /* update callback       */
         NULL,                                              /* free callback         */
         post_update_spdu_uds_mapping_cb,                   /* post update callback  */
-        reset_spdu_uds_mapping_cb,                         /* reset callback        */
+        NULL,                                              /* reset callback        */
         spdu_uds_mapping_uat_fields                        /* UAT field definitions */
     );
 
@@ -3066,7 +3081,7 @@ proto_register_signal_pdu(void) {
         update_spdu_isobus_mapping,                        /* update callback       */
         NULL,                                              /* free callback         */
         post_update_spdu_isobus_mapping_cb,                /* post update callback  */
-        reset_spdu_isobus_mapping_cb,                      /* reset callback        */
+        NULL,                                              /* reset callback        */
         spdu_isobus_mapping_uat_fields                     /* UAT field definitions */
     );
 

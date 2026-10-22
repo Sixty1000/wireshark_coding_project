@@ -5,9 +5,6 @@
 # Run from wireshark source folder as e.g.,
 #    ./tools/delete_includes.py --build-folder ~/wireshark-build/ --folder epan/dissectors/
 #
-# TODO: could make this script import and use check_common functions, or perhaps just delete
-# - there are better ways to manage which header files should be included
-#
 # Wireshark - Network traffic analyzer
 # By Gerald Combs <gerald@wireshark.org>
 # Copyright 1998 Gerald Combs
@@ -15,13 +12,14 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 
-import argparse
-import os
-import shutil
-import signal
 import subprocess
+import os
 import sys
+import shutil
+import argparse
+import signal
 from pathlib import Path
+
 
 # Try to exit soon after Ctrl-C is pressed.
 should_exit = False
@@ -116,16 +114,16 @@ class BuildStats:
         print('\n\n')
         print('Summary')
         print('=========')
-        print('files examined:  ', self.files_examined)
-        print('includes tested: ', self.includes_tested)
-        print('includes deleted:', self.includes_deleted)
-        print('files not built: ', len(self.files_not_built_list))
+        print('files examined:   %d' %  self.files_examined)
+        print('includes tested:  %d' %  self.includes_tested)
+        print('includes deleted: %d' %  self.includes_deleted)
+        print('files not built:  %d' %  len(self.files_not_built_list))
         for abandoned_file in self.files_not_built_list:
-            print('    ', abandoned_file)
-        print('generated files not tested:', len(self.generated_files_ignored))
+            print('     %s' % abandoned_file)
+        print('generated files not tested: %d' % len(self.generated_files_ignored))
         for generated_file in self.generated_files_ignored:
-            print('    ', generated_file)
-        print('includes kept as not safe to remove:', self.includes_to_keep_kept)
+            print('     %s' % generated_file)
+        print('includes kept as not safe to remove: %d' % self.includes_to_keep_kept)
 
 stats = BuildStats()
 
@@ -143,7 +141,8 @@ def test_file_is_built(filename):
     # Write the file with nonsense at start.
     f_write.write('NO WAY THIS FILE BUILDS!!!!!')
     # Copy remaining lines as-is.
-    f_write.writelines(f_read)
+    for line in f_read:
+        f_write.write(line)
     f_read.close()
     f_write.close()
     # Backup file, and do this build with the one we wrote.
@@ -157,13 +156,19 @@ def test_file_is_built(filename):
     os.remove(temp_filename)
     os.remove(write_filename)
 
-    # File not in build if build succeeds
-    return result != 0
+    if result == 0:
+        # Build succeeded so this file wasn't in it
+        return False
+    else:
+        # Build failed so this file *is* part of it
+        return True
 
 
 # Function to test removal of each #include from a file in turn.
 # At the end, only those that appear to be needed will be left.
 def test_file(filename):
+    global stats
+
     print('\n------------------------------')
     print(bcolors.OKBLUE, bcolors.BOLD, 'Testing', filename, bcolors.ENDC)
 
@@ -189,7 +194,7 @@ def test_file(filename):
     # Loop around, finding all possible include lines to comment out
     while (True):
         if should_exit:
-            sys.exit(1)
+            exit(1)
 
         have_deleted_line = False
         result = 0
@@ -211,27 +216,28 @@ def test_file(filename):
             if line.startswith('#if'):
                 hash_if_level = hash_if_level + 1
 
-            if line.startswith('#endif') and hash_if_level > 1:
-                hash_if_level = hash_if_level - 1
+            if line.startswith('#endif'):
+                if hash_if_level > 1:
+                    hash_if_level = hash_if_level - 1
 
             # Consider deleting this line have haven't already reached.
-            # Test line for starting with #include, and eligible for deletion.
-            if  (not have_deleted_line and (tested_line_number < this_line_number) and
-                 line.startswith('#include ') and hash_if_level == 0 and module_header not in line):
+            if (not have_deleted_line and (tested_line_number < this_line_number)):
 
-                # Check that this isn't a header file that known unsafe to uninclude.
-                allowed_to_delete = True
-                for entry in includes_to_keep:
-                    if line.find(entry) != -1:
-                        allowed_to_delete = False
-                        stats.includes_to_keep_kept += 1
-                        continue
+                # Test line for starting with #include, and eligible for deletion.
+                if line.startswith('#include ') and hash_if_level == 0 and line.find(module_header) == -1:
+                    # Check that this isn't a header file that known unsafe to uninclude.
+                    allowed_to_delete = True
+                    for entry in includes_to_keep:
+                        if line.find(entry) != -1:
+                            allowed_to_delete = False
+                            stats.includes_to_keep_kept += 1
+                            continue
 
-                if allowed_to_delete:
-                    # OK, actually doing it.
-                    have_deleted_line = True
-                    this_line_deleted = True
-                    tested_line_number = this_line_number
+                    if allowed_to_delete:
+                        # OK, actually doing it.
+                        have_deleted_line = True
+                        this_line_deleted = True
+                        tested_line_number = this_line_number
 
             # Write line to output file, unless this very one was deleted.
             if not this_line_deleted:
@@ -290,31 +296,35 @@ def generated_file(filename):
     if filename == 'register.c':
         return True
 
-    # TODO: use check_common.isGeneratedFile() ?
-    with open(filename, 'r') as f_read:
-        for lines_tested, line in enumerate(f_read):
-            # The comment to say that its generated is near the top, so give up once
-            # get a few lines down.
-            if lines_tested > 10:
-                # Didn't find anything
-                return False
-            if (line.find('Generated automatically') != -1 or
-                line.find('Generated Automatically') != -1 or
-                line.find('Autogenerated from') != -1 or
-                line.find('is autogenerated') != -1 or
-                line.find('automatically generated by Pidl') != -1 or
-                line.find('Created by: The Qt Meta Object Compiler') != -1 or
-                line.find('This file was generated') != -1 or
-                line.find('This filter was automatically generated') != -1 or
-                line.find('This file is auto generated, do not edit!') != -1):
+    # Open file
+    f_read = open(filename, 'r')
+    lines_tested = 0
+    for line in f_read:
+        # The comment to say that its generated is near the top, so give up once
+        # get a few lines down.
+        if lines_tested > 10:
+            f_read.close()
+            return False
+        if (line.find('Generated automatically') != -1 or
+            line.find('Generated Automatically') != -1 or
+            line.find('Autogenerated from') != -1 or
+            line.find('is autogenerated') != -1 or
+            line.find('automatically generated by Pidl') != -1 or
+            line.find('Created by: The Qt Meta Object Compiler') != -1 or
+            line.find('This file was generated') != -1 or
+            line.find('This filter was automatically generated') != -1 or
+            line.find('This file is auto generated, do not edit!') != -1):
 
-                return True
+            f_read.close()
+            return True
+        lines_tested = lines_tested + 1
 
-    # Who knows.
+    # OK, looks like a hand-written file!
+    f_read.close()
     return False
 
 def isBuildableFile(filename):
-    return filename.endswith(('.c', '.cpp'))
+    return filename.endswith('.c') or filename.endswith('.cpp')
 
 
 def findFilesInFolder(folder, recursive=False):
@@ -348,7 +358,7 @@ if args.file:
     for f in args.file:
         if not os.path.isfile(f):
             print('Chosen file', f, 'does not exist.')
-            sys.exit(1)
+            exit(1)
         else:
             files.append(f)
 elif args.folder:
@@ -356,7 +366,7 @@ elif args.folder:
     folder = args.folder
     if not os.path.isdir(folder):
         print('Folder', folder, 'not found!')
-        sys.exit(1)
+        exit(1)
     # Find files from folder.
     print('Looking for files in', folder)
     files = findFilesInFolder(folder, recursive=False)
@@ -367,7 +377,7 @@ if args.first_file:
     idx = files.index(args.first_file)
     if idx == -1:
         print('first-file entry', args.first_file, 'not in list of files to be checked')
-        sys.exit(1)
+        exit(1)
     else:
         files = files[idx:]
 
@@ -375,7 +385,7 @@ if args.last_file:
     idx = files.index(args.last_file)
     if idx == -1:
         print('last-file entry', args.last_file, 'not in list of files to be checked')
-        sys.exit(1)
+        exit(1)
     else:
         files = files[:idx+1]
 
@@ -387,7 +397,7 @@ print(bcolors.OKBLUE,bcolors.BOLD,
 result = subprocess.call(make_command)
 if result != 0:
     print(bcolors.FAIL, bcolors.BOLD, 'Initial build failed - give up now!!!!', bcolors.ENDC)
-    sys.exit(-1)
+    exit (-1)
 
 
 
@@ -406,7 +416,7 @@ for filename in files:
             reason = 'generated file...'
         if not under_version_control(filename):
             reason = 'not under source control'
-        print(f'Ignoring {filename}: {reason}', filename, reason)
+        print('Ignoring %s: %s' % (filename, reason))
 
 
 

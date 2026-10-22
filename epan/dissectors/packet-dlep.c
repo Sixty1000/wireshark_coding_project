@@ -22,14 +22,13 @@
 #include <epan/ftypes/ftypes.h> /* for fieldtype lengths */
 #include <epan/exceptions.h>
 #include <epan/expert.h>
+#include <epan/ipproto.h>       /* for IP_PROTO_TCP and IP_PROTO_UDP */
 #include <epan/packet.h>
 #include <epan/packet_info.h>   /* for struct packet_info */
 #include <epan/prefs.h>
 #include <epan/tvbuff.h>
 #include <epan/to_str.h>
 #include <epan/tfs.h>
-#include <wsutil/array.h>
-#include <epan/iana-info.h>
 
 #include "packet-tcp.h"
 
@@ -547,8 +546,8 @@ static int
 decode_dataitem_macaddr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pt, void *data _U_)
 {
   proto_item *pi = proto_tree_get_parent(pt);
-  const unsigned len = tvb_captured_length(tvb);
-  unsigned offset = 0;
+  const int len = tvb_captured_length(tvb);
+  int offset = 0;
   switch(len) {
     case FT_ETHER_LEN:
       proto_tree_add_item(pt, hf_dlep_dataitem_macaddr_eui48, tvb, offset, len, ENC_NA);
@@ -556,7 +555,7 @@ decode_dataitem_macaddr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pt, void 
       break;
     case FT_EUI64_LEN:
       proto_tree_add_item(pt, hf_dlep_dataitem_macaddr_eui64, tvb, offset, len, ENC_BIG_ENDIAN);
-      proto_item_append_text(pi, ": %s", tvb_address_to_str(pinfo->pool, tvb, AT_EUI64, offset));
+      proto_item_append_text(pi, ": %s", tvb_eui64_to_str(pinfo->pool, tvb, offset));
       break;
     default:
       proto_tree_add_expert(pt, NULL, &ei_dlep_dataitem_macaddr_unexpected_length, tvb, offset, len);
@@ -873,9 +872,7 @@ decode_dataitem_li(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pt, void *data
   int offset = 0;
 
   proto_tree_add_item(pt, hf_dlep_dataitem_li, tvb, offset, len, ENC_NA);
-  if (len > 0) {
-    proto_item_append_text(pi, ": %s", tvb_bytes_to_str(pinfo->pool, tvb, offset, len));
-  }
+  proto_item_append_text(pi, ": %s", tvb_bytes_to_str(pinfo->pool, tvb, offset, len));
   offset+=len;
 
   return offset;
@@ -1320,7 +1317,7 @@ proto_register_dlep(void)
   dlep_sig_handle = register_dissector ("dlep.udp", dissect_dlep_sig, proto_dlep);
 
   dlep_dataitem_table = register_dissector_table("dlep.dataitem", "DLEP Data Item Type", proto_dlep, FT_UINT16, BASE_DEC);
-  proto_dataitem = proto_register_protocol_in_name_only("DLEP Data Item Dissector", "DLEP Data Item", "dlep.data_item", proto_dlep, FT_BYTES);
+  proto_dataitem = proto_register_protocol_in_name_only("DLEP Data Item Dissector", "DLEP Data Item", "dlep.dataitem", proto_dlep, FT_BYTES);
   dissector_add_uint("dlep.dataitem", DLEP_DIT_STATUS, create_dissector_handle(decode_dataitem_status, proto_dataitem));
   dissector_add_uint("dlep.dataitem", DLEP_DIT_V4CONN, create_dissector_handle(decode_dataitem_v4conn, proto_dataitem));
   dissector_add_uint("dlep.dataitem", DLEP_DIT_V6CONN, create_dissector_handle(decode_dataitem_v6conn, proto_dataitem));

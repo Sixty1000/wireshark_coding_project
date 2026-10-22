@@ -26,6 +26,15 @@
 #include "packet-ber.h"
 #include "packet-e212.h"
 
+#ifdef _MSC_VER
+/* disable: "warning C4146: unary minus operator applied to unsigned type, result still unsigned" */
+#pragma warning(disable:4146)
+#endif
+
+#define PNAME  "UTRAN Iur interface Radio Network Subsystem Application Part"
+#define PSNAME "RNSAP"
+#define PFNAME "rnsap"
+
 #define SCCP_SSN_RNSAP 143
 
 #include "packet-rnsap-val.h"
@@ -116,21 +125,21 @@ static int dissect_InitiatingMessageValue(tvbuff_t *tvb, packet_info *pinfo, pro
 {
   rnsap_private_data_t *pdata = rnsap_get_private_data(pinfo);
   if (!pdata->ProcedureID) return 0;
-  return (dissector_try_string_with_data(rnsap_proc_imsg_dissector_table, pdata->ProcedureID, tvb, pinfo, tree, true, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_string(rnsap_proc_imsg_dissector_table, pdata->ProcedureID, tvb, pinfo, tree, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_SuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
   rnsap_private_data_t *pdata = rnsap_get_private_data(pinfo);
   if (!pdata->ProcedureID) return 0;
-  return (dissector_try_string_with_data(rnsap_proc_sout_dissector_table, pdata->ProcedureID, tvb, pinfo, tree, true, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_string(rnsap_proc_sout_dissector_table, pdata->ProcedureID, tvb, pinfo, tree, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_UnsuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
   rnsap_private_data_t *pdata = rnsap_get_private_data(pinfo);
   if (!pdata->ProcedureID) return 0;
-  return (dissector_try_string_with_data(rnsap_proc_uout_dissector_table, pdata->ProcedureID, tvb, pinfo, tree, true, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_string(rnsap_proc_uout_dissector_table, pdata->ProcedureID, tvb, pinfo, tree, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int
@@ -175,8 +184,8 @@ dissect_sccp_rnsap_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 
   pdu_type = tvb_get_uint8(tvb, PDU_TYPE_OFFSET);
   if (pdu_type & 0x1F) {
-    /* pdu_type is not 0x00 (initiatingMessage), 0x20 (successfulOutcome),
-       0x40 (unsuccessfulOutcome) or 0x60 (outcome), ignore extension bit (0x80) */
+    /* pdu_type is not 0x00 (initiatingMessage), 0x20 (succesfulOutcome),
+       0x40 (unsuccesfulOutcome) or 0x60 (outcome), ignore extension bit (0x80) */
     return false;
   }
 
@@ -261,7 +270,7 @@ void proto_register_rnsap(void) {
 
 
   /* Register protocol */
-  proto_rnsap = proto_register_protocol("UTRAN Iur interface Radio Network Subsystem Application Part", "RNSAP", "rnsap");
+  proto_rnsap = proto_register_protocol(PNAME, PSNAME, PFNAME);
   /* Register fields and subtrees */
   proto_register_field_array(proto_rnsap, hf, array_length(hf));
   proto_register_subtree_array(ett, array_length(ett));

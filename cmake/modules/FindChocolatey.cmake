@@ -3,7 +3,7 @@
 #
 # This module looks for Chocolatey
 
-if(WIN32 AND NOT USE_MSYSTEM)
+if(WIN32)
     if(ENV{ChocolateyInstall})
         set(_chocolateyinstall_bin "$ENV{ChocolateyInstall}/bin")
     endif()

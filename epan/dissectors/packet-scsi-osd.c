@@ -17,10 +17,8 @@
 #include <epan/packet.h>
 #include <epan/conversation.h>
 #include <epan/expert.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
-#include <epan/dissectors/packet-scsi.h>
-#include <epan/dissectors/packet-scsi-osd.h>
+#include "packet-scsi.h"
+#include "packet-scsi-osd.h"
 
 void proto_register_scsi_osd(void);
 
@@ -164,7 +162,7 @@ static expert_field ei_osd2_query_values_equal;
 #define PAGE_NUMBER_ROOT            0x90000000
 
 
-/* There will be one such structure created for each conversation on top of which
+/* There will be one such structure create for each conversation ontop of which
  * there is an OSD session
  */
 typedef struct _scsi_osd_conv_info_t {
@@ -411,11 +409,12 @@ dissect_osd_attribute_list_entry(packet_info *pinfo, tvbuff_t *tvb,
 
     /* attributes page */
     page = tvb_get_ntohl(tvb, offset);
-    proto_tree_add_item_ret_uint(tree, hf_scsi_osd_attributes_page, tvb, offset, 4, ENC_BIG_ENDIAN, &page);
+    proto_tree_add_item(tree, hf_scsi_osd_attributes_page, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
 
     /* attribute number */
-    proto_tree_add_item_ret_uint(tree, hf_scsi_osd_attribute_number, tvb, offset, 4, ENC_BIG_ENDIAN, &number);
+    number = tvb_get_ntohl(tvb, offset);
+    proto_tree_add_item(tree, hf_scsi_osd_attribute_number, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
 
     if (osd2) {
@@ -424,7 +423,8 @@ dissect_osd_attribute_list_entry(packet_info *pinfo, tvbuff_t *tvb,
     }
 
     /* attribute length */
-    proto_tree_add_item_ret_uint16(tree, hf_scsi_osd_attribute_length, tvb, offset, 2, ENC_BIG_ENDIAN, &attribute_length);
+    attribute_length = tvb_get_ntohs(tvb, offset);
+    proto_tree_add_item(tree, hf_scsi_osd_attribute_length, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
     proto_item_append_text(item, " 0x%08x (%s)", page,  val_to_str_ext_const(page, &attributes_page_vals_ext, "Unknown"));
@@ -473,7 +473,8 @@ dissect_osd_attributes_list(packet_info *pinfo, tvbuff_t *tvb, int offset,
     const attribute_page_numbers_t *apn;
 
     /* list type */
-    list_type_item = proto_tree_add_item_ret_uint8(tree, hf_scsi_osd_attributes_list_type, tvb, offset, 1, ENC_BIG_ENDIAN, &type);
+    type = tvb_get_uint8(tvb, offset)&0x0f;
+    list_type_item = proto_tree_add_item(tree, hf_scsi_osd_attributes_list_type, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
 
     /* OSD-1: a reserved byte */
@@ -483,10 +484,12 @@ dissect_osd_attributes_list(packet_info *pinfo, tvbuff_t *tvb, int offset,
     /* OSD-1: length (16 bit)
        OSD-2: length (32 bit) */
     if (osd2) {
-        proto_tree_add_item_ret_uint(tree, hf_scsi_osd2_attributes_list_length, tvb, offset, 4, ENC_BIG_ENDIAN, &length);
+        length = tvb_get_ntohl(tvb, offset);
+        proto_tree_add_item(tree, hf_scsi_osd2_attributes_list_length, tvb, offset, 4, ENC_BIG_ENDIAN);
         offset += 4;
     } else {
-        proto_tree_add_item_ret_uint(tree, hf_scsi_osd_attributes_list_length, tvb, offset, 2, ENC_BIG_ENDIAN, &length);
+        length = tvb_get_ntohs(tvb, offset);
+        proto_tree_add_item(tree, hf_scsi_osd_attributes_list_length, tvb, offset, 2, ENC_BIG_ENDIAN);
         offset += 2;
     }
 
@@ -529,11 +532,13 @@ dissect_osd_attributes_list(packet_info *pinfo, tvbuff_t *tvb, int offset,
         switch (type) {
         case 0x01: /* retrieving attributes 7.1.3.2 */
             /* attributes page */
-            proto_tree_add_item_ret_uint(tt, hf_scsi_osd_attributes_page, tvb, offset, 4, ENC_BIG_ENDIAN, &page);
+            page = tvb_get_ntohl(tvb, offset);
+            proto_tree_add_item(tt, hf_scsi_osd_attributes_page, tvb, offset, 4, ENC_BIG_ENDIAN);
             offset += 4;
 
             /* attribute number */
-            item = proto_tree_add_item_ret_uint(tt, hf_scsi_osd_attribute_number, tvb, offset, 4, ENC_BIG_ENDIAN, &number);
+            number = tvb_get_ntohl(tvb, offset);
+            item = proto_tree_add_item(tt, hf_scsi_osd_attribute_number, tvb, offset, 4, ENC_BIG_ENDIAN);
             offset += 4;
 
             proto_item_append_text(ti, " 0x%08x (%s)", page,  val_to_str_ext_const(page, &attributes_page_vals_ext, "Unknown"));
@@ -570,7 +575,9 @@ dissect_osd_option(tvbuff_t *tvb, int offset, proto_tree *parent_tree)
     proto_item *it;
     uint8_t     option;
 
-    it = proto_tree_add_item_ret_uint8(parent_tree, hf_scsi_osd_option, tvb, offset, 1, ENC_BIG_ENDIAN, &option);
+    option = tvb_get_uint8(tvb, offset);
+
+    it = proto_tree_add_item(parent_tree, hf_scsi_osd_option, tvb, offset, 1, ENC_BIG_ENDIAN);
     tree = proto_item_add_subtree(it, ett_osd_option);
 
     proto_tree_add_item(tree, hf_scsi_osd_option_dpo, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -824,7 +831,8 @@ dissect_osd2_cdb_continuation_length(packet_info *pinfo, tvbuff_t *tvb,
     uint32_t    continuation_length;
     proto_item *item;
 
-    item = proto_tree_add_item_ret_uint(tree, hf_scsi_osd2_cdb_continuation_length, tvb, offset, 4, ENC_BIG_ENDIAN, &continuation_length);
+    continuation_length = tvb_get_ntohl(tvb, offset);
+    item = proto_tree_add_item(tree, hf_scsi_osd2_cdb_continuation_length, tvb, offset, 4, ENC_BIG_ENDIAN);
     if (cdata && cdata->itlq && cdata->itlq->extra_data) {
         extra_data = (scsi_osd_extra_data_t *)cdata->itlq->extra_data;
         extra_data->continuation_length = continuation_length;
@@ -860,11 +868,13 @@ static void dissect_osd2_query_list_descriptor(packet_info *pinfo, tvbuff_t *tvb
         offset += 2;
 
         /* query attributes page */
-        proto_tree_add_item_ret_uint(tree, hf_scsi_osd2_query_attributes_page, tvb, offset, 4, ENC_BIG_ENDIAN, &page);
+        page = tvb_get_ntohl(tvb, offset);
+        proto_tree_add_item(tree, hf_scsi_osd2_query_attributes_page, tvb, offset, 4, ENC_BIG_ENDIAN);
         offset += 4;
 
         /* query attributes number */
-        item = proto_tree_add_item_ret_uint(tree, hf_scsi_osd2_query_attribute_number, tvb, offset, 4, ENC_BIG_ENDIAN, &number);
+        number = tvb_get_ntohl(tvb, offset);
+        item = proto_tree_add_item(tree, hf_scsi_osd2_query_attribute_number, tvb, offset, 4, ENC_BIG_ENDIAN);
         offset += 4;
 
         apn = osd_lookup_attribute(page, number);
@@ -877,7 +887,8 @@ static void dissect_osd2_query_list_descriptor(packet_info *pinfo, tvbuff_t *tvb
         }
 
         /* query minimum attribute value length */
-        proto_tree_add_item_ret_uint(tree, hf_scsi_osd2_query_minimum_attribute_value_length, tvb, offset, 2, ENC_BIG_ENDIAN, &min_value_length);
+        proto_tree_add_item(tree, hf_scsi_osd2_query_minimum_attribute_value_length, tvb, offset, 2, ENC_BIG_ENDIAN);
+        min_value_length = tvb_get_ntohs(tvb, offset);
         offset += 2;
 
         /* query minimum attribute value */
@@ -888,7 +899,8 @@ static void dissect_osd2_query_list_descriptor(packet_info *pinfo, tvbuff_t *tvb
         offset += min_value_length;
 
         /* query maximum attribute value length */
-        item = proto_tree_add_item_ret_uint(tree, hf_scsi_osd2_query_maximum_attribute_value_length, tvb, offset, 2, ENC_BIG_ENDIAN, &max_value_length);
+        item = proto_tree_add_item(tree, hf_scsi_osd2_query_maximum_attribute_value_length, tvb, offset, 2, ENC_BIG_ENDIAN);
+        max_value_length = tvb_get_ntohs(tvb, offset);
         offset += 2;
 
         /* xxx query maximum attribute value */
@@ -923,7 +935,8 @@ dissect_osd2_cdb_continuation(packet_info *pinfo, tvbuff_t *tvb, uint32_t offset
     if (!extra_data || extra_data->continuation_length<40) return;
 
     /* cdb continuation format */
-    item = proto_tree_add_item_ret_uint8(tree, hf_scsi_osd2_cdb_continuation_format, tvb, offset, 1, ENC_BIG_ENDIAN, &format);
+    item = proto_tree_add_item(tree, hf_scsi_osd2_cdb_continuation_format, tvb, offset, 1, ENC_BIG_ENDIAN);
+    format = tvb_get_uint8(tvb, offset);
     if (format != 0x01) {
         expert_add_info(pinfo, item, &ei_osd2_cdb_continuation_format_unknown);
         return;
@@ -934,7 +947,8 @@ dissect_osd2_cdb_continuation(packet_info *pinfo, tvbuff_t *tvb, uint32_t offset
     offset += 1;
 
     /* continued service action */
-    item = proto_tree_add_item_ret_uint16(tree, hf_scsi_osd2_continued_service_action, tvb, offset, 2, ENC_BIG_ENDIAN, &sa);
+    item = proto_tree_add_item(tree, hf_scsi_osd2_continued_service_action, tvb, offset, 2, ENC_BIG_ENDIAN);
+    sa = tvb_get_ntohs(tvb, offset);
     if (sa != extra_data->svcaction) {
         expert_add_info(pinfo, item, &ei_osd2_continued_service_action_mismatch);
     }
@@ -951,18 +965,21 @@ dissect_osd2_cdb_continuation(packet_info *pinfo, tvbuff_t *tvb, uint32_t offset
         proto_item *item_type, *item_length;
 
         /* descriptor type */
-        item_type= proto_tree_add_item_ret_uint16(tree, hf_scsi_osd2_cdb_continuation_descriptor_type, tvb, offset, 2, ENC_BIG_ENDIAN, &type);
+        item_type= proto_tree_add_item(tree, hf_scsi_osd2_cdb_continuation_descriptor_type, tvb, offset, 2, ENC_BIG_ENDIAN);
+        type = tvb_get_ntohs(tvb, offset);
         offset += 2;
 
         /* 1 reserved byte*/
         offset += 1;
 
         /* descriptor pad length */
-        proto_tree_add_item_ret_uint(tree, hf_scsi_osd2_cdb_continuation_descriptor_pad_length, tvb, offset, 1, ENC_BIG_ENDIAN, &padlen);
+        proto_tree_add_item(tree, hf_scsi_osd2_cdb_continuation_descriptor_pad_length, tvb, offset, 1, ENC_BIG_ENDIAN);
+        padlen = tvb_get_uint8(tvb, offset)&7;
         offset += 1;
 
         /* descriptor length */
-        item_length = proto_tree_add_item_ret_uint(tree, hf_scsi_osd2_cdb_continuation_descriptor_length, tvb, offset, 4, ENC_BIG_ENDIAN, &length);
+        item_length = proto_tree_add_item(tree, hf_scsi_osd2_cdb_continuation_descriptor_length, tvb, offset, 4, ENC_BIG_ENDIAN);
+        length = tvb_get_ntohl(tvb, offset);
         offset += 4;
 
         switch (type) {
@@ -1081,7 +1098,8 @@ dissect_osd_capability(tvbuff_t *tvb, int offset, proto_tree *parent_tree)
             ett_osd_capability, NULL, "Capability");
 
     /* capability format */
-    proto_tree_add_item_ret_uint8(tree, hf_scsi_osd_capability_format, tvb, offset, 1, ENC_BIG_ENDIAN, &format);
+    proto_tree_add_item(tree, hf_scsi_osd_capability_format, tvb, offset, 1, ENC_BIG_ENDIAN);
+    format = tvb_get_uint8(tvb, offset)&0x0F;
     offset += 1;
 
     if (format != 1) return;
@@ -1588,7 +1606,8 @@ dissect_osd_list(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         proto_tree_add_item(tree, hf_scsi_osd_list_flags_lstchg, tvb, offset, 1, ENC_BIG_ENDIAN);
         if (osd2) {
             proto_item *item;
-            item = proto_tree_add_item_ret_uint8(tree, hf_scsi_osd2_object_descriptor_format, tvb, offset, 1, ENC_BIG_ENDIAN, &format);
+            item = proto_tree_add_item(tree, hf_scsi_osd2_object_descriptor_format, tvb, offset, 1, ENC_BIG_ENDIAN);
+            format = tvb_get_uint8(tvb, offset)>>2;
             if (format == 0x01 || format == 0x02) {
                 is_root_or_coltn = true;
                 if (list_collection) format = 0;
@@ -3124,7 +3143,8 @@ dissect_osd2_query(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
         /* 3 reserved bytes */
         offset += 3;
-        item = proto_tree_add_item_ret_uint8(tree, hf_scsi_osd2_object_descriptor_format, tvb, offset, 1, ENC_BIG_ENDIAN, &format);
+        item = proto_tree_add_item(tree, hf_scsi_osd2_object_descriptor_format, tvb, offset, 1, ENC_BIG_ENDIAN);
+        format = tvb_get_uint8(tvb, offset)>>2;
         offset += 1;
         if (format != 0x21) {
             expert_add_info(pinfo, item, &ei_osd2_invalid_object_descriptor_format);

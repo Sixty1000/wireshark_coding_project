@@ -8,7 +8,6 @@
  */
 
 #include "config.h"
-#include <app/application_flavor.h>
 
 #include <wireshark.h>
 
@@ -21,18 +20,13 @@
 #include <ui/qt/widgets/syntax_line_edit.h>
 #include <ui_capture_preferences_frame.h>
 #include "main_application.h"
-#include <ui/qt/main_window.h>
-#include <ui/qt/manager/interface_list_manager.h>
 
-#include <QSignalBlocker>
 #include <QSpacerItem>
 
 #include "ui/capture_ui_utils.h"
 #include "ui/ws_ui_util.h"
 
 #include <epan/prefs-int.h>
-#include <uat_dialog.h>
-#include "ui/qt/widgets/wireshark_file_dialog.h"
 
 CapturePreferencesFrame::CapturePreferencesFrame(QWidget *parent) :
     QFrame(parent),
@@ -44,22 +38,8 @@ CapturePreferencesFrame::CapturePreferencesFrame(QWidget *parent) :
     pref_prom_mode_ = prefFromPrefPtr(&prefs.capture_prom_mode);
     pref_monitor_mode_ = prefFromPrefPtr(&prefs.capture_monitor_mode);
     pref_pcap_ng_ = prefFromPrefPtr(&prefs.capture_pcap_ng);
-    pref_process_info_ = prefFromPrefPtr(&prefs.capture_process_info);
-    {
-        /* Filled before anything is connected to it changing. */
-        QSignalBlocker blocker(ui->captureProcessInfoComboBox);
-        ui->captureProcessInfoComboBox->addItem(tr("Nothing"), CAPTURE_PROCESS_INFO_NONE);
-        ui->captureProcessInfoComboBox->addItem(tr("Process IDs and names"), CAPTURE_PROCESS_INFO_BASIC);
-        ui->captureProcessInfoComboBox->addItem(tr("Process IDs, names, paths, command lines and users"), CAPTURE_PROCESS_INFO_FULL);
-    }
-    if (!application_flavor_is_wireshark()) {
-        /* Stratoshark captures system calls, which have no sockets to look up. */
-        ui->captureProcessInfoLabel->setVisible(false);
-        ui->captureProcessInfoComboBox->setVisible(false);
-    }
     pref_real_time_ = prefFromPrefPtr(&prefs.capture_real_time);
     pref_update_interval_ = prefFromPrefPtr(&prefs.capture_update_interval);
-    pref_temp_dir_ = prefFromPrefPtr(&prefs.capture_temp_dir);
     pref_no_interface_load_ = prefFromPrefPtr(&prefs.capture_no_interface_load);
     pref_no_extcap_ = prefFromPrefPtr(&prefs.capture_no_extcap);
 
@@ -98,9 +78,7 @@ void CapturePreferencesFrame::updateWidgets()
          * see whether any have showed up (or privileges have changed
          * to allow us to access them).
          */
-        MainWindow *mainWindow = mainApp->mainWindow();
-        if (mainWindow && mainWindow->interfaceListManager())
-            mainWindow->interfaceListManager()->requestRefresh();
+        mainApp->refreshLocalInterfaces();
     }
     for (unsigned i = 0; i < global_capture_opts.all_ifaces->len; i++) {
         device = &g_array_index(global_capture_opts.all_ifaces, interface_t, i);
@@ -133,7 +111,7 @@ void CapturePreferencesFrame::updateWidgets()
         // This also means that the capture.device
         QString item_text = device->display_name;
         if (!item_text.contains(device->name)) {
-            item_text.append(QStringLiteral(" (%1)").arg(device->name));
+            item_text.append(QString(" (%1)").arg(device->name));
         }
         ui->defaultInterfaceComboBox->addItem(item_text);
     }
@@ -147,14 +125,10 @@ void CapturePreferencesFrame::updateWidgets()
     ui->capturePromModeCheckBox->setChecked(prefs_get_bool_value(pref_prom_mode_, pref_stashed));
     ui->captureMonitorModeCheckBox->setChecked(prefs_get_bool_value(pref_monitor_mode_, pref_stashed));
     ui->capturePcapNgCheckBox->setChecked(prefs_get_bool_value(pref_pcap_ng_, pref_stashed));
-    ui->captureProcessInfoComboBox->setCurrentIndex(
-        ui->captureProcessInfoComboBox->findData(prefs_get_enum_value(pref_process_info_, pref_stashed)));
     ui->captureRealTimeCheckBox->setChecked(prefs_get_bool_value(pref_real_time_, pref_stashed));
-    ui->captureUpdateIntervalLineEdit->setText(QString::number(prefs_get_uint_value(pref_update_interval_, pref_stashed)));
-    ui->captureUpdateIntervalLineEdit->setPlaceholderText(QString::number(prefs_get_uint_value(pref_update_interval_, pref_default)));
+    ui->captureUpdateIntervalLineEdit->setText(QString::number(prefs_get_uint_value_real(pref_update_interval_, pref_stashed)));
+    ui->captureUpdateIntervalLineEdit->setPlaceholderText(QString::number(prefs_get_uint_value_real(pref_update_interval_, pref_default)));
     ui->captureUpdateIntervalLineEdit->setSyntaxState(SyntaxLineEdit::Empty);
-    ui->captureTempDirLineEdit->setText(prefs_get_string_value(pref_temp_dir_, pref_stashed));
-    ui->captureTempDirLineEdit->setPlaceholderText(g_get_tmp_dir());
 #endif // HAVE_LIBPCAP
     ui->captureNoInterfaceLoad->setChecked(prefs_get_bool_value(pref_no_interface_load_, pref_stashed));
     ui->captureNoExtcapCheckBox->setChecked(prefs_get_bool_value(pref_no_extcap_, pref_stashed));
@@ -180,12 +154,6 @@ void CapturePreferencesFrame::on_capturePcapNgCheckBox_toggled(bool checked)
     prefs_set_bool_value(pref_pcap_ng_, checked, pref_stashed);
 }
 
-void CapturePreferencesFrame::on_captureProcessInfoComboBox_currentIndexChanged(int idx)
-{
-    if (idx >= 0)
-        prefs_set_enum_value(pref_process_info_, ui->captureProcessInfoComboBox->itemData(idx).toInt(), pref_stashed);
-}
-
 void CapturePreferencesFrame::on_captureRealTimeCheckBox_toggled(bool checked)
 {
     prefs_set_bool_value(pref_real_time_, checked, pref_stashed);
@@ -195,7 +163,7 @@ void CapturePreferencesFrame::on_captureUpdateIntervalLineEdit_textChanged(const
 {
     uint new_uint;
     if (new_str.isEmpty()) {
-        new_uint = prefs_get_uint_value(pref_update_interval_, pref_default);
+        new_uint = prefs_get_uint_value_real(pref_update_interval_, pref_default);
         prefs_set_uint_value(pref_update_interval_, new_uint, pref_stashed);
         ui->captureUpdateIntervalLineEdit->setSyntaxState(SyntaxLineEdit::Empty);
         return;
@@ -206,25 +174,10 @@ void CapturePreferencesFrame::on_captureUpdateIntervalLineEdit_textChanged(const
     if (ok) {
         ui->captureUpdateIntervalLineEdit->setSyntaxState(SyntaxLineEdit::Valid);
     } else {
-        new_uint = prefs_get_uint_value(pref_update_interval_, pref_current);
+        new_uint = prefs_get_uint_value_real(pref_update_interval_, pref_current);
         ui->captureUpdateIntervalLineEdit->setSyntaxState(SyntaxLineEdit::Invalid);
     }
     prefs_set_uint_value(pref_update_interval_, new_uint, pref_stashed);
-}
-
-void CapturePreferencesFrame::on_captureTempDirLineEdit_textEdited(const QString &new_dir)
-{
-    prefs_set_string_value(pref_temp_dir_, qUtf8Printable(new_dir), pref_stashed);
-}
-
-void CapturePreferencesFrame::on_captureTempDirBrowseButton_clicked()
-{
-    QString specified_dir = WiresharkFileDialog::getExistingDirectory(this, tr("Temporary Directory"));
-
-    if (specified_dir.isEmpty()) return;
-
-    ui->captureTempDirLineEdit->setText(specified_dir);
-    prefs_set_string_value(pref_temp_dir_, qUtf8Printable(specified_dir), pref_stashed);
 }
 
 void CapturePreferencesFrame::on_captureNoInterfaceLoad_toggled(bool checked)

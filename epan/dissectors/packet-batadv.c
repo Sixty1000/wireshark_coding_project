@@ -831,21 +831,21 @@ static dissector_handle_t batman_handle;
 static void dissect_batadv_v5(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
 static void dissect_batadv_v15(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
 static void dissect_batadv_batman(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
-static unsigned dissect_batadv_batman_v5(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree);
-static unsigned dissect_batadv_batman_v7(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree);
-static unsigned dissect_batadv_batman_v9(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree);
-static unsigned dissect_batadv_batman_v10(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree);
-static unsigned dissect_batadv_batman_v11(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree);
-static unsigned dissect_batadv_batman_v14(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree);
+static int dissect_batadv_batman_v5(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree);
+static int dissect_batadv_batman_v7(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree);
+static int dissect_batadv_batman_v9(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree);
+static int dissect_batadv_batman_v10(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree);
+static int dissect_batadv_batman_v11(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree);
+static int dissect_batadv_batman_v14(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree);
 
 static void dissect_batadv_iv_ogm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
-static unsigned dissect_batadv_iv_ogm_v15(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree);
+static int dissect_batadv_iv_ogm_v15(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree);
 
 static void dissect_batadv_elp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
 static void dissect_batadv_elp_v15(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
 
 static void dissect_batadv_ogm2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
-static unsigned dissect_batadv_ogm2_v15(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree);
+static int dissect_batadv_ogm2_v15(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree);
 
 static void dissect_batadv_bcast(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
 static void dissect_batadv_bcast_v6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
@@ -894,14 +894,14 @@ static void dissect_batadv_unicast_tvlv_v15(tvbuff_t *tvb, packet_info *pinfo, p
 
 static void dissect_batadv_tvlv_v15(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
 static void dissect_batadv_tvlv_v15_header(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, uint8_t type);
-static void dissect_batadv_tvlv_v15_dat(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, uint8_t version);
-static void dissect_batadv_tvlv_v15_nc(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, uint8_t version);
-static void dissect_batadv_tvlv_v15_mcast(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, uint8_t version);
-static void dissect_batadv_tvlv_v15_gw(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, uint8_t version);
-static void dissect_batadv_tvlv_v15_roam(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, uint8_t version);
-static void dissect_batadv_tvlv_v15_tt(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset, uint8_t version);
-static unsigned dissect_batadv_tvlv_v15_tt_vlan(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset, uint8_t tt_flags, int changes_offset);
-static unsigned dissect_batadv_tvlv_v15_tt_change(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset);
+static void dissect_batadv_tvlv_v15_dat(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset, uint8_t version);
+static void dissect_batadv_tvlv_v15_nc(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset, uint8_t version);
+static void dissect_batadv_tvlv_v15_mcast(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset, uint8_t version);
+static void dissect_batadv_tvlv_v15_gw(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset, uint8_t version);
+static void dissect_batadv_tvlv_v15_roam(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset, uint8_t version);
+static void dissect_batadv_tvlv_v15_tt(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset, uint8_t version);
+static int dissect_batadv_tvlv_v15_tt_vlan(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, uint8_t tt_flags, int changes_offset);
+static int dissect_batadv_tvlv_v15_tt_change(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset);
 
 
 /* other dissectors */
@@ -1044,7 +1044,7 @@ static void dissect_batadv_v15(tvbuff_t *tvb, packet_info *pinfo,
 static void dissect_batadv_batman(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
 	uint8_t version;
-	unsigned offset = 0;
+	int offset = 0;
 
 	/* set protocol name */
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "BATADV_BATMAN");
@@ -1053,35 +1053,35 @@ static void dissect_batadv_batman(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
 	switch (version) {
 	case 5:
 	case 6:
-		while (tvb_reported_length_remaining(tvb, offset) >= BATMAN_PACKET_V5_SIZE) {
+		while (offset != -1 && tvb_reported_length_remaining(tvb, offset) >= BATMAN_PACKET_V5_SIZE) {
 			offset = dissect_batadv_batman_v5(tvb, offset, pinfo, tree);
 		}
 		break;
 	case 7:
 	case 8:
-		while (tvb_reported_length_remaining(tvb, offset) >= BATMAN_PACKET_V7_SIZE) {
+		while (offset != -1 && tvb_reported_length_remaining(tvb, offset) >= BATMAN_PACKET_V7_SIZE) {
 			offset = dissect_batadv_batman_v7(tvb, offset, pinfo, tree);
 		}
 		break;
 	case 9:
-		while (tvb_reported_length_remaining(tvb, offset) >= BATMAN_PACKET_V9_SIZE) {
+		while (offset != -1 && tvb_reported_length_remaining(tvb, offset) >= BATMAN_PACKET_V9_SIZE) {
 			offset = dissect_batadv_batman_v9(tvb, offset, pinfo, tree);
 		}
 		break;
 	case 11:
 	case 13:
-		while (tvb_reported_length_remaining(tvb, offset) >= BATMAN_PACKET_V11_SIZE) {
+		while (offset != -1 && tvb_reported_length_remaining(tvb, offset) >= BATMAN_PACKET_V11_SIZE) {
 			offset = dissect_batadv_batman_v11(tvb, offset, pinfo, tree);
 		}
 		break;
 	case 10:
 	case 12:
-		while (tvb_reported_length_remaining(tvb, offset) >= BATMAN_PACKET_V10_SIZE) {
+		while (offset != -1 && tvb_reported_length_remaining(tvb, offset) >= BATMAN_PACKET_V10_SIZE) {
 			offset = dissect_batadv_batman_v10(tvb, offset, pinfo, tree);
 		}
 		break;
 	case 14:
-		while (tvb_reported_length_remaining(tvb, offset) >= BATMAN_PACKET_V14_SIZE) {
+		while (offset != -1 && tvb_reported_length_remaining(tvb, offset) >= BATMAN_PACKET_V14_SIZE) {
 			offset = dissect_batadv_batman_v14(tvb, offset, pinfo, tree);
 		}
 		break;
@@ -1092,7 +1092,7 @@ static void dissect_batadv_batman(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
 	}
 }
 
-static void dissect_batadv_gwflags(tvbuff_t *tvb, uint8_t gwflags, unsigned offset, proto_item *tgw)
+static void dissect_batadv_gwflags(tvbuff_t *tvb, uint8_t gwflags, int offset, proto_item *tgw)
 {
 	proto_tree *gwflags_tree;
 	uint8_t s = (gwflags & 0x80) >> 7;
@@ -1113,7 +1113,7 @@ static void dissect_batadv_gwflags(tvbuff_t *tvb, uint8_t gwflags, unsigned offs
 	proto_tree_add_uint(gwflags_tree, hf_batadv_batman_gwflags_ul_speed, tvb, offset, 1, up);
 }
 
-static unsigned dissect_batadv_batman_v5(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree)
+static int dissect_batadv_batman_v5(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree)
 {
 	proto_item *ti, *tgw;
 	proto_tree *batadv_batman_tree;
@@ -1130,7 +1130,7 @@ static unsigned dissect_batadv_batman_v5(tvbuff_t *tvb, unsigned offset, packet_
 
 	/* don't interpret padding as B.A.T.M.A.N. advanced packet */
 	if (batman_packeth->version == 0 || type != BATADV_PACKET_V5) {
-		return tvb_reported_length(tvb);
+		return -1;
 	}
 
 	batman_packeth->flags = tvb_get_uint8(tvb, offset+2);
@@ -1208,7 +1208,7 @@ static unsigned dissect_batadv_batman_v5(tvbuff_t *tvb, unsigned offset, packet_
 	return offset;
 }
 
-static unsigned dissect_batadv_batman_v7(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree)
+static int dissect_batadv_batman_v7(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree)
 {
 	proto_tree *batadv_batman_tree;
 	proto_item *ti;
@@ -1225,7 +1225,7 @@ static unsigned dissect_batadv_batman_v7(tvbuff_t *tvb, unsigned offset, packet_
 
 	/* don't interpret padding as B.A.T.M.A.N. advanced packet */
 	if (batman_packeth->version == 0 || type != BATADV_PACKET_V5) {
-		return tvb_reported_length(tvb);
+		return -1;
 	}
 
 	batman_packeth->flags = tvb_get_uint8(tvb, offset+2);
@@ -1293,7 +1293,7 @@ static unsigned dissect_batadv_batman_v7(tvbuff_t *tvb, unsigned offset, packet_
 	return offset;
 }
 
-static unsigned dissect_batadv_batman_v9(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree)
+static int dissect_batadv_batman_v9(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree)
 {
 	proto_item *ti, *tgw;
 	proto_tree *batadv_batman_tree;
@@ -1310,7 +1310,7 @@ static unsigned dissect_batadv_batman_v9(tvbuff_t *tvb, unsigned offset, packet_
 
 	/* don't interpret padding as B.A.T.M.A.N. advanced packet */
 	if (batman_packeth->version == 0 || type != BATADV_PACKET_V5) {
-		return tvb_reported_length(tvb);
+		return -1;
 	}
 
 	batman_packeth->flags = tvb_get_uint8(tvb, offset+2);
@@ -1386,7 +1386,7 @@ static unsigned dissect_batadv_batman_v9(tvbuff_t *tvb, unsigned offset, packet_
 	return offset;
 }
 
-static unsigned dissect_batadv_batman_v10(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree)
+static int dissect_batadv_batman_v10(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree)
 {
 	proto_item *ti, *tgw;
 	proto_tree *batadv_batman_tree;
@@ -1403,7 +1403,7 @@ static unsigned dissect_batadv_batman_v10(tvbuff_t *tvb, unsigned offset, packet
 
 	/* don't interpret padding as B.A.T.M.A.N. advanced packet */
 	if (batman_packeth->version == 0 || type != BATADV_PACKET_V5) {
-		return tvb_reported_length(tvb);
+		return -1;
 	}
 
 	batman_packeth->flags = tvb_get_uint8(tvb, offset+2);
@@ -1479,7 +1479,7 @@ static unsigned dissect_batadv_batman_v10(tvbuff_t *tvb, unsigned offset, packet
 	return offset;
 }
 
-static unsigned dissect_batadv_batman_v11(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree)
+static int dissect_batadv_batman_v11(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree)
 {
 	proto_tree *batadv_batman_tree;
 	proto_item *ti;
@@ -1496,7 +1496,7 @@ static unsigned dissect_batadv_batman_v11(tvbuff_t *tvb, unsigned offset, packet
 
 	/* don't interpret padding as B.A.T.M.A.N. advanced packet */
 	if (batman_packeth->version == 0 || type != BATADV_PACKET_V5) {
-		return tvb_reported_length(tvb);
+		return -1;
 	}
 
 	batman_packeth->flags = tvb_get_uint8(tvb, offset+2);
@@ -1564,7 +1564,7 @@ static unsigned dissect_batadv_batman_v11(tvbuff_t *tvb, unsigned offset, packet
 	return offset;
 }
 
-static unsigned dissect_batadv_batman_v14(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree)
+static int dissect_batadv_batman_v14(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree)
 {
 	proto_item *ti, *tgw;
 	proto_tree *batadv_batman_tree;
@@ -1582,7 +1582,7 @@ static unsigned dissect_batadv_batman_v14(tvbuff_t *tvb, unsigned offset, packet
 
 	/* don't interpret padding as B.A.T.M.A.N. advanced packet */
 	if (batman_packeth->version == 0 || type != BATADV_PACKET_V5) {
-		return tvb_reported_length(tvb);
+		return -1;
 	}
 
 	batman_packeth->ttl = tvb_get_uint8(tvb, offset+2);
@@ -1672,7 +1672,7 @@ static unsigned dissect_batadv_batman_v14(tvbuff_t *tvb, unsigned offset, packet
 static void dissect_batadv_iv_ogm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
 	uint8_t version;
-	unsigned offset = 0;
+	int offset = 0;
 
 	/* set protocol name */
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "BATADV_IV_OGM");
@@ -1680,7 +1680,8 @@ static void dissect_batadv_iv_ogm(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
 	version = tvb_get_uint8(tvb, 1);
 	switch (version) {
 	case 15:
-		while (tvb_reported_length_remaining(tvb, offset) >= IV_OGM_PACKET_V15_SIZE) {
+		while (offset != -1 &&
+		       tvb_reported_length_remaining(tvb, offset) >= IV_OGM_PACKET_V15_SIZE) {
 			offset = dissect_batadv_iv_ogm_v15(tvb, offset, pinfo, tree);
 		}
 		break;
@@ -1691,7 +1692,7 @@ static void dissect_batadv_iv_ogm(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
 	}
 }
 
-static unsigned dissect_batadv_iv_ogm_v15(tvbuff_t *tvb, unsigned offset,
+static int dissect_batadv_iv_ogm_v15(tvbuff_t *tvb, int offset,
 				     packet_info *pinfo, proto_tree *tree)
 {
 	proto_tree *batadv_iv_ogm_tree;
@@ -1711,7 +1712,7 @@ static unsigned dissect_batadv_iv_ogm_v15(tvbuff_t *tvb, unsigned offset,
 
 	/* don't interpret padding as B.A.T.M.A.N. advanced packet */
 	if (version == 0 || type != BATADV_IV_OGM_V15)
-		return tvb_reported_length(tvb);
+		return -1;
 
 	iv_ogm_packeth = wmem_new(pinfo->pool, struct iv_ogm_packet_v15);
 
@@ -1853,7 +1854,7 @@ static void dissect_batadv_bcast_v6(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 
 	tvbuff_t *next_tvb;
 	int length_remaining;
-	unsigned offset = 0;
+	int offset = 0;
 	proto_tree *batadv_bcast_tree;
 	proto_item *ti;
 
@@ -1907,7 +1908,7 @@ static void dissect_batadv_bcast_v10(tvbuff_t *tvb, packet_info *pinfo, proto_tr
 
 	tvbuff_t *next_tvb;
 	int length_remaining;
-	unsigned offset = 0;
+	int offset = 0;
 	proto_tree *batadv_bcast_tree;
 	proto_item *ti;
 
@@ -1966,7 +1967,7 @@ static void dissect_batadv_bcast_v14(tvbuff_t *tvb, packet_info *pinfo, proto_tr
 
 	tvbuff_t *next_tvb;
 	int length_remaining;
-	unsigned offset = 0;
+	int offset = 0;
 	proto_tree *batadv_bcast_tree;
 	proto_item *ti;
 
@@ -2066,7 +2067,7 @@ static void dissect_batadv_icmp_v6(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 	struct icmp_packet_v6 *icmp_packeth;
 	tvbuff_t *next_tvb;
 	int length_remaining;
-	unsigned offset = 0;
+	int offset = 0;
 	proto_tree *batadv_icmp_tree;
 	proto_item *ti;
 
@@ -2088,7 +2089,7 @@ static void dissect_batadv_icmp_v6(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 
 	/* Set info column */
 	col_add_fstr(pinfo->cinfo, COL_INFO, "[%s] Seq=%u",
-		     val_to_str(pinfo->pool, icmp_packeth->msg_type, icmp_packettypenames, "Unknown (0x%02x)"),
+		     val_to_str(icmp_packeth->msg_type, icmp_packettypenames, "Unknown (0x%02x)"),
 		     icmp_packeth->seqno);
 	/* Set tree info */
 	ti = proto_tree_add_protocol_format(tree, proto_batadv_plugin, tvb, 0, ICMP_PACKET_V6_SIZE,
@@ -2134,7 +2135,7 @@ static void dissect_batadv_icmp_v6(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 }
 
 static void
-dissect_batadv_icmp_rr(packet_info *pinfo, proto_tree *batadv_icmp_tree, tvbuff_t *tvb, unsigned offset)
+dissect_batadv_icmp_rr(packet_info *pinfo, proto_tree *batadv_icmp_tree, tvbuff_t *tvb, int offset)
 {
 	proto_tree *field_tree;
 	int ptr, i;
@@ -2160,7 +2161,7 @@ dissect_batadv_icmp_rr(packet_info *pinfo, proto_tree *batadv_icmp_tree, tvbuff_
 
 static void
 dissect_batadv_icmp_rr_v15(packet_info *pinfo, proto_tree *batadv_icmp_tree, tvbuff_t *tvb,
-			   unsigned offset, int ptr)
+			   int offset, int ptr)
 {
 	proto_tree *field_tree;
 	int i;
@@ -2191,7 +2192,7 @@ static void dissect_batadv_icmp_v7(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 
 	tvbuff_t *next_tvb;
 	int length_remaining;
-	unsigned offset = 0;
+	int offset = 0;
 
 	icmp_packeth = wmem_new(pinfo->pool, struct icmp_packet_v7);
 
@@ -2211,7 +2212,7 @@ static void dissect_batadv_icmp_v7(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 
 	/* Set info column */
 	col_add_fstr(pinfo->cinfo, COL_INFO, "[%s] Seq=%u",
-		     val_to_str(pinfo->pool, icmp_packeth->msg_type, icmp_packettypenames, "Unknown (0x%02x)"),
+		     val_to_str(icmp_packeth->msg_type, icmp_packettypenames, "Unknown (0x%02x)"),
 		     icmp_packeth->seqno);
 
 	/* Set tree info */
@@ -2271,7 +2272,7 @@ static void dissect_batadv_icmp_v14(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 
 	tvbuff_t *next_tvb;
 	int length_remaining;
-	unsigned offset = 0;
+	int offset = 0;
 
 	icmp_packeth = wmem_new(pinfo->pool, struct icmp_packet_v14);
 
@@ -2292,7 +2293,7 @@ static void dissect_batadv_icmp_v14(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 
 	/* Set info column */
 	col_add_fstr(pinfo->cinfo, COL_INFO, "[%s] Seq=%u",
-		     val_to_str(pinfo->pool, icmp_packeth->msg_type, icmp_packettypenames, "Unknown (0x%02x)"),
+		     val_to_str(icmp_packeth->msg_type, icmp_packettypenames, "Unknown (0x%02x)"),
 		     icmp_packeth->seqno);
 
 	/* Set tree info */
@@ -2357,7 +2358,7 @@ static void dissect_batadv_icmp_tp_v15(tvbuff_t *tvb, packet_info *pinfo,
 	tvbuff_t *next_tvb;
 	int length_remaining;
 	uint32_t msg_type;
-	unsigned offset = 0;
+	int offset = 0;
 
 	icmp_packeth = wmem_new(pinfo->pool, struct icmp_tp_packet_v15);
 
@@ -2395,7 +2396,7 @@ static void dissect_batadv_icmp_tp_v15(tvbuff_t *tvb, packet_info *pinfo,
 	proto_tree_add_item_ret_uint(batadv_icmp_tree, hf_batadv_icmp_msg_type,
 				     tvb, offset, 1, ENC_BIG_ENDIAN, &msg_type);
 	col_add_fstr(pinfo->cinfo, COL_INFO, "[%s]",
-		     val_to_str(pinfo->pool, msg_type, icmp_packettypenames,
+		     val_to_str(msg_type, icmp_packettypenames,
 				"Unknown (0x%02x)"));
 	offset += 1;
 
@@ -2459,7 +2460,7 @@ static void dissect_batadv_icmp_simple_v15(tvbuff_t *tvb, packet_info *pinfo,
 	tvbuff_t *next_tvb;
 	int length_remaining;
 	uint32_t msg_type;
-	unsigned offset = 0;
+	int offset = 0;
 	uint32_t seqno;
 
 	icmp_packeth = wmem_new(pinfo->pool, struct icmp_packet_v15);
@@ -2498,7 +2499,7 @@ static void dissect_batadv_icmp_simple_v15(tvbuff_t *tvb, packet_info *pinfo,
 	proto_tree_add_item_ret_uint(batadv_icmp_tree, hf_batadv_icmp_msg_type,
 				     tvb, offset, 1, ENC_BIG_ENDIAN, &msg_type);
 	col_add_fstr(pinfo->cinfo, COL_INFO, "[%s]",
-		     val_to_str(pinfo->pool, msg_type, icmp_packettypenames,
+		     val_to_str(msg_type, icmp_packettypenames,
 				"Unknown (0x%02x)"));
 	offset += 1;
 
@@ -2602,7 +2603,7 @@ static void dissect_batadv_unicast_v6(tvbuff_t *tvb, packet_info *pinfo, proto_t
 
 	tvbuff_t *next_tvb;
 	int length_remaining;
-	unsigned offset = 0;
+	int offset = 0;
 	proto_tree *batadv_unicast_tree;
 	proto_item *ti;
 
@@ -2658,7 +2659,7 @@ static void dissect_batadv_unicast_v14(tvbuff_t *tvb, packet_info *pinfo, proto_
 
 	tvbuff_t *next_tvb;
 	int length_remaining;
-	unsigned offset = 0;
+	int offset = 0;
 	proto_tree *batadv_unicast_tree;
 	proto_item *ti;
 
@@ -2742,7 +2743,7 @@ static void dissect_batadv_unicast_4addr_v14(tvbuff_t *tvb, packet_info *pinfo, 
 
 	tvbuff_t *next_tvb;
 	int length_remaining;
-	unsigned offset = 0;
+	int offset = 0;
 	proto_tree *batadv_unicast_4addr_tree;
 	proto_item *ti;
 
@@ -2764,7 +2765,7 @@ static void dissect_batadv_unicast_4addr_v14(tvbuff_t *tvb, packet_info *pinfo, 
 
 	/* Set info column */
 	col_add_str(pinfo->cinfo, COL_INFO,
-		     val_to_str(pinfo->pool, unicast_4addr_packeth->subtype, unicast_4addr_typenames, "Unknown (0x%02x)"));
+		     val_to_str(unicast_4addr_packeth->subtype, unicast_4addr_typenames, "Unknown (0x%02x)"));
 
 	/* Set tree info */
 	ti = proto_tree_add_protocol_format(tree, proto_batadv_plugin, tvb, 0, UNICAST_4ADDR_PACKET_V14_SIZE,
@@ -2850,7 +2851,7 @@ static void dissect_batadv_unicast_frag_v12(tvbuff_t *tvb, packet_info *pinfo, p
 	proto_item *ti;
 
 	tvbuff_t *new_tvb;
-	unsigned offset = 0;
+	int offset = 0;
 	int head = 0;
 	int length_remaining;
 
@@ -2939,7 +2940,7 @@ static void dissect_batadv_unicast_frag_v14(tvbuff_t *tvb, packet_info *pinfo, p
 	proto_item *ti;
 
 	tvbuff_t *new_tvb;
-	unsigned offset = 0;
+	int offset = 0;
 	int head = 0;
 	int length_remaining;
 
@@ -3037,7 +3038,7 @@ static void dissect_batadv_unicast_frag_v15(tvbuff_t *tvb, packet_info *pinfo,
 	proto_item *ti;
 
 	tvbuff_t *new_tvb;
-	unsigned offset = 0;
+	int offset = 0;
 	int frag_no = 0;
 	int length_remaining;
 
@@ -3187,8 +3188,7 @@ static void dissect_batadv_vis_v6(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
 	tvbuff_t *next_tvb;
 	unsigned entry_size;
 	int length_remaining;
-	unsigned offset = 0;
-	int i;
+	int offset = 0, i;
 
 	vis_packeth = wmem_new(pinfo->pool, struct vis_packet_v6);
 
@@ -3209,7 +3209,7 @@ static void dissect_batadv_vis_v6(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
 
 	/* Set info column */
 	col_add_fstr(pinfo->cinfo, COL_INFO, "[%s] Seq=%u",
-		     val_to_str(pinfo->pool, vis_packeth->vis_type, vis_packettypenames, "Unknown (0x%02x)"),
+		     val_to_str(vis_packeth->vis_type, vis_packettypenames, "Unknown (0x%02x)"),
 		     vis_packeth->seqno);
 	/* Set tree info */
 	ti = proto_tree_add_protocol_format(tree, proto_batadv_plugin, tvb, 0, VIS_PACKET_V6_SIZE,
@@ -3304,8 +3304,7 @@ static void dissect_batadv_vis_v10(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 
 	tvbuff_t *next_tvb;
 	int length_remaining;
-	unsigned offset = 0;
-	int i;
+	int offset = 0, i;
 
 	vis_packeth = wmem_new(pinfo->pool, struct vis_packet_v10);
 
@@ -3326,7 +3325,7 @@ static void dissect_batadv_vis_v10(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 
 	/* Set info column */
 	col_add_fstr(pinfo->cinfo, COL_INFO, "[%s] Seq=%u",
-		     val_to_str(pinfo->pool, vis_packeth->vis_type, vis_packettypenames, "Unknown (0x%02x)"),
+		     val_to_str(vis_packeth->vis_type, vis_packettypenames, "Unknown (0x%02x)"),
 		     vis_packeth->seqno);
 
 	/* Set tree info */
@@ -3397,8 +3396,7 @@ static void dissect_batadv_vis_v14(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 
 	tvbuff_t *next_tvb;
 	int length_remaining;
-	unsigned offset = 0;
-	int i;
+	int offset = 0, i;
 
 	vis_packeth = wmem_new(pinfo->pool, struct vis_packet_v14);
 
@@ -3419,7 +3417,7 @@ static void dissect_batadv_vis_v14(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 
 	/* Set info column */
 	col_add_fstr(pinfo->cinfo, COL_INFO, "[%s] Seq=%u",
-		     val_to_str(pinfo->pool, vis_packeth->vis_type, vis_packettypenames, "Unknown (0x%02x)"),
+		     val_to_str(vis_packeth->vis_type, vis_packettypenames, "Unknown (0x%02x)"),
 		     vis_packeth->seqno);
 
 	/* Set tree info */
@@ -3541,8 +3539,7 @@ static void dissect_batadv_tt_query_v14(tvbuff_t *tvb, packet_info *pinfo, proto
 
 	tvbuff_t *next_tvb;
 	int length_remaining;
-	unsigned offset = 0;
-	int i;
+	int offset = 0, i;
 	int tt_type;
 
 	tt_query_packeth = wmem_new(pinfo->pool, struct tt_query_packet_v14);
@@ -3688,7 +3685,7 @@ static void dissect_batadv_roam_adv_v14(tvbuff_t *tvb, packet_info *pinfo, proto
 
 	tvbuff_t *next_tvb;
 	int length_remaining;
-	unsigned offset = 0;
+	int offset = 0;
 
 	roam_adv_packeth = wmem_new(pinfo->pool, struct roam_adv_packet_v14);
 
@@ -3776,7 +3773,7 @@ static void dissect_batadv_coded_v15(tvbuff_t *tvb, packet_info *pinfo,
 
 	tvbuff_t *next_tvb;
 	int length_remaining;
-	unsigned offset = 0;
+	int offset = 0;
 
 	coded_packeth = wmem_new(pinfo->pool, struct coded_packet_v15);
 
@@ -3910,7 +3907,7 @@ static void dissect_batadv_elp_v15(tvbuff_t *tvb, packet_info *pinfo,
 
 	tvbuff_t *next_tvb;
 	int length_remaining;
-	unsigned offset = 0;
+	int offset = 0;
 
 	elp_packeth = wmem_new(pinfo->pool, struct elp_packet_v15);
 
@@ -3970,7 +3967,7 @@ static void dissect_batadv_elp_v15(tvbuff_t *tvb, packet_info *pinfo,
 static void dissect_batadv_ogm2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
 	uint8_t version;
-	unsigned offset = 0;
+	int offset = 0;
 
 	/* set protocol name */
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "BATADV_OGM2");
@@ -3978,7 +3975,8 @@ static void dissect_batadv_ogm2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
 	version = tvb_get_uint8(tvb, 1);
 	switch (version) {
 	case 15:
-		while (tvb_reported_length_remaining(tvb, offset) >= OGM2_PACKET_V15_SIZE) {
+		while (offset != -1 &&
+		       tvb_reported_length_remaining(tvb, offset) >= OGM2_PACKET_V15_SIZE) {
 			offset = dissect_batadv_ogm2_v15(tvb, offset, pinfo, tree);
 		}
 		break;
@@ -3989,7 +3987,7 @@ static void dissect_batadv_ogm2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
 	}
 }
 
-static unsigned dissect_batadv_ogm2_v15(tvbuff_t *tvb, unsigned offset,
+static int dissect_batadv_ogm2_v15(tvbuff_t *tvb, int offset,
 				   packet_info *pinfo, proto_tree *tree)
 {
 	proto_tree *batadv_ogm2_tree;
@@ -4011,7 +4009,7 @@ static unsigned dissect_batadv_ogm2_v15(tvbuff_t *tvb, unsigned offset,
 
 	/* don't interpret padding as B.A.T.M.A.N. advanced packet */
 	if (version == 0 || type != BATADV_OGM2_V15)
-		return tvb_reported_length(tvb);
+		return -1;
 
 	ogm2_packeth = wmem_new(pinfo->pool, struct ogm2_packet_v15);
 
@@ -4118,7 +4116,7 @@ static void dissect_batadv_unicast_tvlv_v15(tvbuff_t *tvb, packet_info *pinfo,
 	struct unicast_tvlv_packet_v15 *unicast_tvlv_packeth;
 
 	tvbuff_t *next_tvb;
-	unsigned offset = 0;
+	int offset = 0;
 	proto_tree *batadv_unicast_tvlv_tree;
 	proto_item *ti;
 
@@ -4205,12 +4203,12 @@ static void dissect_batadv_tvlv_v15(tvbuff_t *tvb, packet_info *pinfo,
 {
 	uint8_t type, version;
 	uint16_t length;
-	unsigned offset = 0;
+	int offset = 0;
 	tvbuff_t *next_tvb;
 	proto_tree *batadv_tvlv_tree;
 	proto_item *ti;
 
-	while (offset != 0 && tvb_reported_length_remaining(tvb, offset) >= 4) {
+	while (offset != -1 && tvb_reported_length_remaining(tvb, offset) >= 4) {
 
 		type = tvb_get_uint8(tvb, offset + 0);
 		version = tvb_get_uint8(tvb, offset + 1);
@@ -4222,7 +4220,7 @@ static void dissect_batadv_tvlv_v15(tvbuff_t *tvb, packet_info *pinfo,
 						    proto_batadv_plugin,
 						    next_tvb, 0, length,
 						    "TVLV, %s",
-						    val_to_str(pinfo->pool, type,
+						    val_to_str(type,
 							       tvlv_v15_typenames,
 							       "Unknown (0x%02x)"));
 		batadv_tvlv_tree = proto_item_add_subtree(ti, ett_batadv_tvlv);
@@ -4274,12 +4272,12 @@ static void dissect_batadv_tvlv_v15_header(tvbuff_t *tvb,
 					   packet_info *pinfo _U_,
 					   proto_tree *tree, uint8_t type)
 {
-	unsigned offset = 0;
+	int offset = 0;
 
 	/* items */
 	proto_tree_add_uint_format_value(tree, hf_batadv_tvlv_type, tvb, offset,
 					 1, type, "%s",
-					 val_to_str(pinfo->pool, type, tvlv_v15_typenames,
+					 val_to_str(type, tvlv_v15_typenames,
 						    "Unknown (0x%02x)"));
 	offset += 1;
 
@@ -4292,7 +4290,7 @@ static void dissect_batadv_tvlv_v15_header(tvbuff_t *tvb,
 }
 
 static void dissect_batadv_tvlv_v15_dat(tvbuff_t *tvb, packet_info *pinfo,
-					proto_tree *tree, unsigned offset,
+					proto_tree *tree, int offset,
 					uint8_t version)
 {
 	if (version != 0x01) {
@@ -4304,7 +4302,7 @@ static void dissect_batadv_tvlv_v15_dat(tvbuff_t *tvb, packet_info *pinfo,
 }
 
 static void dissect_batadv_tvlv_v15_nc(tvbuff_t *tvb, packet_info *pinfo,
-				       proto_tree *tree, unsigned offset,
+				       proto_tree *tree, int offset,
 				       uint8_t version)
 {
 	if (version != 0x01) {
@@ -4316,7 +4314,7 @@ static void dissect_batadv_tvlv_v15_nc(tvbuff_t *tvb, packet_info *pinfo,
 }
 
 static void dissect_batadv_tvlv_v15_mcast(tvbuff_t *tvb, packet_info *pinfo,
-					  proto_tree *tree, unsigned offset,
+					  proto_tree *tree, int offset,
 					  uint8_t version)
 {
 	static int * const flags[] = {
@@ -4342,7 +4340,7 @@ static void dissect_batadv_tvlv_v15_mcast(tvbuff_t *tvb, packet_info *pinfo,
 }
 
 static void dissect_batadv_tvlv_v15_gw(tvbuff_t *tvb, packet_info *pinfo,
-				       proto_tree *tree, unsigned offset,
+				       proto_tree *tree, int offset,
 				       uint8_t version)
 {
 	uint32_t down, up;
@@ -4367,7 +4365,7 @@ static void dissect_batadv_tvlv_v15_gw(tvbuff_t *tvb, packet_info *pinfo,
 }
 
 static void dissect_batadv_tvlv_v15_roam(tvbuff_t *tvb, packet_info *pinfo,
-					 proto_tree *tree, unsigned offset,
+					 proto_tree *tree, int offset,
 					 uint8_t version)
 {
 	static int * const flags[] = {
@@ -4388,11 +4386,11 @@ static void dissect_batadv_tvlv_v15_roam(tvbuff_t *tvb, packet_info *pinfo,
 	offset += 6;
 
 	proto_tree_add_bitmask(tree, tvb, offset, hf_batadv_tvlv_roam_vid,
-			       ett_batadv_tvlv_vid, flags, ENC_BIG_ENDIAN);
+			       ett_batadv_tvlv_vid, flags, ENC_NA);
 }
 
 static void dissect_batadv_tvlv_v15_tt(tvbuff_t *tvb, packet_info *pinfo,
-				       proto_tree *tree, unsigned offset,
+				       proto_tree *tree, int offset,
 				       uint8_t version)
 {
 	uint16_t num_vlan;
@@ -4450,7 +4448,7 @@ static void dissect_batadv_tvlv_v15_tt_vlan_checksum(tvbuff_t *tvb,
 						     uint16_t vlan_id,
 						     int crc_offset,
 						     uint8_t tt_flags,
-						     unsigned offset)
+						     int offset)
 {
 	const uint8_t *buf;
 	uint32_t crc32;
@@ -4502,9 +4500,9 @@ skip:
 		expert_add_info(pinfo, ti, &ei_batadv_tvlv_tt_vlan_empty);
 }
 
-static unsigned dissect_batadv_tvlv_v15_tt_vlan(tvbuff_t *tvb,
+static int dissect_batadv_tvlv_v15_tt_vlan(tvbuff_t *tvb,
 					   packet_info *pinfo,
-					   proto_tree *tree, unsigned offset,
+					   proto_tree *tree, int offset,
 					   uint8_t tt_flags,
 					   int changes_offset)
 {
@@ -4532,7 +4530,7 @@ static unsigned dissect_batadv_tvlv_v15_tt_vlan(tvbuff_t *tvb,
 
 	proto_tree_add_bitmask(vlan_tree, tvb, offset,
 			       hf_batadv_tvlv_tt_vlan_vid,
-			       ett_batadv_tvlv_vid, flags, ENC_BIG_ENDIAN);
+			       ett_batadv_tvlv_vid, flags, ENC_NA);
 	offset += 2;
 
 	/* Skip 2 byte of padding. */
@@ -4541,9 +4539,9 @@ static unsigned dissect_batadv_tvlv_v15_tt_vlan(tvbuff_t *tvb,
 	return offset;
 }
 
-static unsigned dissect_batadv_tvlv_v15_tt_change(tvbuff_t *tvb,
+static int dissect_batadv_tvlv_v15_tt_change(tvbuff_t *tvb,
 					     packet_info *pinfo _U_,
-					     proto_tree *tree, unsigned offset)
+					     proto_tree *tree, int offset)
 {
 	proto_tree *change_tree;
 	proto_item *ti;
@@ -4581,7 +4579,7 @@ static unsigned dissect_batadv_tvlv_v15_tt_change(tvbuff_t *tvb,
 
 	proto_tree_add_bitmask(change_tree, tvb, offset,
 			       hf_batadv_tvlv_tt_change_vid,
-			       ett_batadv_tvlv_vid, flags_vlan, ENC_BIG_ENDIAN);
+			       ett_batadv_tvlv_vid, flags_vlan, ENC_NA);
 	offset += 2;
 
 	return offset;

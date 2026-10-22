@@ -33,8 +33,7 @@ typedef enum _wmem_cb_event_t {
     WMEM_CB_DESTROY_EVENT  /**< wmem_destroy_allocator() */
 } wmem_cb_event_t;
 
-/**
- * @brief Function signature for registered user callbacks.
+/** Function signature for registered user callbacks.
  *
  * allocator The allocator that triggered this callback.
  * event     The event type that triggered this callback.
@@ -44,8 +43,7 @@ typedef enum _wmem_cb_event_t {
  */
 typedef bool (*wmem_user_cb_t) (wmem_allocator_t*, wmem_cb_event_t, void*);
 
-/**
- * @brief Register a callback function with the given allocator pool.
+/** Register a callback function with the given allocator pool.
  *
  * @param allocator The allocator with which to register the callback.
  * @param callback  The function to be called as the callback.
@@ -62,8 +60,7 @@ unsigned
 wmem_register_callback(wmem_allocator_t *allocator, wmem_user_cb_t callback,
         void *user_data);
 
-/**
- * @brief Unregister the callback function with the given ID.
+/** Unregister the callback function with the given ID.
  *
  * @param allocator The allocator from which to unregister the callback.
  * @param id        The callback id as returned from wmem_register_callback().

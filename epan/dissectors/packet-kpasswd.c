@@ -113,7 +113,7 @@ dissect_kpasswd_user_data_reply(packet_info *pinfo, tvbuff_t *tvb, proto_tree *t
     proto_tree_add_uint(tree, hf_kpasswd_result, tvb, offset, 2, result);
     offset+=2;
     col_add_str(pinfo->cinfo, COL_INFO,
-        val_to_str(pinfo->pool, result, kpasswd_result_types, "Result: %u"));
+        val_to_str(result, kpasswd_result_types, "Result: %u"));
 
 
     /* optional result string */
@@ -158,13 +158,13 @@ dissect_kpasswd_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, bool
 {
     proto_item *kpasswd_item=NULL;
     proto_tree *kpasswd_tree=NULL;
-    unsigned offset = 0;
+    int offset = 0;
     uint16_t message_len, version, ap_req_len;
     tvbuff_t *next_tvb;
 
     /* TCP record mark and length */
     uint32_t krb_rm = 0;
-    int krb_reclen;
+    int krb_reclen = 0;
     int krb_rm_size = 0;    /* bytes consumed by record mark: 0 or 4 */
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "KPASSWD");

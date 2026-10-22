@@ -9,6 +9,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+#include "wtap_opttypes.h"
 #include <config.h>
 
 #include <stdio.h>
@@ -37,6 +38,8 @@
 #include <epan/column.h>
 #include <epan/column-info.h>
 
+#include <ui/ssl_key_export.h>
+
 #include <ui/io_graph_item.h>
 #include <epan/stats_tree_priv.h>
 #include <epan/stat_tap_ui.h>
@@ -48,21 +51,20 @@
 #include <epan/rtd_table.h>
 #include <epan/srt_table.h>
 #include <epan/to_str.h>
-#include <epan/secrets.h>
 
 #include <epan/dissectors/packet-h225.h>
+#include <epan/rtp_pt.h>
 #include <ui/voip_calls.h>
 #include <ui/rtp_stream.h>
 #include <ui/tap-rtp-common.h>
 #include <ui/tap-rtp-analysis.h>
 #include <ui/cli/tap-protohierstat.h>
 #include <ui/cli/tap-voip.h>
-#include <app/application_flavor.h>
+#include <wsutil/version_info.h>
 #include <epan/to_str.h>
 
 #include <epan/addr_resolv.h>
 #include <epan/dissectors/packet-rtp.h>
-#include <epan/dissectors/packet-rtp_pt.h>
 #include <ui/rtp_media.h>
 #include <ui/mcast_stream.h>
 #include <speex/speex_resampler.h>
@@ -377,8 +379,6 @@ json_prep(char* buf, const jsmntok_t* tokens, int count)
         {"method",     "download",       1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
         {"method",     "dumpconf",       1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
         {"method",     "follow",         1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
-        {"method",     "field",          1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
-        {"method",     "fields",         1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
         {"method",     "frame",          1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
         {"method",     "frames",         1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
         {"method",     "info",           1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
@@ -400,7 +400,6 @@ json_prep(char* buf, const jsmntok_t* tokens, int count)
         {"follow",     "follow",         2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_MANDATORY},
         {"follow",     "filter",         2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_MANDATORY},
         {"follow",     "sub_stream",     2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, SHARKD_OPTIONAL},
-        {"field",      "name",           2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_MANDATORY},
         {"frame",      "frame",          2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, SHARKD_MANDATORY},
         {"frame",      "proto",          2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  SHARKD_OPTIONAL},
         {"frame",      "ref_frame",      2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, SHARKD_OPTIONAL},
@@ -439,21 +438,9 @@ json_prep(char* buf, const jsmntok_t* tokens, int count)
         {"iograph",    "filter7",        2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
         {"iograph",    "filter8",        2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
         {"iograph",    "filter9",        2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
-        {"iograph",    "aot0",           2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  SHARKD_OPTIONAL},
-        {"iograph",    "aot1",           2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  SHARKD_OPTIONAL},
-        {"iograph",    "aot2",           2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  SHARKD_OPTIONAL},
-        {"iograph",    "aot3",           2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  SHARKD_OPTIONAL},
-        {"iograph",    "aot4",           2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  SHARKD_OPTIONAL},
-        {"iograph",    "aot5",           2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  SHARKD_OPTIONAL},
-        {"iograph",    "aot6",           2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  SHARKD_OPTIONAL},
-        {"iograph",    "aot7",           2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  SHARKD_OPTIONAL},
-        {"iograph",    "aot8",           2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  SHARKD_OPTIONAL},
-        {"iograph",    "aot9",           2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  SHARKD_OPTIONAL},
         {"load",       "file",           2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_MANDATORY},
-        {"load",       "max_packets",    2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, SHARKD_OPTIONAL},
-        {"load",       "max_bytes",      2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, SHARKD_OPTIONAL},
         {"setcomment", "frame",          2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, SHARKD_MANDATORY},
-        {"setcomment", "comment",        2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_MANDATORY},
+        {"setcomment", "comment",        2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
         {"setconf",    "name",           2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_MANDATORY},
         {"setconf",    "value",          2, JSMN_UNDEFINED,    SHARKD_JSON_ANY,      SHARKD_MANDATORY},
         {"tap",        "tap0",           2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_MANDATORY},
@@ -688,7 +675,7 @@ json_prep(char* buf, const jsmntok_t* tokens, int count)
                     );
             return false;
         }
-        }
+    }
 
     /* check for mandatory members */
     size_t j = 0;
@@ -1095,7 +1082,7 @@ sharkd_session_process_info(void)
     sharkd_session_print_encap_types();
     sharkd_json_array_close();
 
-    sharkd_json_value_string("version", application_get_vcs_version_info_short());
+    sharkd_json_value_string("version", get_ws_vcs_version_info_short());
 
     sharkd_json_array_open("nstat");
     i = 0;
@@ -1169,116 +1156,6 @@ sharkd_session_process_info(void)
     sharkd_json_result_epilogue();
 }
 
-static void sharkd_session_print_field(header_field_info* current_header_field_info, bool as_object)
-{
-    if (as_object)
-    {
-        sharkd_json_object_open(NULL);
-    }
-
-    sharkd_json_value_stringf("id", "%i", current_header_field_info->id);
-    sharkd_json_value_stringf("parent_id", "%i", current_header_field_info->parent);
-    sharkd_json_value_string("name", current_header_field_info->abbrev);
-    sharkd_json_value_string("display_name", current_header_field_info->name);
-    sharkd_json_value_string("type", ftype_name(current_header_field_info->type));
-
-    if (as_object)
-    {
-        sharkd_json_object_close();
-    }
-}
-
-static void
-sharkd_session_print_fields(void)
-{
-    void* proto_cookie = NULL;
-    void* field_cookie = NULL;
-    int protocol_id = -1;
-
-    for (protocol_id = proto_get_first_protocol(&proto_cookie); protocol_id != -1; protocol_id = proto_get_next_protocol(&proto_cookie))
-    {
-        protocol_t* protocol = find_protocol_by_id(protocol_id);
-        if (!proto_is_protocol_enabled(protocol))
-        {
-            continue;
-        }
-
-        header_field_info* current_header_field_info = proto_registrar_get_nth(proto_get_id(protocol));
-
-        sharkd_session_print_field(current_header_field_info, true);
-
-        for (current_header_field_info = proto_get_first_protocol_field(protocol_id, &field_cookie); current_header_field_info != NULL; current_header_field_info = proto_get_next_protocol_field(protocol_id, &field_cookie))
-        {
-            if (current_header_field_info->same_name_prev_id != -1)
-            {
-                continue;
-            }
-
-            sharkd_session_print_field(current_header_field_info, true);
-        }
-    }
-}
-
-/**
- * sharkd_session_process_fields()
- *
- * Process fields request
- *
- * Output object with attributes:
- *   (m) fields  - all fields with their id, name, display_name, type and id of their parent
- */
-static void
-sharkd_session_process_fields(void)
-{
-    sharkd_json_result_prologue(rpcid);
-
-    sharkd_json_array_open("fields");
-    sharkd_session_print_fields();
-    sharkd_json_array_close();
-
-    sharkd_json_result_epilogue();
-}
-
-/**
- * sharkd_session_process_field()
- *
- * Process field request
- *
- * Input:
- *   (m) name - (filter) name of the field
- *
- * Output object with attributes:
- *   (m) id            - id of the field
- *   (m) parent_id     - id of the field's parent
- *   (m) name          - name of the field
- *   (m) display_name  - display_name of the field
- *   (m) type          - type of the field
- */
-static void
-sharkd_session_process_field(const char* buf, const jsmntok_t* tokens, int count)
-{
-    const char* tok_name = json_find_attr(buf, tokens, count, "name");
-
-    sharkd_json_result_prologue(rpcid);
-
-    if (tok_name)
-    {
-        header_field_info* current_header_field_info = proto_registrar_get_byname(tok_name);
-        if (current_header_field_info == NULL)
-        {
-            sharkd_json_error(
-                rpcid, -32602, NULL,
-                "Unknown field name"
-            );
-            return;
-        }
-
-        sharkd_session_print_field(current_header_field_info, false);
-    }
-
-    sharkd_json_result_epilogue();
-}
-
 /**
  * sharkd_session_process_load()
  *
@@ -1294,44 +1171,12 @@ static void
 sharkd_session_process_load(const char *buf, const jsmntok_t *tokens, int count)
 {
     const char *tok_file = json_find_attr(buf, tokens, count, "file");
-    const char *tok_max_packets = json_find_attr(buf, tokens, count, "max_packets");
-    const char *tok_max_bytes = json_find_attr(buf, tokens, count, "max_bytes");
     int err = 0;
-
-    uint32_t max_packets = 0;  /* 0 means unlimited */
-    uint64_t max_bytes = 0;    /* 0 means unlimited */
 
     if (!tok_file)
         return;
 
-    /* Parse optional max_packets parameter */
-    if (tok_max_packets)
-    {
-        if (!ws_strtou32(tok_max_packets, NULL, &max_packets))
-        {
-            sharkd_json_error(
-                    rpcid, -32602, NULL,
-                    "Invalid max_packets parameter"
-                    );
-            return;
-        }
-    }
-
-    /* Parse optional max_bytes parameter */
-    if (tok_max_bytes)
-    {
-        if (!ws_strtou64(tok_max_bytes, NULL, &max_bytes))
-        {
-            sharkd_json_error(
-                    rpcid, -32602, NULL,
-                    "Invalid max_bytes parameter"
-                    );
-            return;
-        }
-    }
-
-    fprintf(stderr, "load: filename=%s, max_packets=%u, max_bytes=%" PRIu64 "\n",
-            tok_file, max_packets, max_bytes);
+    fprintf(stderr, "load: filename=%s\n", tok_file);
 
     if (sharkd_cf_open(tok_file, WTAP_TYPE_AUTO, false, &err) != CF_OK)
     {
@@ -1342,20 +1187,9 @@ sharkd_session_process_load(const char *buf, const jsmntok_t *tokens, int count)
         return;
     }
 
-    /* The open succeeded, and any previous file was closed. Remove any filter
-     * results that refer to the previous file. */
-    g_hash_table_remove_all(filter_table);
-
     TRY
     {
-        if (max_packets > 0 || max_bytes > 0)
-        {
-            err = sharkd_load_cap_file_with_limits((int)max_packets, (int64_t)max_bytes);
-        }
-        else
-        {
-            err = sharkd_load_cap_file();
-        }
+        err = sharkd_load_cap_file();
     }
     CATCH(OutOfMemoryError)
     {
@@ -1397,7 +1231,7 @@ sharkd_session_process_load(const char *buf, const jsmntok_t *tokens, int count)
  *                      'title'    - column title
  *                      'format'   - column format (%x or %Cus:<expr>:<occurrence> if COL_CUSTOM)
  *                      'visible'  - true if column is visible
- *                      'display'  - column display format; 'U', 'R' or 'D'
+ *                      'resolved' - true if column is resolved
  */
 static void
 sharkd_session_process_status(void)
@@ -1426,14 +1260,14 @@ sharkd_session_process_status(void)
     if (cfile.cinfo.num_cols > 0)
     {
         sharkd_json_array_open("columns");
-        for (unsigned i = 0; i < cfile.cinfo.num_cols; ++i)
+        for (int i = 0; i < cfile.cinfo.num_cols; ++i)
         {
             sharkd_json_value_string(NULL, get_column_title(i));
         }
         sharkd_json_array_close();
 
         sharkd_json_array_open("column_info");
-        for (unsigned i = 0; i < cfile.cinfo.num_cols; ++i)
+        for (int i = 0; i < cfile.cinfo.num_cols; ++i)
         {
             int fmt = get_column_format(i);
             sharkd_json_object_open(NULL);
@@ -1445,7 +1279,7 @@ sharkd_session_process_status(void)
                 sharkd_json_value_stringf("format", "%s:%s:%d", col_format_to_string(fmt), get_column_custom_fields(i), get_column_custom_occurrence(i));
             }
             sharkd_json_value_anyf("visible", get_column_visible(i) ? "true" : "false");
-            sharkd_json_value_stringf("display", "%c", get_column_display_format(i));
+            sharkd_json_value_anyf("resolved", get_column_resolved(i) ? "true" : "false");
             sharkd_json_object_close();
         }
         sharkd_json_array_close();
@@ -1508,7 +1342,8 @@ static void
 sharkd_session_process_analyse(void)
 {
     struct sharkd_analyse_data analyser;
-    wtap_rec rec; /* Record information */
+    wtap_rec rec; /* Record metadata */
+    Buffer rec_buf;   /* Record data */
 
     analyser.first_time = NULL;
     analyser.last_time  = NULL;
@@ -1520,7 +1355,8 @@ sharkd_session_process_analyse(void)
 
     sharkd_json_array_open("protocols");
 
-    wtap_rec_init(&rec, DEFAULT_INIT_BUFFER_SIZE_2048);
+    wtap_rec_init(&rec);
+    ws_buffer_init(&rec_buf, 1514);
 
     for (uint32_t framenum = 1; framenum <= cfile.count; framenum++)
     {
@@ -1530,7 +1366,7 @@ sharkd_session_process_analyse(void)
 
         status = sharkd_dissect_request(framenum,
                 (framenum != 1) ? 1 : 0, framenum - 1,
-                &rec, NULL, SHARKD_DISSECT_FLAG_NULL,
+                &rec, &rec_buf, NULL, SHARKD_DISSECT_FLAG_NULL,
                 &sharkd_session_process_analyse_cb, &analyser,
                 &err, &err_info);
         switch (status) {
@@ -1563,6 +1399,7 @@ sharkd_session_process_analyse(void)
     sharkd_json_result_epilogue();
 
     wtap_rec_cleanup(&rec);
+    ws_buffer_free(&rec_buf);
 
     g_hash_table_destroy(analyser.protocols_set);
 }
@@ -1652,7 +1489,7 @@ sharkd_session_process_frames_cb(epan_dissect_t *edt, proto_tree *tree _U_,
     json_dumper_begin_object(&dumper);
 
     sharkd_json_array_open("c");
-    for (unsigned col = 0; col < cinfo->num_cols; ++col)
+    for (int col = 0; col < cinfo->num_cols; ++col)
     {
         sharkd_json_value_string(NULL, get_column_text(cinfo, col));
     }
@@ -1735,7 +1572,8 @@ sharkd_session_process_frames(const char *buf, const jsmntok_t *tokens, int coun
     uint32_t skip;
     uint32_t limit;
 
-    wtap_rec rec; /* Record information */
+    wtap_rec rec; /* Record metadata */
+    Buffer rec_buf;   /* Record data */
     column_info *cinfo = &cfile.cinfo;
     column_info user_cinfo;
 
@@ -1792,7 +1630,8 @@ sharkd_session_process_frames(const char *buf, const jsmntok_t *tokens, int coun
 
     sharkd_json_result_array_prologue(rpcid);
 
-    wtap_rec_init(&rec, DEFAULT_INIT_BUFFER_SIZE_2048);
+    wtap_rec_init(&rec);
+    ws_buffer_init(&rec_buf, 1514);
 
     for (uint32_t framenum = 1; framenum <= cfile.count; framenum++)
     {
@@ -1846,7 +1685,7 @@ sharkd_session_process_frames(const char *buf, const jsmntok_t *tokens, int coun
         fdata = sharkd_get_frame(framenum);
         status = sharkd_dissect_request(framenum,
                 ref_frame, prev_dis_num,
-                &rec, cinfo,
+                &rec, &rec_buf, cinfo,
                 (fdata->color_filter == NULL) ? SHARKD_DISSECT_FLAG_COLOR : SHARKD_DISSECT_FLAG_NULL,
                 &sharkd_session_process_frames_cb, NULL,
                 &err, &err_info);
@@ -1879,10 +1718,10 @@ sharkd_session_process_frames(const char *buf, const jsmntok_t *tokens, int coun
         col_cleanup(cinfo);
 
     wtap_rec_cleanup(&rec);
+    ws_buffer_free(&rec_buf);
 }
 
 static void
-// NOLINTNEXTLINE(misc-no-recursion)
 sharkd_session_process_tap_stats_node_cb(const char *key, const stat_node *n)
 {
     stat_node *node;
@@ -1932,7 +1771,6 @@ sharkd_session_process_tap_stats_node_cb(const char *key, const stat_node *n)
 
         if (node->children)
         {
-            // We recurse here but our depth is limited
             sharkd_session_process_tap_stats_node_cb("sub", node);
         }
         json_dumper_end_object(&dumper);
@@ -2931,7 +2769,6 @@ sharkd_session_free_tap_srt_cb(void *arg)
 }
 
 static void
-// NOLINTNEXTLINE(misc-no-recursion)
 sharkd_session_process_tap_phs_cb_aux(phs_t *rs)
 {
     for (; rs; rs = rs->sibling) {
@@ -2944,7 +2781,6 @@ sharkd_session_process_tap_phs_cb_aux(phs_t *rs)
         sharkd_json_value_anyf("bytes", "%"PRIu64, rs->bytes);
         if (rs->child != NULL && rs->child->protocol != -1) {
             sharkd_json_array_open("protos");
-            // We recurse here but our depth is limited
             sharkd_session_process_tap_phs_cb_aux(rs->child);
             sharkd_json_array_close();
         }
@@ -3021,8 +2857,7 @@ sharkd_session_process_tap_eo_cb(void *tapdata)
     struct sharkd_export_object_list *object_list = (struct sharkd_export_object_list *) tap_object->gui_data;
     GSList *slist;
     int i = 0;
-    char *sha1sum_str;
-    uint8_t sha1sum_bytes[HASH_SHA1_LENGTH];
+    char sha1sum_bytes[HASH_SHA1_LENGTH], *sha1sum_str;
 
     json_dumper_begin_object(&dumper);
     sharkd_json_value_string("tap", object_list->type);
@@ -3572,464 +3407,6 @@ sharkd_session_eo_register_tap_listener(register_eo_t *eo, const char *tap_type,
     return register_tap_listener(get_eo_tap_listener_name(eo), eo_object, tap_filter, 0, NULL, get_eo_packet_func(eo), tap_draw, NULL);
 }
 
-static void
-rtpstream_free_cb(void *data)
-{
-    rtpstream_tapinfo_t *rtp_tapinfo = (rtpstream_tapinfo_t*)data;
-
-    rtpstream_reset(rtp_tapinfo);
-    g_free(rtp_tapinfo);
-}
-
-static bool
-sharkd_session_register_tap(const char *tok_tap, const char *tap_filter, void **tap_datap, GFreeFunc *tap_freep)
-{
-    void *tap_data = NULL;
-    GFreeFunc tap_free = NULL;
-    GString *tap_error = NULL;
-
-    if (!strncmp(tok_tap, "stat:", 5))
-    {
-        stats_tree_cfg *cfg = stats_tree_get_cfg_by_abbr(tok_tap + 5);
-        stats_tree *st;
-
-        if (!cfg)
-        {
-            sharkd_json_error(
-                    rpcid, -11001, NULL,
-                    "sharkd_session_process_tap() stat %s not found", tok_tap + 5
-                    );
-            return false;
-        }
-
-        st = stats_tree_new(cfg, NULL, tap_filter);
-
-        tap_error = register_tap_listener(st->cfg->tapname, st, st->filter, st->cfg->flags, stats_tree_reset, stats_tree_packet, sharkd_session_process_tap_stats_cb, NULL);
-
-        if (!tap_error && cfg->init)
-            cfg->init(st);
-
-        tap_data = st;
-        tap_free = sharkd_session_free_tap_stats_cb;
-    }
-    else if (!strcmp(tok_tap, "expert"))
-    {
-        struct sharkd_expert_tap *expert_tap;
-
-        expert_tap = g_new0(struct sharkd_expert_tap, 1);
-        expert_tap->text = g_string_chunk_new(100);
-
-        tap_error = register_tap_listener("expert", expert_tap, tap_filter, 0, NULL, sharkd_session_packet_tap_expert_cb, sharkd_session_process_tap_expert_cb, NULL);
-
-        tap_data = expert_tap;
-        tap_free = sharkd_session_free_tap_expert_cb;
-    }
-    else if (!strncmp(tok_tap, "seqa:", 5))
-    {
-        seq_analysis_info_t *graph_analysis;
-        register_analysis_t *analysis;
-        const char *tap_name;
-        tap_packet_cb tap_func;
-        unsigned tap_flags;
-
-        analysis = sequence_analysis_find_by_name(tok_tap + 5);
-        if (!analysis)
-        {
-            sharkd_json_error(
-                    rpcid, -11002, NULL,
-                    "sharkd_session_process_tap() seq analysis %s not found", tok_tap + 5
-                    );
-            return false;
-        }
-
-        graph_analysis = sequence_analysis_info_new();
-        graph_analysis->name = tok_tap + 5;
-        /* TODO, make configurable */
-        graph_analysis->any_addr = false;
-
-        tap_name  = sequence_analysis_get_tap_listener_name(analysis);
-        tap_flags = sequence_analysis_get_tap_flags(analysis);
-        tap_func  = sequence_analysis_get_packet_func(analysis);
-
-        tap_error = register_tap_listener(tap_name, graph_analysis, tap_filter, tap_flags, NULL, tap_func, sharkd_session_process_tap_flow_cb, NULL);
-
-        tap_data = graph_analysis;
-        tap_free = sharkd_session_free_tap_flow_cb;
-    }
-    else if (!strncmp(tok_tap, "conv:", 5) || !strncmp(tok_tap, "endpt:", 6))
-    {
-        struct register_ct *ct = NULL;
-        const char *ct_tapname;
-        struct sharkd_conv_tap_data *ct_data;
-        tap_packet_cb tap_func = NULL;
-
-        if (!strncmp(tok_tap, "conv:", 5))
-        {
-            ct = get_conversation_by_proto_id(proto_get_id_by_short_name(tok_tap + 5));
-
-            if (!ct || !(tap_func = get_conversation_packet_func(ct)))
-            {
-                sharkd_json_error(
-                        rpcid, -11003, NULL,
-                        "sharkd_session_process_tap() conv %s not found", tok_tap + 5
-                        );
-                return false;
-            }
-        }
-        else if (!strncmp(tok_tap, "endpt:", 6))
-        {
-            ct = get_conversation_by_proto_id(proto_get_id_by_short_name(tok_tap + 6));
-
-            if (!ct || !(tap_func = get_endpoint_packet_func(ct)))
-            {
-                sharkd_json_error(
-                        rpcid, -11004, NULL,
-                        "sharkd_session_process_tap() endpt %s not found", tok_tap + 6
-                        );
-                return false;
-            }
-        }
-        else
-        {
-            sharkd_json_error(
-                    rpcid, -11005, NULL,
-                    "sharkd_session_process_tap() conv/endpt(?): %s not found", tok_tap
-                    );
-            return false;
-        }
-
-        ct_tapname = proto_get_protocol_filter_name(get_conversation_proto_id(ct));
-
-        ct_data = g_new0(struct sharkd_conv_tap_data, 1);
-        ct_data->type = tok_tap;
-        ct_data->hash.user_data = ct_data;
-
-        /* XXX: make configurable */
-        ct_data->resolve_name = true;
-        ct_data->resolve_port = true;
-
-        tap_error = register_tap_listener(ct_tapname, &ct_data->hash, tap_filter, 0, NULL, tap_func, sharkd_session_process_tap_conv_cb, NULL);
-
-        tap_data = &ct_data->hash;
-        tap_free = sharkd_session_free_tap_conv_cb;
-    }
-    else if (!strncmp(tok_tap, "nstat:", 6))
-    {
-        stat_tap_table_ui *stat_tap = stat_tap_by_name(tok_tap + 6);
-        stat_data_t *stat_data;
-
-        if (!stat_tap)
-        {
-            sharkd_json_error(
-                    rpcid, -11006, NULL,
-                    "sharkd_session_process_tap() nstat=%s not found", tok_tap + 6
-                    );
-            return false;
-        }
-
-        stat_tap->stat_tap_init_cb(stat_tap);
-
-        stat_data = g_new0(stat_data_t, 1);
-        stat_data->stat_tap_data = stat_tap;
-        stat_data->user_data = NULL;
-
-        tap_error = register_tap_listener(stat_tap->tap_name, stat_data, tap_filter, 0, NULL, stat_tap->packet_func, sharkd_session_process_tap_nstat_cb, NULL);
-
-        tap_data = stat_data;
-        tap_free = sharkd_session_free_tap_nstat_cb;
-    }
-    else if (!strncmp(tok_tap, "rtd:", 4))
-    {
-        register_rtd_t *rtd = get_rtd_table_by_name(tok_tap + 4);
-        rtd_data_t *rtd_data;
-        char *err;
-
-        if (!rtd)
-        {
-            sharkd_json_error(
-                    rpcid, -11007, NULL,
-                    "sharkd_session_process_tap() rtd=%s not found", tok_tap + 4
-                    );
-            return false;
-        }
-
-        rtd_table_get_filter(rtd, "", &tap_filter, &err);
-        if (err != NULL)
-        {
-            sharkd_json_error(
-                    rpcid, -11008, NULL,
-                    "sharkd_session_process_tap() rtd=%s err=%s", tok_tap + 4, err
-                    );
-            g_free(err);
-            return false;
-        }
-
-        rtd_data = g_new0(rtd_data_t, 1);
-        rtd_data->user_data = rtd;
-        rtd_table_dissector_init(rtd, &rtd_data->stat_table, NULL, NULL);
-
-        tap_error = register_tap_listener(get_rtd_tap_listener_name(rtd), rtd_data, tap_filter, 0, NULL, get_rtd_packet_func(rtd), sharkd_session_process_tap_rtd_cb, NULL);
-
-        tap_data = rtd_data;
-        tap_free = sharkd_session_free_tap_rtd_cb;
-    }
-    else if (!strncmp(tok_tap, "srt:", 4))
-    {
-        register_srt_t *srt = get_srt_table_by_name(tok_tap + 4);
-        srt_data_t *srt_data;
-        char *err;
-
-        if (!srt)
-        {
-            sharkd_json_error(
-                    rpcid, -11009, NULL,
-                    "sharkd_session_process_tap() srt=%s not found", tok_tap + 4
-                    );
-            return false;
-        }
-
-        srt_table_get_filter(srt, "", &tap_filter, &err);
-        if (err != NULL)
-        {
-            sharkd_json_error(
-                    rpcid, -11010, NULL,
-                    "sharkd_session_process_tap() srt=%s err=%s", tok_tap + 4, err
-                    );
-            g_free(err);
-            return false;
-        }
-
-        srt_data = g_new0(srt_data_t, 1);
-        srt_data->srt_array = g_array_new(FALSE, TRUE, sizeof(srt_stat_table *));
-        srt_data->user_data = srt;
-        srt_table_dissector_init(srt, srt_data->srt_array);
-
-        tap_error = register_tap_listener(get_srt_tap_listener_name(srt), srt_data, tap_filter, 0, NULL, get_srt_packet_func(srt), sharkd_session_process_tap_srt_cb, NULL);
-
-        tap_data = srt_data;
-        tap_free = sharkd_session_free_tap_srt_cb;
-    }
-    else if (!strncmp(tok_tap, "eo:", 3))
-    {
-        register_eo_t *eo = get_eo_by_name(tok_tap + 3);
-
-        if (!eo)
-        {
-            sharkd_json_error(
-                    rpcid, -11011, NULL,
-                    "sharkd_session_process_tap() eo=%s not found", tok_tap + 3
-                    );
-            return false;
-        }
-
-        tap_error = sharkd_session_eo_register_tap_listener(eo, tok_tap, tap_filter, sharkd_session_process_tap_eo_cb, &tap_data, &tap_free);
-
-        /* tap_data & tap_free assigned by sharkd_session_eo_register_tap_listener */
-    }
-    else if (!strcmp(tok_tap, "rtp-streams"))
-    {
-        rtpstream_tapinfo_t *rtp_tapinfo = g_new0(rtpstream_tapinfo_t, 1);
-        rtp_tapinfo->mode = TAP_ANALYSE; // This is 0 anyway
-
-        tap_error = register_tap_listener("rtp", rtp_tapinfo, tap_filter, 0, rtpstream_reset_cb, rtpstream_packet_cb, sharkd_session_process_tap_rtp_cb, NULL);
-
-        tap_data = rtp_tapinfo;
-        tap_free = rtpstream_free_cb;
-    }
-    else if (!strncmp(tok_tap, "rtp-analyse:", 12))
-    {
-        struct sharkd_analyse_rtp *rtp_req;
-
-        rtp_req = (struct sharkd_analyse_rtp *) g_malloc0(sizeof(*rtp_req));
-        if (!sharkd_rtp_match_init(&rtp_req->id, tok_tap + 12))
-        {
-            sharkd_json_error(
-                    rpcid, -10001, NULL,
-                    "sharkd_session_process_tap() rtp tokenizing error %s", tok_tap
-                    );
-            rtpstream_id_free(&rtp_req->id);
-            g_free(rtp_req);
-            return false;
-        }
-
-        rtp_req->tap_name = tok_tap;
-        rtp_req->statinfo.first_packet = true;
-        rtp_req->statinfo.reg_pt = PT_UNDEFINED;
-
-        tap_error = register_tap_listener("rtp", rtp_req, tap_filter, 0, NULL, sharkd_session_packet_tap_rtp_analyse_cb, sharkd_session_process_tap_rtp_analyse_cb, NULL);
-
-        tap_data = rtp_req;
-        tap_free = sharkd_session_process_tap_rtp_free_cb;
-    }
-    else if (!strcmp(tok_tap, "multicast"))
-    {
-        mcaststream_tapinfo_t *mcaststream_tapinfo;
-        mcaststream_tapinfo = (mcaststream_tapinfo_t *) g_malloc0(sizeof(*mcaststream_tapinfo));
-
-        tap_error = register_tap_listener("udp", mcaststream_tapinfo, tap_filter, 0, NULL, mcaststream_packet, sharkd_session_process_tap_multicast_cb, NULL);
-        tap_data = mcaststream_tapinfo;
-        tap_free = sharkd_session_process_free_tap_multicast_cb;
-    }
-    else if (!strcmp(tok_tap, "phs"))
-    {
-        phs_t *rs;
-
-        pc_proto_id = proto_registrar_get_id_byname("pkt_comment");
-
-        rs = new_phs_t(NULL, tap_filter);
-
-        tap_error = register_tap_listener("frame", rs, tap_filter,
-                                          TL_REQUIRES_PROTO_TREE|TL_REQUIRES_PROTOCOLS,
-                                          NULL, protohierstat_packet,
-                                          sharkd_session_process_tap_phs_cb, NULL);
-
-        tap_data = rs;
-        tap_free = sharkd_session_free_tap_phs_cb;
-    }
-    else if (!strcmp(tok_tap, "voip-calls"))
-    {
-        voip_stat_init_tapinfo();
-
-        tap_error = register_tap_listener("frame", &tapinfo_, tap_filter, 0, NULL, NULL, sharkd_session_process_tap_voip_calls_cb, NULL);
-
-        tapinfo_.session = cfile.epan;
-        voip_calls_init_all_taps(&tapinfo_);
-
-        tap_data = &tapinfo_;
-        tap_free = sharkd_session_free_tap_voip_calls_cb;
-    }
-    else if (!strncmp(tok_tap, "voip-convs:", 11))
-    {
-        int len;
-        unsigned int min, max;
-        struct sharkd_voip_convs_req *voip_convs_req;
-        const char *conv_arg = tok_tap + 11;
-
-        // parse tok_tap to get which call we are asking for
-        if (*conv_arg == 0) {
-            // set all bits of voip_conv_sel (-1 in binary is all 1's)
-            memset(voip_conv_sel, -1, sizeof(voip_conv_sel));
-        } else {
-            memset(voip_conv_sel, 0, sizeof(voip_conv_sel));
-
-            while (*conv_arg != 0) {
-                if (*conv_arg == ',') {
-                    conv_arg++;
-                }
-                if (sscanf(conv_arg, "%u-%u%n", &min, &max, &len) == 2) {
-                    conv_arg += len;
-                } else if (sscanf(conv_arg, "%u%n", &min, &len) == 1) {
-                    max = min;
-                    conv_arg += len;
-                } else {
-                    sharkd_json_error(
-                            rpcid, -11014, NULL,
-                            "sharkd_session_process_tap() voip-convs=%s invalid 'convs' parameter", tok_tap
-                    );
-                    return false;
-                }
-                if (min > max || min >= VOIP_CONV_MAX || max >= VOIP_CONV_MAX) {
-                    sharkd_json_error(
-                            rpcid, -11012, NULL,
-                            "sharkd_session_process_tap() voip-convs=%s invalid 'convs' number range", tok_tap
-                    );
-                    return false;
-                }
-                for(; min <= max; min++) {
-                    voip_conv_sel[min / VOIP_CONV_BITS] |= 1 << (min % VOIP_CONV_BITS);
-                }
-            }
-        }
-
-        voip_stat_init_tapinfo();
-
-        voip_convs_req = (struct sharkd_voip_convs_req *) g_malloc0(sizeof(*voip_convs_req));
-        voip_convs_req->tapinfo = &tapinfo_;
-        voip_convs_req->tap_name = tok_tap;
-
-        tap_error = register_tap_listener("frame", voip_convs_req, tap_filter, 0, NULL, NULL, sharkd_session_process_tap_voip_convs_cb, NULL);
-
-        tapinfo_.session = cfile.epan;
-        voip_calls_init_all_taps(&tapinfo_);
-
-        tap_data = voip_convs_req;
-        tap_free = sharkd_session_free_tap_voip_convs_cb;
-    }
-    else if (!strncmp(tok_tap, "hosts:", 6))
-    {
-        bool dump_v4;
-        bool dump_v6;
-        struct sharkd_hosts_req *hosts_req;
-        const char *proto_arg;
-        char **proto_tokens;
-        int proto_count;
-
-        proto_arg = tok_tap + 6;
-
-        if (strlen(proto_arg) == 0) {
-            dump_v4 = true;
-            dump_v6 = true;
-        } else {
-            dump_v4 = false;
-            dump_v6 = false;
-
-            proto_tokens = g_strsplit(proto_arg, ",", 0);
-            proto_count = 0;
-            while (proto_tokens[proto_count]) {
-                if (!strcmp("ip", proto_tokens[proto_count]) ||
-                    !strcmp("ipv4", proto_tokens[proto_count])) {
-                    dump_v4 = true;
-                } else if (!strcmp("ipv6", proto_tokens[proto_count])) {
-                    dump_v6 = true;
-                } else {
-                    g_strfreev(proto_tokens);
-                    sharkd_json_error(
-                            rpcid, -11015, NULL,
-                            "sharkd_session_process_tap() hosts=%s invalid 'protos' parameter", tok_tap
-                    );
-                    return false;
-                }
-                proto_count++;
-            }
-            g_strfreev(proto_tokens);
-        }
-
-        hosts_req = (struct sharkd_hosts_req *)g_malloc0(sizeof(*hosts_req));
-        hosts_req->dump_v4 = dump_v4;
-        hosts_req->dump_v6 = dump_v6;
-        hosts_req->tap_name = tok_tap;
-
-        tap_error = register_tap_listener("frame", hosts_req, tap_filter, TL_REQUIRES_PROTO_TREE, NULL, NULL, sharkd_session_process_tap_hosts_cb, NULL);
-
-        tap_data = hosts_req;
-        tap_free = sharkd_session_free_tap_hosts_cb;
-    }
-    else
-    {
-        sharkd_json_error(
-                rpcid, -11012, NULL,
-                "sharkd_session_process_tap() %s not recognized", tok_tap
-                );
-        return false;
-    }
-
-    if (tap_error)
-    {
-        sharkd_json_error(
-                rpcid, -11013, NULL,
-                "sharkd_session_process_tap() name=%s error=%s", tok_tap, tap_error->str
-                );
-        g_string_free(tap_error, TRUE);
-        if (tap_free)
-            tap_free(tap_data);
-        return false;
-    }
-
-    *tap_freep = tap_free;
-    *tap_datap = tap_data;
-    return true;
-}
-
 /**
  * sharkd_session_process_tap()
  *
@@ -4067,6 +3444,9 @@ sharkd_session_process_tap(char *buf, const jsmntok_t *tokens, int count)
     int i;
     const char *tap_filter = json_find_attr(buf, tokens, count, "filter");
 
+    rtpstream_tapinfo_t rtp_tapinfo =
+    { NULL, NULL, NULL, NULL, 0, NULL, NULL, 0, TAP_ANALYSE, NULL, NULL, NULL, false, false};
+
     for (i = 0; i < 16; i++)
     {
         char tapbuf[32];
@@ -4074,14 +3454,440 @@ sharkd_session_process_tap(char *buf, const jsmntok_t *tokens, int count)
 
         void *tap_data = NULL;
         GFreeFunc tap_free = NULL;
+        GString *tap_error = NULL;
 
         snprintf(tapbuf, sizeof(tapbuf), "tap%d", i);
         tok_tap = json_find_attr(buf, tokens, count, tapbuf);
         if (!tok_tap)
             break;
 
-        if (!sharkd_session_register_tap(tok_tap, tap_filter, &tap_data, &tap_free)) {
-            goto cleanup;
+        if (!strncmp(tok_tap, "stat:", 5))
+        {
+            stats_tree_cfg *cfg = stats_tree_get_cfg_by_abbr(tok_tap + 5);
+            stats_tree *st;
+
+            if (!cfg)
+            {
+                sharkd_json_error(
+                        rpcid, -11001, NULL,
+                        "sharkd_session_process_tap() stat %s not found", tok_tap + 5
+                        );
+                return;
+            }
+
+            st = stats_tree_new(cfg, NULL, tap_filter);
+
+            tap_error = register_tap_listener(st->cfg->tapname, st, st->filter, st->cfg->flags, stats_tree_reset, stats_tree_packet, sharkd_session_process_tap_stats_cb, NULL);
+
+            if (!tap_error && cfg->init)
+                cfg->init(st);
+
+            tap_data = st;
+            tap_free = sharkd_session_free_tap_stats_cb;
+        }
+        else if (!strcmp(tok_tap, "expert"))
+        {
+            struct sharkd_expert_tap *expert_tap;
+
+            expert_tap = g_new0(struct sharkd_expert_tap, 1);
+            expert_tap->text = g_string_chunk_new(100);
+
+            tap_error = register_tap_listener("expert", expert_tap, tap_filter, 0, NULL, sharkd_session_packet_tap_expert_cb, sharkd_session_process_tap_expert_cb, NULL);
+
+            tap_data = expert_tap;
+            tap_free = sharkd_session_free_tap_expert_cb;
+        }
+        else if (!strncmp(tok_tap, "seqa:", 5))
+        {
+            seq_analysis_info_t *graph_analysis;
+            register_analysis_t *analysis;
+            const char *tap_name;
+            tap_packet_cb tap_func;
+            unsigned tap_flags;
+
+            analysis = sequence_analysis_find_by_name(tok_tap + 5);
+            if (!analysis)
+            {
+                sharkd_json_error(
+                        rpcid, -11002, NULL,
+                        "sharkd_session_process_tap() seq analysis %s not found", tok_tap + 5
+                        );
+                return;
+            }
+
+            graph_analysis = sequence_analysis_info_new();
+            graph_analysis->name = tok_tap + 5;
+            /* TODO, make configurable */
+            graph_analysis->any_addr = false;
+
+            tap_name  = sequence_analysis_get_tap_listener_name(analysis);
+            tap_flags = sequence_analysis_get_tap_flags(analysis);
+            tap_func  = sequence_analysis_get_packet_func(analysis);
+
+            tap_error = register_tap_listener(tap_name, graph_analysis, tap_filter, tap_flags, NULL, tap_func, sharkd_session_process_tap_flow_cb, NULL);
+
+            tap_data = graph_analysis;
+            tap_free = sharkd_session_free_tap_flow_cb;
+        }
+        else if (!strncmp(tok_tap, "conv:", 5) || !strncmp(tok_tap, "endpt:", 6))
+        {
+            struct register_ct *ct = NULL;
+            const char *ct_tapname;
+            struct sharkd_conv_tap_data *ct_data;
+            tap_packet_cb tap_func = NULL;
+
+            if (!strncmp(tok_tap, "conv:", 5))
+            {
+                ct = get_conversation_by_proto_id(proto_get_id_by_short_name(tok_tap + 5));
+
+                if (!ct || !(tap_func = get_conversation_packet_func(ct)))
+                {
+                    sharkd_json_error(
+                            rpcid, -11003, NULL,
+                            "sharkd_session_process_tap() conv %s not found", tok_tap + 5
+                            );
+                    return;
+                }
+            }
+            else if (!strncmp(tok_tap, "endpt:", 6))
+            {
+                ct = get_conversation_by_proto_id(proto_get_id_by_short_name(tok_tap + 6));
+
+                if (!ct || !(tap_func = get_endpoint_packet_func(ct)))
+                {
+                    sharkd_json_error(
+                            rpcid, -11004, NULL,
+                            "sharkd_session_process_tap() endpt %s not found", tok_tap + 6
+                            );
+                    return;
+                }
+            }
+            else
+            {
+                sharkd_json_error(
+                        rpcid, -11005, NULL,
+                        "sharkd_session_process_tap() conv/endpt(?): %s not found", tok_tap
+                        );
+                return;
+            }
+
+            ct_tapname = proto_get_protocol_filter_name(get_conversation_proto_id(ct));
+
+            ct_data = g_new0(struct sharkd_conv_tap_data, 1);
+            ct_data->type = tok_tap;
+            ct_data->hash.user_data = ct_data;
+
+            /* XXX: make configurable */
+            ct_data->resolve_name = true;
+            ct_data->resolve_port = true;
+
+            tap_error = register_tap_listener(ct_tapname, &ct_data->hash, tap_filter, 0, NULL, tap_func, sharkd_session_process_tap_conv_cb, NULL);
+
+            tap_data = &ct_data->hash;
+            tap_free = sharkd_session_free_tap_conv_cb;
+        }
+        else if (!strncmp(tok_tap, "nstat:", 6))
+        {
+            stat_tap_table_ui *stat_tap = stat_tap_by_name(tok_tap + 6);
+            stat_data_t *stat_data;
+
+            if (!stat_tap)
+            {
+                sharkd_json_error(
+                        rpcid, -11006, NULL,
+                        "sharkd_session_process_tap() nstat=%s not found", tok_tap + 6
+                        );
+                return;
+            }
+
+            stat_tap->stat_tap_init_cb(stat_tap);
+
+            stat_data = g_new0(stat_data_t, 1);
+            stat_data->stat_tap_data = stat_tap;
+            stat_data->user_data = NULL;
+
+            tap_error = register_tap_listener(stat_tap->tap_name, stat_data, tap_filter, 0, NULL, stat_tap->packet_func, sharkd_session_process_tap_nstat_cb, NULL);
+
+            tap_data = stat_data;
+            tap_free = sharkd_session_free_tap_nstat_cb;
+        }
+        else if (!strncmp(tok_tap, "rtd:", 4))
+        {
+            register_rtd_t *rtd = get_rtd_table_by_name(tok_tap + 4);
+            rtd_data_t *rtd_data;
+            char *err;
+
+            if (!rtd)
+            {
+                sharkd_json_error(
+                        rpcid, -11007, NULL,
+                        "sharkd_session_process_tap() rtd=%s not found", tok_tap + 4
+                        );
+                return;
+            }
+
+            rtd_table_get_filter(rtd, "", &tap_filter, &err);
+            if (err != NULL)
+            {
+                sharkd_json_error(
+                        rpcid, -11008, NULL,
+                        "sharkd_session_process_tap() rtd=%s err=%s", tok_tap + 4, err
+                        );
+                g_free(err);
+                return;
+            }
+
+            rtd_data = g_new0(rtd_data_t, 1);
+            rtd_data->user_data = rtd;
+            rtd_table_dissector_init(rtd, &rtd_data->stat_table, NULL, NULL);
+
+            tap_error = register_tap_listener(get_rtd_tap_listener_name(rtd), rtd_data, tap_filter, 0, NULL, get_rtd_packet_func(rtd), sharkd_session_process_tap_rtd_cb, NULL);
+
+            tap_data = rtd_data;
+            tap_free = sharkd_session_free_tap_rtd_cb;
+        }
+        else if (!strncmp(tok_tap, "srt:", 4))
+        {
+            register_srt_t *srt = get_srt_table_by_name(tok_tap + 4);
+            srt_data_t *srt_data;
+            char *err;
+
+            if (!srt)
+            {
+                sharkd_json_error(
+                        rpcid, -11009, NULL,
+                        "sharkd_session_process_tap() srt=%s not found", tok_tap + 4
+                        );
+                return;
+            }
+
+            srt_table_get_filter(srt, "", &tap_filter, &err);
+            if (err != NULL)
+            {
+                sharkd_json_error(
+                        rpcid, -11010, NULL,
+                        "sharkd_session_process_tap() srt=%s err=%s", tok_tap + 4, err
+                        );
+                g_free(err);
+                return;
+            }
+
+            srt_data = g_new0(srt_data_t, 1);
+            srt_data->srt_array = g_array_new(FALSE, TRUE, sizeof(srt_stat_table *));
+            srt_data->user_data = srt;
+            srt_table_dissector_init(srt, srt_data->srt_array);
+
+            tap_error = register_tap_listener(get_srt_tap_listener_name(srt), srt_data, tap_filter, 0, NULL, get_srt_packet_func(srt), sharkd_session_process_tap_srt_cb, NULL);
+
+            tap_data = srt_data;
+            tap_free = sharkd_session_free_tap_srt_cb;
+        }
+        else if (!strncmp(tok_tap, "eo:", 3))
+        {
+            register_eo_t *eo = get_eo_by_name(tok_tap + 3);
+
+            if (!eo)
+            {
+                sharkd_json_error(
+                        rpcid, -11011, NULL,
+                        "sharkd_session_process_tap() eo=%s not found", tok_tap + 3
+                        );
+                return;
+            }
+
+            tap_error = sharkd_session_eo_register_tap_listener(eo, tok_tap, tap_filter, sharkd_session_process_tap_eo_cb, &tap_data, &tap_free);
+
+            /* tap_data & tap_free assigned by sharkd_session_eo_register_tap_listener */
+        }
+        else if (!strcmp(tok_tap, "rtp-streams"))
+        {
+            tap_error = register_tap_listener("rtp", &rtp_tapinfo, tap_filter, 0, rtpstream_reset_cb, rtpstream_packet_cb, sharkd_session_process_tap_rtp_cb, NULL);
+
+            tap_data = &rtp_tapinfo;
+            tap_free = rtpstream_reset_cb;
+        }
+        else if (!strncmp(tok_tap, "rtp-analyse:", 12))
+        {
+            struct sharkd_analyse_rtp *rtp_req;
+
+            rtp_req = (struct sharkd_analyse_rtp *) g_malloc0(sizeof(*rtp_req));
+            if (!sharkd_rtp_match_init(&rtp_req->id, tok_tap + 12))
+            {
+                rtpstream_id_free(&rtp_req->id);
+                g_free(rtp_req);
+                continue;
+            }
+
+            rtp_req->tap_name = tok_tap;
+            rtp_req->statinfo.first_packet = true;
+            rtp_req->statinfo.reg_pt = PT_UNDEFINED;
+
+            tap_error = register_tap_listener("rtp", rtp_req, tap_filter, 0, NULL, sharkd_session_packet_tap_rtp_analyse_cb, sharkd_session_process_tap_rtp_analyse_cb, NULL);
+
+            tap_data = rtp_req;
+            tap_free = sharkd_session_process_tap_rtp_free_cb;
+        }
+        else if (!strcmp(tok_tap, "multicast"))
+        {
+            mcaststream_tapinfo_t *mcaststream_tapinfo;
+            mcaststream_tapinfo = (mcaststream_tapinfo_t *) g_malloc0(sizeof(*mcaststream_tapinfo));
+
+            tap_error = register_tap_listener("udp", mcaststream_tapinfo, tap_filter, 0, NULL, mcaststream_packet, sharkd_session_process_tap_multicast_cb, NULL);
+            tap_data = mcaststream_tapinfo;
+            tap_free = sharkd_session_process_free_tap_multicast_cb;
+        }
+        else if (!strcmp(tok_tap, "phs"))
+        {
+            phs_t *rs;
+
+            pc_proto_id = proto_registrar_get_id_byname("pkt_comment");
+
+            rs = new_phs_t(NULL, tap_filter);
+
+            tap_error = register_tap_listener("frame", rs, tap_filter, TL_REQUIRES_PROTO_TREE, NULL,
+                                              protohierstat_packet,
+                                              sharkd_session_process_tap_phs_cb, NULL);
+
+            tap_data = rs;
+            tap_free = sharkd_session_free_tap_phs_cb;
+        }
+        else if (!strcmp(tok_tap, "voip-calls"))
+        {
+            voip_stat_init_tapinfo();
+
+            tap_error = register_tap_listener("frame", &tapinfo_, tap_filter, 0, NULL, NULL, sharkd_session_process_tap_voip_calls_cb, NULL);
+
+            tapinfo_.session = cfile.epan;
+            voip_calls_init_all_taps(&tapinfo_);
+
+            tap_data = &tapinfo_;
+            tap_free = sharkd_session_free_tap_voip_calls_cb;
+        }
+        else if (!strncmp(tok_tap, "voip-convs:", 11))
+        {
+            int len;
+            unsigned int min, max;
+            struct sharkd_voip_convs_req *voip_convs_req;
+            const char *conv_arg = tok_tap + 11;
+
+            // parse tok_tap to get which call we are asking for
+            if (*conv_arg == 0) {
+                // set all bits of voip_conv_sel (-1 in binary is all 1's)
+                memset(voip_conv_sel, -1, sizeof(voip_conv_sel));
+            } else {
+                memset(voip_conv_sel, 0, sizeof(voip_conv_sel));
+
+                while (*conv_arg != 0) {
+                    if (*conv_arg == ',') {
+                        conv_arg++;
+                    }
+                    if (sscanf(conv_arg, "%u-%u%n", &min, &max, &len) == 2) {
+                        conv_arg += len;
+                    } else if (sscanf(conv_arg, "%u%n", &min, &len) == 1) {
+                        max = min;
+                        conv_arg += len;
+                    } else {
+                        sharkd_json_error(
+                                rpcid, -11014, NULL,
+                                "sharkd_session_process_tap() voip-convs=%s invalid 'convs' parameter", tok_tap
+                        );
+                        return;
+                    }
+                    if (min > max || min >= VOIP_CONV_MAX || max >= VOIP_CONV_MAX) {
+                        sharkd_json_error(
+                                rpcid, -11012, NULL,
+                                "sharkd_session_process_tap() voip-convs=%s invalid 'convs' number range", tok_tap
+                        );
+                        return;
+                    }
+                    for(; min <= max; min++) {
+                        voip_conv_sel[min / VOIP_CONV_BITS] |= 1 << (min % VOIP_CONV_BITS);
+                    }
+                }
+            }
+
+            voip_stat_init_tapinfo();
+
+            voip_convs_req = (struct sharkd_voip_convs_req *) g_malloc0(sizeof(*voip_convs_req));
+            voip_convs_req->tapinfo = &tapinfo_;
+            voip_convs_req->tap_name = tok_tap;
+
+            tap_error = register_tap_listener("frame", voip_convs_req, tap_filter, 0, NULL, NULL, sharkd_session_process_tap_voip_convs_cb, NULL);
+
+            tapinfo_.session = cfile.epan;
+            voip_calls_init_all_taps(&tapinfo_);
+
+            tap_data = voip_convs_req;
+            tap_free = sharkd_session_free_tap_voip_convs_cb;
+        }
+        else if (!strncmp(tok_tap, "hosts:", 6))
+        {
+            bool dump_v4;
+            bool dump_v6;
+            struct sharkd_hosts_req *hosts_req;
+            const char *proto_arg;
+            char **proto_tokens;
+            int proto_count;
+
+            proto_arg = tok_tap + 6;
+
+            if (strlen(proto_arg) == 0) {
+                dump_v4 = true;
+                dump_v6 = true;
+            } else {
+                dump_v4 = false;
+                dump_v6 = false;
+
+                proto_tokens = g_strsplit(proto_arg, ",", 0);
+                proto_count = 0;
+                while (proto_tokens[proto_count]) {
+                    if (!strcmp("ip", proto_tokens[proto_count]) ||
+                        !strcmp("ipv4", proto_tokens[proto_count])) {
+                        dump_v4 = true;
+                    } else if (!strcmp("ipv6", proto_tokens[proto_count])) {
+                        dump_v6 = true;
+                    } else {
+                        g_strfreev(proto_tokens);
+                        sharkd_json_error(
+                                rpcid, -11015, NULL,
+                                "sharkd_session_process_tap() hosts=%s invalid 'protos' parameter", tok_tap
+                        );
+                        return;
+                    }
+                    proto_count++;
+                }
+                g_strfreev(proto_tokens);
+            }
+
+            hosts_req = (struct sharkd_hosts_req *)g_malloc0(sizeof(*hosts_req));
+            hosts_req->dump_v4 = dump_v4;
+            hosts_req->dump_v6 = dump_v6;
+            hosts_req->tap_name = tok_tap;
+
+            tap_error = register_tap_listener("frame", hosts_req, tap_filter, TL_REQUIRES_PROTO_TREE, NULL, NULL, sharkd_session_process_tap_hosts_cb, NULL);
+
+            tap_data = hosts_req;
+            tap_free = sharkd_session_free_tap_hosts_cb;
+        }
+        else
+        {
+            sharkd_json_error(
+                    rpcid, -11012, NULL,
+                    "sharkd_session_process_tap() %s not recognized", tok_tap
+                    );
+            return;
+        }
+
+        if (tap_error)
+        {
+            sharkd_json_error(
+                    rpcid, -11013, NULL,
+                    "sharkd_session_process_tap() name=%s error=%s", tok_tap, tap_error->str
+                    );
+            g_string_free(tap_error, TRUE);
+            if (tap_free)
+                tap_free(tap_data);
+            return;
         }
 
         taps_data[taps_count] = tap_data;
@@ -4105,7 +3911,6 @@ sharkd_session_process_tap(char *buf, const jsmntok_t *tokens, int count)
     sharkd_json_array_close();
     sharkd_json_result_epilogue();
 
-cleanup:
     for (i = 0; i < taps_count; i++)
     {
         if (taps_data[i])
@@ -4242,7 +4047,6 @@ sharkd_session_process_follow(char *buf, const jsmntok_t *tokens, int count)
 }
 
 static void
-// NOLINTNEXTLINE(misc-no-recursion)
 sharkd_session_process_frame_cb_tree(const char *key, epan_dissect_t *edt, proto_tree *tree, tvbuff_t **tvbs, bool display_hidden)
 {
     proto_node *node;
@@ -4265,7 +4069,7 @@ sharkd_session_process_frame_cb_tree(const char *key, epan_dissect_t *edt, proto
             char label_str[ITEM_LABEL_LENGTH];
 
             label_str[0] = '\0';
-            proto_item_fill_label(finfo, label_str, NULL);
+            proto_item_fill_label(finfo, label_str);
             sharkd_json_value_string("l", label_str);
         }
         else
@@ -4287,10 +4091,10 @@ sharkd_session_process_frame_cb_tree(const char *key, epan_dissect_t *edt, proto
             }
         }
 
-        if (finfo->length > 0)
+        if (finfo->start >= 0 && finfo->length > 0)
             sharkd_json_value_anyf("h", "[%d,%d]", finfo->start, finfo->length);
 
-        if (finfo->appendix_length > 0)
+        if (finfo->appendix_start >= 0 && finfo->appendix_length > 0)
             sharkd_json_value_anyf("i", "[%d,%d]", finfo->appendix_start, finfo->appendix_length);
 
 
@@ -4347,7 +4151,6 @@ sharkd_session_process_frame_cb_tree(const char *key, epan_dissect_t *edt, proto
             if (finfo->tree_type != -1)
                 sharkd_json_value_anyf("e", "%d", finfo->tree_type);
 
-            // We recurse here but our depth is limited
             sharkd_session_process_frame_cb_tree("n", edt, (proto_tree *) node, tvbs, display_hidden);
         }
 
@@ -4430,47 +4233,6 @@ struct sharkd_frame_request_data
 };
 
 static void
-sharkd_session_process_add_data_source(struct data_source *src, bool add_description)
-{
-    tvbuff_t *tvb;
-    unsigned length;
-
-    if (add_description) {
-        char *src_description = get_data_source_description(src);
-
-        sharkd_json_value_string("name", src_description);
-        wmem_free(NULL, src_description);
-    }
-
-    tvb = get_data_source_tvb(src);
-
-    TRY {
-        length = tvb_captured_length(tvb);
-
-        if (length != 0)
-        {
-            const unsigned char *cp = tvb_get_ptr(tvb, 0, length);
-
-            /* XXX pi.fd->encoding */
-            sharkd_json_value_base64("bytes", cp, length);
-        }
-        else
-        {
-            sharkd_json_value_base64("bytes", (const uint8_t*)"", 0);
-        }
-    } CATCH_BOUNDS_AND_DISSECTOR_ERRORS {
-        /* tvb_captured_length can throw DissectorError. With an
-         * offset of 0 and a length of the captured length, tvb_get_ptr
-         * can throw DissectorError or various bounds errors. We have
-         * to catch it so that the JSON is valid. */
-        sharkd_json_value_base64("bytes", (const uint8_t*)"", 0);
-    } CATCH_ALL {
-        ws_assert_not_reached();
-    }
-    ENDTRY;
-}
-
-static void
 sharkd_session_process_frame_cb(epan_dissect_t *edt, proto_tree *tree, struct epan_column_info *cinfo, const GSList *data_src, void *data)
 {
     packet_info *pi = &edt->pi;
@@ -4533,7 +4295,7 @@ sharkd_session_process_frame_cb(epan_dissect_t *edt, proto_tree *tree, struct ep
 
     if (cinfo)
     {
-        unsigned col;
+        int col;
 
         sharkd_json_array_open("col");
         for (col = 0; col < cinfo->num_cols; ++col)
@@ -4560,7 +4322,23 @@ sharkd_session_process_frame_cb(epan_dissect_t *edt, proto_tree *tree, struct ep
         struct data_source *src = (struct data_source *) data_src->data;
         bool ds_open = false;
 
-        sharkd_session_process_add_data_source(src, ds_open);
+        tvbuff_t *tvb;
+        unsigned length;
+
+        tvb = get_data_source_tvb(src);
+        length = tvb_captured_length(tvb);
+
+        if (length != 0)
+        {
+            const unsigned char *cp = tvb_get_ptr(tvb, 0, length);
+
+            /* XXX pi.fd->encoding */
+            sharkd_json_value_base64("bytes", cp, length);
+        }
+        else
+        {
+            sharkd_json_value_base64("bytes", "", 0);
+        }
 
         data_src = data_src->next;
         if (data_src)
@@ -4575,7 +4353,27 @@ sharkd_session_process_frame_cb(epan_dissect_t *edt, proto_tree *tree, struct ep
 
             json_dumper_begin_object(&dumper);
 
-            sharkd_session_process_add_data_source(src, ds_open);
+            {
+                char *src_name = get_data_source_name(src);
+
+                sharkd_json_value_string("name", src_name);
+                wmem_free(NULL, src_name);
+            }
+
+            tvb = get_data_source_tvb(src);
+            length = tvb_captured_length(tvb);
+
+            if (length != 0)
+            {
+                const unsigned char *cp = tvb_get_ptr(tvb, 0, length);
+
+                /* XXX pi.fd->encoding */
+                sharkd_json_value_base64("bytes", cp, length);
+            }
+            else
+            {
+                sharkd_json_value_base64("bytes", "", 0);
+            }
 
             json_dumper_end_object(&dumper);
 
@@ -4606,7 +4404,6 @@ struct sharkd_iograph
     int hf_index;
     io_graph_item_unit_t calc_type;
     uint32_t interval;
-    bool aot;
 
     /* result */
     int space_items;
@@ -4680,9 +4477,10 @@ sharkd_session_process_iograph(char *buf, const jsmntok_t *tokens, int count)
     const char *tok_interval = json_find_attr(buf, tokens, count, "interval");
     const char *tok_interval_units = json_find_attr(buf, tokens, count, "interval_units");
     struct sharkd_iograph graphs[10];
-    unsigned graph_count;
+    bool is_any_ok = false;
+    int graph_count;
 
-    unsigned i;
+    int i;
 
     /* default: 1000ms = one per second */
     uint32_t interval = 1000;
@@ -4720,7 +4518,7 @@ sharkd_session_process_iograph(char *buf, const jsmntok_t *tokens, int count)
         interval_us = 1000000 * interval;
     }
 
-    for (i = graph_count = 0; i < G_N_ELEMENTS(graphs); i++)
+    for (i = graph_count = 0; i < (int) G_N_ELEMENTS(graphs); i++)
     {
         struct sharkd_iograph *graph = &graphs[graph_count];
 
@@ -4728,7 +4526,6 @@ sharkd_session_process_iograph(char *buf, const jsmntok_t *tokens, int count)
         const char *tok_filter;
         char tok_format_buf[32];
         const char *field_name;
-        const char *tok_aot;
 
         snprintf(tok_format_buf, sizeof(tok_format_buf), "graph%d", i);
         tok_graph = json_find_attr(buf, tokens, count, tok_format_buf);
@@ -4758,8 +4555,6 @@ sharkd_session_process_iograph(char *buf, const jsmntok_t *tokens, int count)
             graph->calc_type = IOG_ITEM_UNIT_CALC_AVERAGE;
         else if (g_str_has_prefix(tok_graph, "load:"))
             graph->calc_type = IOG_ITEM_UNIT_CALC_LOAD;
-        else if (g_str_has_prefix(tok_graph, "throughput:"))
-            graph->calc_type = IOG_ITEM_UNIT_CALC_THROUGHPUT;
         else
             break;
 
@@ -4772,23 +4567,16 @@ sharkd_session_process_iograph(char *buf, const jsmntok_t *tokens, int count)
         graph->interval = interval_us;
 
         graph->hf_index = -1;
-        graph->error = check_field_unit(field_name, &graph->hf_index, graph->calc_type, "Packets");
+        graph->error = check_field_unit(field_name, &graph->hf_index, graph->calc_type);
 
         graph->space_items = 0; /* TODO, can avoid realloc()s in sharkd_iograph_packet() by calculating: capture_time / interval */
         graph->num_items = 0;
         graph->items = NULL;
 
-        snprintf(tok_format_buf, sizeof(tok_format_buf), "aot%d", i);
-        tok_aot = json_find_attr(buf, tokens, count, tok_format_buf);
-        if (tok_aot!=NULL) {
-            graph->aot = (!strcmp(tok_aot, "true")) ? true : false;
-        }
-        else {
-            graph->aot = false;
-        }
-
         if (!graph->error)
             graph->error = register_tap_listener("frame", graph, tok_filter, TL_REQUIRES_PROTO_TREE, NULL, sharkd_iograph_packet, NULL, NULL);
+
+        graph_count++;
 
         if (graph->error)
         {
@@ -4797,14 +4585,15 @@ sharkd_session_process_iograph(char *buf, const jsmntok_t *tokens, int count)
                     "%s", graph->error->str
                     );
             g_string_free(graph->error, TRUE);
-            goto cleanup;
+            return;
         }
 
-        graph_count++;
+        if (graph->error == NULL)
+            is_any_ok = true;
     }
 
     /* retap only if we have at least one ok */
-    if (graph_count)
+    if (is_any_ok)
         sharkd_retap();
 
     sharkd_json_result_prologue(rpcid);
@@ -4832,7 +4621,7 @@ sharkd_session_process_iograph(char *buf, const jsmntok_t *tokens, int count)
             {
                 double val;
 
-                val = get_io_graph_item(graph->items, graph->calc_type, idx, graph->hf_index, &cfile, graph->interval, graph->num_items, graph->aot);
+                val = get_io_graph_item(graph->items, graph->calc_type, idx, graph->hf_index, &cfile, graph->interval, graph->num_items);
 
                 /* if it's zero, don't display */
                 if (val == 0.0)
@@ -4849,19 +4638,12 @@ sharkd_session_process_iograph(char *buf, const jsmntok_t *tokens, int count)
         }
         json_dumper_end_object(&dumper);
 
+        remove_tap_listener(graph);
+        g_free(graph->items);
     }
     sharkd_json_array_close();
 
     sharkd_json_result_epilogue();
-
-cleanup:
-    for (i = 0; i < graph_count; i++)
-    {
-        struct sharkd_iograph *graph = &graphs[i];
-
-        remove_tap_listener(graph);
-        g_free(graph->items);
-    }
 }
 
 /**
@@ -5049,7 +4831,8 @@ sharkd_session_process_frame(char *buf, const jsmntok_t *tokens, int count)
     uint32_t framenum, ref_frame_num, prev_dis_num;
     uint32_t dissect_flags = SHARKD_DISSECT_FLAG_NULL;
     struct sharkd_frame_request_data req_data;
-    wtap_rec rec; /* Record information */
+    wtap_rec rec; /* Record metadata */
+    Buffer rec_buf;   /* Record data */
     enum dissect_request_status status;
     int err;
     char *err_info;
@@ -5097,10 +4880,11 @@ sharkd_session_process_frame(char *buf, const jsmntok_t *tokens, int count)
 
     req_data.display_hidden = (json_find_attr(buf, tokens, count, "v") != NULL);
 
-    wtap_rec_init(&rec, DEFAULT_INIT_BUFFER_SIZE_2048);
+    wtap_rec_init(&rec);
+    ws_buffer_init(&rec_buf, 1514);
 
     status = sharkd_dissect_request(framenum, ref_frame_num, prev_dis_num,
-            &rec, cinfo, dissect_flags,
+            &rec, &rec_buf, cinfo, dissect_flags,
             &sharkd_session_process_frame_cb, &req_data, &err, &err_info);
     switch (status) {
 
@@ -5126,6 +4910,7 @@ sharkd_session_process_frame(char *buf, const jsmntok_t *tokens, int count)
     }
 
     wtap_rec_cleanup(&rec);
+    ws_buffer_free(&rec_buf);
 }
 
 /**
@@ -5353,7 +5138,7 @@ sharkd_session_process_complete(char *buf, const jsmntok_t *tokens, int count)
         }
         else
         {
-            prefs_modules_foreach(prefs_get_module_tree(), sharkd_session_process_complete_pref_cb, &data);
+            prefs_modules_foreach(sharkd_session_process_complete_pref_cb, &data);
         }
         sharkd_json_array_close();
     }
@@ -5370,7 +5155,7 @@ sharkd_session_process_complete(char *buf, const jsmntok_t *tokens, int count)
  *
  * Input:
  *   (m) frame - frame number
- *   (m) comment - user comment
+ *   (o) comment - user comment
  *
  * Output object with attributes:
  *   (m) err   - error code: 0 succeed
@@ -5493,8 +5278,7 @@ sharkd_session_process_setconf(char *buf, const jsmntok_t *tokens, int count)
         default:
             sharkd_json_error(
                     rpcid, -4005, NULL,
-                    "Unable to set the preference%s%s",
-                    errmsg ? ": " : "", errmsg ? errmsg : ""
+                    "Unable to set the preference"
                     );
     }
 
@@ -5517,100 +5301,91 @@ sharkd_session_process_dumpconf_cb(pref_t *pref, void *d)
     snprintf(json_pref_key, sizeof(json_pref_key), "%s.%s", data->module->name, pref_name);
     sharkd_json_object_open(json_pref_key);
 
-    if (!prefs_is_preference_obsolete(pref)) {
-        switch (prefs_get_type(pref))
-        {
-            case PREF_UINT:
-                sharkd_json_value_anyf("u", "%u", prefs_get_uint_value(pref, pref_current));
-                if (prefs_get_uint_base(pref) != 10)
-                    sharkd_json_value_anyf("ub", "%u", prefs_get_uint_base(pref));
-                break;
+    switch (prefs_get_type(pref))
+    {
+        case PREF_UINT:
+            sharkd_json_value_anyf("u", "%u", prefs_get_uint_value_real(pref, pref_current));
+            if (prefs_get_uint_base(pref) != 10)
+                sharkd_json_value_anyf("ub", "%u", prefs_get_uint_base(pref));
+            break;
 
-            case PREF_INT:
-                sharkd_json_value_anyf("d", "%d", prefs_get_int_value(pref, pref_current));
-                break;
+        case PREF_BOOL:
+            sharkd_json_value_anyf("b", prefs_get_bool_value(pref, pref_current) ? "1" : "0");
+            break;
 
-            case PREF_FLOAT:
-                sharkd_json_value_anyf("f", "%.*f", prefs_get_uint_base(pref), prefs_get_float_value(pref, pref_current));
-                break;
+        case PREF_STRING:
+        case PREF_SAVE_FILENAME:
+        case PREF_OPEN_FILENAME:
+        case PREF_DIRNAME:
+        case PREF_PASSWORD:
+        case PREF_DISSECTOR:
+            sharkd_json_value_string("s", prefs_get_string_value(pref, pref_current));
+            break;
 
-            case PREF_BOOL:
-                sharkd_json_value_anyf("b", prefs_get_bool_value(pref, pref_current) ? "1" : "0");
-                break;
+        case PREF_ENUM:
+            {
+                const enum_val_t *enums;
 
-            case PREF_STRING:
-            case PREF_SAVE_FILENAME:
-            case PREF_OPEN_FILENAME:
-            case PREF_DIRNAME:
-            case PREF_PASSWORD:
-            case PREF_DISSECTOR:
-                sharkd_json_value_string("s", prefs_get_string_value(pref, pref_current));
-                break;
-
-            case PREF_ENUM:
+                sharkd_json_array_open("e");
+                for (enums = prefs_get_enumvals(pref); enums->name; enums++)
                 {
-                    const enum_val_t *enums;
+                    json_dumper_begin_object(&dumper);
 
-                    sharkd_json_array_open("e");
-                    for (enums = prefs_get_enumvals(pref); enums->name; enums++)
-                    {
-                        json_dumper_begin_object(&dumper);
+                    sharkd_json_value_anyf("v", "%d", enums->value);
 
-                        sharkd_json_value_anyf("v", "%d", enums->value);
+                    if (enums->value == prefs_get_enum_value(pref, pref_current))
+                        sharkd_json_value_anyf("s", "1");
 
-                        if (enums->value == prefs_get_enum_value(pref, pref_current))
-                            sharkd_json_value_anyf("s", "1");
+                    sharkd_json_value_string("d", enums->description);
 
-                        sharkd_json_value_string("d", enums->description);
-
-                        json_dumper_end_object(&dumper);
-                    }
-                    sharkd_json_array_close();
-                    break;
+                    json_dumper_end_object(&dumper);
                 }
+                sharkd_json_array_close();
+                break;
+            }
 
-            case PREF_RANGE:
-            case PREF_DECODE_AS_RANGE:
+        case PREF_RANGE:
+        case PREF_DECODE_AS_RANGE:
+            {
+                char *range_str = range_convert_range(NULL, prefs_get_range_value_real(pref, pref_current));
+                sharkd_json_value_string("r", range_str);
+                wmem_free(NULL, range_str);
+                break;
+            }
+
+        case PREF_UAT:
+            {
+                uat_t *uat = prefs_get_uat_value(pref);
+                unsigned idx;
+
+                sharkd_json_array_open("t");
+                for (idx = 0; idx < uat->raw_data->len; idx++)
                 {
-                    char *range_str = range_convert_range(NULL, prefs_get_range_value_real(pref, pref_current));
-                    sharkd_json_value_string("r", range_str);
-                    wmem_free(NULL, range_str);
-                    break;
-                }
+                    void *rec = UAT_INDEX_PTR(uat, idx);
+                    unsigned colnum;
 
-            case PREF_UAT:
-                {
-                    uat_t *uat = prefs_get_uat_value(pref);
-                    unsigned idx;
-
-                    sharkd_json_array_open("t");
-                    for (idx = 0; idx < uat->raw_data->len; idx++)
+                    sharkd_json_array_open(NULL);
+                    for (colnum = 0; colnum < uat->ncols; colnum++)
                     {
-                        void *rec = UAT_INDEX_PTR(uat, idx);
-                        unsigned colnum;
+                        char *str = uat_fld_tostr(rec, &(uat->fields[colnum]));
 
-                        sharkd_json_array_open(NULL);
-                        for (colnum = 0; colnum < uat->ncols; colnum++)
-                        {
-                            char *str = uat_fld_tostr(rec, &(uat->fields[colnum]));
-
-                            sharkd_json_value_string(NULL, str);
-                            g_free(str);
-                        }
-
-                        sharkd_json_array_close();
+                        sharkd_json_value_string(NULL, str);
+                        g_free(str);
                     }
 
                     sharkd_json_array_close();
-                    break;
                 }
 
-            case PREF_COLOR:
-            case PREF_CUSTOM:
-            case PREF_STATIC_TEXT:
-                /* TODO */
+                sharkd_json_array_close();
                 break;
-        }
+            }
+
+        case PREF_COLOR:
+        case PREF_CUSTOM:
+        case PREF_STATIC_TEXT:
+        case PREF_OBSOLETE:
+            /* TODO */
+            break;
     }
 
 #if 0
@@ -5668,7 +5443,7 @@ sharkd_session_process_dumpconf(char *buf, const jsmntok_t *tokens, int count)
         sharkd_json_result_prologue(rpcid);
 
         sharkd_json_object_open("prefs");
-        prefs_modules_foreach(prefs_get_module_tree(), sharkd_session_process_dumpconf_mod_cb, &data);
+        prefs_modules_foreach(sharkd_session_process_dumpconf_mod_cb, &data);
         sharkd_json_object_close();
 
         sharkd_json_result_epilogue();
@@ -5758,7 +5533,7 @@ sharkd_rtp_download_decode(struct sharkd_download_rtp *req)
     /* based on RtpAudioStream::decode() 6e29d874f8b5e6ebc59f661a0bb0dab8e56f122a */
     /* TODO, for now only without silence (timing_mode_ = Uninterrupted) */
 
-    static const int sample_bytes_ = SAMPLE_BYTES;
+    static const int sample_bytes_ = sizeof(SAMPLE) / sizeof(char);
 
     uint32_t audio_out_rate_ = 0;
     struct _GHashTable *decoders_hash_ = rtp_decoder_hash_table_new();
@@ -5793,7 +5568,7 @@ sharkd_rtp_download_decode(struct sharkd_download_rtp *req)
         {
             uint32_t tmp32;
             uint16_t tmp16;
-            uint8_t wav_hdr[44];
+            char wav_hdr[44];
 
             /* First non-zero wins */
             audio_out_rate_ = sample_rate;
@@ -5858,7 +5633,7 @@ sharkd_rtp_download_decode(struct sharkd_download_rtp *req)
                 }
             }
             in_len = (spx_uint32_t)rtp_packet->info->info_payload_len;
-            out_len = (spx_uint32_t)((audio_out_rate_ * (uint64_t)rtp_packet->info->info_payload_len / sample_rate) + (audio_out_rate_ % sample_rate != 0));
+            out_len = (audio_out_rate_ * (spx_uint32_t)rtp_packet->info->info_payload_len / sample_rate) + (audio_out_rate_ % sample_rate != 0);
             if (out_len * sample_bytes_ > resample_buff_len)
             {
                 while ((out_len * sample_bytes_ > resample_buff_len))
@@ -5872,7 +5647,7 @@ sharkd_rtp_download_decode(struct sharkd_download_rtp *req)
         }
 
         /* Write the decoded, possibly-resampled audio */
-        json_dumper_write_base64(&dumper, (const uint8_t*)write_buff, write_bytes);
+        json_dumper_write_base64(&dumper, write_buff, write_bytes);
 
         g_free(decode_buff);
     }
@@ -6043,12 +5818,10 @@ sharkd_session_process_download(char *buf, const jsmntok_t *tokens, int count)
     }
     else if (!strcmp(tok_token, "ssl-secrets"))
     {
-        size_t str_len = 0;
-        unsigned num_keys = 0;
-        char* str = NULL;
-        secrets_export_values ret = secrets_export("TLS", &str, &str_len, &num_keys);
+        size_t str_len;
+        char *str = ssl_export_sessions(&str_len);
 
-        if ((ret == SECRETS_EXPORT_SUCCESS) && (str_len > 0))
+        if (str)
         {
             const char *mime     = "text/plain";
             const char *filename = "keylog.txt";
@@ -6056,7 +5829,7 @@ sharkd_session_process_download(char *buf, const jsmntok_t *tokens, int count)
             sharkd_json_result_prologue(rpcid);
             sharkd_json_value_string("file", filename);
             sharkd_json_value_string("mime", mime);
-            sharkd_json_value_base64("data", (const uint8_t*)str, str_len);
+            sharkd_json_value_base64("data", str, str_len);
             sharkd_json_result_epilogue();
         }
         g_free(str);
@@ -6150,10 +5923,6 @@ sharkd_session_process(char *buf, const jsmntok_t *tokens, int count)
             sharkd_session_process_analyse();
         else if (!strcmp(tok_method, "info"))
             sharkd_session_process_info();
-        else if (!strcmp(tok_method, "fields"))
-            sharkd_session_process_fields();
-        else if (!strcmp(tok_method, "field"))
-            sharkd_session_process_field(buf, tokens, count);
         else if (!strcmp(tok_method, "check"))
             sharkd_session_process_check(buf, tokens, count);
         else if (!strcmp(tok_method, "complete"))
@@ -6206,13 +5975,14 @@ sharkd_session_main(int mode_setting)
 
     dumper.output_file = stdout;
 
-    /* XXX - This could be a wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(),...) */
     filter_table = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, sharkd_session_filter_free);
 
 #ifdef HAVE_MAXMINDDB
     /* mmdbresolve was stopped before fork(), force starting it */
     uat_get_table_by_name("MaxMind Database Paths")->post_update_cb();
 #endif
+
+    set_resolution_synchrony(true);
 
     while (fgets(buf, sizeof(buf), stdin))
     {

@@ -9,7 +9,8 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "config.h"
+#include <config.h>
+
 #define WS_LOG_DOMAIN  LOG_DOMAIN_MAIN
 
 #include <stdlib.h>
@@ -34,9 +35,10 @@
 #include <wsutil/filesystem.h>
 #include <wsutil/file_util.h>
 #include <wsutil/privileges.h>
+#include <wsutil/report_message.h>
 #include <wsutil/wslog.h>
 #include <wsutil/ws_assert.h>
-#include <app/application_flavor.h>
+#include <cli_main.h>
 #include <wsutil/version_info.h>
 
 #include "globals.h"
@@ -46,6 +48,7 @@
 #include <epan/wslua/init_wslua.h>
 #endif
 #include "file.h"
+#include "frame_tvbuff.h"
 #include <epan/disabled_protos.h>
 #include <epan/prefs.h>
 #include <epan/column.h>
@@ -60,11 +63,10 @@
 #include <epan/stat_tap_ui.h>
 #include <epan/ex-opt.h>
 
-#include <wiretap/wtap_module.h>
+#include <wiretap/wtap-int.h>
 #include <wiretap/file_wrappers.h>
 
 #include <epan/funnel.h>
-#include "ui/cli/tshark-tap.h"
 
 #ifdef HAVE_PLUGINS
 #include <wsutil/plugins.h>
@@ -111,13 +113,17 @@ static output_fields_t* output_fields;
 /* The line separator used between packets, changeable via the -S option */
 static const char *separator = "";
 
-static bool process_file(capture_file *);
+static bool process_file(capture_file *, int, int64_t);
 static bool process_packet_single_pass(capture_file *cf,
-        epan_dissect_t *edt, int64_t offset, wtap_rec *rec);
+        epan_dissect_t *edt, int64_t offset, wtap_rec *rec,
+        const unsigned char *pd);
 static void show_print_file_io_error(int err);
 static bool write_preamble(capture_file *cf);
 static bool print_packet(capture_file *cf, epan_dissect_t *edt);
 static bool write_finale(void);
+
+static void tfshark_cmdarg_err(const char *msg_format, va_list ap);
+static void tfshark_cmdarg_err_cont(const char *msg_format, va_list ap);
 
 static GHashTable *output_only_tables;
 
@@ -263,7 +269,6 @@ main(int argc, char *argv[])
     static const struct ws_option long_options[] = {
         {"help", ws_no_argument, NULL, 'h'},
         {"version", ws_no_argument, NULL, 'v'},
-        LONGOPT_WSLOG
         {0, 0, 0, 0 }
     };
     bool                 arg_error = false;
@@ -280,9 +285,6 @@ main(int argc, char *argv[])
     df_error_t          *df_err;
     e_prefs             *prefs_p;
     char                *output_only = NULL;
-    const struct file_extension_info* file_extensions;
-    unsigned num_extensions;
-    epan_app_data_t app_data;
 
     /*
      * The leading + ensures that getopt_long() does not permute the argv[]
@@ -306,12 +308,18 @@ main(int argc, char *argv[])
 #define OPTSTRING "+2C:d:e:E:hK:lo:O:qQr:R:S:t:T:u:vVxX:Y:z:"
 
     static const char    optstring[] = OPTSTRING;
-
-    /* Future proof by zeroing out all data */
-    memset(&app_data, 0, sizeof(app_data));
-
-    /* Set the program name. */
-    g_set_prgname("tfshark");
+    static const struct report_message_routines tfshark_report_routines = {
+        failure_message,
+        failure_message,
+        open_failure_message,
+        read_failure_message,
+        write_failure_message,
+        cfile_open_failure_message,
+        cfile_dump_open_failure_message,
+        cfile_read_failure_message,
+        cfile_write_failure_message,
+        cfile_close_failure_message
+    };
 
     /*
      * Set the C-language locale to the native environment and set the
@@ -323,13 +331,13 @@ main(int argc, char *argv[])
     setlocale(LC_ALL, "");
 #endif
 
-    cmdarg_err_init(stderr_cmdarg_err, stderr_cmdarg_err_cont);
+    cmdarg_err_init(tfshark_cmdarg_err, tfshark_cmdarg_err_cont);
 
     /* Initialize log handler early so we can have proper logging during startup. */
-    ws_log_init(vcmdarg_err, "TFShark Debug Console");
+    ws_log_init("tfshark", vcmdarg_err);
 
     /* Early logging command-line initialization. */
-    ws_log_parse_args(&argc, argv, optstring, long_options, vcmdarg_err, WS_EXIT_INVALID_OPTION);
+    ws_log_parse_args(&argc, argv, vcmdarg_err, WS_EXIT_INVALID_OPTION);
 
     ws_noisy("Finished log init and parsing command line log arguments");
 
@@ -350,7 +358,7 @@ main(int argc, char *argv[])
      * Attempt to get the pathname of the directory containing the
      * executable file.
      */
-    configuration_init_error = configuration_init(argv[0], "wireshark");
+    configuration_init_error = configuration_init(argv[0], NULL);
     if (configuration_init_error != NULL) {
         fprintf(stderr,
                 "tfshark: Can't get pathname of directory containing the tfshark program: %s.\n",
@@ -361,7 +369,7 @@ main(int argc, char *argv[])
     initialize_funnel_ops();
 
     /* Initialize the version information. */
-    ws_init_version_info("TFShark", application_flavor_name_proper(), application_get_vcs_version_info,
+    ws_init_version_info("TFShark",
                          epan_gather_compile_info,
                          epan_gather_runtime_info);
     /*
@@ -381,12 +389,12 @@ main(int argc, char *argv[])
     while ((opt = ws_getopt_long(argc, argv, optstring, long_options, NULL)) != -1) {
         switch (opt) {
             case 'C':        /* Configuration Profile */
-                if (profile_exists (application_configuration_environment_prefix(), ws_optarg, false)) {
+                if (profile_exists (ws_optarg, false)) {
                     set_profile_name (ws_optarg);
-                } else if (profile_exists (application_configuration_environment_prefix(), ws_optarg, true)) {
+                } else if (profile_exists (ws_optarg, true)) {
                     char  *pf_dir_path, *pf_dir_path2, *pf_filename;
                     /* Copy from global profile */
-                    if (create_persconffile_profile(application_configuration_environment_prefix(), ws_optarg, &pf_dir_path) == -1) {
+                    if (create_persconffile_profile(ws_optarg, &pf_dir_path) == -1) {
                         cmdarg_err("Can't create directory\n\"%s\":\n%s.",
                             pf_dir_path, g_strerror(errno));
 
@@ -394,7 +402,7 @@ main(int argc, char *argv[])
                         exit_status = WS_EXIT_INVALID_FILE;
                         goto clean_exit;
                     }
-                    if (copy_persconffile_profile(application_configuration_environment_prefix(), ws_optarg, ws_optarg, true, &pf_filename,
+                    if (copy_persconffile_profile(ws_optarg, ws_optarg, true, &pf_filename,
                             &pf_dir_path, &pf_dir_path2) == -1) {
                         cmdarg_err("Can't copy file \"%s\" in directory\n\"%s\" to\n\"%s\":\n%s.",
                             pf_filename, pf_dir_path2, pf_dir_path, g_strerror(errno));
@@ -442,7 +450,7 @@ main(int argc, char *argv[])
     if (print_summary == -1)
         print_summary = (print_details || print_hex) ? false : true;
 
-    init_report_failure_message("tfshark");
+    init_report_message("tfshark", &tfshark_report_routines);
 
     timestamp_set_type(TS_RELATIVE);
     timestamp_set_precision(TS_PREC_AUTO);
@@ -460,20 +468,13 @@ main(int argc, char *argv[])
      * capture files, but that mechanism should support plugins for
      * other files, too, if *their* formats are extensible.
      */
-    application_file_extensions(&file_extensions, &num_extensions);
-    wtap_init(true, application_configuration_environment_prefix(), file_extensions, num_extensions);
-
+    wtap_init(true);
 
     /* Register all dissectors; we must do this before checking for the
        "-G" flag, as the "-G" flag dumps information registered by the
        dissectors, and we must do it before we read the preferences, in
        case any dissectors register preferences. */
-    app_data.env_var_prefix = application_configuration_environment_prefix();
-    app_data.col_fmt = application_columns();
-    app_data.num_cols = application_num_columns();
-    app_data.register_func = register_all_protocols;
-    app_data.handoff_func = register_all_protocol_handoffs;
-    if (!epan_init(NULL, NULL, true, &app_data)) {
+    if (!epan_init(NULL, NULL, true)) {
         exit_status = WS_EXIT_INIT_FAILED;
         goto clean_exit;
     }
@@ -484,6 +485,11 @@ main(int argc, char *argv[])
     /* we register the plugin taps before the other taps because
        stats_tree taps plugins will be registered as tap listeners
        by stats_tree_stat.c and need to registered before that */
+
+    /* XXX Disable tap registration for now until we can get tfshark set up with
+     * its own set of taps and the necessary registration function etc.
+     register_all_tap_listeners();
+     */
 
     /* If invoked with the "-G" flag, we dump out information based on
        the argument to the "-G" flag; if no argument is specified,
@@ -503,12 +509,12 @@ main(int argc, char *argv[])
                 column_dump_column_formats();
             else if (strcmp(argv[2], "currentprefs") == 0) {
                 epan_load_settings();
-                write_prefs(application_configuration_environment_prefix(), NULL);
+                write_prefs(NULL);
             }
             else if (strcmp(argv[2], "decodes") == 0)
                 dissector_dump_decodes();
             else if (strcmp(argv[2], "defaultprefs") == 0)
-                write_prefs(application_configuration_environment_prefix(), NULL);
+                write_prefs(NULL);
             else if (strcmp(argv[2], "dissector-tables") == 0)
                 dissector_dump_dissector_tables();
             else if (strcmp(argv[2], "fields") == 0)
@@ -755,12 +761,8 @@ main(int argc, char *argv[])
                     goto clean_exit;
                 }
                 break;
-            case '?':        /* Bad flag - print usage message */
             default:
-                /* wslog arguments are okay */
-                if (ws_log_is_wslog_arg(opt))
-                    break;
-
+            case '?':        /* Bad flag - print usage message */
                 print_usage(stderr);
                 exit_status = WS_EXIT_INVALID_OPTION;
                 goto clean_exit;
@@ -875,7 +877,6 @@ main(int argc, char *argv[])
         }
     }
     cfile.dfcode = dfcode;
-    tap_load_main_filter(dfcode);
 
     if (print_packet_info) {
         /* If we're printing as text or PostScript, we have
@@ -925,15 +926,12 @@ main(int argc, char *argv[])
        have registered its field array so we can have a tap filter
        with one of MATE's late-registered fields as part of the
        filter. */
-    if (!start_requested_stats()) {
-        exit_status = WS_EXIT_INVALID_OPTION;
-        goto clean_exit;
-    }
+    start_requested_stats();
 
     /* Process the packets in the file */
     TRY {
         /* XXX - for now there is only 1 packet */
-        success = process_file(&cfile);
+        success = process_file(&cfile, 1, 0);
     }
     CATCH(OutOfMemoryError) {
         fprintf(stderr,
@@ -988,19 +986,7 @@ tfshark_epan_new(capture_file *cf)
     static const struct packet_provider_funcs funcs = {
         /* XXX - there should be no need for time stamps */
         cap_file_provider_get_frame_ts,
-        cap_file_provider_get_start_ts,
-        cap_file_provider_get_end_ts,
         no_interface_name,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
         NULL,
         NULL,
     };
@@ -1010,7 +996,8 @@ tfshark_epan_new(capture_file *cf)
 
 static bool
 process_packet_first_pass(capture_file *cf, epan_dissect_t *edt,
-        int64_t offset, wtap_rec *rec)
+        int64_t offset, wtap_rec *rec,
+        const unsigned char *pd)
 {
     frame_data     fdlocal;
     uint32_t       framenum;
@@ -1036,6 +1023,10 @@ process_packet_first_pass(capture_file *cf, epan_dissect_t *edt,
         if (cf->rfcode)
             epan_dissect_prime_with_dfilter(edt, cf->rfcode);
 
+        /* This is the first pass, so prime the epan_dissect_t with the
+           hfids postdissectors want on the first pass. */
+        prime_epan_dissect_with_postdissector_wanted_hfids(edt);
+
         frame_data_set_before_dissect(&fdlocal, &cf->elapsed_time,
                 &cf->provider.ref, cf->provider.prev_dis);
         if (cf->provider.ref == &fdlocal) {
@@ -1043,7 +1034,9 @@ process_packet_first_pass(capture_file *cf, epan_dissect_t *edt,
             cf->provider.ref = &ref_frame;
         }
 
-        epan_dissect_file_run(edt, rec,  &fdlocal, NULL);
+        epan_dissect_file_run(edt, rec,
+                file_tvbuff_new(&cf->provider, &fdlocal, pd),
+                &fdlocal, NULL);
 
         /* Run the read filter if we have one. */
         if (cf->rfcode)
@@ -1077,7 +1070,8 @@ process_packet_first_pass(capture_file *cf, epan_dissect_t *edt,
 
 static bool
 process_packet_second_pass(capture_file *cf, epan_dissect_t *edt,
-        frame_data *fdata, wtap_rec *rec)
+        frame_data *fdata, wtap_rec *rec,
+        Buffer *buf)
 {
     column_info    *cinfo;
     bool            passed;
@@ -1096,6 +1090,10 @@ process_packet_second_pass(capture_file *cf, epan_dissect_t *edt,
            filter. */
         if (cf->dfcode)
             epan_dissect_prime_with_dfilter(edt, cf->dfcode);
+
+        /* This is the first and only pass, so prime the epan_dissect_t
+           with the hfids postdissectors want on the first pass. */
+        prime_epan_dissect_with_postdissector_wanted_hfids(edt);
 
         col_custom_prime_edt(edt, &cf->cinfo);
 
@@ -1117,7 +1115,8 @@ process_packet_second_pass(capture_file *cf, epan_dissect_t *edt,
             cf->provider.ref = &ref_frame;
         }
 
-        epan_dissect_file_run_with_taps(edt, rec, fdata, cinfo);
+        epan_dissect_file_run_with_taps(edt, rec,
+                file_tvbuff_new_buffer(&cf->provider, fdata, buf), fdata, cinfo);
 
         /* Run the read/display filter if we have one. */
         if (cf->dfcode)
@@ -1153,83 +1152,88 @@ process_packet_second_pass(capture_file *cf, epan_dissect_t *edt,
     return passed || fdata->dependent_of_displayed;
 }
 
-/*
- * XXX - this routine doesn't read in files larger than UINT_MAX bytes;
- * it would need to loop over the file.
- *
- * But if we read the entire file in, that might, for sufficiently
- * large files, eat up address space or other resources (especially
- * on 32-bit platforms).
- */
 static bool
-full_file_read(capture_file *cf, wtap_rec *rec, int *err, char **err_info)
+local_wtap_read(capture_file *cf, wtap_rec *file_rec _U_, int *err, char **err_info _U_, int64_t *data_offset _U_, uint8_t** data_buffer)
 {
-    int64_t file_size;
-    int packet_size = 0;
-    const int block_size = 1024 * 1024;
+    /* int bytes_read; */
+    int64_t packet_size = wtap_file_size(cf->provider.wth, err);
 
-    if ((file_size = wtap_file_size(cf->provider.wth, err)) == -1)
+    *data_buffer = (uint8_t*)g_malloc((size_t)packet_size);
+    /* bytes_read =*/ file_read(*data_buffer, (unsigned int)packet_size, cf->provider.wth->fh);
+
+#if 0 /* no more filetap */
+    if (bytes_read < 0) {
+        *err = file_error(cf->provider.wth->fh, err_info);
+        if (*err == 0)
+            *err = FTAP_ERR_SHORT_READ;
         return false;
+    } else if (bytes_read == 0) {
+        /* Done with file, no error */
+        return false;
+    }
 
-    if (file_size > INT_MAX) {
+
+    /* XXX - SET FRAME SIZE EQUAL TO TOTAL FILE SIZE */
+    file_rec->rec_header.packet_header.caplen = (uint32_t)packet_size;
+    file_rec->rec_header.packet_header.len = (uint32_t)packet_size;
+
+    /*
+     * Set the packet encapsulation to the file's encapsulation
+     * value; if that's not WTAP_ENCAP_PER_PACKET, it's the
+     * right answer (and means that the read routine for this
+     * capture file type doesn't have to set it), and if it
+     * *is* WTAP_ENCAP_PER_PACKET, the caller needs to set it
+     * anyway.
+     */
+    wth->rec.rec_header.packet_header.pkt_encap = wth->file_encap;
+
+    if (!wth->subtype_read(wth, err, err_info, data_offset)) {
         /*
-         * Avoid allocating space for an immensely-large file.
+         * If we didn't get an error indication, we read
+         * the last packet.  See if there's any deferred
+         * error, as might, for example, occur if we're
+         * reading a compressed file, and we got an error
+         * reading compressed data from the file, but
+         * got enough compressed data to decompress the
+         * last packet of the file.
          */
-        *err = WTAP_ERR_BAD_FILE;
-        *err_info = ws_strdup_printf("File is %" PRId64 " bytes in size, bigger than maximum of %u",
-                file_size, INT_MAX);
-        return false;
+        if (*err == 0)
+            *err = file_error(wth->fh, err_info);
+        return false;    /* failure */
     }
 
     /*
-     * Compressed files might expand to a larger size than the actual file
-     * size. Try to read the full size and then read in smaller increments
-     * to avoid frequent memory reallocations.
+     * It makes no sense for the captured data length to be bigger
+     * than the actual data length.
      */
-    int buffer_size = block_size * (1 + (int)file_size / block_size);
-    for (;;) {
-        if (buffer_size <= 0) {
-            *err = WTAP_ERR_BAD_FILE;
-            *err_info = ws_strdup_printf("%s: Uncompressed file is bigger than maximum of %u",
-                    wtap_encap_name(cf->provider.wth->file_encap), INT_MAX);
-            return false;
-        }
-        ws_buffer_assure_space(&rec->data, buffer_size);
-        int nread = file_read(ws_buffer_start_ptr(&rec->data) + packet_size, buffer_size - packet_size, cf->provider.wth->fh);
-        if (nread < 0) {
-            *err = file_error(cf->provider.wth->fh, err_info);
-            if (*err == 0)
-                *err = WTAP_ERR_BAD_FILE;
-            return false;
-        }
-        packet_size += nread;
-        if (packet_size != buffer_size) {
-            /* EOF */
-            break;
-        }
-        buffer_size += block_size;
-    }
+    if (wth->rec.rec_header.packet_header.caplen > wth->rec.rec_header.packet_header.len)
+        wth->rec.rec_header.packet_header.caplen = wth->rec.rec_header.packet_header.len;
 
-    wtap_setup_packet_rec(rec, cf->provider.wth->file_encap);
-    rec->presence_flags = 0; /* yes, we have no bananas^Wtime stamp */
-    rec->ts.secs = 0;
-    rec->ts.nsecs = 0;
-    rec->rec_header.packet_header.caplen = packet_size;
-    rec->rec_header.packet_header.len = packet_size;
+    /*
+     * Make sure that it's not WTAP_ENCAP_PER_PACKET, as that
+     * probably means the file has that encapsulation type
+     * but the read routine didn't set this packet's
+     * encapsulation type.
+     */
+    ws_assert(wth->rec.rec_header.packet_header.pkt_encap != WTAP_ENCAP_PER_PACKET);
+#endif
 
-    return true;
+    return true; /* success */
 }
 
 static bool
-process_file(capture_file *cf)
+process_file(capture_file *cf, int max_packet_count, int64_t max_byte_count)
 {
     uint32_t     framenum;
     int          err;
     char        *err_info = NULL;
+    int64_t      data_offset = 0;
     bool         filtering_tap_listeners;
     unsigned     tap_flags;
+    Buffer       buf;
     epan_dissect_t *edt = NULL;
     wtap_rec     file_rec;
+    uint8_t* raw_data;
 
     if (print_packet_info) {
         if (!write_preamble(cf)) {
@@ -1245,7 +1249,7 @@ process_file(capture_file *cf)
     /* Get the union of the flags for all tap listeners. */
     tap_flags = union_of_tap_listener_flags();
 
-    wtap_rec_init(&file_rec, DEFAULT_INIT_BUFFER_SIZE_2048);
+    wtap_rec_init(&file_rec);
 
     /* XXX - TEMPORARY HACK TO ELF DISSECTOR */
     file_rec.rec_header.packet_header.pkt_encap = 1234;
@@ -1275,11 +1279,20 @@ process_file(capture_file *cf)
                so it's not going to be "visible". */
             edt = epan_dissect_new(cf->epan, create_proto_tree, false);
         }
+        while (local_wtap_read(cf, &file_rec, &err, &err_info, &data_offset, &raw_data)) {
+            if (process_packet_first_pass(cf, edt, data_offset, &file_rec, raw_data)) {
 
-        /* XXX - check for failure and report it */
-        full_file_read(cf, &file_rec, &err, &err_info);
-        /* XXX - check return value? */
-        process_packet_first_pass(cf, edt, 0, &file_rec);
+                /* Stop reading if we have the maximum number of packets;
+                 * When the -c option has not been used, max_packet_count
+                 * starts at 0, which practically means, never stop reading.
+                 * (unless we roll over max_packet_count ?)
+                 */
+                if ( (--max_packet_count == 0) || (max_byte_count != 0 && data_offset >= max_byte_count)) {
+                    err = 0; /* This is not an error */
+                    break;
+                }
+            }
+        }
 
         if (edt) {
             epan_dissect_free(edt);
@@ -1297,6 +1310,7 @@ process_file(capture_file *cf)
 
         cf->provider.prev_dis = NULL;
         cf->provider.prev_cap = NULL;
+        ws_buffer_init(&buf, 1514);
 
         if (do_dissection) {
             bool create_proto_tree;
@@ -1327,14 +1341,23 @@ process_file(capture_file *cf)
 
         for (framenum = 1; err == 0 && framenum <= cf->count; framenum++) {
             fdata = frame_data_sequence_find(cf->provider.frames, framenum);
-            if (!process_packet_second_pass(cf, edt, fdata, &file_rec))
+#if 0
+            if (wtap_seek_read(cf->provider.wth, fdata->file_off,
+                        &buf, fdata->cap_len, &err, &err_info)) {
+                process_packet_second_pass(cf, edt, fdata, &cf->rec, &buf, tap_flags);
+            }
+#else
+            if (!process_packet_second_pass(cf, edt, fdata, &cf->rec, &buf))
                 return false;
+#endif
         }
 
         if (edt) {
             epan_dissect_free(edt);
             edt = NULL;
         }
+
+        ws_buffer_free(&buf);
     }
     else {
         framenum = 0;
@@ -1374,10 +1397,24 @@ process_file(capture_file *cf)
             edt = epan_dissect_new(cf->epan, create_proto_tree, print_packet_info && print_details);
         }
 
-        /* XXX - check for failure and report it */
-        if (full_file_read(cf, &file_rec, &err, &err_info)) {
-            if (!process_packet_single_pass(cf, edt, 0, &file_rec))
+        while (local_wtap_read(cf, &file_rec, &err, &err_info, &data_offset, &raw_data)) {
+
+            framenum++;
+
+            if (!process_packet_single_pass(cf, edt, data_offset,
+                        &file_rec/*wtap_get_rec(cf->provider.wth)*/,
+                        raw_data))
                 return false;
+
+            /* Stop reading if we have the maximum number of packets;
+             * When the -c option has not been used, max_packet_count
+             * starts at 0, which practically means, never stop reading.
+             * (unless we roll over max_packet_count ?)
+             */
+            if ( (--max_packet_count == 0) || (max_byte_count != 0 && data_offset >= max_byte_count)) {
+                err = 0; /* This is not an error */
+                break;
+            }
         }
 
         if (edt) {
@@ -1473,7 +1510,7 @@ out:
 
 static bool
 process_packet_single_pass(capture_file *cf, epan_dissect_t *edt, int64_t offset,
-        wtap_rec *rec)
+        wtap_rec *rec, const unsigned char *pd)
 {
     frame_data      fdata;
     column_info    *cinfo;
@@ -1519,7 +1556,9 @@ process_packet_single_pass(capture_file *cf, epan_dissect_t *edt, int64_t offset
             cf->provider.ref = &ref_frame;
         }
 
-        epan_dissect_file_run_with_taps(edt, rec, &fdata, cinfo);
+        epan_dissect_file_run_with_taps(edt, rec,
+                frame_tvbuff_new(&cf->provider, &fdata, pd),
+                &fdata, cinfo);
 
         /* Run the filter if we have it. */
         if (cf->dfcode)
@@ -1568,11 +1607,11 @@ write_preamble(capture_file *cf)
     switch (output_action) {
 
         case WRITE_TEXT:
-            return print_preamble(print_stream, cf->filename, application_get_vcs_version_info());
+            return print_preamble(print_stream, cf->filename, get_ws_vcs_version_info());
 
         case WRITE_XML:
             if (print_details)
-                write_pdml_preamble(stdout, cf->filename, get_doc_dir(application_configuration_environment_prefix()));
+                write_pdml_preamble(stdout, cf->filename);
             else
                 write_psml_preamble(&cf->cinfo, stdout);
             return !ferror(stdout);
@@ -1643,7 +1682,7 @@ static bool
 print_columns(capture_file *cf)
 {
     char   *line_bufp;
-    unsigned i;
+    int     i;
     size_t  buf_offset;
     size_t  column_len;
     size_t  col_len;
@@ -1660,7 +1699,6 @@ print_columns(capture_file *cf)
         const char* col_text = get_column_text(&cf->cinfo, i);
         switch (col_item->col_fmt) {
             case COL_NUMBER:
-            case COL_NUMBER_DIS:
                 column_len = col_len = strlen(col_text);
                 if (column_len < 3)
                     column_len = 3;
@@ -2022,4 +2060,25 @@ show_print_file_io_error(int err)
                     g_strerror(err));
             break;
     }
+}
+
+/*
+ * Report an error in command-line arguments.
+ */
+static void
+tfshark_cmdarg_err(const char *msg_format, va_list ap)
+{
+    fprintf(stderr, "tfshark: ");
+    vfprintf(stderr, msg_format, ap);
+    fprintf(stderr, "\n");
+}
+
+/*
+ * Report additional information for an error in command-line arguments.
+ */
+static void
+tfshark_cmdarg_err_cont(const char *msg_format, va_list ap)
+{
+    vfprintf(stderr, msg_format, ap);
+    fprintf(stderr, "\n");
 }

@@ -14,8 +14,10 @@
  */
 
 #include "config.h"
-#define WS_LOG_DOMAIN "packet-wap"
-#include <wireshark.h>
+
+#ifdef DEBUG
+#include <stdio.h>
+#endif
 
 #include <epan/packet.h>
 #include "packet-wap.h"
@@ -39,7 +41,10 @@ tvb_get_uintvar (tvbuff_t *tvb, unsigned offset,
     unsigned octet;
     unsigned counter = 0;
 
-    ws_debug("Starting tvb_get_uintvar at offset %d", offset);
+#ifdef DEBUG
+    fprintf (stderr,
+            "dissect_wap: Starting tvb_get_uintvar at offset %d\n", offset);
+#endif
 
     do {
         octet = tvb_get_uint8 (tvb, offset+counter);
@@ -56,12 +61,18 @@ tvb_get_uintvar (tvbuff_t *tvb, unsigned offset,
             break;
         }
 
-        ws_debug("computing: octet is %d (0x%02x), count=%d, value=%d",
+#ifdef DEBUG
+        fprintf(stderr,
+            "dissect_wap: computing: octet is %d (0x%02x), count=%d, value=%d\n",
                  octet, octet, counter, value);
+#endif
     } while (octet & 0x80);
 
-    ws_debug(" Leaving tvb_get_uintvar count=%d, value=%u",
+#ifdef DEBUG
+    fprintf (stderr,
+            "dissect_wap: Leaving tvb_get_uintvar count=%d, value=%u\n",
             counter, value);
+#endif
 
     if (octetCount)
         *octetCount = counter;

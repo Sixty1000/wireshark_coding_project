@@ -16,7 +16,6 @@
 #include "ui/decode_as_utils.h"
 #include "ui/simple_dialog.h"
 #include "wsutil/filesystem.h"
-#include "app/application_flavor.h"
 #include <wsutil/utf8_entities.h>
 
 #include <ui/qt/widgets/copy_from_profile_button.h>
@@ -51,12 +50,12 @@ DecodeAsDialog::DecodeAsDialog(QWidget *parent, capture_file *cf, bool create_ne
     ui->decodeAsTreeView->setModel(model_);
     ui->decodeAsTreeView->setItemDelegate(delegate_);
 
-    ui->newToolButton->setIconByName("list-add");
-    ui->deleteToolButton->setIconByName("list-remove");
-    ui->copyToolButton->setIconByName("list-copy");
-    ui->clearToolButton->setIconByName("list-clear");
+    ui->newToolButton->setStockIcon("list-add");
+    ui->deleteToolButton->setStockIcon("list-remove");
+    ui->copyToolButton->setStockIcon("list-copy");
+    ui->clearToolButton->setStockIcon("list-clear");
 
-#ifdef Q_OS_MACOS
+#ifdef Q_OS_MAC
     ui->newToolButton->setAttribute(Qt::WA_MacSmallSize, true);
     ui->deleteToolButton->setAttribute(Qt::WA_MacSmallSize, true);
     ui->copyToolButton->setAttribute(Qt::WA_MacSmallSize, true);
@@ -66,7 +65,7 @@ DecodeAsDialog::DecodeAsDialog(QWidget *parent, capture_file *cf, bool create_ne
 
     setWindowTitle(mainApp->windowTitleString(tr("Decode As…")));
 
-    QString abs_path = gchar_free_to_qstring(get_persconffile_path(DECODE_AS_ENTRIES_FILE_NAME, true, application_configuration_environment_prefix()));
+    QString abs_path = gchar_free_to_qstring(get_persconffile_path(DECODE_AS_ENTRIES_FILE_NAME, true));
     if (file_exists(abs_path.toUtf8().constData())) {
         ui->pathLabel->setText(abs_path);
         ui->pathLabel->setUrl(QUrl::fromLocalFile(abs_path).toString());
@@ -217,7 +216,7 @@ void DecodeAsDialog::on_buttonBox_clicked(QAbstractButton *button)
         char* err = NULL;
 
         applyChanges();
-        if (save_decode_as_entries(application_flavor_name_proper(), application_configuration_environment_prefix(), &err) < 0) {
+        if (save_decode_as_entries(&err) < 0) {
             simple_dialog(ESD_TYPE_ERROR, ESD_BTN_OK, "%s", err);
             g_free(err);
         }

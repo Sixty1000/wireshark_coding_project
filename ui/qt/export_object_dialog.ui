@@ -43,16 +43,6 @@
      <item>
       <widget class="QComboBox" name="cmbContentType"/>
      </item>
-     <item>
-      <widget class="QCheckBox" name="uniqueCheckBox">
-       <property name="text">
-        <string>Unique</string>
-       </property>
-       <property name="toolTip">
-        <string>Only display the first of identical entries</string>
-       </property>
-      </widget>
-     </item>
     </layout>
    </item>
    <item>
@@ -71,9 +61,6 @@
      </property>
      <property name="expandsOnDoubleClick">
       <bool>false</bool>
-     </property>
-     <property name="selectionMode">
-      <enum>QAbstractItemView::ExtendedSelection</enum>
      </property>
     </widget>
    </item>
@@ -143,7 +130,7 @@
       <enum>Qt::Horizontal</enum>
      </property>
      <property name="standardButtons">
-      <set>QDialogButtonBox::Close|QDialogButtonBox::Help|QDialogButtonBox::Open|QDialogButtonBox::Save</set>
+      <set>QDialogButtonBox::Close|QDialogButtonBox::Help|QDialogButtonBox::Open|QDialogButtonBox::Save|QDialogButtonBox::SaveAll</set>
      </property>
     </widget>
    </item>

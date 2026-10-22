@@ -1,4 +1,4 @@
-/* packet-docsis-vendor.c
+/* packet-vendor.c
  * Routines for Vendor Specific Encodings dissection
  * Copyright 2002, Anand V. Narwani <anand[AT]narwani.org>
  *

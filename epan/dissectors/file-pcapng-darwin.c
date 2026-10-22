@@ -11,22 +11,21 @@
 
 #include <epan/packet.h>
 #include <epan/addr_resolv.h>
-#include <wsutil/array.h>
 
 #include <epan/dissectors/file-pcapng.h>
 
 /*
- * Apple's Pcapng Darwin Process Info Block
+ * Apple's Pcapng Darwin Process Event Block
  *
- *    A Darwin Process Info Block (DPIB) is an Apple defined container
+ *    A Darwin Process Event Block (DPEB) is an Apple defined container
  *    for information describing a Darwin process.
  *
  *    Tools that write / read the capture file associate an incrementing
- *    32-bit number (starting from '0') to each Darwin Process Info Block,
- *    called the DPIB ID for the process in question.  This number is
- *    unique within each Section and identifies a specific DPIB; a DPIB ID
+ *    32-bit number (starting from '0') to each Darwin Process Event Block,
+ *    called the DPEB ID for the process in question.  This number is
+ *    unique within each Section and identifies a specific DPEB; a DPEB ID
  *    is only unique inside the current section. Two Sections can have different
- *    processes identified by the same DPIB ID values.  DPIB ID are referenced
+ *    processes identified by the same DPEB ID values.  DPEB ID are referenced
  *    by Enhanced Packet Blocks that include options to indicate the Darwin
  *    process to which the EPB refers.
  *
@@ -47,11 +46,11 @@
  *         |                     Block Total Length                        |
  *         +---------------------------------------------------------------+
  *
- *                   Figure XXX.1: Darwin Process Info Block
+ *                   Figure XXX.1: Darwin Process Event Block
  *
  *    The meaning of the fields are:
  *
- *    o  Block Type: The block type of a Darwin Process Info Block is 2147483649.
+ *    o  Block Type: The block type of a Darwin Process Event Block is 2147483649.
  *
  *       Note: This specific block type number falls into the range defined
  *       for "local use" but has in fact been available publicly since Darwin
@@ -126,7 +125,7 @@ static int hf_pcapng_option_darwin_process_name;
 static int hf_pcapng_option_darwin_process_uuid;
 
 #define BLOCK_DARWIN_PROCESS         0x80000001
-#define BLOCK_DARWIN_PROCESS_NAME    "Darwin Process Info Block"
+#define BLOCK_DARWIN_PROCESS_NAME    "Darwin Process Event Block"
 
 
 static const value_string option_code_darwin_process_info_vals[] = {
@@ -178,9 +177,8 @@ dissect_darwin_process_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
     proto_item_append_text(argp->block_item, " %u", argp->info->darwin_process_event_number);
     argp->info->darwin_process_event_number += 1;
 
-    /* Process ID; like the other Darwin integer fields, it is little-endian
-     * whatever the byte order of the section (see wiretap/pcapng-darwin-custom.c) */
-    proto_tree_add_item(tree, hf_pcapng_darwin_process_id, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+    /* Process ID */
+    proto_tree_add_item(tree, hf_pcapng_darwin_process_id, tvb, offset, 4, argp->info->encoding);
     offset += 4;
 
     /* Options */

@@ -11,10 +11,8 @@
 import os.path
 import shutil
 import subprocess
-
-import pytest
-
 from subprocesstest import grep_output
+import pytest
 
 tf_str = { True: 'TRUE', False: 'FALSE' }
 
@@ -83,26 +81,26 @@ class TestNameResolution:
         # Profile: Custom
         check_name_resolution(True, False, True, 'custom-4-2-2-2')
 
-    def test_hosts_any(self, cmd_tshark, capture_file, base_env):
+    def test_hosts_any(self, cmd_tshark, capture_file):
         stdout = subprocess.check_output((cmd_tshark,
                 '-r', capture_file('dns+icmp.pcapng.gz'),
                 '-qz', 'hosts',
-                ), encoding='utf-8', env=base_env)
+                ), encoding='utf-8')
         assert '174.137.42.65\twww.wireshark.org' in stdout
         assert 'fe80::6233:4bff:fe13:c558\tCrunch.local' in stdout
 
-    def test_hosts_ipv4(self, cmd_tshark, capture_file, base_env):
+    def test_hosts_ipv4(self, cmd_tshark, capture_file):
         stdout = subprocess.check_output((cmd_tshark,
                 '-r', capture_file('dns+icmp.pcapng.gz'),
                 '-qz', 'hosts,ipv4',
-                ), encoding='utf-8', env=base_env)
+                ), encoding='utf-8')
         assert '174.137.42.65\twww.wireshark.org' in stdout
         assert 'fe80::6233:4bff:fe13:c558\tCrunch.local' not in stdout
 
-    def test_hosts_ipv6(self, cmd_tshark, capture_file, base_env):
+    def test_hosts_ipv6(self, cmd_tshark, capture_file):
         stdout = subprocess.check_output((cmd_tshark,
                 '-r', capture_file('dns+icmp.pcapng.gz'),
                 '-qz', 'hosts,ipv6',
-                ), encoding='utf-8', env=base_env)
+                ), encoding='utf-8')
         assert '174.137.42.65\twww.wireshark.org' not in stdout
         assert 'fe80::6233:4bff:fe13:c558\tCrunch.local' in stdout

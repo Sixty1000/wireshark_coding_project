@@ -26,6 +26,8 @@
 
 #include <wsutil/array.h>
 
+#define PROTO_SHORT_NAME "WASSP"
+#define PROTO_LONG_NAME "Wireless Access Station Session Protocol"
 #define LBS_HDR_MAGIC 0x7c83
 #define MU_NETFLOW_RECORD_SIZE 46
 #define WASSP_SNMP 161
@@ -1677,7 +1679,7 @@ static const TLV_PARSER_ENTRY tlvMainTable[]  =
 	{ EID_MU_TUNNEL_PRIVATE_GROUP_ID_STRING, "MU Tunnel Private Group ID String", TLV_TYPE_STRING, 0, 0, 0, 0, 0, 0, 0, 0},
 	{ EID_MU_USER_ID_STRING, "MU User ID String", TLV_TYPE_STRING, 0, 0, 0, 0, 0, 0, 0, 0},
 	{ EID_MU_DEFENDED_STATE, "MU Defended State", TLV_TYPE_UINT, 0, 0, 0, 0, 0, 0, 0, 0},
-	{ EID_MU_MOD_MASK, "MU Modulation Mask", TLV_TYPE_UINT, 0, 0, 0, 0, 0, 0, 0, 0},
+	{ EID_MU_MOD_MASK, "MU Modulation Maske", TLV_TYPE_UINT, 0, 0, 0, 0, 0, 0, 0, 0},
 	{ EID_LOCATOR_TRACKED, "Locator Tracked", TLV_TYPE_UINT, 0, 0, 0, 0, 0, 0, 0, 0},
 	{ EID_PORT, "Port", TLV_TYPE_UINT, 0, 0, 0, 0, 0, 0, 0, 0},
 	{ EID_RETRIES_COUNT, "Retries Count", TLV_TYPE_UINT, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -2353,7 +2355,7 @@ typedef enum
 	EID_MU_rc_ul_dropped_bytes_D,                // 170
 	EID_MU_rc_dl_dropped_pkts_D,                 // 171
 	EID_MU_rc_dl_dropped_bytes_D,                // 172
-	EID_STATS_TLV_MAX                            //  Make sure this is the MAX
+	EID_STATS_TLV_MAX                            //  Make shure this is the MAX
 } wassp_tlv_stats_1_type_t;
 
 
@@ -4813,7 +4815,8 @@ int dissect_wassp_sub_tlv(proto_tree *wassp_tree, tvbuff_t *tvb, packet_info *pi
 				}
 			}
 
-			proto_tree_add_uint_format_value(tmp_tree, hf_wassp_tlv_type_sub, tvb, offset + TLV_TYPE, 2, tlv_type, "%s (%d)", label, tlv_type);
+			tlvi =   proto_tree_add_item(tmp_tree, hf_wassp_tlv_type_sub, tvb, offset + TLV_TYPE, 2, ENC_NA);
+			proto_item_append_text(tlvi, " : %s (%d)", label, tlv_type);
 			proto_tree_add_item(tmp_tree, hf_wassp_tlv_length, tvb, offset + TLV_LENGTH, 2, ENC_BIG_ENDIAN);
 
 			if (tlv_type == EID_PARSE_ERROR)
@@ -5625,7 +5628,7 @@ static int dissect_mu_netflow(proto_tree *tree, tvbuff_t *tvb, int offset)
 	proto_tree_add_item(mu_netflow_header_tree, hf_wassp_mu_netflow_version, tvb, MU_NETFLOW_HDR_VERSION, 2, ENC_BIG_ENDIAN);
 	proto_tree_add_item(mu_netflow_header_tree, hf_wassp_mu_netflow_length, tvb, MU_NETFLOW_HDR_LENGTH, 2, ENC_BIG_ENDIAN);
 	proto_tree_add_item(mu_netflow_header_tree, hf_wassp_mu_netflow_flags, tvb, MU_NETFLOW_HDR_FLAG, 2, ENC_BIG_ENDIAN);
-	proto_tree_add_item(mu_netflow_header_tree, hf_wassp_mu_netflow_uptime, tvb, MU_NETFLOW_HDR_UPTIME, 4, ENC_TIME_SECS_NSECS);
+	proto_tree_add_item(mu_netflow_header_tree, hf_wassp_mu_netflow_uptime, tvb, MU_NETFLOW_HDR_UPTIME, 4, ENC_NA);
 	offset += MU_NETFLOW_HEADER_TOTAL_LENGTH;
 
 	netflowLen = tvb_get_ntohs(tvb, MU_NETFLOW_HDR_LENGTH);
@@ -5767,107 +5770,110 @@ static void dissect_unfragmented_wassp(tvbuff_t *tvb, packet_info *pinfo, proto_
 	uint16_t plength = plength2;
 	uint16_t lsbHeaderMagic = 0;
 
-	wassp_tree = tree;
-	plength -= WASSP_HDR_LEN;
-
-	switch (ru_msg_type)
+	if (tree)
 	{
-	case WASSP_RU_Discov:                            // 1
-	case WASSP_RU_Register_Req:                      // 2
-	case WASSP_RU_Register_Rsp:                      // 3
-	case WASSP_RU_Authentication_Req:                // 4
-	case WASSP_RU_Authentication_Rsp:                // 5
-	case WASSP_RU_SW_Version_Validate_Req:           // 6
-	case WASSP_RU_SW_Version_Validate_Rsp:           // 7
-	case WASSP_RU_Config_Req:                        // 8
-	case WASSP_RU_Config_Rsp:                        // 9
-	case WASSP_RU_Ack:                               // 10
-	case WASSP_RU_Config_Status_Notify:              // 11
-	case WASSP_RU_Set_State_Req:                     // 12
-	case WASSP_RU_Set_State_Rsp:                     // 13
-	case WASSP_RU_Poll:                              // 16
-	case WASSP_RU_SNMP_Req:                          // 17
-	case WASSP_RU_SNMP_Rsp:                          // 18
-	case WASSP_BP_Trap_Notify:                       // 19
-	case WASSP_BP_Scan_Req:                          // 20
-	case WASSP_RFM_Notify:                           // 21
-	case WASSP_RU_SNMP_Alarm_Notify:                 // 22
-	case WASSP_RU_SNMP_Set_Alarm_Clear:              // 23
-	case WASSP_RU_SNMP_Set_Log_Status:               // 24
-	case WASSP_RU_SNMP_Get_Log_Req:                  // 25
-	case WASSP_RU_SNMP_Get_Log_Resp:                 // 26
-	case WASSP_SEC_Update_Notify:                    // 27
-	case WASSP_RU_STATS_Req:                         // 28
-	case WASSP_RU_STATS_Rsp:                         // 29
-	case WASSP_RU_UNUSED_30:                         // 30
-	case WASSP_RU_UNUSED_31:                         // 31
-	case WASSP_RU_Get_Req:                           // 32
-	case WASSP_RU_Get_Rsp:                           // 33
-	case WASSP_RU_Alarm_Notify:                      // 34
-	case WASSP_RU_Set_Alarm_Clear:                   // 35
-	case WASSP_RU_Get_Log_Req:                       // 36
-	case WASSP_RU_Get_Log_Rsp:                       // 37
-	case WASSP_RU_UNUSED_38:                         // 38
-	case WASSP_RU_UNUSED_39:                         // 39
-	case WASSP_P_PEER_DOWN_NOTIFY:                   // 40
-	case WASSP_P_LINK_STATE_CHANGE_REQ:              // 41
-	case WASSP_P_LINK_STATE_CHANGE_RSP:              // 42
-	case WASSP_RU_GetIP_Req:                         // 44
-	case WASSP_RU_GetIP_Rsp:                         // 45
-	case WASSP_RU_LAMG_Update_Req:                   // 46
-	case WASSP_RU_LAMG_Update_Rsp:                   // 47
-	case WASSP_RU_Event_Req:                         // 48
-	case WASSP_RU_Event_Rsp:                         // 49
-	case WASSP_RU_BULK_MU_UPDATE_REQ:                // 50
-	case WASSP_RU_BULK_MU_UPDATE_RSP:                // 51
-	case WASSP_ROAMED_MU_FILTER_STATS_REQ:           // 52
-	case WASSP_ROAMED_MU_FILTER_STATS_RESP:          // 53
-	case WASSP_RU_AC_Event_Req:                      // 56
-	case WASSP_RU_AC_Event_Rsp:                      // 57
-	case WASSP_RU_Event_Notify:                      // 58
-	case WASSP_RU_AC_EVENT:                          // 59
-	case WASSP_WIDS_WIPS_Config_Req:                 // 60
-	case WASSP_WIDS_WIPS_Config_Rsp:                 // 61
-	case WASSP_Scan_Data_Notify:                     // 62
-	case WASSP_Scan_Data_Notify_Ack:                 // 63
-	case WASSP_Loc_Data_Notify:                      // 64
-	case WASSP_Loc_Data_Notify_Ack:                  // 65
-	case WASSP_RU_SW_Version_Validate_Ack:           // 66
-	case WASSP_NEIGHBOUR_STATS_Rsp:                  // 67
-	case WASSP_APPL_STATS_RESP:                      // 68
-	case WASSP_AC_Register_Req:                      // 101
-	case WASSP_AC_Register_Rsp:                      // 102
-	case WASSP_AC_Deregister_Req:                    // 103
-	case WASSP_AC_Deregister_Rsp:                    // 104
-		goto tlv_dissect;
-	case WASSP_RU_Stats_Notify:                      // 14
-		/* Dissect SNMP encoded RU statistics */
-		dissector_try_uint(wassp_dissector_table, WASSP_SNMP, tvb_new_subset_length(tvb, offset, plength), pinfo, wassp_tree);
-		offset += plength;
-		goto data_dissect;
-	case WASSP_LBS_TAG_REPORT:                       // 55
-		lsbHeaderMagic = tvb_get_ntohs(tvb, 36);
-		call_dissector(ip_handle, tvb_new_subset_length(tvb, offset, plength), pinfo, wassp_tree);
-		if (lsbHeaderMagic == LBS_HDR_MAGIC)
-			offset = decode_lbs_tag_header(wassp_tree, tvb, offset + 28);
-		else
+		wassp_tree = tree;
+		plength -= WASSP_HDR_LEN;
+
+		switch (ru_msg_type)
 		{
-			return;
+		case WASSP_RU_Discov:                            // 1
+		case WASSP_RU_Register_Req:                      // 2
+		case WASSP_RU_Register_Rsp:                      // 3
+		case WASSP_RU_Authentication_Req:                // 4
+		case WASSP_RU_Authentication_Rsp:                // 5
+		case WASSP_RU_SW_Version_Validate_Req:           // 6
+		case WASSP_RU_SW_Version_Validate_Rsp:           // 7
+		case WASSP_RU_Config_Req:                        // 8
+		case WASSP_RU_Config_Rsp:                        // 9
+		case WASSP_RU_Ack:                               // 10
+		case WASSP_RU_Config_Status_Notify:              // 11
+		case WASSP_RU_Set_State_Req:                     // 12
+		case WASSP_RU_Set_State_Rsp:                     // 13
+		case WASSP_RU_Poll:                              // 16
+		case WASSP_RU_SNMP_Req:                          // 17
+		case WASSP_RU_SNMP_Rsp:                          // 18
+		case WASSP_BP_Trap_Notify:                       // 19
+		case WASSP_BP_Scan_Req:                          // 20
+		case WASSP_RFM_Notify:                           // 21
+		case WASSP_RU_SNMP_Alarm_Notify:                 // 22
+		case WASSP_RU_SNMP_Set_Alarm_Clear:              // 23
+		case WASSP_RU_SNMP_Set_Log_Status:               // 24
+		case WASSP_RU_SNMP_Get_Log_Req:                  // 25
+		case WASSP_RU_SNMP_Get_Log_Resp:                 // 26
+		case WASSP_SEC_Update_Notify:                    // 27
+		case WASSP_RU_STATS_Req:                         // 28
+		case WASSP_RU_STATS_Rsp:                         // 29
+		case WASSP_RU_UNUSED_30:                         // 30
+		case WASSP_RU_UNUSED_31:                         // 31
+		case WASSP_RU_Get_Req:                           // 32
+		case WASSP_RU_Get_Rsp:                           // 33
+		case WASSP_RU_Alarm_Notify:                      // 34
+		case WASSP_RU_Set_Alarm_Clear:                   // 35
+		case WASSP_RU_Get_Log_Req:                       // 36
+		case WASSP_RU_Get_Log_Rsp:                       // 37
+		case WASSP_RU_UNUSED_38:                         // 38
+		case WASSP_RU_UNUSED_39:                         // 39
+		case WASSP_P_PEER_DOWN_NOTIFY:                   // 40
+		case WASSP_P_LINK_STATE_CHANGE_REQ:              // 41
+		case WASSP_P_LINK_STATE_CHANGE_RSP:              // 42
+		case WASSP_RU_GetIP_Req:                         // 44
+		case WASSP_RU_GetIP_Rsp:                         // 45
+		case WASSP_RU_LAMG_Update_Req:                   // 46
+		case WASSP_RU_LAMG_Update_Rsp:                   // 47
+		case WASSP_RU_Event_Req:                         // 48
+		case WASSP_RU_Event_Rsp:                         // 49
+		case WASSP_RU_BULK_MU_UPDATE_REQ:                // 50
+		case WASSP_RU_BULK_MU_UPDATE_RSP:                // 51
+		case WASSP_ROAMED_MU_FILTER_STATS_REQ:           // 52
+		case WASSP_ROAMED_MU_FILTER_STATS_RESP:          // 53
+		case WASSP_RU_AC_Event_Req:                      // 56
+		case WASSP_RU_AC_Event_Rsp:                      // 57
+		case WASSP_RU_Event_Notify:                      // 58
+		case WASSP_RU_AC_EVENT:                          // 59
+		case WASSP_WIDS_WIPS_Config_Req:                 // 60
+		case WASSP_WIDS_WIPS_Config_Rsp:                 // 61
+		case WASSP_Scan_Data_Notify:                     // 62
+		case WASSP_Scan_Data_Notify_Ack:                 // 63
+		case WASSP_Loc_Data_Notify:                      // 64
+		case WASSP_Loc_Data_Notify_Ack:                  // 65
+		case WASSP_RU_SW_Version_Validate_Ack:           // 66
+		case WASSP_NEIGHBOUR_STATS_Rsp:                  // 67
+		case WASSP_APPL_STATS_RESP:                      // 68
+		case WASSP_AC_Register_Req:                      // 101
+		case WASSP_AC_Register_Rsp:                      // 102
+		case WASSP_AC_Deregister_Req:                    // 103
+		case WASSP_AC_Deregister_Rsp:                    // 104
+			goto tlv_dissect;
+		case WASSP_RU_Stats_Notify:                      // 14
+			/* Dissect SNMP encoded RU statistics */
+			dissector_try_uint(wassp_dissector_table, WASSP_SNMP, tvb_new_subset_length(tvb, offset, plength), pinfo, wassp_tree);
+			offset += plength;
+			goto data_dissect;
+		case WASSP_LBS_TAG_REPORT:                       // 55
+			lsbHeaderMagic = tvb_get_ntohs(tvb, 36);
+			call_dissector(ip_handle, tvb_new_subset_length(tvb, offset, plength), pinfo, wassp_tree);
+			if (lsbHeaderMagic == LBS_HDR_MAGIC)
+				offset = decode_lbs_tag_header(wassp_tree, tvb, offset + 28);
+			else
+			{
+				return;
+			}
+			goto data_dissect;
+		case WASSP_Data:                            // 15
+			offset = dissect_wassp_mu(wassp_tree, tvb, pinfo, offset, plength);
+			goto data_dissect;
+		default:
+			offset += plength;
+			goto data_dissect;
 		}
-		goto data_dissect;
-	case WASSP_Data:                            // 15
-		offset = dissect_wassp_mu(wassp_tree, tvb, pinfo, offset, plength);
-		goto data_dissect;
-	default:
-		offset += plength;
-		goto data_dissect;
-	}
 tlv_dissect:
-	/* Dissect all RU messages containing TLVs */
-	offset = dissect_wassp_tlv(wassp_tree, tvb, pinfo, offset, ru_msg_type);
+		/* Dissect all RU messages containing TLVs */
+		offset = dissect_wassp_tlv(wassp_tree, tvb, pinfo, offset, ru_msg_type);
 data_dissect:
-	/* Call data dissector on any remaining bytes */
-	call_dissector(data_handle, tvb_new_subset_remaining(tvb, offset), pinfo, wassp_tree);
+		/* Call data dissector on any remaining bytes */
+		call_dissector(data_handle, tvb_new_subset_length(tvb, offset, -1), pinfo, wassp_tree);
+	}
 }
 
 
@@ -5880,7 +5886,7 @@ static int dissect_wassp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree )
 	proto_tree *wassp_tree;
 	proto_tree *wassp_header_tree, *ru_discover_header_tree, *wassp_seq_flag_tree;
 	wassp_ru_msg_t ru_msg_type;
-	unsigned offset = 0;
+	int offset = 0;
 	uint16_t flag = 0, seq_number = 0;
 	uint32_t fragment = false, complete = true;
 	uint32_t remain_len = 0, length;
@@ -5905,7 +5911,7 @@ static int dissect_wassp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree )
 
 	************************************************************************************************************************************************************/
 
-	col_set_str(pinfo->cinfo, COL_PROTOCOL, "WASSP");
+	col_set_str(pinfo->cinfo, COL_PROTOCOL, PROTO_SHORT_NAME);
 	remain_len = tvb_reported_length_remaining(tvb, WASSP_HDR_VERSION);
 	next_tvb = tvb;
 	ru_msg_type = (wassp_ru_msg_t)tvb_get_uint8(tvb, WASSP_HDR_TYPE);
@@ -6005,7 +6011,7 @@ static int dissect_wassp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree )
 		else
 		{
 			col_append_fstr(pinfo->cinfo, COL_INFO, " (Message fragment %u)", seq_number);
-			next_tvb = tvb_new_subset_remaining(tvb, WASSP_HDR_LEN);
+			next_tvb = tvb_new_subset_length(tvb, WASSP_HDR_LEN, -1);
 		}
 	}
 
@@ -6556,7 +6562,7 @@ void proto_register_wassp(void)
 			&hf_wassp_tlv_value,
 			{
 				"Wassp TLV", "wassp.tlv.value", FT_NONE, BASE_NONE, NULL,
-				0x0, NULL, HFILL
+				0x0, "Wassp TLV in hexadecimal", HFILL
 			}
 		},
 		{
@@ -6569,8 +6575,8 @@ void proto_register_wassp(void)
 		{
 			&hf_wassp_tlv_type_sub,
 			{
-				"Type", "wassp.tlv.type.sub", FT_UINT16, BASE_DEC, NULL,
-				0x0, "Wassp sub TLV type", HFILL
+				"Type", "wassp.tlv.type", FT_NONE, BASE_NONE, NULL,
+				0x0, "Wassp TLV type", HFILL
 			}
 		},
 		{

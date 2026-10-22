@@ -9,8 +9,9 @@
 
 #include <ui/qt/widgets/apply_line_edit.h>
 
-#include <ui/qt/utils/theme_manager.h>
-#include <ui/qt/utils/themes/contrast_adapt_icon.h>
+#include <epan/prefs.h>
+
+#include <ui/qt/utils/color_utils.h>
 
 #include <QRegularExpression>
 #include <QRegularExpressionValidator>
@@ -23,12 +24,11 @@ ApplyLineEdit::ApplyLineEdit(QString linePlaceholderText, QWidget * parent)
     emptyAllowed_ = false;
     regex_ = QString();
 
-    apply_button_ = new StockIconToolButton(parent);
-    apply_button_->setIcon(ContrastAdaptIcon("filter-apply"));
+    apply_button_ = new StockIconToolButton(parent, "x-filter-apply");
     apply_button_->setCursor(Qt::ArrowCursor);
     apply_button_->setEnabled(false);
     apply_button_->setToolTip(tr("Apply changes"));
-    apply_button_->setIconSize(QSize(21, 14));
+    apply_button_->setIconSize(QSize(24, 14));
     apply_button_->setMaximumWidth(30);
     apply_button_->setStyleSheet(
             "QToolButton {"
@@ -38,7 +38,7 @@ ApplyLineEdit::ApplyLineEdit(QString linePlaceholderText, QWidget * parent)
             "}"
             );
 
-#ifdef Q_OS_MACOS
+#ifdef Q_OS_MAC
     setAttribute(Qt::WA_MacSmallSize, true);
     apply_button_->setAttribute(Qt::WA_MacSmallSize, true);
 #endif
@@ -117,18 +117,18 @@ void ApplyLineEdit::handleValidation(QString newText)
 {
     int frameWidth = style()->pixelMetric(QStyle::PM_DefaultFrameWidth);
 
-    QString style_sheet = QStringLiteral(
+    QString style_sheet = QString(
             "ApplyLineEdit {"
             "  padding-left: %1px;"
             "  padding-right: %2px;"
+            "  background-color: %3;"
             "}"
             )
             .arg(frameWidth + 1)
-            .arg(apply_button_->sizeHint().width() + frameWidth);
+            .arg(apply_button_->sizeHint().width() + frameWidth)
+            .arg(isValidText(newText, true) ? QString("") : ColorUtils::fromColorT(prefs.gui_text_invalid).name());
 
     setStyleSheet(style_sheet);
-    ThemeManager::setValidationState(this,
-            isValidText(newText, true) ? QString() : QStringLiteral("invalid"));
 }
 
 void ApplyLineEdit::resizeEvent(QResizeEvent *)

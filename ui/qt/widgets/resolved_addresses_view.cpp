@@ -7,7 +7,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "config.h"
+#include <config.h>
 #define WS_LOG_DOMAIN LOG_DOMAIN_QTUI
 
 #include <ui/qt/widgets/resolved_addresses_view.h>
@@ -143,7 +143,7 @@ void ResolvedAddressesView::saveAs()
     QString selectedFilter;
     QString fileName = WiresharkFileDialog::getSaveFileName(this, caption,
         mainApp->openDialogInitialDir().canonicalPath(),
-        QStringLiteral("%1;;%2;;%3").arg(txtFilter).arg(csvFilter).arg(jsonFilter),
+        QString("%1;;%2;;%3").arg(txtFilter).arg(csvFilter).arg(jsonFilter),
         &selectedFilter);
     if (fileName.isEmpty()) {
         return;
@@ -193,7 +193,7 @@ void ResolvedAddressesView::toTextStream(QTextStream& stream,
                 if (selected && !selectionModel()->isRowSelected(row, QModelIndex())) continue;
                 rowText.clear();
                 rowText << model()->data(model()->index(row, PORTS_COL_NAME)).toString();
-                rowText << QStringLiteral("%1/%2")
+                rowText << QString("%1/%2")
                                   .arg(model()->data(model()->index(row, PORTS_COL_PORT)).toString())
                                   .arg(model()->data(model()->index(row, PORTS_COL_PROTOCOL)).toString());
                 stream << rowText.join("\t") << "\n";
@@ -230,7 +230,7 @@ void ResolvedAddressesView::toTextStream(QTextStream& stream,
                 if (!v.isValid()) {
                     rowText << QStringLiteral("\"\"");
                 } else if (v.userType() == QMetaType::QString) {
-                    rowText << QStringLiteral("\"%1\"").arg(v.toString().replace('\"', "\"\""));
+                    rowText << QString("\"%1\"").arg(v.toString().replace('\"', "\"\""));
                 } else {
                     rowText << v.toString();
                 }

@@ -18,7 +18,6 @@
 
 #include <epan/packet.h>
 #include "opcua_application_layer.h"
-#include "opcua_servicetable.h"
 
 /** NodeId encoding mask table */
 static const value_string g_nodeidmasks[] = {
@@ -30,6 +29,9 @@ static const value_string g_nodeidmasks[] = {
     { 0x05, "Opaque" },
     { 0, NULL }
 };
+
+/** Service type table */
+extern const value_string g_requesttypes[];
 
 static int hf_opcua_nodeid_encodingmask;
 static int hf_opcua_app_nsid;
@@ -43,7 +45,7 @@ void registerApplicationLayerTypes(int proto)
     {
         /* id                               full name                    abbreviation                       type       display   strings               bitmask blurb HFILL */
         {&hf_opcua_nodeid_encodingmask,    {"NodeId EncodingMask",       "opcua.servicenodeid.encodingmask", FT_UINT8,  BASE_HEX, VALS(g_nodeidmasks),  0x0,    NULL, HFILL}},
-        {&hf_opcua_app_nsid,               {"NodeId Namespace Index",    "opcua.servicenodeid.nsid",         FT_UINT16,	BASE_DEC, NULL,                 0x0,    NULL, HFILL}},
+        {&hf_opcua_app_nsid,               {"NodeId Namespace Index",    "opcua.servicenodeid.nsid",         FT_UINT8,  BASE_DEC, NULL,                 0x0,    NULL, HFILL}},
         {&hf_opcua_app_numeric,            {"NodeId Identifier Numeric", "opcua.servicenodeid.numeric",      FT_UINT32, BASE_DEC, VALS(g_requesttypes), 0x0,    NULL, HFILL}}
     };
 
@@ -51,7 +53,7 @@ void registerApplicationLayerTypes(int proto)
 }
 
 /** Decodes the service nodeid without modifying the tree or offset.
- * Service NodeIds are always numeric.
+ * Service NodeIds are alsways numeric.
  */
 int getServiceNodeId(tvbuff_t *tvb, int offset)
 {

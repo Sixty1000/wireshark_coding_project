@@ -23,18 +23,16 @@
  * This module provides a stand-alone implementation of the spec.
  */
 
-#include "config.h"
-#define WS_LOG_DOMAIN "packet-communityid"
-#include <wireshark.h>
+#include <config.h>
 
+#include <epan/value_string.h>
+#include <epan/ipproto.h>
 #include <epan/packet.h>
 #include <epan/proto_data.h>
 #include <epan/prefs.h>
 
 #include <wsutil/wsgcrypt.h>
-#include <wsutil/array.h>
 
-#include "packet-ip.h"
 #include "packet-icmp.h"
 
 /* ---- Generic Community ID codebase, based on GLib & GCrypt ------------------
@@ -127,10 +125,32 @@
  */
 #define CID_ADDR_LEN_MAX 16
 
+/* Set to 1 for debugging output to stderr. */
+#define CID_DEBUG 0
+
 typedef struct _communityid_cfg_t {
     bool cfg_do_base64;
     uint16_t cfg_seed;
 } communityid_cfg_t;
+
+#if CID_DEBUG
+static void communityid_sha1_dbg(const char *msg, const void* data, size_t len)
+{
+    char *buf = (char*) g_malloc(len*2 + 1);
+    char *ptr = buf;
+    size_t i;
+
+    for (i = 0; i < len; i++, ptr += 2) {
+        snprintf(ptr, 3, "%02x", ((unsigned char*)data)[i]);
+    }
+
+    fprintf(stderr, "Community ID dbg [%s]: %s\n", msg, buf);
+    g_free(buf);
+}
+#define COMMUNITYID_SHA1_DBG(...) communityid_sha1_dbg(__VA_ARGS__)
+#else
+#define COMMUNITYID_SHA1_DBG(...)
+#endif
 
 /* Helper function to determine whether a flow tuple is ordered
  * correctly or needs flipping for abstracting flow directionality.
@@ -327,26 +347,26 @@ static bool communityid_calc(communityid_cfg_t *cfg, uint8_t proto,
     if (gcry_md_open(&sha1, GCRY_MD_SHA1, 0))
         return false;
 
-    ws_debug("seed: %04x", seed_final);
+    COMMUNITYID_SHA1_DBG("seed", &seed_final, 2);
     gcry_md_write(sha1, &seed_final, 2);
 
-    ws_log_buffer(saddr, addr_len, "saddr");
+    COMMUNITYID_SHA1_DBG("saddr", saddr, addr_len);
     gcry_md_write(sha1, saddr, addr_len);
 
-    ws_log_buffer(daddr, addr_len, "daddr");
+    COMMUNITYID_SHA1_DBG("daddr", daddr, addr_len);
     gcry_md_write(sha1, daddr, addr_len);
 
-    ws_debug("proto: %02x", proto);
+    COMMUNITYID_SHA1_DBG("proto", &proto, 1);
     gcry_md_write(sha1, &proto, 1);
 
-    ws_debug("padding: %02x", padding);
+    COMMUNITYID_SHA1_DBG("padding", &padding, 1);
     gcry_md_write(sha1, &padding, 1);
 
     if (sport != NULL && dport != NULL) {
-        ws_debug("Community ID sport: %04x", *sport);
+        COMMUNITYID_SHA1_DBG("sport", sport, 2);
         gcry_md_write(sha1, sport, 2);
 
-        ws_debug("Community ID dport: %04x", *dport);
+        COMMUNITYID_SHA1_DBG("dport", dport, 2);
         gcry_md_write(sha1, dport, 2);
     }
 
@@ -384,8 +404,6 @@ static bool communityid_calc(communityid_cfg_t *cfg, uint8_t proto,
 /* ---- End of generic Community ID codebase ----------------------------------- */
 
 void proto_register_communityid(void);
-void proto_reg_handoff_communityid(void);
-
 
 static int proto_communityid;
 static int proto_ip;
@@ -452,6 +470,14 @@ static int communityid_dissector(tvbuff_t *tvb, packet_info *pinfo,
     /* Map Wireshark-level config to Community ID configs. */
     cid_cfg.cfg_do_base64 = pref_cid_do_base64;
     cid_cfg.cfg_seed = (uint16_t) pref_cid_seed;
+
+    /* If not yet done, establish global handles for required protocols. */
+    if (proto_ip <= 0) {
+        proto_ip = proto_get_id_by_filter_name("ip");
+        proto_ipv6 = proto_get_id_by_filter_name("ipv6");
+        proto_icmp = proto_get_id_by_filter_name("icmp");
+        proto_icmpv6 = proto_get_id_by_filter_name("icmpv6");
+    }
 
     if (pinfo->net_src.type == AT_IPv4 && pinfo->net_dst.type == AT_IPv4)
         proto_ip_found = proto_ip;
@@ -538,9 +564,8 @@ static int communityid_dissector(tvbuff_t *tvb, packet_info *pinfo,
                  * include values other than the defined CID_PROTO_*
                  * constants.
                  */
-                ws_ip4* iph = (ws_ip4*)p_get_proto_data(pinfo->pool, pinfo, proto_ip_found, layer_num);
-                if (iph != NULL)
-                    proto = iph->ip_proto;
+                proto = GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo,
+                                                          proto_ip_found, layer_num));
                 break;
             }
 
@@ -571,7 +596,7 @@ void proto_register_communityid(void)
 
     static hf_register_info hf[] = {
         { &hf_communityid_hash,
-          { "Community ID", "communityid.hash", FT_STRING, BASE_NONE, NULL, 0x00,
+          { "Community ID", "communityid", FT_STRING, BASE_NONE, NULL, 0x00,
             "Community ID hash value for this packet's flow", HFILL }}
     };
 
@@ -595,15 +620,6 @@ void proto_register_communityid(void)
         "Hash seed value",
         "A 16-bit seed value to add to the hashed data",
         10, &pref_cid_seed);
-}
-
-void
-proto_reg_handoff_communityid(void)
-{
-    proto_ip = proto_get_id_by_filter_name("ip");
-    proto_ipv6 = proto_get_id_by_filter_name("ipv6");
-    proto_icmp = proto_get_id_by_filter_name("icmp");
-    proto_icmpv6 = proto_get_id_by_filter_name("icmpv6");
 }
 
 /*

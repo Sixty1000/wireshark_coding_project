@@ -17,6 +17,9 @@
 void proto_register_pdc(void);
 void proto_reg_handoff_pdc(void);
 
+/*PDC Protocol*/
+#define PDC_PROCOTOL "PDC"
+
 /* PDC version */
 #define PDC_VERSION 2
 
@@ -366,7 +369,7 @@ static int dissect_pdc_packet(tvbuff_t *tvb, proto_tree *tree, packet_info *pinf
 static int dissect_pdc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
 	/*Set the Column*/
-	col_set_str(pinfo->cinfo, COL_PROTOCOL, "PDC");
+	col_set_str(pinfo->cinfo, COL_PROTOCOL, PDC_PROCOTOL );
 	col_clear(pinfo->cinfo, COL_INFO);
 
 	dissect_pdc_packet(tvb, tree, pinfo);
@@ -554,7 +557,11 @@ void proto_register_pdc(void)
 		&ett_pdc_simpdu_var
 	};
 
-	proto_pdc = proto_register_protocol ("PDC Protocol", "PDC", "pdc");
+	proto_pdc = proto_register_protocol (
+		"PDC Protocol",	/* name       */
+		"PDC",		/* short name */
+		"pdc"		/* abbrev     */
+		);
 
 	/*Required Function Calls to register the header fields and subtrees used*/
 	proto_register_field_array(proto_pdc, hf, array_length(hf));

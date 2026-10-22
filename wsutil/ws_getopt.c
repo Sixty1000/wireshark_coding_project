@@ -34,8 +34,6 @@
 #include <string.h>
 #include <wchar.h>
 
-#include <glib.h>
-
 #include <ws_codepoints.h>
 
 char *ws_optarg;
@@ -121,7 +119,7 @@ int ws_getopt(int argc, char * const argv[], const char *optstring)
 	if (d != c || c == ':') {
 		ws_optopt = c;
 		if (optstring[0] != ':' && ws_opterr)
-			__getopt_msg(g_get_prgname(), ": unrecognized option: ", optchar, (size_t)k);
+			__getopt_msg(argv[0], ": unrecognized option: ", optchar, k);
 		return '?';
 	}
 	if (optstring[i] == ':') {
@@ -133,9 +131,9 @@ int ws_getopt(int argc, char * const argv[], const char *optstring)
 		if (ws_optind > argc) {
 			ws_optopt = c;
 			if (optstring[0] == ':') return ':';
-			if (ws_opterr) __getopt_msg(g_get_prgname(),
+			if (ws_opterr) __getopt_msg(argv[0],
 				": option requires an argument: ",
-				optchar, (size_t)k);
+				optchar, k);
 			return '?';
 		}
 	}
@@ -220,7 +218,7 @@ static int __getopt_long_core(int argc, char *const *argv, const char *optstring
 					ws_optopt = longopts[i].val;
 					if (colon || !ws_opterr)
 						return '?';
-					__getopt_msg(g_get_prgname(),
+					__getopt_msg(argv[0],
 						": option does not take an argument: ",
 						longopts[i].name,
 						strlen(longopts[i].name));
@@ -232,7 +230,7 @@ static int __getopt_long_core(int argc, char *const *argv, const char *optstring
 					ws_optopt = longopts[i].val;
 					if (colon) return ':';
 					if (!ws_opterr) return '?';
-					__getopt_msg(g_get_prgname(),
+					__getopt_msg(argv[0],
 						": option requires an argument: ",
 						longopts[i].name,
 						strlen(longopts[i].name));
@@ -250,7 +248,7 @@ static int __getopt_long_core(int argc, char *const *argv, const char *optstring
 		if (argv[ws_optind][1] == '-') {
 			ws_optopt = 0;
 			if (!colon && ws_opterr)
-				__getopt_msg(g_get_prgname(), cnt ?
+				__getopt_msg(argv[0], cnt ?
 					": option is ambiguous: " :
 					": unrecognized option: ",
 					argv[ws_optind]+2,

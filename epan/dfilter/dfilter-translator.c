@@ -11,7 +11,7 @@
 
 #include <wireshark.h>
 
-#include <wsutil/value_string.h>
+#include <epan/value_string.h>
 
 #include "dfilter.h"
 #include "dfilter-translator.h"
@@ -21,7 +21,7 @@
 // name: DFTranslator
 static GHashTable *registered_translators_;
 
-static void cleanup_hash_table_key(void * data)
+static void cleanup_hash_table_key(gpointer data)
 {
     g_free(data);
 }

@@ -7,7 +7,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-#pragma once
+
+#ifndef __STRUTIL_H__
+#define __STRUTIL_H__
+
 #include "ws_symbol_export.h"
 
 #include <epan/wmem_scopes.h>
@@ -30,7 +33,6 @@ extern "C" {
  * @param eol A pointer that will receive the EOL location
  * @return A pointer to the EOL character(s) in "*eol".
  */
-WS_DLL_PUBLIC
 const unsigned char *find_line_end(const unsigned char *data, const unsigned char *dataend,
     const unsigned char **eol);
 
@@ -59,10 +61,7 @@ WS_DLL_PUBLIC
 bool       hex_str_to_bytes(const char *hex_str, GByteArray *bytes,
     bool force_separators);
 
-/**
- * @brief Turn a string of hex digits with optional separators (defined by encoding)
- *
- * Turn a string of hex digits with optional separators (defined by encoding)
+/* Turn a string of hex digits with optional separators (defined by encoding)
  * into a byte array. Unlike hex_str_to_bytes(), this will read as many hex-char
  * pairs as possible and not error if it hits a non-hex-char; instead it just ends
  * there. (i.e., like strtol()/atoi()/etc.) But it must see two hex chars at the
@@ -113,7 +112,7 @@ bool       uri_str_to_bytes(const char *uri_str, GByteArray *bytes);
 
 /** Turn a OID string representation (dot notation) into a byte array.
  *
- * @param oid_str The OID string (dot notation).
+ * @param oid_str The OID string (dot notaion).
  * @param bytes The GByteArray that will receive the bytes.  This
  *        must be initialized by the caller.
  * @param is_absolute True if this is an absolute OID; false for relative OID.
@@ -124,7 +123,7 @@ bool       rel_oid_str_to_bytes(const char *oid_str, GByteArray *bytes, bool is_
 
 /** Turn a OID string representation (dot notation) into a byte array.
  *
- * @param oid_str The OID string (dot notation).
+ * @param oid_str The OID string (dot notaion).
  * @param bytes The GByteArray that will receive the bytes.  This
  *        must be initialized by the caller.
  * @return True if the string was converted successfully
@@ -177,8 +176,7 @@ char*     xml_escape(const char *unescaped);
 WS_DLL_PUBLIC
 uint8_t * convert_string_to_hex(const char *string, size_t *nbytes);
 
-/**
- * @brief Prep a string for case-sensitive vs case-insensitive searching.
+/** Prep a string for case-sensitive vs case-insensitive searching.
  *
  * @param string The search string
  * @param case_insensitive true if case-insensitive, false if not
@@ -189,59 +187,20 @@ uint8_t * convert_string_to_hex(const char *string, size_t *nbytes);
 WS_DLL_PUBLIC
 char * convert_string_case(const char *string, bool case_insensitive);
 
-/**
- * @brief Decodes an IA5-7BIT encoded string into a UTF-8 string.
- *
- * @param dest Destination buffer for the decoded string.
- * @param src Source buffer containing the IA5-7BIT encoded data.
- * @param len Length of the source data to decode.
- */
 WS_DLL_PUBLIC
 void IA5_7BIT_decode(unsigned char * dest, const unsigned char* src, int len);
 
 #define FORMAT_LABEL_REPLACE_SPACE      (0x1 << 0)
 
-/** Copy a string and escape any unprintable characters, truncating if
- * necessary to fit into bufsize and guaranteeing null-termination.
- * Copies whole UTF-8 characters, truncating to avoid splitting a multibyte
- * character. Requires valid UTF-8 input; stops copying and returns the
- * current position upon encountering an invalid character.
- *
- * @param label_str The destination string
- * @param bufsize The allocated size of the string
- * @param pos The offset into label_str at which to start copying
- * @param str The source string
- * @param flags FORMAT_LABEL_REPLACE_SPACE or 0
- * @return The attempted length of label_str. If >= bufsize,
- * truncation occurred.
- */
 WS_DLL_PUBLIC
 size_t ws_label_strcpy(char *label_str, size_t bufsize, size_t pos, const uint8_t *str, int flags);
 
-/** Concatenate a string and escape any unprintable characters, truncating
- * if necessary to fit into bufsize and guaranteeing null-termination.
- * Copies whole UTF-8 characters, truncating to avoid splitting a multibyte
- * character. Requires valid UTF-8 input; stops concatenating and returns
- * the current position upon encountering an invalid character.
- *
- * @param label_str The destination string
- * @param bufsize The allocated size of the string
- * @param str The source string
- * @param flags FORMAT_LABEL_REPLACE_SPACE or 0
- * @return The attempted length of label_str. If >= bufsize, truncation
- * occurred.
- */
 WS_DLL_PUBLIC
 size_t ws_label_strcat(char *label_str, size_t bufsize, const uint8_t *str, int flags);
 
-/**
- * @brief Check if name is valid.
- *
- * This covers names for display filter fields, dissector
+/*
+ * Check name is valid. This covers names for display filter fields, dissector
  * tables, preference modules, etc. Lower case is preferred.
- * @param name The name to check.
- * @param lower_only If true, only lower case letters are allowed.
- * @return 0 if the name is valid, otherwise the first invalid character.
  */
 WS_DLL_LOCAL unsigned char
 module_check_valid_name(const char *name, bool lower_only);
@@ -249,3 +208,5 @@ module_check_valid_name(const char *name, bool lower_only);
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
+
+#endif /* __STRUTIL_H__ */

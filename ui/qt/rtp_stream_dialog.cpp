@@ -13,6 +13,7 @@
 #include "file.h"
 
 #include "epan/addr_resolv.h"
+#include <epan/rtp_pt.h>
 
 #include <wsutil/utf8_entities.h>
 
@@ -83,10 +84,10 @@ bool operator==(rtpstream_id_t const& a, rtpstream_id_t const& b);
 class RtpStreamTreeWidgetItem : public QTreeWidgetItem
 {
 public:
-    RtpStreamTreeWidgetItem(QTreeWidget *tree, rtpstream_info_t *stream_info, bool tod) :
+    RtpStreamTreeWidgetItem(QTreeWidget *tree, rtpstream_info_t *stream_info) :
         QTreeWidgetItem(tree, rtp_stream_type_),
         stream_info_(stream_info),
-        tod_(tod)
+        tod_(0)
     {
         drawData();
     }
@@ -105,10 +106,10 @@ public:
         setText(src_port_col_, QString::number(calc.src_port));
         setText(dst_addr_col_, calc.dst_addr_str);
         setText(dst_port_col_, QString::number(calc.dst_port));
-        setText(ssrc_col_, QStringLiteral("0x%1").arg(calc.ssrc, 0, 16));
+        setText(ssrc_col_, QString("0x%1").arg(calc.ssrc, 0, 16));
         if (tod_) {
             QDateTime abs_dt = QDateTime::fromMSecsSinceEpoch(nstime_to_msec(&stream_info_->start_fd->abs_ts));
-            setText(start_time_col_, QStringLiteral("%1")
+            setText(start_time_col_, QString("%1")
                 .arg(abs_dt.toString("yyyy-MM-dd hh:mm:ss.zzz")));
         } else {
           setText(start_time_col_, QString::number(calc.start_time_ms, 'f', 6));
@@ -206,7 +207,7 @@ public:
             ret = calc.problem ? "Problem" : "";
             break;
         case ssrc_fmt_col_:
-            ret = QStringLiteral("0x%1").arg(calc.ssrc, 0, 16);
+            ret = QString("0x%1").arg(calc.ssrc, 0, 16);
             break;
         case lost_perc_col_:
             ret = QString::number(calc.lost_perc, 'f', prefs.gui_decimal_places1);
@@ -219,7 +220,7 @@ public:
         return ret;
     }
 
-    bool operator< (const QTreeWidgetItem &other) const override
+    bool operator< (const QTreeWidgetItem &other) const
     {
         rtpstream_info_calc_t calc1;
         rtpstream_info_calc_t calc2;
@@ -317,7 +318,7 @@ RtpStreamDialog *RtpStreamDialog::openRtpStreamDialog(QWidget &parent, CaptureFi
 }
 
 RtpStreamDialog::RtpStreamDialog(QWidget &parent, CaptureFile &cf) :
-    RtpBaseDialog(parent, cf),
+    WiresharkDialog(parent, cf),
     ui(new Ui::RtpStreamDialog),
     need_redraw_(false)
 {
@@ -335,6 +336,7 @@ RtpStreamDialog::RtpStreamDialog(QWidget &parent, CaptureFile &cf) :
     ctx_menu_.addAction(ui->actionCopyAsCsv);
     ctx_menu_.addAction(ui->actionCopyAsYaml);
     ctx_menu_.addAction(ui->actionAnalyze);
+    set_action_shortcuts_visible_in_context_menu(ctx_menu_.actions());
 
     ui->streamTreeWidget->setContextMenuPolicy(Qt::CustomContextMenu);
     ui->streamTreeWidget->header()->setSortIndicator(0, Qt::AscendingOrder);
@@ -386,7 +388,7 @@ RtpStreamDialog::RtpStreamDialog(QWidget &parent, CaptureFile &cf) :
     register_tap_listener_rtpstream(&tapinfo_, NULL, show_tap_registration_error);
     if (cap_file_.isValid() && cap_file_.capFile()->dfilter) {
         // Activate display filter checking
-        rtpstream_set_apply_display_filter(&tapinfo_, true);
+        tapinfo_.apply_display_filter = true;
         ui->displayFilterCheckBox->setChecked(true);
     }
 
@@ -394,6 +396,8 @@ RtpStreamDialog::RtpStreamDialog(QWidget &parent, CaptureFile &cf) :
             this, &RtpStreamDialog::displayFilterCheckBoxToggled);
     connect(this, SIGNAL(updateFilter(QString, bool)),
             &parent, SLOT(filterPackets(QString, bool)));
+    connect(&parent, SIGNAL(displayFilterSuccess(bool)),
+            this, SLOT(displayFilterSuccess(bool)));
     connect(this, SIGNAL(rtpPlayerDialogReplaceRtpStreams(QVector<rtpstream_id_t *>)),
             &parent, SLOT(rtpPlayerDialogReplaceRtpStreams(QVector<rtpstream_id_t *>)));
     connect(this, SIGNAL(rtpPlayerDialogAddRtpStreams(QVector<rtpstream_id_t *>)),
@@ -588,7 +592,7 @@ void RtpStreamDialog::updateStreams()
     // Add any missing items
     while (cur_stream && cur_stream->data && to_insert_count) {
         rtpstream_info_t *stream_info = gxx_list_data(rtpstream_info_t*, cur_stream);
-        RtpStreamTreeWidgetItem *rsti = new RtpStreamTreeWidgetItem(ui->streamTreeWidget, stream_info, ui->todCheckBox->isChecked());
+        RtpStreamTreeWidgetItem *rsti = new RtpStreamTreeWidgetItem(ui->streamTreeWidget, stream_info);
         cur_stream = gxx_list_next(cur_stream);
         to_insert_count--;
 
@@ -626,7 +630,7 @@ void RtpStreamDialog::updateWidgets()
     bool selected = ui->streamTreeWidget->selectedItems().count() > 0;
 
     QString hint = "<small><i>";
-    hint += tr("%Ln stream(s)", "", ui->streamTreeWidget->topLevelItemCount());
+    hint += tr("%1 streams").arg(ui->streamTreeWidget->topLevelItemCount());
 
     if (selected) {
         int tot_packets = 0;
@@ -636,8 +640,9 @@ void RtpStreamDialog::updateWidgets()
                 tot_packets += rsti->streamInfo()->packet_count;
             }
         }
-        hint += tr(", %1 selected, %Ln total packet(s)", "", tot_packets)
-                .arg(ui->streamTreeWidget->selectedItems().count());
+        hint += tr(", %1 selected, %2 total packets")
+                .arg(ui->streamTreeWidget->selectedItems().count())
+                .arg(tot_packets);
     }
 
     hint += ". Right-click for more options.";
@@ -692,8 +697,8 @@ QList<QVariant> RtpStreamDialog::streamRowData(int row) const
 
     // Add additional columns to export
     if (row < 0) {
-        row_data << QStringLiteral("SSRC formatted");
-        row_data << QStringLiteral("Lost percentage");
+        row_data << QString("SSRC formatted");
+        row_data << QString("Lost percentage");
     } else {
         RtpStreamTreeWidgetItem *rsti = static_cast<RtpStreamTreeWidgetItem*>(ui->streamTreeWidget->topLevelItem(row));
         if (rsti) {
@@ -750,7 +755,7 @@ void RtpStreamDialog::on_actionCopyAsCsv_triggered()
             if (!v.isValid()) {
                 rdsl << "\"\"";
             } else if (v.userType() == QMetaType::QString) {
-                rdsl << QStringLiteral("\"%1\"").arg(v.toString());
+                rdsl << QString("\"%1\"").arg(v.toString());
             } else {
                 rdsl << v.toString();
             }
@@ -785,7 +790,7 @@ void RtpStreamDialog::on_actionExportAsRtpDump_triggered()
     if (stream_info) {
         QString file_name;
         QDir path(mainApp->openDialogInitialDir());
-        QString save_file = QStringLiteral("%1/%2").arg(path.canonicalPath(), cap_file_.fileBaseName());
+        QString save_file = path.canonicalPath() + "/" + cap_file_.fileBaseName();
         QString extension;
         file_name = WiresharkFileDialog::getSaveFileName(this, mainApp->windowTitleString(tr("Save RTPDump As…")),
                                                  save_file, "RTPDump Format (*.rtp)", &extension);
@@ -944,7 +949,7 @@ void RtpStreamDialog::displayFilterCheckBoxToggled(bool checked)
         return;
     }
 
-    rtpstream_set_apply_display_filter(&tapinfo_, checked);
+    tapinfo_.apply_display_filter = checked;
 
     cap_file_.retapPackets();
 }
@@ -1012,7 +1017,6 @@ void RtpStreamDialog::rtpPlayerRemove()
     emit rtpPlayerDialogRemoveRtpStreams(getSelectedRtpIds());
 }
 
-#ifdef QT_MULTIMEDIA_LIB
 void RtpStreamDialog::rtpAnalysisReplace()
 {
     if (ui->streamTreeWidget->selectedItems().count() < 1) return;
@@ -1033,7 +1037,13 @@ void RtpStreamDialog::rtpAnalysisRemove()
 
     emit rtpAnalysisDialogRemoveRtpStreams(getSelectedRtpIds());
 }
-#endif // QT_MULTIMEDIA_LIB
+
+void RtpStreamDialog::displayFilterSuccess(bool success)
+{
+    if (success && ui->displayFilterCheckBox->isChecked()) {
+        cap_file_.retapPackets();
+    }
+}
 
 void RtpStreamDialog::invertSelection()
 {
@@ -1048,8 +1058,6 @@ void RtpStreamDialog::invertSelection()
 
 void RtpStreamDialog::on_actionAnalyze_triggered()
 {
-#ifdef QT_MULTIMEDIA_LIB
     RtpStreamDialog::rtpAnalysisAdd();
-#endif // QT_MULTIMEDIA_LIB
 }
 

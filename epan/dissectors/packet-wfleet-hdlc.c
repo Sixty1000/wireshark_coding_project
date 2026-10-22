@@ -1,4 +1,4 @@
-/* packet-wfleet-hdlc.c
+/* packet-chdlc.c
  * Routines for Wellfleet HDLC packet disassembly
  * Copied from the Cisco HDLC packet disassembly routines
  *

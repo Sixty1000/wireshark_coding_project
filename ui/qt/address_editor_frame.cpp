@@ -10,6 +10,7 @@
 #include "config.h"
 
 #include "file.h"
+#include "frame_tvbuff.h"
 
 #include "epan/addr_resolv.h"
 #include "epan/epan_dissect.h"
@@ -37,7 +38,7 @@ AddressEditorFrame::AddressEditorFrame(QWidget *parent) :
     ui->setupUi(this);
     ui->addressComboBox->setSizeAdjustPolicy(QComboBox::AdjustToContents);
 
-#ifdef Q_OS_MACOS
+#ifdef Q_OS_MAC
     foreach (QWidget *w, findChildren<QWidget *>()) {
         w->setAttribute(Qt::WA_MacSmallSize, true);
     }
@@ -102,16 +103,13 @@ void AddressEditorFrame::addAddresses(const ProtoNode& node, QStringList& addres
 void AddressEditorFrame::editAddresses(CaptureFile &cf, int column)
 {
     cap_file_ = cf.capFile();
-    wtap_rec    rec;
 
     if (!cap_file_->current_frame) {
         on_buttonBox_rejected();
         return;
     }
 
-    wtap_rec_init(&rec, DEFAULT_INIT_BUFFER_SIZE_2048);
-    if (!cf_read_record(cap_file_, cap_file_->current_frame, &rec)) {
-        wtap_rec_cleanup(&rec);
+    if (!cf_read_current_record(cap_file_)) {
         on_buttonBox_rejected();
         return; // error reading the frame
     }
@@ -131,6 +129,7 @@ void AddressEditorFrame::editAddresses(CaptureFile &cf, int column)
     col_custom_prime_edt(&edt, &cap_file_->cinfo);
 
     epan_dissect_run(&edt, cap_file_->cd_t, &cap_file_->rec,
+        frame_tvbuff_new_buffer(&cap_file_->provider, cap_file_->current_frame, &cap_file_->buf),
         cap_file_->current_frame, &cap_file_->cinfo);
     epan_dissect_fill_in_columns(&edt, true, true);
 
@@ -152,7 +151,6 @@ void AddressEditorFrame::editAddresses(CaptureFile &cf, int column)
     }
 
     epan_dissect_cleanup(&edt);
-    wtap_rec_cleanup(&rec);
 
     displayPreviousUserDefinedHostname();
 
@@ -276,7 +274,7 @@ void AddressEditorFrame::on_buttonBox_rejected()
 
 bool AddressEditorFrame::isAddressColumn(epan_column_info *cinfo, int column)
 {
-    if (!cinfo || column < 0 || (unsigned)column >= cinfo->num_cols) return false;
+    if (!cinfo || column < 0 || column >= cinfo->num_cols) return false;
 
     if (((cinfo->columns[column].col_fmt == COL_DEF_SRC) ||
          (cinfo->columns[column].col_fmt == COL_RES_SRC) ||

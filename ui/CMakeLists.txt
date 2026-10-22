@@ -10,7 +10,6 @@
 set(NONGENERATED_UI_SRC
 	alert_box.c
 	capture.c
-	capture_opts.c
 	capture_ui_utils.c
 	commandline.c
 	decode_as_utils.c
@@ -21,7 +20,7 @@ set(NONGENERATED_UI_SRC
 	file_dialog.c
 	firewall_rules.c
 	iface_toolbar.c
-	init.c
+	iface_lists.c
 	io_graph_item.c
 	language.c
 	mcast_stream.c
@@ -36,6 +35,8 @@ set(NONGENERATED_UI_SRC
 	rtp_stream.c
 	rtp_stream_id.c
 	service_response_time.c
+	software_update.c
+	ssl_key_export.c
 	tap_export_pdu.c
 	tap-iax2-analysis.c
 	tap-rtp-analysis.c
@@ -43,13 +44,10 @@ set(NONGENERATED_UI_SRC
 	tap-sctp-analysis.c
 	tap-rlc-graph.c
 	tap-tcp-stream.c
-	tap-aggregation.c
-	tap-dis-common.c
 	text_import.c
 	text_import_regex.c
 	time_shift.c
 	util.c
-	ui_prefs.c
 	voip_calls.c
 )
 
@@ -59,9 +57,7 @@ file(GLOB EXTRA_UI_HEADERS
 	rtp_stream.h
 	rtp_stream_id.h
 	tap-iax2-analysis.h
-	tap-dis-common.h
 	tap-rtp-analysis.h
-	tap-aggregation.h
 )
 
 set(UI_SRC ${NONGENERATED_UI_SRC})

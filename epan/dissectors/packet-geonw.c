@@ -66,7 +66,6 @@
 #include <epan/tap.h>
 #include <epan/etypes.h>
 #include <epan/unit_strings.h>
-#include <epan/exceptions.h>
 
 #include <wsutil/utf8_entities.h>
 
@@ -322,8 +321,8 @@ static int
 dissect_btpa(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
     heur_dtbl_entry_t *hdtbl_entry;
-    uint32_t low_port, high_port;
-    uint32_t dst_port, src_port;
+    int low_port, high_port;
+    int dst_port, src_port;
     proto_item *hidden_item;
     struct btpaheader *btpah;
 
@@ -369,10 +368,10 @@ dissect_btpa(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
         high_port = dst_port;
     }
 
-    if (dissector_try_uint_with_data(btpa_subdissector_table, low_port, next_tvb, pinfo, tree, true, NULL))
+    if (dissector_try_uint_new(btpa_subdissector_table, low_port, next_tvb, pinfo, tree, true, NULL))
         return tvb_captured_length(tvb);
 
-    if (dissector_try_uint_with_data(btpa_subdissector_table, high_port, next_tvb, pinfo, tree, true, NULL))
+    if (dissector_try_uint_new(btpa_subdissector_table, high_port, next_tvb, pinfo, tree, true, NULL))
         return tvb_captured_length(tvb);
 
     if (dissector_try_heuristic(btpa_heur_subdissector_list, next_tvb, pinfo, tree, &hdtbl_entry, NULL))
@@ -420,7 +419,7 @@ dissect_btpb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
     if (have_tap_listener(btpb_follow_tap))
         tap_queue_packet(btpb_follow_tap, pinfo, next_tvb);
 
-    if (dissector_try_uint_with_data(btpb_subdissector_table, dst_port, next_tvb, pinfo, tree, true, NULL)) {
+    if (dissector_try_uint_new(btpb_subdissector_table, dst_port, next_tvb, pinfo, tree, true, NULL)) {
         return tvb_captured_length(tvb);
     }
     if (dissector_try_heuristic(btpb_heur_subdissector_list, next_tvb, pinfo, tree, &hdtbl_entry, NULL)) {
@@ -1249,7 +1248,7 @@ dissect_sec_intx(tvbuff_t *tvb, int *offset, packet_info *pinfo, proto_tree *tre
     ti = proto_tree_add_item(tree, hf_sgeonw_intx, tvb, start, (*offset) - start, ENC_NA);
     subtree = proto_item_add_subtree(ti, ett_sgeonw_intx);
     proto_tree_add_bits_item(subtree, hf_sgeonw_var_len_det, tvb, start << 3, (*offset) - start, ENC_NA);
-    if ((hf != hf_sgeonw_app_id) && ((*offset) - start) > 4) {
+    if ((hf != hf_sgeonw_app_id) || ((*offset) - start) > 4) {
         proto_tree_add_uint64_bits_format_value(subtree, hf, tvb, (start << 3) + (*offset) - start,
             (((*offset) - start) << 3) - ((*offset) - start), tmp_val, ENC_BIG_ENDIAN, "%" PRIu64, tmp_val);
     }
@@ -1915,25 +1914,27 @@ dissect_sec_payload(tvbuff_t *tvb, int *offset, packet_info *pinfo, proto_tree *
         field_tree = proto_item_add_subtree(ti, ett_sgeonw_field);
         proto_tree_add_item(field_tree, hf_sgeonw_payload_field_type, tvb, *offset, 1, ENC_BIG_ENDIAN);
         *offset += 1;
-        param_len = dissect_sec_var_len(tvb, offset, pinfo, field_tree);
         switch(tmp_val) {
             case unsecured:
             case signed_pl:
+                param_len = dissect_sec_var_len(tvb, offset, pinfo, field_tree);
                 if (param_len) {
                     tvbuff_t *next_tvb = tvb_new_subset_length(tvb, *offset, param_len);
                     p_add_proto_data(pinfo->pool, pinfo, proto_geonw, SEC_TVB_KEY, next_tvb);
                 }
+                *offset += param_len;
                 break;
             case encrypted:
             case signed_and_encrypted:
+                param_len = dissect_sec_var_len(tvb, offset, pinfo, field_tree);
                 proto_tree_add_item(field_tree, hf_sgeonw_opaque, tvb, *offset, param_len, ENC_NA);
+                *offset += param_len;
                 break;
             default:
                 // Opaque
+                param_len = dissect_sec_var_len(tvb, offset, pinfo, field_tree);
                 proto_tree_add_item(field_tree, hf_sgeonw_opaque, tvb, *offset, param_len, ENC_NA);
-        }
-        if (ckd_add(offset, *offset, param_len)) {
-            THROW(ReportedBoundsError);
+                *offset += param_len;
         }
         proto_item_set_end(ti, tvb, *offset);
     }
@@ -2141,7 +2142,7 @@ dissect_geonw_internal(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
     uint32_t header_type;
     uint32_t rhl;
     uint32_t tmp_val;
-    unsigned offset = 0;
+    int offset = 0;
     proto_item *ti;
     proto_item *top_item;
     proto_item* rhl_ti = NULL;
@@ -2299,7 +2300,7 @@ dissect_geonw_internal(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
         // HT
         proto_tree_add_item_ret_uint(geonw_ch_tree, hf_geonw_ch_header_type, tvb, offset, 1, ENC_BIG_ENDIAN, &header_type);
         geonwh->gnw_htype = header_type;
-        col_add_str(pinfo->cinfo, COL_INFO, val_to_str(pinfo->pool, header_type, ch_header_type_names, "Unknown (%u)"));
+        col_add_str(pinfo->cinfo, COL_INFO, val_to_str(header_type, ch_header_type_names, "Unknown (%u)"));
         offset += 1;
 
         if (!skip_bh) {
@@ -2860,7 +2861,7 @@ proto_register_btpa(void)
     static build_valid_func btpa_da_both_values[2] = {btpa_src_value, btpa_dst_value};
     static decode_as_value_t btpa_da_values[3] = {{btpa_src_prompt, 1, btpa_da_src_values}, {btpa_dst_prompt, 1, btpa_da_dst_values}, {btpa_both_prompt, 2, btpa_da_both_values}};
     static decode_as_t btpa_da = {"btpa", "btpa.port", 3, 2, btpa_da_values, "BTP-A", "port(s) as",
-                                 decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL, NULL, NULL };
+                                 decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL};
 
     register_decode_as(&btpa_da);
 
@@ -2911,7 +2912,7 @@ proto_register_btpb(void)
     static build_valid_func btpb_da_build_value[1] = {btpb_dst_value};
     static decode_as_value_t btpb_da_values = {btpb_dst_prompt, 1, btpb_da_build_value};
     static decode_as_t btpb_da = {"btpb", "btpb.port", 1, 0, &btpb_da_values, NULL, NULL,
-                                    decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL, NULL, NULL };
+                                    decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL};
 
     register_decode_as(&btpb_da);
 
@@ -3591,7 +3592,7 @@ proto_register_geonw(void)
         { &ei_geonw_nz_reserved, { "geonw.reserved_not_zero", PI_PROTOCOL, PI_WARN, "Incorrect, should be 0", EXPFILL }},
         { &ei_geonw_version_err, { "geonw.bogus_version", PI_MALFORMED, PI_ERROR, "Bogus GeoNetworking Version", EXPFILL }},
         { &ei_geonw_rhl_lncb,    { "geonw.rhl.lncb", PI_SEQUENCE, PI_NOTE, "Remaining Hop Limit", EXPFILL }},
-        { &ei_geonw_rhl_too_low, { "geonw.rhl.too_small", PI_SEQUENCE, PI_NOTE, "Remaining Hop Limit Too Low", EXPFILL }},
+        { &ei_geonw_rhl_too_low, { "geonw.rhl.too_small", PI_SEQUENCE, PI_NOTE, "Remaining Hop Limit", EXPFILL }},
         { &ei_geonw_mhl_lt_rhl,  { "geonw.rhl.ht_mhl", PI_SEQUENCE, PI_WARN, "Remaining Hop Limit To Live", EXPFILL }},
         { &ei_geonw_scc_too_big, { "geonw.scc_too_big", PI_MALFORMED, PI_ERROR, "Country code should be less than 1000", EXPFILL }},
         { &ei_geonw_analysis_duplicate, { "geonw.analysis_duplicate", PI_SEQUENCE, PI_NOTE, "Duplicate packet", EXPFILL }},
@@ -3698,11 +3699,6 @@ proto_reg_handoff_geonw(void)
     dissector_add_uint("ieee1609dot2.psid", psid_geonetworking_management_communications, sgeonw_handle_);
     dissector_add_uint("ieee1609dot2.psid", psid_traffic_light_control_status_service, sgeonw_handle_);
     dissector_add_uint("ieee1609dot2.psid", psid_collective_perception_service, sgeonw_handle_);
-    dissector_add_uint("ieee1609dot2.psid", psid_avm_service, sgeonw_handle_);
-    dissector_add_uint("ieee1609dot2.psid", psid_vru_awareness_basic_service, sgeonw_handle_);
-    dissector_add_uint("ieee1609dot2.psid", psid_imz_basic_service, sgeonw_handle_);
-    dissector_add_uint("ieee1609dot2.psid", psid_mr_service, sgeonw_handle_);
-    dissector_add_uint("ieee1609dot2.psid", psid_poi_service, sgeonw_handle_);
 
 }
 

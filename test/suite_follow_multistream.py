@@ -6,7 +6,6 @@
 '''Follow QUIC/HTTP2 Stream tests'''
 
 import subprocess
-
 import pytest
 
 

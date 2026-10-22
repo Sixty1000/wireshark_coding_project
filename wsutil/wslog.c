@@ -16,7 +16,7 @@
 #include <string.h>
 #include <errno.h>
 #include <time.h>
-/* Because ws_assert() depends on ws_error() we do not use it
+/* Because ws_assert() dependes on ws_error() we do not use it
  * here and fall back on assert() instead. */
 #include <assert.h>
 #ifdef HAVE_UNISTD_H
@@ -28,7 +28,6 @@
 #include <conio.h>
 #endif
 
-#include "clopts_common.h"
 #include "file_util.h"
 #include "time_util.h"
 #include "to_str.h"
@@ -36,7 +35,6 @@
 #ifdef _WIN32
 #include "console_win32.h"
 #endif
-
 
 #define ASSERT(expr)    assert(expr)
 
@@ -52,9 +50,6 @@
 /* Log level that generates a trap and aborts. Can be "critical"
  * or "warning". */
 #define ENV_VAR_FATAL       "WIRESHARK_LOG_FATAL"
-
-/* Fatal log count before program is trapped. */
-#define ENV_VAR_FATAL_COUNT "WIRESHARK_LOG_FATAL_COUNT"
 
 /* Log domains that are fatal. */
 #define ENV_VAR_FATAL_DOMAIN    "WIRESHARK_LOG_FATAL_DOMAIN"
@@ -123,8 +118,6 @@ static ws_log_writer_free_data_cb *registered_log_writer_data_free;
 static FILE *custom_log;
 
 static enum ws_log_level fatal_log_level = LOG_LEVEL_ERROR;
-
-static uint32_t fatal_log_count = 1;
 
 #ifdef WS_DEBUG
 static bool init_complete;
@@ -375,6 +368,19 @@ enum ws_log_level ws_log_set_level_str(const char *str_level)
 }
 
 
+static const char *opt_level   = "--log-level";
+static const char *opt_domain  = "--log-domain";
+/* Alias "domain" and "domains". */
+static const char *opt_domain_s = "--log-domains";
+static const char *opt_file    = "--log-file";
+static const char *opt_fatal   = "--log-fatal";
+static const char *opt_fatal_domain = "--log-fatal-domain";
+/* Alias "domain" and "domains". */
+static const char *opt_fatal_domain_s = "--log-fatal-domains";
+static const char *opt_debug   = "--log-debug";
+static const char *opt_noisy   = "--log-noisy";
+
+
 static void print_err(void (*vcmdarg_err)(const char *, va_list ap),
                         int exit_failure,
                         const char *fmt, ...)
@@ -391,143 +397,277 @@ static void print_err(void (*vcmdarg_err)(const char *, va_list ap),
         exit(exit_failure);
 }
 
-int ws_log_parse_args(int* argc, char* argv[],
-    const char* optstring, const struct ws_option* long_options,
-    void (*vcmdarg_err)(const char*, va_list ap),
-    int exit_failure)
+
+/*
+ * This tries to convert old log level preference to a wslog
+ * configuration. The string must start with "console.log.level:"
+ * It receives an argv for { '-o', 'console.log.level:nnn', ...} or
+ * { '-oconsole.log.level:nnn', ...}.
+ */
+static void
+parse_console_compat_option(char *argv[],
+                        void (*vcmdarg_err)(const char *, va_list ap),
+                        int exit_failure)
 {
-    int opt;
+    const char *mask_str;
+    uint32_t mask;
+    enum ws_log_level level;
 
-     /* Save the global setting of erroring on unknown options, because this list will probably contain application options
-        not handled here */
-    int old_ws_opterr = ws_opterr;
+    ASSERT(argv != NULL);
 
-    /* Clear erroring on unknown options */
-    ws_opterr = 0;
+    if (argv[0] == NULL)
+        return;
 
-    while ((opt = ws_getopt_long_only(*argc, argv, optstring, long_options, NULL)) != -1) {
-
-        switch (opt)
-        {
-        case LONGOPT_WSLOG_LOG_LEVEL:
-            if (ws_log_set_level_str(ws_optarg) == LOG_LEVEL_NONE) {
-                print_err(vcmdarg_err, exit_failure,
-                    "Invalid log level \"%s\".\n", ws_optarg);
-            }
-            break;
-
-        case LONGOPT_WSLOG_LOG_DOMAIN:
-            ws_log_set_domain_filter(ws_optarg);
-            break;
-
-        case LONGOPT_WSLOG_LOG_FILE:
-        {
-            FILE* fp = ws_fopen(ws_optarg, "w");
-            if (fp == NULL) {
-                print_err(vcmdarg_err, exit_failure,
-                    "Error opening file '%s' for writing: %s.\n",
-                    ws_optarg, g_strerror(errno));
-            }
-            else {
-                ws_log_add_custom_file(fp);
-            }
+    if (strcmp(argv[0], "-o") == 0) {
+        if (argv[1] == NULL ||
+                    !g_str_has_prefix(argv[1], "console.log.level:")) {
+            /* Not what we were looking for. */
+            return;
         }
-        break;
-        case LONGOPT_WSLOG_LOG_FATAL:
-            if (ws_log_set_fatal_level_str(ws_optarg) == LOG_LEVEL_NONE) {
-                print_err(vcmdarg_err, exit_failure,
-                    "Fatal log level must be \"critical\" or \"warning\", not \"%s\".\n", ws_optarg);
-            }
-            break;
-        case LONGOPT_WSLOG_LOG_FATAL_COUNT:
-            if (!ws_log_set_fatal_count_str(ws_optarg)) {
-                print_err(vcmdarg_err, exit_failure,
-                    "Fatal log count must be decimal and larger than 0, not \"%s\".\n", ws_optarg);
-            }
-            break;
-        case LONGOPT_WSLOG_LOG_FATAL_DOMAIN:
-            ws_log_set_fatal_domain_filter(ws_optarg);
-            break;
-        case LONGOPT_WSLOG_LOG_DEBUG:
-            ws_log_set_debug_filter(ws_optarg);
-            break;
-        case LONGOPT_WSLOG_LOG_NOISY:
-            ws_log_set_noisy_filter(ws_optarg);
-            break;
-        case 'o':
-            if (g_str_has_prefix(ws_optarg, "console.log.level:")) {
-                uint32_t mask;
-                enum ws_log_level level;
-                const char* mask_str = ws_optarg + strlen("console.log.level:");
-                if (*mask_str == '\0') {
-                    print_err(vcmdarg_err, exit_failure,
-                        "Missing value to 'console.log.level' option.");
-                    break;
-                }
-
-                if (!ws_strtou32(mask_str, NULL, &mask)) {
-                    print_err(vcmdarg_err, exit_failure,
-                        "%s is not a valid decimal number.", mask_str);
-                    break;
-                }
-
-                /*
-                 * The lowest priority bit in the mask defines the level.
-                 */
-                if (mask & G_LOG_LEVEL_DEBUG)
-                    level = LOG_LEVEL_DEBUG;
-                else if (mask & G_LOG_LEVEL_INFO)
-                    level = LOG_LEVEL_INFO;
-                else if (mask & G_LOG_LEVEL_MESSAGE)
-                    level = LOG_LEVEL_MESSAGE;
-                else if (mask & G_LOG_LEVEL_WARNING)
-                    level = LOG_LEVEL_WARNING;
-                else if (mask & G_LOG_LEVEL_CRITICAL)
-                    level = LOG_LEVEL_CRITICAL;
-                else if (mask & G_LOG_LEVEL_ERROR)
-                    level = LOG_LEVEL_ERROR;
-                else
-                    level = LOG_LEVEL_NONE;
-
-                if (level != LOG_LEVEL_NONE) {
-                    ws_log_set_level(level);
-                } else {
-                    /* Some values (like zero) might not contain any meaningful bits.
-                     * Throwing an error in that case seems appropriate. */
-                    print_err(vcmdarg_err, exit_failure,
-                        "Value %s is not a valid log mask.", mask_str);
-                }
-            }
-            break;
-        default:
-            /* Ignore options not found because they are probably supported by the application */
-            break;
-        }
+        mask_str = argv[1] + strlen("console.log.level:");
+    }
+    else if (g_str_has_prefix(argv[0], "-oconsole.log.level:")) {
+        mask_str = argv[0] + strlen("-oconsole.log.level:");
+    }
+    else {
+        /* Not what we were looking for. */
+        return;
     }
 
-    /* Restore the global setting of erroring on unknown options */
-    ws_opterr = old_ws_opterr;
-    ws_optreset = 1;
+    print_err(vcmdarg_err, LOG_ARGS_NOEXIT,
+                "Option 'console.log.level' is deprecated, consult '--help' "
+                "for diagnostic message options.");
 
-    return 0;
+    if (*mask_str == '\0') {
+        print_err(vcmdarg_err, exit_failure,
+                    "Missing value to 'console.log.level' option.");
+        return;
+    }
+
+    if (!ws_basestrtou32(mask_str, NULL, &mask, 10)) {
+        print_err(vcmdarg_err, exit_failure,
+                    "%s is not a valid decimal number.", mask_str);
+        return;
+    }
+
+    /*
+     * The lowest priority bit in the mask defines the level.
+     */
+    if (mask & G_LOG_LEVEL_DEBUG)
+        level = LOG_LEVEL_DEBUG;
+    else if (mask & G_LOG_LEVEL_INFO)
+        level = LOG_LEVEL_INFO;
+    else if (mask & G_LOG_LEVEL_MESSAGE)
+        level = LOG_LEVEL_MESSAGE;
+    else if (mask & G_LOG_LEVEL_WARNING)
+        level = LOG_LEVEL_WARNING;
+    else if (mask & G_LOG_LEVEL_CRITICAL)
+        level = LOG_LEVEL_CRITICAL;
+    else if (mask & G_LOG_LEVEL_ERROR)
+        level = LOG_LEVEL_ERROR;
+    else
+        level = LOG_LEVEL_NONE;
+
+    if (level == LOG_LEVEL_NONE) {
+        /* Some values (like zero) might not contain any meaningful bits.
+         * Throwing an error in that case seems appropriate. */
+        print_err(vcmdarg_err, exit_failure,
+                    "Value %s is not a valid log mask.", mask_str);
+        return;
+    }
+
+    ws_log_set_level(level);
 }
 
-bool ws_log_is_wslog_arg(int arg)
+/* Match "arg_name=value" or "arg_name value" to opt_name. */
+static bool optequal(const char *arg, const char *opt)
 {
-    static const struct ws_option test_options[] = {
-        LONGOPT_WSLOG
-        {0, 0, 0, 0 }
-    };
+    ASSERT(arg);
+    ASSERT(opt);
+#define ARGEND(arg) (*(arg) == '\0' || *(arg) == ' ' || *(arg) == '=')
 
-    const struct ws_option* option = test_options;
-    while (option->val != 0) {
-        if (option->val == arg)
-            return true;
+    while (!ARGEND(arg) && *opt != '\0') {
+        if (*arg != *opt) {
+            return false;
+        }
+        arg += 1;
+        opt += 1;
+    }
+    if (ARGEND(arg) && *opt == '\0') {
+        return true;
+    }
+    return false;
+}
 
-        option++;
+int ws_log_parse_args(int *argc_ptr, char *argv[],
+                        void (*vcmdarg_err)(const char *, va_list ap),
+                        int exit_failure)
+{
+    char **ptr = argv;
+    int count = *argc_ptr;
+    int ret = 0;
+    size_t optlen;
+    const char *option, *value;
+    int extra;
+
+    if (argc_ptr == NULL || argv == NULL)
+        return -1;
+
+#ifdef WS_DEBUG
+    /* Assert ws_log_init() was called before ws_log_parse_args(). */
+    ASSERT(init_complete);
+#endif
+
+    /* Configure from command line. */
+
+    while (*ptr != NULL) {
+        if (optequal(*ptr, opt_level)) {
+            option = opt_level;
+            optlen = strlen(opt_level);
+        }
+        else if (optequal(*ptr, opt_domain)) {
+            option = opt_domain;
+            optlen = strlen(opt_domain);
+        }
+        else if (optequal(*ptr, opt_domain_s)) {
+            option = opt_domain; /* Alias */
+            optlen = strlen(opt_domain_s);
+        }
+        else if (optequal(*ptr, opt_fatal_domain)) {
+            option = opt_fatal_domain;
+            optlen = strlen(opt_fatal_domain);
+        }
+        else if (optequal(*ptr, opt_fatal_domain_s)) {
+            option = opt_fatal_domain; /* Alias */
+            optlen = strlen(opt_fatal_domain_s);
+        }
+        else if (optequal(*ptr, opt_file)) {
+            option = opt_file;
+            optlen = strlen(opt_file);
+        }
+        else if (optequal(*ptr, opt_fatal)) {
+            option = opt_fatal;
+            optlen = strlen(opt_fatal);
+        }
+        else if (optequal(*ptr, opt_debug)) {
+            option = opt_debug;
+            optlen = strlen(opt_debug);
+        }
+        else if (optequal(*ptr, opt_noisy)) {
+            option = opt_noisy;
+            optlen = strlen(opt_noisy);
+        }
+        else {
+            /* Check is we have the old '-o console.log.level' flag,
+             * or '-oconsole.log.level', for backward compatibility.
+             * Then if we do ignore it after processing and let the
+             * preferences module handle it later. */
+            if (*(*ptr + 0) == '-' && *(*ptr + 1) == 'o') {
+                parse_console_compat_option(ptr, vcmdarg_err, exit_failure);
+            }
+            ptr += 1;
+            count -= 1;
+            continue;
+        }
+
+        value = *ptr + optlen;
+        /* Two possibilities:
+         *      --<option> <value>
+         * or
+         *      --<option>=<value>
+         */
+        if (value[0] == '\0') {
+            /* value is separated with blank space */
+            value = *(ptr + 1);
+            extra = 1;
+
+            if (value == NULL || !*value || *value == '-') {
+                /* If the option value after the blank starts with '-' assume
+                 * it is another option. */
+                print_err(vcmdarg_err, exit_failure,
+                            "Option \"%s\" requires a value.\n", *ptr);
+                option = NULL;
+                extra = 0;
+                ret += 1;
+            }
+        }
+        else if (value[0] == '=') {
+            /* value is after equals */
+            value += 1;
+            extra = 0;
+        }
+        else {
+            /* Option isn't known. */
+            ptr += 1;
+            count -= 1;
+            continue;
+        }
+
+        if (option == opt_level) {
+            if (ws_log_set_level_str(value) == LOG_LEVEL_NONE) {
+                print_err(vcmdarg_err, exit_failure,
+                            "Invalid log level \"%s\".\n", value);
+                ret += 1;
+            }
+        }
+        else if (option == opt_domain) {
+            ws_log_set_domain_filter(value);
+        }
+        else if (option == opt_fatal_domain) {
+            ws_log_set_fatal_domain_filter(value);
+        }
+        else if (option == opt_file) {
+            if (value == NULL) {
+                print_err(vcmdarg_err, exit_failure,
+                            "Option '%s' requires an argument.\n",
+                            option);
+                ret += 1;
+            }
+            else {
+                FILE *fp = ws_fopen(value, "w");
+                if (fp == NULL) {
+                    print_err(vcmdarg_err, exit_failure,
+                                "Error opening file '%s' for writing: %s.\n",
+                                value, g_strerror(errno));
+                    ret += 1;
+                }
+                else {
+                    ws_log_add_custom_file(fp);
+                }
+            }
+        }
+        else if (option == opt_fatal) {
+            if (ws_log_set_fatal_level_str(value) == LOG_LEVEL_NONE) {
+                print_err(vcmdarg_err, exit_failure,
+                            "Fatal log level must be \"critical\" or "
+                            "\"warning\", not \"%s\".\n", value);
+                ret += 1;
+            }
+        }
+        else if (option == opt_debug) {
+            ws_log_set_debug_filter(value);
+        }
+        else if (option == opt_noisy) {
+            ws_log_set_noisy_filter(value);
+        }
+        else {
+            /* Option value missing or invalid, do nothing. */
+        }
+
+        /*
+         * We found a log option. We will remove it from
+         * the argv by moving up the other strings in the array. This is
+         * so that it doesn't generate an unrecognized option
+         * error further along in the initialization process.
+         */
+        /* Include the terminating NULL in the memmove. */
+        memmove(ptr, ptr + 1 + extra, (count - extra) * sizeof(*ptr));
+        /* No need to increment ptr here. */
+        count -= (1 + extra);
+        *argc_ptr -= (1 + extra);
     }
 
-    return false;
+    return ret;
 }
 
 
@@ -620,25 +760,6 @@ enum ws_log_level ws_log_set_fatal_level_str(const char *str_level)
     return ws_log_set_fatal_level(level);
 }
 
-void ws_log_set_fatal_count(uint32_t count)
-{
-    fatal_log_count = MIN(1, count);
-}
-
-bool ws_log_set_fatal_count_str(const char *str_count)
-{
-    const char *endptr;
-    uint32_t count;
-    bool result = ws_strtou32(str_count, &endptr, &count);
-
-    if (result && count < 1)
-        result = false;
-
-    if (result)
-        ws_log_set_fatal_count(count);
-
-    return result;
-}
 
 void ws_log_set_writer(ws_log_writer_cb *writer)
 {
@@ -715,8 +836,6 @@ static void load_registry(void)
 
     ws_log_console_open = (ws_log_console_open_pref)data;
 }
-
-static const char* log_console_title = "Debug Console";
 #endif
 
 
@@ -725,12 +844,16 @@ static const char* log_console_title = "Debug Console";
  * to communicate with the parent and it will block. We have to use
  * vcmdarg_err to report errors.
  */
-void ws_log_init(void (*vcmdarg_err)(const char *, va_list ap), const char* console_title _U_)
+void ws_log_init(const char *progname,
+                            void (*vcmdarg_err)(const char *, va_list ap))
 {
     const char *env;
     int fd;
 
-    registered_progname = g_get_prgname();
+    if (progname != NULL) {
+        registered_progname = progname;
+        g_set_prgname(progname);
+    }
 
     ws_tzset();
 
@@ -745,13 +868,12 @@ void ws_log_init(void (*vcmdarg_err)(const char *, va_list ap), const char* cons
     g_log_set_default_handler(glib_log_handler, NULL);
 
 #ifdef _WIN32
-    log_console_title = console_title;
-
     load_registry();
 
     /* if the user wants a console to be always there, well, we should open one for him */
-    if (ws_log_console_open == LOG_CONSOLE_OPEN_ALWAYS)
-        create_console(log_console_title);
+    if (ws_log_console_open == LOG_CONSOLE_OPEN_ALWAYS) {
+        create_console();
+    }
 #endif
 
     atexit(ws_log_cleanup);
@@ -773,15 +895,6 @@ void ws_log_init(void (*vcmdarg_err)(const char *, va_list ap), const char* cons
             print_err(vcmdarg_err, LOG_ARGS_NOEXIT,
                         "Ignoring invalid environment value %s=\"%s\"",
                         ENV_VAR_FATAL, env);
-        }
-    }
-
-    env = g_getenv(ENV_VAR_FATAL_COUNT);
-    if (env != NULL) {
-        if (!ws_log_set_fatal_count_str(env)) {
-            print_err(vcmdarg_err, LOG_ARGS_NOEXIT,
-                        "Ignoring invalid environment value %s=\"%s\"",
-                        ENV_VAR_FATAL_COUNT, env);
         }
     }
 
@@ -811,22 +924,24 @@ void ws_log_init(void (*vcmdarg_err)(const char *, va_list ap), const char* cons
 }
 
 
-void ws_log_init_with_writer(ws_log_writer_cb *writer,
-                            void (*vcmdarg_err)(const char *, va_list ap), const char* console_title)
+void ws_log_init_with_writer(const char *progname,
+                            ws_log_writer_cb *writer,
+                            void (*vcmdarg_err)(const char *, va_list ap))
 {
     registered_log_writer = writer;
-    ws_log_init(vcmdarg_err, console_title);
+    ws_log_init(progname, vcmdarg_err);
 }
 
 
-void ws_log_init_with_writer_and_data(ws_log_writer_cb *writer,
+void ws_log_init_with_writer_and_data(const char *progname,
+                            ws_log_writer_cb *writer,
                             void *user_data,
                             ws_log_writer_free_data_cb *free_user_data,
-                            void (*vcmdarg_err)(const char *, va_list ap), const char* console_title)
+                            void (*vcmdarg_err)(const char *, va_list ap))
 {
     registered_log_writer_data = user_data;
     registered_log_writer_data_free = free_user_data;
-    ws_log_init_with_writer(writer, vcmdarg_err, console_title);
+    ws_log_init_with_writer(progname, writer, vcmdarg_err);
 }
 
 
@@ -886,7 +1001,7 @@ static void log_write_do_work(FILE *fp, bool use_color,
 
 #ifdef WS_DEBUG
     if (!init_complete)
-        fputs(" no init.", fp);
+        fputs(" no init!", fp);
 #endif
 
     /* Process */
@@ -980,7 +1095,7 @@ static void log_write_dispatch(const char *domain, enum ws_log_level level,
 
 #ifdef _WIN32
     if (ws_log_console_open != LOG_CONSOLE_OPEN_NEVER) {
-        create_console(log_console_title);
+        create_console();
     }
 #endif /* _WIN32 */
 
@@ -1020,8 +1135,7 @@ static void log_write_dispatch(const char *domain, enum ws_log_level level,
 #endif /* _WIN32 */
 
     if (fatal_event) {
-        if (--fatal_log_count == 0)
-            abort();
+        abort();
     }
 }
 
@@ -1217,7 +1331,7 @@ void ws_log_buffer_full(const char *domain, enum ws_log_level level,
     if (!ws_log_msg_is_active(domain, level))
         return;
 
-    char *bufstr = bytes_to_str_punct_maxlen(NULL, ptr, size, ' ', max_bytes_len);
+    char *bufstr = bytes_to_str_maxlen(NULL, ptr, size, max_bytes_len);
 
     if (G_UNLIKELY(msg == NULL))
         ws_log_write_always_full(domain, level, file, line, func,
@@ -1294,9 +1408,6 @@ void ws_log_add_custom_file(FILE *fp)
 #define USAGE_FATAL \
     "sets level to abort the program (\"critical\" or \"warning\")"
 
-#define USAGE_FATAL_COUNT \
-    "sets the number of fatal errors before aborting the program"
-
 #define USAGE_DOMAINS \
     "comma-separated list of the active log domains"
 
@@ -1315,13 +1426,12 @@ void ws_log_add_custom_file(FILE *fp)
 void ws_log_print_usage(FILE *fp)
 {
     fprintf(fp, "Diagnostic output:\n");
-    fprintf(fp, "  --log-level <level>       " USAGE_LEVEL "\n");
-    fprintf(fp, "  --log-fatal <level>       " USAGE_FATAL "\n");
-    fprintf(fp, "  --log-fatal-count <count> " USAGE_FATAL_COUNT "\n");
-    fprintf(fp, "  --log-domains <[!]list>   " USAGE_DOMAINS "\n");
+    fprintf(fp, "  --log-level <level>      " USAGE_LEVEL "\n");
+    fprintf(fp, "  --log-fatal <level>      " USAGE_FATAL "\n");
+    fprintf(fp, "  --log-domains <[!]list>  " USAGE_DOMAINS "\n");
     fprintf(fp, "  --log-fatal-domains <list>\n");
-    fprintf(fp, "                            " USAGE_FATAL_DOMAINS "\n");
-    fprintf(fp, "  --log-debug <[!]list>     " USAGE_DEBUG "\n");
-    fprintf(fp, "  --log-noisy <[!]list>     " USAGE_NOISY "\n");
-    fprintf(fp, "  --log-file <path>         " USAGE_FILE "\n");
+    fprintf(fp, "                           " USAGE_FATAL_DOMAINS "\n");
+    fprintf(fp, "  --log-debug <[!]list>    " USAGE_DEBUG "\n");
+    fprintf(fp, "  --log-noisy <[!]list>    " USAGE_NOISY "\n");
+    fprintf(fp, "  --log-file <path>        " USAGE_FILE "\n");
 }

@@ -1,7 +1,7 @@
 /* packet-xnap.c
  * Routines for dissecting NG-RAN Xn application protocol (XnAP)
  * 3GPP TS 38.423 packet dissection
- * Copyright 2018-2026, Pascal Quantin <pascal@wireshark.org>
+ * Copyright 2018-2024, Pascal Quantin <pascal@wireshark.org>
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
@@ -10,7 +10,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * Ref:
- * 3GPP TS 38.423 V19.4.0 (2026-09)
+ * 3GPP TS 38.423 V18.2.0 (2024-06)
  */
 
 #include "config.h"
@@ -18,6 +18,7 @@
 #include <epan/packet.h>
 #include <epan/asn1.h>
 #include <epan/prefs.h>
+#include <epan/sctpppids.h>
 #include <epan/proto_data.h>
 #include <epan/conversation.h>
 #include <epan/tfs.h>
@@ -35,8 +36,15 @@
 #include "packet-ntp.h"
 #include "packet-f1ap.h"
 #include "packet-nrppa.h"
-#include "packet-sctp.h"
-#include "packet-lpp.h"
+
+#ifdef _MSC_VER
+/* disable: "warning C4146: unary minus operator applied to unsigned type, result still unsigned" */
+#pragma warning(disable:4146)
+#endif
+
+#define PNAME  "NG-RAN Xn Application Protocol (XnAP)"
+#define PSNAME "XnAP"
+#define PFNAME "xnap"
 
 /* Dissector will use SCTP PPID 61 or SCTP port. IANA assigned port = 38422 */
 #define SCTP_PORT_XnAP	38422
@@ -104,7 +112,6 @@ static int hf_xnap_nodemeasurementFailedReportCharacteristics_AveragePacketDelay
 static int hf_xnap_nodemeasurementFailedReportCharacteristics_AveragePacketLossDL;
 static int hf_xnap_nodemeasurementFailedReportCharacteristics_MeasuredUETrajectory;
 static int hf_xnap_nodemeasurementFailedReportCharacteristics_Reserved;
-static int hf_xnap_extensionValue_data;
 #include "packet-xnap-hf.c"
 
 /* Initialize the subtree pointers */
@@ -164,38 +171,6 @@ static int ett_xnap_ReportCharacteristicsForDataCollection;
 static int ett_xnap_SRSConfiguration;
 static int ett_xnap_PSCellListContainer;
 static int ett_xnap_SuccessfulPSCellChangeReportContainer;
-static int ett_xnap_Circle_referenceLocation;
-static int ett_xnap_cSIResourceConfigurationToAddModList;
-static int ett_xnap_cSIResourceConfigurationToReleaseList;
-static int ett_xnap_cSI_RSResourceToAddModList;
-static int ett_xnap_cSI_RSResourceToReleaseList;
-static int ett_xnap_cSI_RSResourceSetToAddModList;
-static int ett_xnap_cSI_RSResourceSetToReleaseList;
-static int ett_xnap_cSI_IMResourceToAddModList;
-static int ett_xnap_cSI_IMResourceToReleaseList;
-static int ett_xnap_cSI_IMResourceSetToAddModList;
-static int ett_xnap_cSI_IMResourceSetToReleaseList;
-static int ett_xnap_rACHConfiguration;
-static int ett_xnap_JointorDLTCIStateID;
-static int ett_xnap_tCIStateConfigurationList;
-static int ett_xnap_lTMCandidateConfiguration;
-static int ett_xnap_ueBasedTAMeasurementConfiguration;
-static int ett_xnap_lTMCFRAResourceConfiguration;
-static int ett_xnap_lTMCFRAResourceConfigurationSUL;
-static int ett_xnap_cSI_RSReportConfigurationForEarlyCSIAcquisition;
-static int ett_xnap_tCI_StatesConfigurationsList;
-static int ett_xnap_sN_to_MN_Container;
-static int ett_xnap_nZP_CSI_RS_ResourceSet;
-static int ett_xnap_nZP_CSI_RS_Resource;
-static int ett_xnap_Polygon;
-static int ett_xnap_ReferenceConfiguration;
-static int ett_xnap_SBFD_Frequency_Configuration;
-static int ett_xnap_sRS_Resource;
-static int ett_xnap_sRSResourceSetID;
-static int ett_xnap_sRSSpatialRelation;
-static int ett_xnap_spatialRelationInforperSRSResource;
-static int ett_xnap_TagIDPointer;
-static int ett_xnap_ULTCIStateID;
 #include "packet-xnap-ett.c"
 
 enum {
@@ -298,20 +273,6 @@ xnap_N6Jitter_fmt(char *s, uint32_t v)
   snprintf(s, ITEM_LABEL_LENGTH, "%.1fms (%d)", (float)v/2, (int32_t)v);
 }
 
-static void
-xnap_50m_fmt(char *s, uint32_t v)
-{
-  int32_t d = (int32_t)v;
-
-  snprintf(s, ITEM_LABEL_LENGTH, "%dm (%d)", d*50, d);
-}
-
-static void
-xnap_tenth_seconds_fmt(char *s, uint32_t v)
-{
-  snprintf(s, ITEM_LABEL_LENGTH, "%.1fs", ((float)v)/10);
-}
-
 typedef enum {
   INITIATING_MESSAGE,
   SUCCESSFUL_OUTCOME,
@@ -368,37 +329,35 @@ static int dissect_ProtocolIEFieldValue(tvbuff_t *tvb, packet_info *pinfo, proto
 {
   struct xnap_private_data *xnap_data = xnap_get_private_data(pinfo);
 
-  return (dissector_try_uint_with_data(xnap_ies_dissector_table, xnap_data->protocol_ie_id, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_new(xnap_ies_dissector_table, xnap_data->protocol_ie_id, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_ProtocolExtensionFieldExtensionValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
   struct xnap_private_data *xnap_data = xnap_get_private_data(pinfo);
 
-  if (!dissector_try_uint_with_data(xnap_extension_dissector_table, xnap_data->protocol_ie_id, tvb, pinfo, tree, false, NULL))
-    proto_tree_add_item(tree, hf_xnap_extensionValue_data, tvb, 0, -1, ENC_NA);
-  return tvb_captured_length(tvb);
+  return (dissector_try_uint_new(xnap_extension_dissector_table, xnap_data->protocol_ie_id, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_InitiatingMessageValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
   struct xnap_private_data *xnap_data = xnap_get_private_data(pinfo);
 
-  return (dissector_try_uint_with_data(xnap_proc_imsg_dissector_table, xnap_data->procedure_code, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_new(xnap_proc_imsg_dissector_table, xnap_data->procedure_code, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_SuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
   struct xnap_private_data *xnap_data = xnap_get_private_data(pinfo);
 
-  return (dissector_try_uint_with_data(xnap_proc_sout_dissector_table, xnap_data->procedure_code, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_new(xnap_proc_sout_dissector_table, xnap_data->procedure_code, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_UnsuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
   struct xnap_private_data *xnap_data = xnap_get_private_data(pinfo);
 
-  return (dissector_try_uint_with_data(xnap_proc_uout_dissector_table, xnap_data->procedure_code, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_new(xnap_proc_uout_dissector_table, xnap_data->procedure_code, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int
@@ -479,7 +438,7 @@ void proto_register_xnap(void) {
         FT_BOOLEAN, 8, TFS(&tfs_restricted_not_restricted), 0x04,
         NULL, HFILL }},
     { &hf_xnap_primaryRATRestriction_nR_OTHERSAT,
-      { "nR-OTHERSAT", "xnap.primaryRATRestriction.nR_OTHERSAT",
+      { "nR-unlicensed", "xnap.primaryRATRestriction.nR_OTHERSAT",
         FT_BOOLEAN, 8, TFS(&tfs_restricted_not_restricted), 0x02,
         NULL, HFILL }},
     { &hf_xnap_primaryRATRestriction_e_UTRA_LEO,
@@ -495,7 +454,7 @@ void proto_register_xnap(void) {
         FT_BOOLEAN, 8, TFS(&tfs_restricted_not_restricted), 0x40,
         NULL, HFILL }},
     { &hf_xnap_primaryRATRestriction_e_UTRA_OTHERSAT,
-      { "e-UTRA-OTHERSAT", "xnap.primaryRATRestriction.e_UTRA_OTHERSAT",
+      { "e-UTRA-unlicensed", "xnap.primaryRATRestriction.e_UTRA_OTHERSAT",
         FT_BOOLEAN, 8, TFS(&tfs_restricted_not_restricted), 0x20,
         NULL, HFILL }},
     { &hf_xnap_primaryRATRestriction_reserved,
@@ -551,7 +510,7 @@ void proto_register_xnap(void) {
         FT_BOOLEAN, 8, TFS(&tfs_activate_do_not_activate), 0x08,
         NULL, HFILL }},
     { &hf_xnap_MeasurementsToActivate_LoggingM1FromEventTriggered,
-      { "LoggingM1FromEventTriggeredMeasurementReports", "xnap.MeasurementsToActivate.LoggingM1FromEventTriggered",
+      { "LoggingOfM1FromEventTriggeredMeasurementReports", "xnap.MeasurementsToActivate.LoggingM1FromEventTriggered",
         FT_BOOLEAN, 8, TFS(&tfs_activate_do_not_activate), 0x04,
         NULL, HFILL }},
     { &hf_xnap_MeasurementsToActivate_M6,
@@ -674,10 +633,6 @@ void proto_register_xnap(void) {
       { "Reserved", "xnap.nodemeasurementFailedReportCharacteristics.Reserved",
         FT_UINT32, BASE_HEX, NULL, 0x03ffffff,
         NULL, HFILL }},
-    { &hf_xnap_extensionValue_data,
-      { "Data", "xnap.extensionValue.data",
-        FT_BYTES, BASE_NONE|BASE_ALLOW_ZERO, NULL, 0,
-        NULL, HFILL }},
 #include "packet-xnap-hfarr.c"
   };
 
@@ -739,44 +694,12 @@ void proto_register_xnap(void) {
     &ett_xnap_SRSConfiguration,
     &ett_xnap_PSCellListContainer,
     &ett_xnap_SuccessfulPSCellChangeReportContainer,
-    &ett_xnap_Circle_referenceLocation,
-    &ett_xnap_cSIResourceConfigurationToAddModList,
-    &ett_xnap_cSIResourceConfigurationToReleaseList,
-    &ett_xnap_cSI_RSResourceToAddModList,
-    &ett_xnap_cSI_RSResourceToReleaseList,
-    &ett_xnap_cSI_RSResourceSetToAddModList,
-    &ett_xnap_cSI_RSResourceSetToReleaseList,
-    &ett_xnap_cSI_IMResourceToAddModList,
-    &ett_xnap_cSI_IMResourceToReleaseList,
-    &ett_xnap_cSI_IMResourceSetToAddModList,
-    &ett_xnap_cSI_IMResourceSetToReleaseList,
-    &ett_xnap_rACHConfiguration,
-    &ett_xnap_JointorDLTCIStateID,
-    &ett_xnap_tCIStateConfigurationList,
-    &ett_xnap_lTMCandidateConfiguration,
-    &ett_xnap_ueBasedTAMeasurementConfiguration,
-    &ett_xnap_lTMCFRAResourceConfiguration,
-    &ett_xnap_lTMCFRAResourceConfigurationSUL,
-    &ett_xnap_cSI_RSReportConfigurationForEarlyCSIAcquisition,
-    &ett_xnap_tCI_StatesConfigurationsList,
-    &ett_xnap_sN_to_MN_Container,
-    &ett_xnap_nZP_CSI_RS_ResourceSet,
-    &ett_xnap_nZP_CSI_RS_Resource,
-    &ett_xnap_Polygon,
-    &ett_xnap_ReferenceConfiguration,
-    &ett_xnap_SBFD_Frequency_Configuration,
-    &ett_xnap_sRS_Resource,
-    &ett_xnap_sRSResourceSetID,
-    &ett_xnap_sRSSpatialRelation,
-    &ett_xnap_spatialRelationInforperSRSResource,
-    &ett_xnap_TagIDPointer,
-    &ett_xnap_ULTCIStateID,
 #include "packet-xnap-ettarr.c"
   };
 
   module_t *xnap_module;
 
-  proto_xnap = proto_register_protocol("NG-RAN Xn Application Protocol (XnAP)", "XnAP", "xnap");
+  proto_xnap = proto_register_protocol(PNAME, PSNAME, PFNAME);
   proto_register_field_array(proto_xnap, hf, array_length(hf));
   proto_register_subtree_array(ett, array_length(ett));
 

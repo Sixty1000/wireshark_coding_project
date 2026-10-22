@@ -23,6 +23,10 @@
 #include "packet-acse.h"
 #include "packet-mms.h"
 
+#define PNAME  "MMS"
+#define PSNAME "MMS"
+#define PFNAME "mms"
+
 void proto_register_mms(void);
 void proto_reg_handoff_mms(void);
 
@@ -399,7 +403,7 @@ private_data_add_moreCinfo_id(asn1_ctx_t* actx, tvbuff_t* tvb)
 {
     mms_private_data_t* private_data = (mms_private_data_t*)mms_get_private_data(actx);
     (void)g_strlcat(private_data->moreCinfo, " ", BUFFER_SIZE_MORE);
-    (void)g_strlcat(private_data->moreCinfo, (char*)tvb_get_string_enc(actx->pinfo->pool, tvb,
+    (void)g_strlcat(private_data->moreCinfo, tvb_get_string_enc(actx->pinfo->pool, tvb,
         0, tvb_reported_length(tvb), ENC_ASCII | ENC_NA), BUFFER_SIZE_MORE);
 }
 
@@ -429,8 +433,8 @@ private_data_get_moreCinfo(asn1_ctx_t* actx)
 static int
 dissect_mms(tvbuff_t* tvb, packet_info* pinfo, proto_tree* parent_tree, void* data _U_)
 {
-    unsigned offset = 0;
-    unsigned old_offset;
+    int offset = 0;
+    int old_offset;
     proto_item* item = NULL;
     proto_tree* tree = NULL;
     asn1_ctx_t asn1_ctx;
@@ -459,7 +463,7 @@ dissect_mms(tvbuff_t* tvb, packet_info* pinfo, proto_tree* parent_tree, void* da
             wmem_free(pinfo->pool, asn1_ctx.private_data);
         }
         if (offset == old_offset) {
-            proto_tree_add_expert_remaining(tree, pinfo, &ei_mms_zero_pdu, tvb, offset);
+            proto_tree_add_expert(tree, pinfo, &ei_mms_zero_pdu, tvb, offset, -1);
             break;
         }
     }
@@ -672,7 +676,7 @@ void proto_register_mms(void) {
     expert_module_t* expert_mms;
 
     /* Register protocol */
-    proto_mms = proto_register_protocol("MMS", "MMS", "mms");
+    proto_mms = proto_register_protocol(PNAME, PSNAME, PFNAME);
     register_dissector("mms", dissect_mms, proto_mms);
     /* Register fields and subtrees */
     proto_register_field_array(proto_mms, hf, array_length(hf));
@@ -694,7 +698,7 @@ static bool
 dissect_mms_heur(tvbuff_t* tvb, packet_info* pinfo, proto_tree* parent_tree, void* data)
 {
     /* must check that this really is an mms packet */
-    unsigned offset = 0;
+    int offset = 0;
     uint32_t length = 0;
     uint32_t oct;
     int idx = 0;

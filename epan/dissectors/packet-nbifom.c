@@ -13,8 +13,6 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 
 void proto_register_nbifom(void);
 
@@ -219,11 +217,11 @@ dissect_nbifom_routing_rules(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *
                                           ett_nbifom_routing_rule_flags, flags2, ENC_BIG_ENDIAN, &flags);
         curr_offset += 4;
         if (flags & 0x01000000) {
-            proto_tree_add_item(subtree, hf_nbifom_routing_rule_src_ipv4_addr, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
+            proto_tree_add_item(subtree, hf_nbifom_routing_rule_src_ipv4_addr, tvb, curr_offset, 4, ENC_NA);
             curr_offset += 4;
         }
         if (flags & 0x02000000) {
-            proto_tree_add_item(subtree, hf_nbifom_routing_rule_dst_ipv4_addr, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
+            proto_tree_add_item(subtree, hf_nbifom_routing_rule_dst_ipv4_addr, tvb, curr_offset, 4, ENC_NA);
             curr_offset += 4;
         }
         if (flags & 0x04000000) {
@@ -511,7 +509,7 @@ proto_register_nbifom(void)
               NULL, 0x0fffff, NULL, HFILL }}
     };
 
-    static int *nbifom_ett[] = {
+    static int *nbifom_subtrees[] = {
         &ett_nbifom,
         &ett_nbifom_param_contents,
         &ett_nbifom_routing_rule,
@@ -520,7 +518,7 @@ proto_register_nbifom(void)
 
     proto_nbifom = proto_register_protocol("Network-Based IP Flow Mobility", "NBIFOM", "nbifom");
     proto_register_field_array(proto_nbifom, hf, array_length(hf));
-    proto_register_subtree_array(nbifom_ett, array_length(nbifom_ett));
+    proto_register_subtree_array(nbifom_subtrees, array_length(nbifom_subtrees));
 
     register_dissector("nbifom", dissect_nbifom, proto_nbifom);
 }

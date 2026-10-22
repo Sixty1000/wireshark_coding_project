@@ -65,8 +65,8 @@
 #define SC_CM_FWD_OPEN              0x54
 #define SC_CM_GET_CONN_DATA         0x56
 #define SC_CM_SEARCH_CONN_DATA      0x57
-#define SC_CM_GET_CONN_OWNER        0x5A
 #define SC_CM_LARGE_FWD_OPEN        0x5B
+#define SC_CM_GET_CONN_OWNER        0x5A
 #define SC_CM_CONCURRENT_FWD_OPEN   0x5C
 #define SC_CM_CONCURRENT_FWD_CLOSE  0x5E
 
@@ -91,15 +91,6 @@
 #define SC_CCO_GET_STATUS            0x50
 #define SC_CCO_CHANGE_COMPLETE       0x51
 #define SC_CCO_AUDIT_CHANGE          0x52
-
-/* Process Device Diagnostics Object services */
-#define SC_PDD_RESET_DIAGNOSTICS_COUNTER              0x4B
-#define SC_PDD_GET_NEXT_ACTIVE_INSTANCE               0x4C
-#define SC_PDD_GET_ACTIVE_INSTANCES                   0x4D
-#define SC_PDD_GET_INSTANCES_BY_USER_DIAG_GRP         0x4E
-#define SC_PDD_GET_ACTIVE_INSTANCES_BY_STATUS_SIGNAL  0x4F
-#define SC_PDD_GET_INSTANCES_BY_COMPONENT             0x50
-
 
 /* CIP General status codes */
 #define CI_GRC_SUCCESS              0x00
@@ -316,10 +307,7 @@
 #define PCCC_CPU_80_TEST_SINGLE 0x08
 #define PCCC_CPU_80_TEST_DEBUG  0x09
 
-/* File Object */
-#define FILE_SAVE_PARAM_SAVE_METHOD_MASK  0x0F
-#define FILE_SAVE_PARAM_SAVE_STATUS_MASK  0x10
-#define FILE_SAVE_PARAM_RESERVED_MASK     0xE0
+
 
 /* IOI Path types */
 #define CI_SEGMENT_TYPE_MASK        0xE0
@@ -436,11 +424,6 @@ typedef struct cip_simple_request_info {
    uint32_t iConnPoint;
 
    bool hasSimpleData;
-   bool hasSymbolData;
-
-   bool hasEkey;
-   uint16_t deviceType;
-   uint16_t productCode;
 } cip_simple_request_info_t;
 
 enum cip_datatype {
@@ -469,7 +452,6 @@ enum cip_datatype {
    cip_string2,
    cip_stringi,
    cip_byte,
-   cip_byte_array,
    cip_word,
    cip_dword,
    cip_lword,
@@ -477,7 +459,8 @@ enum cip_datatype {
    cip_time_of_day,
    cip_date_and_time,
    cip_dissector_func,
-   cip_engunit,
+
+   /* Currently not supported */
    cip_stringN,
 };
 
@@ -528,9 +511,6 @@ typedef struct cip_connID_info {
 
    // Actual Packet Interval in microseconds.
    uint32_t api;
-
-   // These are used to track the previous timestamps for each direction. These are only used during a first pass calculation.
-   nstime_t timestamp;
 } cip_connID_info_t;
 
 enum cip_safety_format_type {CIP_SAFETY_BASE_FORMAT, CIP_SAFETY_EXTENDED_FORMAT};
@@ -629,9 +609,8 @@ extern void dissect_epath( tvbuff_t *tvb, packet_info *pinfo, proto_tree *path_t
 // Elementary Data Types.
 enum cip_elem_data_types {
     CIP_STRING_TYPE = 0xD0,
-    CIP_STRING2_TYPE = 0xD5,
-    CIP_STRINGN_TYPE = 0xD9,
-    CIP_SHORT_STRING_TYPE = 0xDA
+    CIP_SHORT_STRING_TYPE = 0xDA,
+    CIP_STRING2_TYPE = 0xD5
 };
 
 extern void add_cip_service_to_info_column(packet_info *pinfo, uint8_t service, const value_string* service_vals);
@@ -674,9 +653,6 @@ extern int  dissect_padded_epath_len_usint(packet_info *pinfo, proto_tree *tree,
 extern int  dissect_padded_epath_len_uint(packet_info *pinfo, proto_tree *tree, proto_item *item, tvbuff_t *tvb,
    int offset, int total_len);
 
-extern int dissect_cip_id_status(packet_info* pinfo, proto_tree* tree, proto_item* item, tvbuff_t* tvb,
-   int offset, int total_len);
-
 extern void load_cip_request_data(packet_info *pinfo, cip_simple_request_info_t *req_data);
 extern void reset_cip_request_info(cip_simple_request_info_t* req_data);
 extern bool should_dissect_cip_response(tvbuff_t *tvb, int offset, uint8_t gen_status);
@@ -695,7 +671,6 @@ extern const value_string cip_con_time_mult_vals[];
 extern const value_string cip_class_names_vals[];
 extern const value_string cip_port_number_vals[];
 extern const value_string cip_id_state_vals[];
-extern const value_string cip_con_fw_vals[];
 extern value_string_ext cip_gs_vals_ext;
 extern value_string_ext cip_cm_ext_st_vals_ext;
 extern value_string_ext cip_vendor_vals_ext;
@@ -712,7 +687,6 @@ extern int hf_attr_class_opt_service_num;
 extern int hf_attr_class_service_code;
 extern int hf_attr_class_num_class_attr;
 extern int hf_attr_class_num_inst_attr;
-extern int hf_cip_instance16;
 
 #define CLASS_ATTRIBUTE_1_NAME  "Revision"
 #define CLASS_ATTRIBUTE_2_NAME  "Max Instance"

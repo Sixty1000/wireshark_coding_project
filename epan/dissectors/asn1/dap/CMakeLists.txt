@@ -49,8 +49,4 @@ set( EXTRA_CNF
 	"${CMAKE_CURRENT_BINARY_DIR}/../x509sat/x509sat-exp.cnf"
 )
 
-set( EXPORT_DEPENDS
-	"${CMAKE_CURRENT_BINARY_DIR}/../x509sat/x509sat-exp.cnf"
-)
-
 ASN2WRS()

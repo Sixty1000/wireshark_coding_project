@@ -12,7 +12,7 @@
 #ifndef __TIME_SHIFT_H__
 #define __TIME_SHIFT_H__
 
-#include <epan/cfile.h>
+#include "cfile.h"
 #include <wsutil/nstime.h>
 
 #ifdef __cplusplus
@@ -25,7 +25,7 @@ extern "C" {
  */
 
 /**
- * @brief Parse a time string and fill in each component.
+ * Parse a time string and fill in each component.
  *
  * If year, month, and day are non-NULL a full time format "[YYYY-MM-DD] hh:mm:ss[.decimals]"
  * is allowed. Otherwise an offset format "[-][[hh:]mm:]ss[.decimals]" is allowed.
@@ -44,8 +44,7 @@ extern "C" {
 
 const char * time_string_parse(const char *time_text, int *year, int *month, int *day, bool *negative, int *hour, int *minute, long double *second);
 
-/**
- * @brief Shift all packets by an offset
+/** Shift all packets by an offset
  *
  * @param cf Capture file to shift
  * @param offset_text String representation of the offset.
@@ -54,8 +53,7 @@ const char * time_string_parse(const char *time_text, int *year, int *month, int
  */
 const char * time_shift_all(capture_file *cf, const char *offset_text);
 
-/**
- * @brief Set the time for a single packet
+/* Set the time for a single packet
  *
  * @param cf Capture file to set
  * @param packet_num Packet to set
@@ -65,8 +63,7 @@ const char * time_shift_all(capture_file *cf, const char *offset_text);
  */
 const char * time_shift_settime(capture_file *cf, unsigned packet_num, const char *time_text);
 
-/**
- * @brief Set the time for two packets and extrapolate the rest
+/* Set the time for two packets and extrapolate the rest
  *
  * @param cf Capture file to set
  * @param packet1_num First packet to set
@@ -78,8 +75,7 @@ const char * time_shift_settime(capture_file *cf, unsigned packet_num, const cha
  */
 const char * time_shift_adjtime(capture_file *cf, unsigned packet1_num, const char *time1_text, unsigned packet2_num, const char *time2_text);
 
-/**
- * @brief Reset the times for all packets
+/* Reset the times for all packets
  *
  * @param cf Capture file to set
  *

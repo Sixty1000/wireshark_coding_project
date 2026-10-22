@@ -568,7 +568,7 @@ xa6     Timing Advance Request
             tvb, curr_offset, 0, \
             "Missing Mandatory element (0x%02x) %s%s, rest of dissection is suspect", \
             EMT_iei, \
-            get_gsm_a_msg_string(pinfo->pool, EMT_pdu_type, EMT_elem_idx), \
+            get_gsm_a_msg_string(EMT_pdu_type, EMT_elem_idx), \
             (EMT_elem_name_addition == NULL) ? "" : EMT_elem_name_addition \
             ); \
     } \
@@ -698,7 +698,8 @@ de_bssgp_bvci(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t 
     curr_offset = offset;
 
     /* octet 3-4 Unstructured value */
-    proto_tree_add_item_ret_uint16(tree, hf_bssgp_bvci, tvb, curr_offset, 2, ENC_BIG_ENDIAN, &bvci);
+    bvci = tvb_get_ntohs(tvb,curr_offset);
+    proto_tree_add_item(tree, hf_bssgp_bvci, tvb, curr_offset, 2, ENC_BIG_ENDIAN);
     curr_offset+=2;
 
     if (add_string)
@@ -853,11 +854,12 @@ de_bssgp_cell_id(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t o
     /*Why doesn't this work? ( add_string will not contain RAI + CI )
      * curr_offset = curr_offset + de_cell_id(tvb, tree, curr_offset , 2, add_string, string_len);
      */
-    proto_tree_add_item_ret_uint16(tree, hf_bssgp_ci, tvb, curr_offset, 2, ENC_BIG_ENDIAN, &ci);
+    ci = tvb_get_ntohs(tvb, curr_offset);
+    proto_tree_add_item(tree, hf_bssgp_ci, tvb, curr_offset, 2, ENC_BIG_ENDIAN);
     curr_offset+=2;
     if (add_string) {
         char *str = ws_strdup_printf("%s, CI %u", add_string, ci);
-        (void) g_strlcpy(add_string, str, string_len);
+        g_strlcpy(add_string, str, string_len);
         g_free(str);
     }
 
@@ -920,7 +922,8 @@ de_bssgp_flush_action(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, u
     curr_offset = offset;
 
     /* Action value */
-    proto_tree_add_item_ret_uint8(tree, hf_bssgp_flush_action, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &oct);
+    oct = tvb_get_uint8(tvb,curr_offset);
+    proto_tree_add_item(tree, hf_bssgp_flush_action, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
     curr_offset+=1;
     if (add_string)
         snprintf(add_string, string_len, " - %s", val_to_str_const(oct, bssgp_flush_action_vals, "Reserved"));
@@ -1206,7 +1209,8 @@ de_bssgp_qos_profile(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32
     proto_tree_add_item(tree, hf_bssgp_cr_bit, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
     proto_tree_add_item(tree, hf_bssgp_t_bit, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
     proto_tree_add_item(tree, hf_bssgp_a_bit, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-    pre_item = proto_tree_add_item_ret_uint8(tree, hf_bssgp_precedence, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &precedence);
+    precedence = tvb_get_uint8(tvb, curr_offset) & 0x7;
+    pre_item = proto_tree_add_item(tree, hf_bssgp_precedence, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
     if(link_dir == P2P_DIR_DL){
         proto_item_append_text(pre_item, " %s", val_to_str_const((uint32_t)precedence, bssgp_precedence_dl, "Radio Priority Unknown(Radio priority 3)"));
     }else{
@@ -1567,7 +1571,8 @@ de_bssgp_nsei(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offs
 
     curr_offset = offset;
 
-    proto_tree_add_item_ret_uint16(tree, hf_bssgp_nsei, tvb, curr_offset, 2, ENC_BIG_ENDIAN, &nsei);
+    nsei = tvb_get_ntohs(tvb, curr_offset);
+    proto_tree_add_item(tree, hf_bssgp_nsei, tvb, curr_offset, 2, ENC_BIG_ENDIAN);
     curr_offset+=2;
 
     col_append_sep_fstr(pinfo->cinfo, COL_INFO, BSSGP_SEP, "NSEI %u", nsei);
@@ -2304,11 +2309,12 @@ de_bssgp_rim_routing_inf(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, ui
              */
             curr_offset = curr_offset + de_gmm_rai(tvb, tree, pinfo, curr_offset , 6, add_string, string_len);
             /* Octet 10 - 11 RNC-ID (or Extended RNC-ID) */
-            proto_tree_add_item_ret_uint16(tree, hf_bssgp_rnc_id, tvb, curr_offset, 2, ENC_BIG_ENDIAN, &rnc_id);
+            rnc_id = tvb_get_ntohs(tvb, curr_offset);
+            proto_tree_add_item(tree, hf_bssgp_rnc_id, tvb, curr_offset, 2, ENC_BIG_ENDIAN);
 
             if (add_string) {
                 char *str = ws_strdup_printf(" %s, RNC-ID %u", add_string, rnc_id);
-                (void) g_strlcpy(add_string, str, string_len);
+                g_strlcpy(add_string, str, string_len);
                 g_free(str);
             }
             break;
@@ -2470,7 +2476,8 @@ de_bssgp_mbms_ra_list(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint3
     curr_offset = offset;
 
     /* octet 3 Number of Routing Area Identifications Spare Spare Spare Spare */
-    proto_tree_add_item_ret_uint8(tree, hf_bssgp_mbms_num_ra_ids, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &num_ra_ids);
+    num_ra_ids = tvb_get_uint8(tvb,curr_offset) >> 4;
+    proto_tree_add_item(tree, hf_bssgp_mbms_num_ra_ids, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
 
     /* octet 4 - 11 Routing Area Identification 1 (etc)*/
     for (i = 0; i < num_ra_ids; i++) {
@@ -2758,12 +2765,13 @@ de_bssgp_rnc_identifier(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uin
      */
     curr_offset = curr_offset + de_gmm_rai(tvb, tree, pinfo, curr_offset, 6, add_string, string_len);
     /* Octet 9 - 10 RNC ID (or Extended RNC-ID or Corresponding RNC-ID) */
-    proto_tree_add_item_ret_uint16(tree, hf_bssgp_rnc_id, tvb, curr_offset, 2, ENC_BIG_ENDIAN, &rnc_id);
+    rnc_id = tvb_get_ntohs(tvb, curr_offset);
+    proto_tree_add_item(tree, hf_bssgp_rnc_id, tvb, curr_offset, 2, ENC_BIG_ENDIAN);
     curr_offset+=2;
 
     if (add_string) {
         char *str = ws_strdup_printf(" %s, RNC-ID %u", add_string, rnc_id);
-        (void) g_strlcpy(add_string, str, string_len);
+        g_strlcpy(add_string, str, string_len);
         g_free(str);
     }
 
@@ -3893,7 +3901,7 @@ value_string_ext bssgp_elem_strings_ext = VALUE_STRING_EXT_INIT(bssgp_elem_strin
 int ett_bssgp_elem[NUM_BSSGP_ELEM];
 
 
-uint16_t (* const bssgp_elem_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string, int string_len) = {
+uint16_t (*bssgp_elem_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len, char *add_string, int string_len) = {
     de_bssgp_aligment_octets,                                   /* 11.3.1   0x00 Alignment octets */
     de_bssgp_bmax_default_ms,                                   /* 11.3.2   0x01 Bmax default MS  */
     de_bssgp_bss_area_ind,                                      /* 11.3.3   0x02 BSS Area Indication */
@@ -6658,7 +6666,7 @@ static value_string_ext bssgp_msg_strings_ext = VALUE_STRING_EXT_INIT(bssgp_msg_
 
 #define NUM_BSSGP_MSG array_length(bssgp_msg_strings)
 static int ett_bssgp_msg[NUM_BSSGP_MSG];
-static void (* const bssgp_msg_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len) = {
+static void (*bssgp_msg_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len) = {
 /* 0x00 to 0x10 */
     bssgp_dl_unitdata,                  /* 10.2.1 DL-UNITDATA */
     bssgp_ul_unitdata,                  /* 10.2.2 UL-UNITDATA */
@@ -6871,7 +6879,7 @@ dissect_bssgp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
     ti = proto_tree_add_item(tree, proto_bssgp, tvb, 0, -1, ENC_NA);
     bssgp_tree = proto_item_add_subtree(ti, ett_bssgp);
 
-    /* Message type IE*/
+    /* Messge type IE*/
     msg_fcn_p = NULL;
     ett_tree = -1;
     hf_idx = -1;
@@ -7553,7 +7561,7 @@ proto_register_bssgp(void)
         { &ei_bssgp_missing_mandatory_element, { "bssgp.missing_mandatory_element", PI_PROTOCOL, PI_ERROR, "Missing Mandatory element, rest of dissection is suspect", EXPFILL }},
         { &ei_bssgp_not_dissected_yet, { "bssgp.not_dissected_yet", PI_UNDECODED, PI_WARN, "Not dissected yet", EXPFILL }},
         { &ei_bssgp_erroneous_app_container, { "bssgp.erroneous_app_container", PI_PROTOCOL, PI_WARN, "Erroneous Application Container including IEI and LI", EXPFILL }},
-        { &ei_bssgp_si_item, { "bssgp.unknown_si", PI_PROTOCOL, PI_WARN, "Unknown SI message", EXPFILL }},
+        { &ei_bssgp_si_item, { "bssgp.erroneous_app_container", PI_PROTOCOL, PI_WARN, "Unknown SI message", EXPFILL }},
         { &ei_bssgp_unknown_rim_app_id_data, { "bssgp.rim_app_id_data.unknown", PI_PROTOCOL, PI_WARN, "Unknown RIM Application Identity Data", EXPFILL }},
         { &ei_bssgp_unknown_app_container, { "bssgp.unknown_app_container", PI_PROTOCOL, PI_WARN, "Unknown Application Error Container", EXPFILL }},
         { &ei_bssgp_ra_discriminator, { "bssgp.ra_discriminator.unknown", PI_PROTOCOL, PI_WARN, "Unknown RIM Routing Address discriminator", EXPFILL }},
@@ -7577,7 +7585,7 @@ proto_register_bssgp(void)
     ett[10] = &ett_bssgp_extended_feature_bitmap;
     ett[11] = &ett_bssgp_prio_class_ind;
 
-    last_offset = NUM_INDIVIDUAL_ELEMS;
+        last_offset = NUM_INDIVIDUAL_ELEMS;
 
     for (i=0; i < NUM_BSSGP_ELEM; i++, last_offset++)
     {

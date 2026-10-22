@@ -42,7 +42,7 @@
 #define DPAUXMON_VERSION_MINOR "1"
 #define DPAUXMON_VERSION_RELEASE "0"
 
-static ws_cwstream* pcap_fp;
+FILE* pcap_fp;
 
 enum {
 	EXTCAP_BASE_OPTIONS_ENUM,
@@ -95,22 +95,17 @@ static int list_config(char *interface)
 	return EXIT_SUCCESS;
 }
 
-static int setup_dumpfile(const char* fifo, ws_cwstream** fp)
+static int setup_dumpfile(const char* fifo, FILE** fp)
 {
 	uint64_t bytes_written = 0;
 	int err;
 
 	if (!g_strcmp0(fifo, "-")) {
-		*fp = ws_cwstream_open_stdout(WS_FILE_UNCOMPRESSED, &err);
-		if (!(*fp)) {
-		    ws_warning("Error opening standard out: %s", g_strerror(errno));
-		    return EXIT_FAILURE;
-		}
-		/* XXX - Why does this not write the pcap file header to stdout? */
+		*fp = stdout;
 		return EXIT_SUCCESS;
 	}
 
-	*fp = ws_cwstream_open(fifo, WS_FILE_UNCOMPRESSED, &err);
+	*fp = fopen(fifo, "wb");
 	if (!(*fp)) {
 		ws_warning("Error creating output file: %s", g_strerror(errno));
 		return EXIT_FAILURE;
@@ -121,23 +116,23 @@ static int setup_dumpfile(const char* fifo, ws_cwstream** fp)
 		return EXIT_FAILURE;
 	}
 
-        ws_cwstream_flush(*fp, &err);
+        fflush(*fp);
 
 	return EXIT_SUCCESS;
 }
 
-static int dump_packet(ws_cwstream* fp, const char* buf, const uint32_t buflen, uint64_t ts_usecs)
+static int dump_packet(FILE* fp, const char* buf, const uint32_t buflen, uint64_t ts_usecs)
 {
 	uint64_t bytes_written = 0;
 	int err;
 	int ret = EXIT_SUCCESS;
 
-	if (!libpcap_write_packet(fp, ts_usecs / 1000000, ts_usecs % 1000000, buflen, buflen, (const uint8_t*)buf, &bytes_written, &err)) {
+	if (!libpcap_write_packet(fp, ts_usecs / 1000000, ts_usecs % 1000000, buflen, buflen, buf, &bytes_written, &err)) {
 		ws_warning("Can't write packet");
 		ret = EXIT_FAILURE;
 	}
 
-	ws_cwstream_flush(fp, &err);
+	fflush(fp);
 
 	return ret;
 }
@@ -356,7 +351,7 @@ static int handle_data(struct nl_cache_ops *unused _U_, struct genl_cmd *cmd _U_
 
 	memcpy(&packet[2], data, data_size);
 
-	if (dump_packet(pcap_fp, (const char*)packet, data_size + 2, ts) == EXIT_FAILURE)
+	if (dump_packet(pcap_fp, packet, data_size + 2, ts) == EXIT_FAILURE)
 		extcap_end_application = true;
 
 	return NL_OK;
@@ -399,7 +394,7 @@ static struct genl_ops ops = {
 	.o_ncmds = array_length(cmds),
 };
 
-static struct nl_sock *sock;
+struct nl_sock *sock;
 
 static void run_listener(const char* fifo, unsigned int interface_id)
 {
@@ -473,7 +468,7 @@ err_out:
 free_out:
 	nl_socket_free(sock);
 close_out:
-	ws_cwstream_close(pcap_fp, NULL);
+	fclose(pcap_fp);
 }
 
 int main(int argc, char *argv[])
@@ -486,11 +481,8 @@ int main(int argc, char *argv[])
 	extcap_parameters* extcap_conf = g_new0(extcap_parameters, 1);
 	char* help_header = NULL;
 
-	/* Set the program name. */
-	g_set_prgname("dpauxmon");
-
 	/* Initialize log handler early so we can have proper logging during startup. */
-	extcap_log_init(extcap_conf);
+	extcap_log_init("dpauxmon");
 
 	/*
 	 * Get credential information for later use.
@@ -501,7 +493,7 @@ int main(int argc, char *argv[])
 	 * Attempt to get the pathname of the directory containing the
 	 * executable file.
 	 */
-	configuration_init_error = configuration_init(argv[0], "wireshark");
+	configuration_init_error = configuration_init(argv[0], NULL);
 	if (configuration_init_error != NULL) {
 		ws_warning("Can't get pathname of directory containing the extcap program: %s.",
 			configuration_init_error);

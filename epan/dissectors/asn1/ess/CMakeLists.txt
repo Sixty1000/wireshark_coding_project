@@ -30,7 +30,7 @@ set( SRC_FILES
 	${EXT_ASN_FILE_LIST}
 )
 
-set( A2W_FLAGS -b -k )
+set( A2W_FLAGS -b -k -C )
 
 set( EXTRA_CNF
 	"${CMAKE_CURRENT_BINARY_DIR}/../cms/cms-exp.cnf"

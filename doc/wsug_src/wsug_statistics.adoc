@@ -79,7 +79,7 @@ Statistics:::
 A statistical summary of the capture file.
 If a display filter is set, you will see values in the _Captured_ column, and if any packets are marked, you will see values in the _Marked_ column.
 The values in the _Captured_ column will remain the same as before, while the values in the _Displayed_ column will reflect the values corresponding to the packets shown in the display.
-The values in the _Marked_ column will reflect the values corresponding to the marked packets.
+The values in the _Marked_ column will reflect the values corresponding to the marked packages.
 
 Capture file comments::
 Some capture file formats (notably pcapng) allow a text comment for the entire file.
@@ -114,7 +114,7 @@ NOTE: The resolved addresses are not updated automatically after a user changes 
 
 The `Ports` tab shows the list of service names, ports and types.
 
-Wireshark reads the entries for port mappings from the `services` service configuration files. See <<ChAppFilesConfigurationSection>> section for more information.
+Wireshark reads the entries for port mappings from the `hosts` service configuration files. See <<ChAppFilesConfigurationSection>> section for more information.
 
 .Resolved Addresses window
 image::images/ws-resolved-addr.png[{screenshot-attrs}]
@@ -169,13 +169,13 @@ The total number of PDUs of this protocol.
 
 Packets usually contain multiple protocols. As a result, more than one protocol
 will be counted for each packet. Example: In the screenshot 100% of packets
-are IP and 93.3% are TCP (which is together much more than 100%).
+are IP and 99.3% are TCP (which is together much more than 100%).
 
 Protocol layers can consist of packets that won’t contain any higher layer
 protocol, so the sum of all higher layer packets may not sum to the protocol's
 packet count. This can be caused by segments and fragments reassembled in other
 frames, TCP protocol overhead, and other undissected data. Example: In the
-screenshot 93.3% of the packets are TCP but the sum of the subprotocols
+screenshot 99.3% of the packets are TCP but the sum of the subprotocols
 (TLS, HTTP, Git, etc.) is much less.
 
 A single packet can contain the same protocol more than once. In this case, the
@@ -229,23 +229,12 @@ The btn:[Copy] button will copy the list values to the clipboard in CSV
 exported without special formatting, but this can be enabled if needed.
 
 The btn:[Follow Stream...] button will show the stream contents as described
-in <<ChAdvFollowStream>> dialog. The btn:[Graph...] button will show a
-Time Sequence graph as described in <<ChStatTCPStreamGraphs>>.
+in <<ChAdvFollowStream>> dialog. The btn:[Graph...] button will show a graph
+as described in <<ChStatIOGraphs>>.
 
-The btn:[I/O Graphs...] will open the I/O Graph dialog described in
-<<ChStatIOGraphs>>, with the selected conversations.
-
-
-btn:[Protocol] lets you choose which traffic type tabs are shown.
+btn:[Conversation Types] lets you choose which traffic type tabs are shown.
 See <<ChStatEndpoints>> for a list of endpoint types. The enabled types
-are saved in your profile settings, as well as the last opened tab.
-
-While at first sight all tabs seem to display the very same counters,
-it is not exactly the case. For example TCP and UDP will show Port columns
-when IP won't of course. Specific to TCP, a Flows column shows how many
-times data was sent unidirectionally to the other host before the latter
-started sending data or the connection was finally closed (think of 'turns'
-in the TCP Follow Stream plus 1 - if both sides sent data at least once).
+are saved in your profile settings.
 
 [TIP]
 ====
@@ -349,25 +338,14 @@ had been applied, two columns ("Total Packets") and ("Percent Filtered") show
 the number of unfiltered total packets and the percentage of packets in this filter
 display.
 
-For IPv4 endpoints only, the _Hide aggregated_ checkbox controls how the traffic
-identified from the _subnets_ file should be displayed. By default (not checked),
-the individual endpoints and the subnets are both displayed, and when checked,
-only the aggregation is. The traffic which is not matching any subnet is kept
-as it is. This checkbox is available only when the IPv4 user preference
-_Aggregate subnets in Statistics Dialogs_ is enabled.
-See <<ChAppFilesConfigurationSection>> for the _subnets_ file
-description.
-image::images/ws-stats-endpoints-ipv4aggregation.png[{screenshot-attrs}]
-
-
 The btn:[Copy] button will copy the list values to the clipboard in CSV
 (Comma Separated Values), YAML format or JSON format. The numbers are generally
 exported without special formatting, but this can be enabled if needed.
 The btn:[Map] button will show the endpoints mapped in your web browser.
 
-btn:[Protocol] lets you choose which traffic type tabs are shown. See
+btn:[Endpoint Types] lets you choose which traffic type tabs are shown. See
 <<ChStatEndpoints>> above for a list of endpoint types. The enabled
-types are saved in your profile settings, as well as the last opened tab.
+types are saved in your profile settings.
 
 [TIP]
 ====
@@ -437,20 +415,12 @@ image::images/ws-stats-iographs.png[{screenshot-attrs}]
 As shown above, this window contains a chart drawing area along with a customizable list of graphs.
 Graphs are saved in your current <<ChCustConfigProfilesSection,profile>>.
 They are divided into time intervals, which can be set as described below.
-Hovering over the graph shows the last packet number of the selected graph (or by default,
-the first enabled graph in the graphs list) in each interval except as noted below.
-If the graph was customized, instead of the packet number it will show a value computed according
-to the custom settings (ex: MAX,MIN,..).
+Hovering over the graph shows the last packet in each interval except as noted below.
 Clicking on the graph takes you to the associated packet in the packet list.
 Individual graphs can be configured using the following options:
 
 Enabled::
 Draw or don’t draw this graph.
-
-Avg over Time::
-When checked and the “Y Axis” value is one of Packets/Bytes/Bits, the displayed value is an average over time
-based on the _Interval_, instead of the raw value. The ordinary throughput is obtained when “Y Axis” is set
-to _Bits_.
 
 Graph Name::
 The name of this graph.
@@ -490,12 +460,11 @@ For MAX and MIN values, hovering and clicking the graph will show and take you t
 
 LOAD(Y Field):::
 The queue depth, i.e., number of concurrent requests or calls, in each interval expressed in Erlangs.
-Requires “Y Field” to be a relative time value, and treats it as the duration of an event which
+Requires “Y Field” be a relative time value, and treats it as the duration of an event which
 ended in the containing packet. Useful for response time fields like `smb.time`.
 
 THROUGHPUT(Y Field):::
-If the “Y Field” is a payload (as frame.len, ip.len, ipv6.plen..), this is the computed throughput based on this payload.
-The “Y Axis Factor” needs to be set accordingly to the payload unit to have a value expressed in bits unit (ex: ip.len being expressed as Bytes, set Y Axis Factor to 8).
+If the “Y Field” is a payload counted in Bytes (as frame.len, ip.len, ipv6.plen..), this is the throughput expressed in bits per second.
 
 Y Field::
 The display filter field from which to extract values for the Y axis calculations listed above.
@@ -538,9 +507,6 @@ Switch between showing the absolute time of day or the time relative from the st
 Log scale::
 Switch between a logarithmic or linear Y axis.
 
-EWMA moving average::
-Switch between the EWMA algorithm or SMA for computing the moving average.
-
 Automatic updates::
 Redraw each graph automatically.
 
@@ -569,6 +535,7 @@ You can see a list of useful keyboard shortcuts by right-clicking on the graph.
 
 [#ChStatIOGraphsMissingValues]
 
+[discrete]
 ==== Missing Values Are Zero
 
 Wireshark's I/O Graph window counts or calculates summary statistics over intervals.
@@ -585,141 +552,6 @@ the one containing the packet if the duration is longer than the interval.)
 // If you need to display zero values in a scatter plot, you can do so by making the Y Axis a calculated field.
 // For example, the calculated equivalent of “Packets” is a “COUNT FRAMES” Y Axis with a Y Field set to “frame”.
 // XXX - No longer true as of eb4e2cca69.
-
-[#ChStatPlots]
-
-=== The “Plots” Window
-
-Lets you plot display filter field values over time.
-
-.The “Plots” window
-image::images/ws-stats-plots.png[{screenshot-attrs}]
-
-As shown above, this window contains a plot drawing area along with a customizable list of plots.
-Plots are saved in your current <<ChCustConfigProfilesSection,profile>>.
-Each plot shows the value of the specified field (see Y Field below) at each point in time.
-Hovering over the plot shows the packet number of the selected plot at any given time.
-Clicking on the plot takes you to the corresponding packet in the packet list.
-You can drag the plots around with a left click and zoom on a specific area with a right click.
-
-Individual plots can be configured using the following options:
-
-Enabled::
-Draw or don’t draw this plot.
-
-Group #::
-If you don't want all plots on the same graph, you can use this field to
-group them. Each one will be shown in a distinct graph.
-
-Plot Name::
-The name of this plot.
-
-Display Filter::
-Limits the plot to packets that match this filter.
-
-Color::
-The color to use for plotting the plot’s lines or points.
-
-Style::
-How to visually represent the plot’s data, e.g., by drawing a line, circle, plus, etc.
-
-Y Field::
-The display filter field from which to extract values for the Y axis.
-
-Y Axis Factor::
-Scale the Y axis for this plot by multiplying by a constant factor, e.g. to
-present multiple plots at a similar scale.
-
-The plot as a whole can be configured using the controls under the plot list:
-
-btn:[{plus}]::
-Add a new plot.
-
-btn:[-]::
-Remove the selected plot(s).
-
-btn:[Copy]::
-Copy the selected plot(s).
-
-btn:[⌃]:: Move the selected plot(s) up in the list.
-
-btn:[⌄]:: Move the selected plot(s) down in the list.
-
-btn:[Clear]::
-Remove all plots.
-
-Automatic updates::
-Redraw each plot automatically.
-
-Time origin::
-Switch between showing the time relative to first data point and time relative to capture
-start (not available in pcapng).
-
-Log scale::
-Switch between linear and logarithmic Y axis.
-
-Crosshairs::
-Enable/disable the crosshairs cursor.
-
-Top axis::
-Show the axis scale also on top of the plot.
-
-Enable legend::
-Show a plot legend.
-
-Multiple Value Axes::
-Use multiple Y-axes for displaying data on different scales.
-
-Enable auto scroll::
-Goes automatically to the last drawn points.
-
-Add Marker::
-
-Add marker with x-axis of current mouse position.
-
-Move Marker::
-
-Moves the selected marker to a specific x-axis position provided by the user.
-
-Show Pos Marker::
-
-Show or hide the pos marker, you can then change it to the desired position by dragging and dropping it or left click.
-
-Show Differences::
-
-User can show or hide the difference between markers.
-
-Show Data Point Marker::
-
-User can show or hide data point marker.
-
-Delete Marker::
-
-Delete the selected marker.
-
-Delete All::
-
-Delete all markers, including the Pos Marker "P".
-
-The main dialog buttons along the bottom let you do the following:
-
-btn:[Help] will take you to this section of the User’s Guide.
-
-btn:[Reset] will autoscale the axes to fully display all plots.
-
-btn:[Copy] will copy values from selected plot to the clipboard in CSV
-(Comma Separated Values) format.
-
-btn:[Copy from] will let you copy plots from another profile to the current dialog.
-
-btn:[Close] will close this dialog.
-
-btn:[Save As...] will save the currently displayed plot as an image.
-
-[TIP]
-====
-You can see a list of useful keyboard shortcuts by right-clicking on the plot.
-====
 
 [#ChStatSRT]
 
@@ -772,42 +604,11 @@ btn:[Save As...] will save the response time information in various formats.
 
 btn:[Close] will close this dialog.
 
-[#ChStatDistribution]
-
-=== Distribution Statistics
-
-This window allows to write a filter and get a distribution of the values matching this filter, with their respective
-occurences and percentages. Additionally, an Entropy value (Normalized Shannon) is also computed.
-Only String, Integer, and IP addresses types are currently supported for the filter.
-
-You can launch it directly from the Statistics menu, then you can type a filter in the edit box, or by
-a right-click on some field found in the packet details tree, which will display the results for the
-given clicked field.
-
-Once the dialog is opened, you can edit the input filter and ask for a joint distribution by using the "," (comma)
-character as the separator up to 4 fields.
-For example: ip.ttl,ip.src will show all of the TTLs for each IP seen in the capture.
-
-.The “Distribution” window
-image::images/ws-stats-distribution.png[{screenshot-attrs}]
-
-[NOTE]
-====
-A high Entropy value (between 0.9 and 1) indicates that values are rather evenly distributed, while a low value (0 - 0.5)
-on the contrary indicates one or more dominant values.
-====
-
-[TIP]
-====
-You can use this feature to regularly baseline your traffic, for example filters such as `frame.protocols` or `ip.geoip.dst_summary`
-are very useful in some cases and can be compared easily with another capture.
-====
-
 [#ChStatDHCPBOOTP]
 
 === DHCP (BOOTP) Statistics
 
-The Dynamic Host Configuration Protocol (DHCP) is an option of the Bootstrap Protocol (BOOTP). It dynamically assigns IP addresses and other parameters to a DHCP client. The DHCP (BOOTP) Statistics window displays a table of the number of occurrences of a DHCP message type. The user can filter, copy or save the data into a file.
+The Dynamic Host Configuration Protocol (DHCP) is an option of the Bootstrap Protocol (BOOTP). It dynamically assigns IP addresses and other parameters to a DHCP client. The DHCP (BOOTP) Statistics window displays a table over the number of occurrences of a DHCP message type. The user can filter, copy or save the data into a file.
 
 [#ChStatNetPerfMeter]
 
@@ -872,7 +673,7 @@ a|* Advertisement by Queue
 
 === ANCP
 
-The Access Node Control Protocol (ANCP) is a TCP based protocol, which operates between an Access Node and Network Access Server. The Wireshark ANCP dissector supports the messages listed below:
+The Access Node Control Protocol (ANCP) is an TCP based protocol, which operates between an Access Node and Network Access Server. The Wireshark ANCP dissector supports the listed below messages:
 
 * Adjacency Message
 * Topology Discovery Extensions, such as Port-Up and Port-Down Messages
@@ -905,7 +706,7 @@ You might find these statistics useful for quickly examining the health of a DNS
 
 * The DNS server might have issues if you see that DNS queries have a long request-response time or, if there are too many unanswered queries.
 * DNS requests with abnormally large requests and responses might be indicative of DNS tunneling or command and control traffic.
-* An order of magnitude more DNS responses than requests and the responses are very large might indicate that the target is being attacked with a DNS-based DDoS.
+* The order of magnitude more DNS responses than requests and the responses are very large might indicate that the target is being attacked with a DNS-based DDoS.
 
 You can filter, copy or save the data into a file.
 
@@ -920,7 +721,7 @@ image::images/ws-flow-graph.png[{screenshot-attrs}]
 
 Each vertical line represents the specific host, which you can see in the top of the window.
 
-The numbers in each row at the very left of the window represent the packet time. You can change the time format in the menu:View[Time Display Format]. If you change the time format, you must relaunch the Flow Graph window to observe the time in a new format.
+The numbers in each row at the very left of the window represent the time packet. You can change the time format in the menu:View[Time Display Format]. If you change the time format, you must relaunch the Flow Graph window to observe the time in a new format.
 
 The numbers at the both ends of each arrow between hosts represent the port numbers.
 
@@ -932,7 +733,7 @@ Available controls:
 
 * btn:[Limit to display filter] filters calls just to ones matching display filter. When display filter is active before window is opened, checkbox is checked.
 * btn:[Flow type] allows limit type of protocol flows should be based on.
-* btn:[Addresses] allows switching the shown addresses in diagram.
+* btn:[Addresses] allows switch shown addresses in diagram.
 * btn:[Reset Diagram] resets view position and zoom to default state.
 * btn:[Export] allows export diagram as image in multiple different formats (PDF, PNG, BMP, JPEG and ASCII (diagram is stored with ASCII characters only)).
 
@@ -1003,7 +804,7 @@ image::images/ws-stats-http-requestsequences.png[{screenshot-attrs}]
 
 === HTTP2
 
-Hypertext Transfer Protocol version 2 (HTTP/2) allows multiplexing various HTTP requests and responses over a single connection. It uses a binary encoding which consists of frames. The HTTP/2 statistics window shows the total number of HTTP/2 frames and also provides a breakdown per frame types, such as `HEADERS`, `DATA`, and others.
+Hypertext Transfer Protocol version 2 (HTTP/2) allows multiplexing various HTTP requests and responses over a single connection. It uses a binary encoding which is consisting of frames. The HTTP/2 statistics window shows the total number of HTTP/2 frames and also provides a breakdown per frame types, such as `HEADERS`, `DATA`, and others.
 
 As HTTP/2 traffic is typically encrypted with TLS, you must configure decryption to observe HTTP/2 traffic. For more details, see the link:{wireshark-wiki-url}TLS[TLS wiki page].
 
@@ -1032,18 +833,7 @@ Throughput:: Average throughput and goodput.
 
 Round Trip Time:: Round trip time vs time or sequence number. RTT is
 based on the acknowledgment timestamp corresponding to a particular
-segment. The sampling method selects which segments are taken into
-account and how the RTT is computed:
-
-* `All Data Packets`, all segments carrying data are computed, and when
-present, SACK is ignored.
-* `All Data Packets w/ SACK`, all segments carrying data are computed,
-the RTT value is based on SACK if present.
-* `Data Packets matching RTT`, only segments with a corresponding RTT
-value in the packet list are computed.
-* `Data Packets matching Karn RTT`, only segments with a corresponding RTT
-value in the packet list are computed, ambiguous ACKs following Karn's
-definition are excluded.
+segment.
 
 Window Scaling:: Window size and outstanding bytes.
 
@@ -1055,24 +845,9 @@ The UDP Multicast Streams window shows statistics for all UDP multicast streams.
 
 With these statistics you can:
 
-* Measure the burst size for a video stream. The `Burst measurement interval` and `Burst alarm threshold`
-settings are used by the sliding window algorithm to compute how many times the threshold was hit,
-and is shown in `Burst Alarms`. The threshold may be hit several times during a same window.
-* Measure the output buffer size limit such that no packet drop will occur. The
-`Stream empty speed` and `Buffer alarm threshold` settings are used by the Leaky bucket algorithm to
-compute how many times the buffer was filled while a client was at the same time emptying it at a given,
-constant speed. When filled, the maximum seen is stored in `Max Buffer` and `Buffer Alarms` is incremented
-(note that it won't be incremented again until the buffer value first goes below the threshold, hence a
-high value of alarms when the chosen threshold is near the minimum necessary one). The `Total empty speed`
-plays the same role when considering all the flows added.
+* Measure the burst size for a video stream. This uses the sliding window algorithm.
+* Measure of the output buffer size limit, that no packet drop will occur. This uses the Leaky bucket algorithm.
 * Detect the packet loss inside the MPEG2 video stream.
-
-[NOTE]
-====
-While this dialog helps diagnosing bursts of traffic, or inappropriate small
-buffers, it doesn't bring information on traffic drops or buffer starvations.
-You can use the <<ChStatIOGraphs>> to seek such behaviors.
-====
 
 .UDP Multicast Streams window
 image::images/ws-udp-multicast-stream.png[{screenshot-attrs}]

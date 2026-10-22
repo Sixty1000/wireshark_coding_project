@@ -24,6 +24,14 @@
 #include "packet-ber.h"
 #include "packet-acse.h"
 
+#define GOOSE_PNAME  "GOOSE"
+#define GOOSE_PSNAME "GOOSE"
+#define GOOSE_PFNAME "goose"
+
+#define R_GOOSE_PNAME  "R-GOOSE"
+#define R_GOOSE_PSNAME "R-GOOSE"
+#define R_GOOSE_PFNAME "r-goose"
+
 void proto_register_goose(void);
 void proto_reg_handoff_goose(void);
 
@@ -155,7 +163,7 @@ dissect_goose(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 	asn1_ctx.private_data = wmem_alloc(pinfo->pool, GOOSE_CHK_DATA_LEN);
 	data_chk = (goose_chk_data_t *)asn1_ctx.private_data;
 
-	col_set_str(pinfo->cinfo, COL_PROTOCOL, "GOOSE");
+	col_set_str(pinfo->cinfo, COL_PROTOCOL, GOOSE_PNAME);
 	col_clear(pinfo->cinfo, COL_INFO);
 
 	tree_item = proto_tree_add_item(parent_tree, proto_goose, tvb, 0, -1, ENC_NA);
@@ -199,7 +207,7 @@ dissect_goose(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 		old_offset = offset;
 		offset = dissect_goose_GOOSEpdu(false, tvb, offset, &asn1_ctx , tree, -1);
 		if (offset == old_offset) {
-			proto_tree_add_expert_remaining(tree, pinfo, &ei_goose_zero_pdu, tvb, offset);
+			proto_tree_add_expert(tree, pinfo, &ei_goose_zero_pdu, tvb, offset, -1);
 			break;
 		}
 	}
@@ -208,7 +216,7 @@ dissect_goose(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 }
 
 /*
-* Dissect RGOOSE PDUs inside ISO 8602/X.234 CLTP ConnectionLess
+* Dissect RGOOSE PDUs inside ISO 8602/X.234 CLTP ConnecteionLess
 * Transport Protocol.
 */
 static int
@@ -227,7 +235,7 @@ dissect_rgoose(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 	asn1_ctx.private_data = wmem_alloc(pinfo->pool, GOOSE_CHK_DATA_LEN);
 	data_chk = (goose_chk_data_t *)asn1_ctx.private_data;
 
-	col_set_str(pinfo->cinfo, COL_PROTOCOL, "R-GOOSE");
+	col_set_str(pinfo->cinfo, COL_PROTOCOL, R_GOOSE_PNAME);
 	col_clear(pinfo->cinfo, COL_INFO);
 
 	item = proto_tree_add_item(parent_tree, proto_r_goose, tvb, 0, -1, ENC_NA);
@@ -340,7 +348,7 @@ dissect_rgoose(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 		old_offset = offset;
 		offset = dissect_goose_GOOSEpdu(false, tvb, offset, &asn1_ctx , tree, -1);
 		if (offset == old_offset) {
-			proto_tree_add_expert_remaining(tree, pinfo, &ei_goose_zero_pdu, tvb, offset);
+			proto_tree_add_expert(tree, pinfo, &ei_goose_zero_pdu, tvb, offset, -1);
 			break;
 		}
 	}
@@ -563,8 +571,8 @@ void proto_register_goose(void) {
 	expert_module_t* expert_goose;
 
 	/* Register protocol */
-	proto_goose = proto_register_protocol("GOOSE", "GOOSE", "goose");
-	proto_r_goose = proto_register_protocol("R-GOOSE", "R-GOOSE", "r-goose");
+	proto_goose = proto_register_protocol(GOOSE_PNAME, GOOSE_PSNAME, GOOSE_PFNAME);
+	proto_r_goose = proto_register_protocol(R_GOOSE_PNAME, R_GOOSE_PSNAME, R_GOOSE_PFNAME);
 
 	goose_handle = register_dissector("goose", dissect_goose, proto_goose);
 

@@ -19,7 +19,6 @@
 #include <epan/stat_tap_ui.h>
 #include <epan/conversation_table.h>
 #include <wsutil/cmdarg_err.h>
-#include <wsutil/str_util.h>
 #include <ui/cli/tshark-tap.h>
 
 typedef struct _endpoints_t {
@@ -42,8 +41,8 @@ endpoints_draw(void *arg)
 	printf("%s Endpoints\n", iu->type);
 	printf("Filter:%s\n", iu->filter ? iu->filter : "<No Filter>");
 
-	printf("                       | %sPackets | |  Bytes  | | Tx Packets | | Tx Bytes | | Rx Packets | | Rx Bytes |\n",
-		display_port ? " Port  | | " : "");
+	printf("                       |  %sPackets  | |  Bytes  | | Tx Packets | | Tx Bytes | | Rx Packets | | Rx Bytes |\n",
+		display_port ? "Port  ||  " : "");
 
 	max_frames = UINT_MAX;
 	do {
@@ -72,58 +71,32 @@ endpoints_draw(void *arg)
 				if (display_port) {
 					/* XXX - TODO: make port resolution configurable (through gbl_resolv_flags?) */
 					port_str = get_endpoint_port(NULL, endpoint, true);
-					printf("%-20s      %5s",
+					printf("%-20s      %5s     %6" PRIu64 "     %9" PRIu64
+					       "     %6" PRIu64 "       %9" PRIu64 "      %6"
+					       PRIu64 "       %9" PRIu64 "   \n",
 						conversation_str,
-						port_str);
-					wmem_free(NULL, port_str);
-				} else {
-					printf("%-20s",
-						conversation_str);
-				}
-				wmem_free(NULL, conversation_str);
-
-				if (!prefs.conv_machine_readable) {
-					char *rx_bytes, *tx_bytes, *total_bytes;
-					rx_bytes = format_size(endpoint->rx_bytes, FORMAT_SIZE_UNIT_BYTES, 0);
-					tx_bytes = format_size(endpoint->tx_bytes, FORMAT_SIZE_UNIT_BYTES, 0);
-					total_bytes = format_size(endpoint->tx_bytes + endpoint->rx_bytes, FORMAT_SIZE_UNIT_BYTES, 0);
-					printf("     %8" PRIu64 "   %-11s"
-						"  %8" PRIu64 "      %-11s"
-						"   %8" PRIu64 "      %-11s \n",
-						endpoint->tx_frames+endpoint->rx_frames,
-						total_bytes,
-						endpoint->tx_frames, tx_bytes,
-						endpoint->rx_frames, rx_bytes);
-					wmem_free(NULL, rx_bytes);
-					wmem_free(NULL, tx_bytes);
-					wmem_free(NULL, total_bytes);
-				} else {
-					printf("     %8" PRIu64 "   %9" PRIu64
-						"    %8" PRIu64 "      %9" PRIu64
-						"     %8" PRIu64 "      %9" PRIu64 "  \n",
+						port_str,
 						endpoint->tx_frames+endpoint->rx_frames, endpoint->tx_bytes+endpoint->rx_bytes,
 						endpoint->tx_frames, endpoint->tx_bytes,
 						endpoint->rx_frames, endpoint->rx_bytes);
+					wmem_free(NULL, port_str);
+				} else {
+					printf("%-20s      %6" PRIu64 "     %9" PRIu64
+					       "     %6" PRIu64 "       %9" PRIu64 "      %6"
+					       PRIu64 "       %9" PRIu64 "   \n",
+						/* XXX - TODO: make name resolution configurable (through gbl_resolv_flags?) */
+						conversation_str,
+						endpoint->tx_frames+endpoint->rx_frames, endpoint->tx_bytes+endpoint->rx_bytes,
+						endpoint->tx_frames, endpoint->tx_bytes,
+						endpoint->rx_frames, endpoint->rx_bytes);
+
 				}
+				wmem_free(NULL, conversation_str);
 			}
 		}
 		max_frames = last_frames;
 	} while (last_frames);
 	printf("================================================================================\n");
-}
-
-static void
-endpoints_finish(void *arg)
-{
-	if (!arg)
-		return;
-	conv_hash_t *hash = (conv_hash_t*)arg;
-	endpoints_t *iu = (endpoints_t *)hash->user_data;
-	reset_endpoint_table_data(hash);
-	if (iu) {
-		g_free((char *)iu->filter);
-		g_free(iu);
-	}
 }
 
 void init_endpoints(struct register_ct *ct, const char *filter)
@@ -136,7 +109,7 @@ void init_endpoints(struct register_ct *ct, const char *filter)
 	iu->filter = g_strdup(filter);
 	iu->hash.user_data = iu;
 
-	error_string = register_tap_listener(proto_get_protocol_filter_name(get_conversation_proto_id(ct)), &iu->hash, filter, 0, NULL, get_endpoint_packet_func(ct), endpoints_draw, endpoints_finish);
+	error_string = register_tap_listener(proto_get_protocol_filter_name(get_conversation_proto_id(ct)), &iu->hash, filter, 0, NULL, get_endpoint_packet_func(ct), endpoints_draw, NULL);
 	if (error_string) {
 		g_free(iu);
 		cmdarg_err("Couldn't register endpoint tap: %s",

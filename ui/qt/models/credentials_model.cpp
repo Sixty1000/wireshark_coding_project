@@ -88,11 +88,11 @@ QVariant CredentialsModel::data(const QModelIndex &index, int role) const
             case  COL_USERNAME:
                 if (auth->username_num > 0) {
                     if (auth->username_num != auth->num)
-                        return tr("Click to select the packet with username");
+                        return QString(tr("Click to select the packet with username"));
                     else
                         return select_msg;
                 } else {
-                    return tr("Username not available");
+                    return QString(tr("Username not available"));
                 }
                 break;
             default:
@@ -141,13 +141,13 @@ QVariant CredentialsModel::headerData(int section, Qt::Orientation orientation, 
     if (orientation == Qt::Horizontal) {
         switch (section) {
             case COL_NUM:
-                return tr("Packet No.");
+                return QString(tr("Packet No."));
             case COL_PROTO:
-                return tr("Protocol");
+                return QString(tr("Protocol"));
             case COL_USERNAME:
-                return tr("Username");
+                return QString(tr("Username"));
             case COL_INFO:
-                return tr("Additional Info");
+                return QString(tr("Additional Info"));
         }
     }
 

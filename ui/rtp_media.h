@@ -37,14 +37,12 @@ typedef int16_t SAMPLE;
 #define SAMPLE_NaN SAMPLE_MIN
 #define SAMPLE_BYTES (sizeof(SAMPLE) / sizeof(char))
 
-/**
- * @brief Represents a single dissected RTP packet captured within an RTP stream.
- */
+/* Defines an RTP packet */
 typedef struct _rtp_packet {
-    uint32_t         frame_num;     /**< Frame number of this packet in the capture file; used by the Qt UI only. */
-    struct _rtp_info *info;         /**< Pointer to the dissected RTP header and payload metadata for this packet. */
-    double           arrive_offset; /**< Arrival time offset from the start of the stream; expressed in milliseconds in the GTK UI and seconds in the Qt UI. */
-    uint8_t         *payload_data;  /**< Pointer to the raw RTP payload bytes for this packet. */
+    uint32_t frame_num;      /* Qt only */
+    struct _rtp_info *info;	/* the RTP dissected info */
+    double arrive_offset;	/* arrive offset time since the beginning of the stream as ms in GTK UI and s in Qt UI */
+    uint8_t* payload_data;
 } rtp_packet_t;
 
 /** Create a new hash table.
@@ -52,6 +50,27 @@ typedef struct _rtp_packet {
  * @return A new hash table suitable for passing to decode_rtp_packet.
  */
 GHashTable *rtp_decoder_hash_table_new(void);
+
+/** Decode payload from an RTP packet
+ * For RTP packets with dynamic payload types, the payload name, clock rate,
+ * and number of audio channels (e.g., from the SDP) can be provided.
+ * Note that the output sample rate and number of channels might not be the
+ * same as that of the input.
+ *
+ * @param payload_type Payload number
+ * @param payload_type_str Payload name, can be NULL
+ * @param payload_rate Sample rate, can be 0 for codec default
+ * @param payload_channels Audio channels, can be 0 for codec default
+ * @param payload_fmtp_map Map of format parameters for the media type
+ * @param payload_data Payload
+ * @param payload_len Length of payload
+ * @param out_buff Output audio samples.
+ * @param decoders_hash Hash table created with rtp_decoder_hash_table_new.
+ * @param channels_ptr If non-NULL, receives the number of channels in the sample.
+ * @param sample_rate_ptr If non-NULL, receives the sample rate.
+ * @return The number of decoded bytes on success, 0 on failure.
+ */
+size_t decode_rtp_packet_payload(uint8_t payload_type, const char *payload_type_str, int payload_rate, int payload_channels, wmem_map_t *payload_fmtp_map, uint8_t *payload_data, size_t payload_len, SAMPLE **out_buff, GHashTable *decoders_hash, unsigned *channels_ptr, unsigned *sample_rate_ptr);
 
 /** Decode an RTP packet
  *

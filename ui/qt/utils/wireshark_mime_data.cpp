@@ -13,7 +13,6 @@ const QString WiresharkMimeData::ColoringRulesMimeType = "application/vnd.wiresh
 const QString WiresharkMimeData::ColumnListMimeType = "application/vnd.wireshark.columnlist";
 const QString WiresharkMimeData::FilterListMimeType = "application/vnd.wireshark.filterlist";
 const QString WiresharkMimeData::DisplayFilterMimeType = "application/vnd.wireshark.displayfilter";
-const QString WiresharkMimeData::TaggingRulesMimeType = "application/vnd.wireshark.taggingrules";
 
 void WiresharkMimeData::allowPlainText()
 {
@@ -34,7 +33,7 @@ QString ToolbarEntryMimeData::element() const
 
 QString ToolbarEntryMimeData::labelText() const
 {
-    return QStringLiteral("%1").arg(element_);
+    return QString("%1").arg(element_);
 }
 
 int ToolbarEntryMimeData::position() const

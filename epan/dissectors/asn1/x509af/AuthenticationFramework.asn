@@ -140,9 +140,6 @@ CertificateList ::= SEQUENCE {
   encrypted            BIT STRING
 }
 
--- Imported from later version(WS)
-AvlSerialNumber ::= INTEGER (0..MAX)
-
 --  attribute certificate
 AttributeCertificationPath ::= SEQUENCE {
   attributeCertificate  AttributeCertificate,

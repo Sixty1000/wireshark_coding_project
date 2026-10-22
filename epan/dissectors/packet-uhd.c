@@ -156,7 +156,7 @@ dissect_uhd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
 	id = tvb_get_ntohl(tvb, 4);
 
-	col_add_str(pinfo->cinfo, COL_INFO, val_to_str(pinfo->pool, id, uhd_ids, "Unknown UHD message type '%c'"));
+	col_add_str(pinfo->cinfo, COL_INFO, val_to_str(id, uhd_ids, "Unknown UHD message type '%c'"));
 
 	if (tree == NULL)
 		return tvb_captured_length(tvb);
@@ -189,7 +189,8 @@ dissect_uhd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 		case USRP2_CTRL_ID_WRITE_THESE_I2C_VALUES_BRO:
 		case USRP2_CTRL_ID_COOL_IM_DONE_I2C_WRITE_DUDE:
 			proto_tree_add_item(uhd_tree, hf_uhd_i2c_addr, tvb, 12, 1, ENC_BIG_ENDIAN);
-			proto_tree_add_item_ret_uint8(uhd_tree, hf_uhd_i2c_bytes, tvb, 13, 1, ENC_BIG_ENDIAN, &i2c_bytes);
+			i2c_bytes = tvb_get_uint8(tvb, 13);
+			proto_tree_add_item(uhd_tree, hf_uhd_i2c_bytes, tvb, 13, 1, ENC_BIG_ENDIAN);
 			for (ind = 0; ind < i2c_bytes; ind++) {
 				proto_tree_add_item(uhd_tree, hf_uhd_i2c_data, tvb, 14 + ind, 1, ENC_BIG_ENDIAN);
 			}

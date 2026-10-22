@@ -1,4 +1,4 @@
-/* packet-dhcp-failover.c
+/* packet-dhcpfo.c
  * Routines for ISC DHCP Server failover protocol dissection
  * Copyright 2004, M. Ortega y Strupp <moys@loplof.de>
  *
@@ -403,13 +403,13 @@ get_dhcpfo_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data
 static int
 dissect_dhcpfo_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	proto_item *ti, *pi, *oi;
 	proto_tree *dhcpfo_tree = NULL, *payload_tree, *option_tree;
 	uint8_t tls_request, tls_reply;
 	uint16_t length;
 	unsigned type, serverflag;
-	unsigned poffset;
+	int poffset;
 	uint32_t xid;
 	nstime_t timex;
 	uint32_t lease_expiration_time,
@@ -709,7 +709,7 @@ dissect_dhcpfo_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 					hf_dhcpfo_relationship_name, tvb, offset,
 					option_length, ENC_ASCII, pinfo->pool, &relationship_name_str);
 				proto_item_append_text(oi,", \"%s\"",
-					format_text(pinfo->pool, (char*)relationship_name_str, option_length));
+					format_text(pinfo->pool, relationship_name_str, option_length));
 			} else {
 				/* Microsoft-style: Parse as UTF-16-LE */
 				proto_tree_add_item_ret_string(option_tree,
@@ -717,7 +717,7 @@ dissect_dhcpfo_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 					option_length, ENC_UTF_16|ENC_LITTLE_ENDIAN, pinfo->pool, &relationship_name_str);
 				/* String length is half the data length */
 				proto_item_append_text(oi,", \"%s\"",
-					format_text(pinfo->pool, (char*)relationship_name_str, option_length/2));
+					format_text(pinfo->pool, relationship_name_str, option_length/2));
 			}
 			break;
 
@@ -744,7 +744,7 @@ dissect_dhcpfo_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 					hf_dhcpfo_vendor_class, tvb, offset,
 					option_length, ENC_ASCII, pinfo->pool, &vendor_class_str);
 				proto_item_append_text(oi,", \"%s\"",
-					format_text(pinfo->pool, (char*)vendor_class_str, option_length));
+					format_text(pinfo->pool, vendor_class_str, option_length));
 			} else {
 				/* Microsoft-style: Parse as UTF-16-LE */
 				proto_tree_add_item_ret_string(option_tree,
@@ -752,7 +752,7 @@ dissect_dhcpfo_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 					option_length, ENC_UTF_16|ENC_LITTLE_ENDIAN, pinfo->pool, &vendor_class_str);
 				/* String length is half the data length */
 				proto_item_append_text(oi,", \"%s\"",
-					format_text(pinfo->pool, (char*)vendor_class_str, option_length/2));
+					format_text(pinfo->pool, vendor_class_str, option_length/2));
 			}
 			break;
 
@@ -943,7 +943,8 @@ dissect_dhcpfo_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 				break;
 			}
 
-			ti = proto_tree_add_item_ret_uint8(option_tree, hf_dhcpfo_message_digest_type, tvb, offset, 1, ENC_BIG_ENDIAN, &message_digest_type);
+			message_digest_type = tvb_get_uint8(tvb, offset);
+			ti = proto_tree_add_item(option_tree, hf_dhcpfo_message_digest_type, tvb, offset, 1, ENC_BIG_ENDIAN);
 
 			if (message_digest_type >= 1 && message_digest_type <= 2) {
 				proto_item_append_text(oi, ", %s", val_to_str_const(message_digest_type, message_digest_type_vals, "Unknown value"));
@@ -954,7 +955,7 @@ dissect_dhcpfo_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 
 			proto_tree_add_item(option_tree,
 			    hf_dhcpfo_message_digest, tvb, offset+1,
-			    option_length-1, ENC_NA);
+			    option_length-1, ENC_ASCII);
 			break;
 
 		case DHCP_FO_PD_PROTOCOL_VERSION:
@@ -972,7 +973,7 @@ dissect_dhcpfo_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 				break;
 			}
 			tls_request = tvb_get_uint8(tvb, offset);
-			proto_item_append_text(oi, ", %s", val_to_str(pinfo->pool, tls_request, tls_request_vals, "Unknown (%u)"));
+			proto_item_append_text(oi, ", %s", val_to_str(tls_request, tls_request_vals, "Unknown (%u)"));
 			proto_tree_add_item(option_tree, hf_dhcpfo_tls_request, tvb, offset, 1, ENC_BIG_ENDIAN);
 			break;
 
@@ -982,7 +983,7 @@ dissect_dhcpfo_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 				break;
 			}
 			tls_reply = tvb_get_uint8(tvb, offset);
-			proto_item_append_text(oi, ", %s", val_to_str(pinfo->pool, tls_reply, tls_reply_vals, "Unknown (%u)"));
+			proto_item_append_text(oi, ", %s", val_to_str(tls_reply, tls_reply_vals, "Unknown (%u)"));
 			proto_tree_add_item(option_tree, hf_dhcpfo_tls_reply, tvb, offset, 1, ENC_BIG_ENDIAN);
 			break;
 
@@ -1006,7 +1007,7 @@ dissect_dhcpfo_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 					hf_dhcpfo_infoblox_client_hostname, tvb, offset,
 					option_length, ENC_UTF_8, pinfo->pool, &client_hostname_str);
 				proto_item_append_text(oi,", \"%s\"",
-					format_text(pinfo->pool, (char*)client_hostname_str, option_length));
+					format_text(pinfo->pool, client_hostname_str, option_length));
 			}
 			break;
 
@@ -1017,7 +1018,7 @@ dissect_dhcpfo_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 			    option_length, ENC_UTF_16|ENC_LITTLE_ENDIAN, pinfo->pool, &client_hostname_str);
 			/* With UTF-16 the string length is half the data length, minus the zero-termination */
 			proto_item_append_text(oi,", \"%s\"",
-			    format_text(pinfo->pool, (char*)client_hostname_str, option_length/2-1));
+			    format_text(pinfo->pool, client_hostname_str, option_length/2-1));
 			break;
 
 		case DHCP_FO_PD_OPTION_32:
@@ -1027,7 +1028,7 @@ dissect_dhcpfo_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 			    option_length, ENC_UTF_16|ENC_LITTLE_ENDIAN, pinfo->pool, &ms_client_description_str);
 			/* With UTF-16 the string length is half the data length, minus the zero-termination */
 			proto_item_append_text(oi,", \"%s\"",
-			    format_text(pinfo->pool, (char*)ms_client_description_str, option_length/2-1));
+			    format_text(pinfo->pool, ms_client_description_str, option_length/2-1));
 			break;
 
 		case DHCP_FO_PD_OPTION_33:
@@ -1061,7 +1062,7 @@ dissect_dhcpfo_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 			    option_length, ENC_UTF_16|ENC_LITTLE_ENDIAN, pinfo->pool, &ms_server_name_str);
 			/* With UTF-16 the string length is half the data length, minus the zero-termination */
 			proto_item_append_text(oi,", \"%s\"",
-			    format_text(pinfo->pool, (char*)ms_server_name_str, option_length/2-1));
+			    format_text(pinfo->pool, ms_server_name_str, option_length/2-1));
 			break;
 
 		case DHCP_FO_PD_OPTION_36:
@@ -1129,7 +1130,7 @@ dissect_dhcpfo_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 			    option_length, ENC_UTF_16|ENC_LITTLE_ENDIAN, pinfo->pool, &ms_client_matched_policy_str);
 			/* With UTF-16 the string length is half the data length, minus the zero-termination */
 			proto_item_append_text(oi,", \"%s\"",
-			    format_text(pinfo->pool, (char*)ms_client_matched_policy_str, option_length/2-1));
+			    format_text(pinfo->pool, ms_client_matched_policy_str, option_length/2-1));
 			break;
 
 		case DHCP_FO_PD_OPTION_41:
@@ -1149,7 +1150,7 @@ dissect_dhcpfo_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
 		default:
 			proto_tree_add_item(option_tree,
 				hf_dhcpfo_unknown_data, tvb, offset,
-				option_length, ENC_NA);
+				option_length, ENC_ASCII);
 			break;
 		}
 

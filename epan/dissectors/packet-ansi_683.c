@@ -1002,7 +1002,9 @@ msg_config_req(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsigned len
 
     saved_offset = offset;
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN, &num_blocks);
+    num_blocks = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
 
@@ -1036,7 +1038,9 @@ msg_download_req(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsigned l
 
     saved_offset = offset;
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN, &num_blocks);
+    num_blocks = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
 
@@ -1125,7 +1129,9 @@ msg_ms_key_req(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsigned len
 
     saved_offset = offset;
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_a_key_protocol_revision, tvb, offset, 1, ENC_BIG_ENDIAN, &akey_prev);
+    akey_prev = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_a_key_protocol_revision, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset++;
 
     if (akey_prev < 0x03)
@@ -1237,7 +1243,9 @@ msg_protocap_req(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsigned l
 
     offset++;
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_number_of_capability_records, tvb, offset, 1, ENC_BIG_ENDIAN, &num_cap);
+    num_cap = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_number_of_capability_records, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
 
@@ -1354,7 +1362,9 @@ msg_validate_req(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsigned l
 
     saved_offset = offset;
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN, &num_blocks);
+    num_blocks = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
 
@@ -1468,7 +1478,9 @@ msg_puzl_download_req(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsig
 
     saved_offset = offset;
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN, &num_blocks);
+    num_blocks = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
 
@@ -1537,7 +1549,9 @@ msg_3gpd_config_req(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsigne
 
     saved_offset = offset;
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN, &num_blocks);
+    num_blocks = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
 
@@ -1573,7 +1587,9 @@ msg_3gpd_download_req(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsig
 
     saved_offset = offset;
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN, &num_blocks);
+    num_blocks = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
 
@@ -1700,7 +1716,9 @@ msg_mmd_config_req(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsigned
 
     saved_offset = offset;
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN, &num_blocks);
+    num_blocks = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
 
@@ -1736,7 +1754,9 @@ msg_mmd_download_req(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsign
 
     saved_offset = offset;
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN, &num_blocks);
+    num_blocks = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
 
@@ -1908,7 +1928,9 @@ msg_mms_config_req(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsigned
 
     saved_offset = offset;
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN, &num_blocks);
+    num_blocks = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
 
@@ -1943,7 +1965,9 @@ msg_mms_download_req(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsign
 
     saved_offset = offset;
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN, &num_blocks);
+    num_blocks = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
 
@@ -2011,7 +2035,9 @@ msg_config_rsp(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsigned len
 
     saved_offset = offset;
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN, &num_blocks);
+    num_blocks = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
 
@@ -2108,7 +2134,7 @@ msg_download_rsp(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsigned l
 
     num_blocks = tvb_get_uint8(tvb, offset);
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN, &num_blocks);
+    proto_tree_add_item(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
 
@@ -2224,7 +2250,9 @@ msg_protocap_rsp(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsigned l
     proto_tree_add_item(tree, hf_ansi_683_mobile_station_manuf_model_number, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset++;
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_num_features, tvb, offset, 1, ENC_BIG_ENDIAN, &num_feat);
+    num_feat = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_num_features, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset++;
 
     SHORT_DATA_CHECK((len - (offset - saved_offset)), (uint32_t)(num_feat * 2));
@@ -2364,7 +2392,9 @@ msg_validate_rsp(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsigned l
 
     saved_offset = offset;
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN, &num_blocks);
+    num_blocks = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
 
@@ -2482,7 +2512,9 @@ msg_puzl_download_rsp(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsig
 
     saved_offset = offset;
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN, &num_blocks);
+    num_blocks = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
 
@@ -2544,7 +2576,9 @@ msg_3gpd_config_rsp(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsigne
 
     saved_offset = offset;
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN, &num_blocks);
+    num_blocks = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
 
@@ -2631,7 +2665,9 @@ msg_3gpd_download_rsp(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsig
 
     saved_offset = offset;
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN, &num_blocks);
+    num_blocks = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
 
@@ -2711,7 +2747,9 @@ msg_ext_protocap_rsp(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsign
 
     SHORT_DATA_CHECK((len - (offset - saved_offset)), 1);
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_number_of_capability_records, tvb, offset, 1, ENC_BIG_ENDIAN, &num_recs);
+    num_recs = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_number_of_capability_records, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset++;
 
     /* minimum required length */
@@ -2781,7 +2819,9 @@ msg_mmd_config_rsp(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsigned
 
     saved_offset = offset;
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN, &num_blocks);
+    num_blocks = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
 
@@ -2861,7 +2901,9 @@ msg_mmd_download_rsp(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsign
 
     saved_offset = offset;
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN, &num_blocks);
+    num_blocks = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset++;
 
     SHORT_DATA_CHECK((len - (offset - saved_offset)), (uint32_t)(num_blocks * 2));
@@ -2985,7 +3027,9 @@ msg_mms_config_rsp(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsigned
 
     saved_offset = offset;
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN, &num_blocks);
+    num_blocks = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
 
@@ -3067,7 +3111,9 @@ msg_mms_download_rsp(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsign
 
     saved_offset = offset;
 
-    proto_tree_add_item_ret_uint8(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN, &num_blocks);
+    num_blocks = tvb_get_uint8(tvb, offset);
+
+    proto_tree_add_item(tree, hf_ansi_683_number_of_parameter_blocks, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
 
@@ -3117,7 +3163,7 @@ static const value_string for_msg_type_strings[] = {
     { 0, NULL }
 };
 #define NUM_FOR_MSGS array_length(for_msg_type_strings)
-static void (* const ansi_683_for_msg_fcn[])(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsigned len, uint32_t offset) = {
+static void (*ansi_683_for_msg_fcn[])(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsigned len, uint32_t offset) = {
     msg_config_req,             /* Configuration Request */
     msg_download_req,           /* Download Request */
     msg_ms_key_req,             /* MS Key Request */
@@ -3173,7 +3219,7 @@ static const value_string rev_msg_type_strings[] = {
     { 0, NULL }
 };
 #define NUM_REV_MSGS array_length(rev_msg_type_strings)
-static void (* const ansi_683_rev_msg_fcn[])(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsigned len, uint32_t offset) = {
+static void (*ansi_683_rev_msg_fcn[])(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, unsigned len, uint32_t offset) = {
     msg_config_rsp,             /* Configuration Response */
     msg_download_rsp,           /* Download Response */
     msg_ms_key_rsp,             /* MS Key Response */

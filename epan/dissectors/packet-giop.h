@@ -175,7 +175,7 @@ WS_DLL_PUBLIC bool get_CDR_boolean(tvbuff_t *tvb, int *offset);
 
 /* Copy a 1 octet sequence from the tvbuff
  * which represents a char, and convert
- * it to a char value.
+ * it to an char value.
  * offset is then incremented by 1, to indicate the 1 octet which
  * has been processed.
  */
@@ -276,7 +276,7 @@ WS_DLL_PUBLIC void get_CDR_interface(tvbuff_t *tvb, packet_info *pinfo,
 
 /* Copy a 4 octet sequence from the tvbuff
  * which represents a signed long value, and convert
- * it to a signed long value, taking into account byte order.
+ * it to an signed long vaule, taking into account byte order.
  * offset is first incremented so that it falls on a proper alignment
  * boundary for long values.
  * offset is then incremented by 4, to indicate the 4 octets which
@@ -353,19 +353,20 @@ WS_DLL_PUBLIC int16_t get_CDR_short(tvbuff_t *tvb, int *offset,
     bool stream_is_big_endian, int boundary);
 
 
-WS_DLL_PUBLIC void giop_add_CDR_string(wmem_allocator_t* scope, proto_tree *tree, tvbuff_t *tvb, int *offset,
+WS_DLL_PUBLIC void giop_add_CDR_string(proto_tree *tree, tvbuff_t *tvb, int *offset,
     bool stream_is_big_endian, int boundary,
     int hf);
 
 /* Copy an octet sequence from the tvbuff
  * which represents a string, and convert
- * it to a string value, taking into account byte order.
+ * it to an string value, taking into account byte order.
  * offset is first incremented so that it falls on a proper alignment
  * boundary for string values. (begins with an unsigned long LI)
  *
  * String sequence is copied to a buffer "seq".
- * Memory is allocated in scope pool and will be automatically freed.
- * offset is then incremented, to indicate the octets which
+ * Memory is allocated in packet pool and will be
+ * automatically freed once the packet dissection is finished.
+ * offset is then incremented  , to indicate the  octets which
  * have been processed.
  *
  * returns number of octets in the sequence
@@ -375,7 +376,7 @@ WS_DLL_PUBLIC void giop_add_CDR_string(wmem_allocator_t* scope, proto_tree *tree
  *
  */
 
-WS_DLL_PUBLIC uint32_t get_CDR_string(wmem_allocator_t* scope, tvbuff_t *tvb, const char **seq, int *offset,
+WS_DLL_PUBLIC uint32_t get_CDR_string(tvbuff_t *tvb, const char **seq, int *offset,
     bool stream_is_big_endian, int boundary);
 
 
@@ -501,7 +502,7 @@ WS_DLL_PUBLIC bool is_big_endian (MessageHeader * header);
 
 /*
  * get_encap_info() for any encapsulation  (eg:sequences)
- * we come across. updates the new boundary and endianness
+ * we come across. updates the new boundary and endianess
  * and *offset, and returns the sequence length.
  */
 

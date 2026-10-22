@@ -199,7 +199,6 @@ ftype_register_ipv4(void)
 		ipv4_hash,
 		is_zero,
 		NULL,
-		NULL,
 		len,
 		(FvalueSlice)slice,
 		bitwise_and,

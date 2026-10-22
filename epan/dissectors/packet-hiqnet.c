@@ -112,9 +112,9 @@ static const value_string messageidnames[] = {
     { HIQNET_PARMSETPCT_MSG, "ParamSetPercent" },
     { HIQNET_MULTPARMGET_MSG, "MultiParamGet" },
     { HIQNET_GETATTR_MSG, "GetAttributes" },
-    { HIQNET_SETATTR_MSG, "SetAttribute" }, /* Reverse engineered. Not part of the official spec. */
     { HIQNET_MULTPARMSUB_MSG, "MultiParamSubscribe" },
     { HIQNET_PARMSUBPCT_MSG, "ParamSubscribePercent" },
+    { HIQNET_SETATTR_MSG, "SetAttribute" }, /* Reverse engineered. Not part of the official spec. */
     { HIQNET_MULTPARMUNSUB_MSG, "MultiParamUnsubscribe" },
     { HIQNET_PARMSUBALL_MSG, "ParameterSubscribeAll" },
     { HIQNET_PARMUNSUBALL_MSG, "ParameterUnSubscribeAll" },
@@ -479,8 +479,9 @@ hiqnet_display_rs232netinfo(proto_tree *hiqnet_payload_tree, tvbuff_t *tvb, int 
 
 static int
 hiqnet_display_netinfo(proto_tree *hiqnet_payload_tree, tvbuff_t *tvb, int offset) {
-    uint8_t netid = 0;
-    proto_tree_add_item_ret_uint8(hiqnet_payload_tree, hf_hiqnet_netid, tvb, offset, 1, ENC_BIG_ENDIAN, &netid);
+    unsigned netid = 0;
+    netid = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item(hiqnet_payload_tree, hf_hiqnet_netid, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
     if (netid == HIQNET_TCPIP_NET) {
             offset = hiqnet_display_tcpipnetinfo(hiqnet_payload_tree, tvb, offset);
@@ -494,8 +495,9 @@ hiqnet_display_netinfo(proto_tree *hiqnet_payload_tree, tvbuff_t *tvb, int offse
 
 static int
 hiqnet_display_sernum(proto_tree *hiqnet_payload_tree, tvbuff_t *tvb, int offset) {
-    uint16_t str_len;
-    proto_tree_add_item_ret_uint16(hiqnet_payload_tree, hf_hiqnet_sernumlen, tvb, offset, 2, ENC_BIG_ENDIAN, &str_len);
+    int str_len;
+    str_len = tvb_get_ntohs(tvb, offset);
+    proto_tree_add_item(hiqnet_payload_tree, hf_hiqnet_sernumlen, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
     proto_tree_add_item(hiqnet_payload_tree, hf_hiqnet_sernum, tvb, offset, str_len, ENC_NA);
     offset += str_len;
@@ -609,8 +611,8 @@ hiqnet_display_data(proto_tree *hiqnet_payload_tree, packet_info *pinfo, tvbuff_
 static int
 dissect_hiqnet_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-    uint8_t headerlen;
-    uint32_t messagelen;
+    uint8_t headerlen = 0;
+    uint32_t messagelen = 0;
     uint16_t srcdev = 0;
     uint8_t srcvdaddr = 0;
     uint8_t srcob0addr = 0;
@@ -622,7 +624,7 @@ dissect_hiqnet_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
     uint8_t dstob1addr = 0;
     uint8_t dstob2addr = 0;
     uint16_t messageid = 0;
-    uint16_t flags;
+    uint16_t flags = 0;
     uint16_t paramcount = 0;
     uint16_t subcount = 0;
     uint16_t attrcount = 0;
@@ -648,7 +650,7 @@ dissect_hiqnet_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
     dstob2addr = tvb_get_uint8(tvb, 17);
     messageid = tvb_get_ntohs(tvb, 18);
     col_add_fstr(pinfo->cinfo, COL_INFO, "Msg: %s, Src: %u.%u.%u.%u.%u, Dst: %u.%u.%u.%u.%u",
-        val_to_str(pinfo->pool, messageid, messageidnames, "Unknown (0x%04x)"),
+        val_to_str(messageid, messageidnames, "Unknown (0x%04x)"),
         srcdev, srcvdaddr, srcob0addr, srcob1addr, srcob2addr,
         dstdev, dstvdaddr, dstob0addr, dstob1addr, dstob2addr);
 
@@ -668,12 +670,12 @@ dissect_hiqnet_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
         proto_tree *hiqnet_subscription_tree = NULL;
         proto_tree *hiqnet_object_tree = NULL;
         proto_tree *hiqnet_ifaces_tree = NULL;
-        unsigned offset = 0;
+        int offset = 0;
 
         messagelen = tvb_get_ntohl(tvb, 2);
         ti = proto_tree_add_item(tree, proto_hiqnet, tvb, 0, messagelen, ENC_NA);
         proto_item_append_text(ti, ", Msg: %s",
-            val_to_str(pinfo->pool, messageid, messageidnames, "Unknown (0x%04x)"));
+            val_to_str(messageid, messageidnames, "Unknown (0x%04x)"));
         proto_item_append_text(ti, ", Src %u.%u.%u.%u.%u",
             srcdev, srcvdaddr, srcob0addr, srcob1addr, srcob2addr);
         proto_item_append_text(ti, ", Dst: %u.%u.%u.%u.%u",
@@ -759,7 +761,8 @@ dissect_hiqnet_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
                                ett_hiqnet_flags, hiqnet_flag_fields, ENC_BIG_ENDIAN);
                 break;
             case HIQNET_MULTPARMGET_MSG :
-                proto_tree_add_item_ret_uint16(hiqnet_payload_tree, hf_hiqnet_paramcount, tvb, offset, 2, ENC_BIG_ENDIAN, &paramcount);
+                paramcount = tvb_get_ntohs(tvb, offset);
+                proto_tree_add_item(hiqnet_payload_tree, hf_hiqnet_paramcount, tvb, offset, 2, ENC_BIG_ENDIAN);
                 offset += 2;
                 while (paramcount > 0) {
                     hiqnet_parameter_tree = proto_tree_add_subtree(
@@ -773,7 +776,8 @@ dissect_hiqnet_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
                 }
                 break;
             case HIQNET_MULTPARMSET_MSG :
-                proto_tree_add_item_ret_uint16(hiqnet_payload_tree, hf_hiqnet_paramcount, tvb, offset, 2, ENC_BIG_ENDIAN, &paramcount);
+                paramcount = tvb_get_ntohs(tvb, offset);
+                proto_tree_add_item(hiqnet_payload_tree, hf_hiqnet_paramcount, tvb, offset, 2, ENC_BIG_ENDIAN);
                 offset += 2;
                 while (paramcount > 0) {
                     hiqnet_parameter_tree = proto_tree_add_subtree(
@@ -807,7 +811,8 @@ dissect_hiqnet_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
                 break;
             case HIQNET_MULTPARMSUB_MSG :
                 /* FIXME: Not tested, straight from the spec, never occurred with the devices I own */
-                proto_tree_add_item_ret_uint16(hiqnet_payload_tree, hf_hiqnet_subcount, tvb, offset, 2, ENC_BIG_ENDIAN, &subcount);
+                subcount = tvb_get_ntohs(tvb, offset);
+                proto_tree_add_item(hiqnet_payload_tree, hf_hiqnet_subcount, tvb, offset, 2, ENC_BIG_ENDIAN);
                 offset += 2;
                 while (subcount > 0) {
                     hiqnet_subscription_tree = proto_tree_add_subtree(
@@ -820,7 +825,8 @@ dissect_hiqnet_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
                 proto_tree_add_item(hiqnet_payload_tree, hf_hiqnet_devaddr, tvb, offset, 2, ENC_BIG_ENDIAN);
                 break;
             case HIQNET_GETATTR_MSG :
-                proto_tree_add_item_ret_uint16(hiqnet_payload_tree, hf_hiqnet_attrcount, tvb, offset, 2, ENC_BIG_ENDIAN, &attrcount);
+                attrcount = tvb_get_ntohs(tvb, offset);
+                proto_tree_add_item(hiqnet_payload_tree, hf_hiqnet_attrcount, tvb, offset, 2, ENC_BIG_ENDIAN);
                 offset += 2;
                 if (flags & HIQNET_INFO_FLAG) { /* This not a request */
                     while (attrcount > 0) {
@@ -939,7 +945,8 @@ dissect_hiqnet_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
                 break;
             case HIQNET_MULTPARMUNSUB_MSG :
                 /* FIXME: Not tested, straight from the spec, never occurred with the devices I own */
-                proto_tree_add_item_ret_uint16(hiqnet_payload_tree, hf_hiqnet_subcount, tvb, offset, 2, ENC_BIG_ENDIAN, &subcount);
+                subcount = tvb_get_ntohs(tvb, offset);
+                proto_tree_add_item(hiqnet_payload_tree, hf_hiqnet_subcount, tvb, offset, 2, ENC_BIG_ENDIAN);
                 offset += 2;
                 while (subcount > 0) {
                     hiqnet_subscription_tree = proto_tree_add_subtree(
@@ -953,14 +960,16 @@ dissect_hiqnet_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
                 break;
             case HIQNET_MULTOBJPARMSET_MSG :
                 /* FIXME: Not tested, straight from the spec, never occurred with the devices I own */
-                proto_tree_add_item_ret_uint16(hiqnet_payload_tree, hf_hiqnet_objcount, tvb, offset, 2, ENC_BIG_ENDIAN, &objcount);
+                objcount = tvb_get_ntohs(tvb, offset);
+                proto_tree_add_item(hiqnet_payload_tree, hf_hiqnet_objcount, tvb, offset, 2, ENC_BIG_ENDIAN);
                 offset += 2;
                 while (objcount > 0) {
                     hiqnet_object_tree = proto_tree_add_subtree(
                         hiqnet_payload_tree, tvb, offset, -1, ett_hiqnet, NULL, "Object");
                     hiqnet_display_vdobjectaddr(hiqnet_header_tree, hf_hiqnet_vdobject, tvb, offset);
                     offset += 4;
-                    proto_tree_add_item_ret_uint16(hiqnet_object_tree, hf_hiqnet_paramcount, tvb, offset, 2, ENC_BIG_ENDIAN, &paramcount);
+                    paramcount = tvb_get_ntohs(tvb, offset);
+                    proto_tree_add_item(hiqnet_object_tree, hf_hiqnet_paramcount, tvb, offset, 2, ENC_BIG_ENDIAN);
                     offset += 2;
                     while (paramcount > 0) {
                         hiqnet_parameter_tree = proto_tree_add_subtree(
@@ -975,7 +984,8 @@ dissect_hiqnet_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
                 break;
             case HIQNET_PARMSETPCT_MSG :
                 /* FIXME: Not tested, straight from the spec, never occurred with the devices I own */
-                proto_tree_add_item_ret_uint16(hiqnet_payload_tree, hf_hiqnet_paramcount, tvb, offset, 2, ENC_BIG_ENDIAN, &paramcount);
+                paramcount = tvb_get_ntohs(tvb, offset);
+                proto_tree_add_item(hiqnet_payload_tree, hf_hiqnet_paramcount, tvb, offset, 2, ENC_BIG_ENDIAN);
                 offset += 2;
                 while (paramcount > 0) {
                     hiqnet_parameter_tree = proto_tree_add_subtree(
@@ -990,7 +1000,8 @@ dissect_hiqnet_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
                 break;
             case HIQNET_PARMSUBPCT_MSG :
                 /* FIXME: Not tested, straight from the spec, never occurred with the devices I own */
-                proto_tree_add_item_ret_uint16(hiqnet_payload_tree, hf_hiqnet_subcount, tvb, offset, 2, ENC_BIG_ENDIAN, &subcount);
+                subcount = tvb_get_ntohs(tvb, offset);
+                proto_tree_add_item(hiqnet_payload_tree, hf_hiqnet_subcount, tvb, offset, 2, ENC_BIG_ENDIAN);
                 offset += 2;
                 while (subcount > 0) {
                     hiqnet_subscription_tree = proto_tree_add_subtree(
@@ -1003,7 +1014,8 @@ dissect_hiqnet_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
                 /* FIXME: Not tested, straight from the spec, never occurred with the devices I own */
                 offset = hiqnet_display_sernum(hiqnet_payload_tree, tvb, offset);
                 if (flags & HIQNET_INFO_FLAG) { /* This is not a request */
-                    proto_tree_add_item_ret_uint16(hiqnet_payload_tree, hf_hiqnet_ifacecount, tvb, offset, 2, ENC_BIG_ENDIAN, &ifacecount);
+                    ifacecount = tvb_get_ntohs(tvb, offset);
+                    proto_tree_add_item(hiqnet_payload_tree, hf_hiqnet_ifacecount, tvb, offset, 2, ENC_BIG_ENDIAN);
                     offset += 2;
                     while (ifacecount > 0) {
                         hiqnet_ifaces_tree = proto_tree_add_subtree(
@@ -1026,7 +1038,8 @@ dissect_hiqnet_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
                 hiqnet_display_netinfo(hiqnet_payload_tree, tvb, offset);
                 break;
             case HIQNET_SETATTR_MSG : /* Reverse engineered. Not part of the official spec. */
-                proto_tree_add_item_ret_uint16(hiqnet_payload_tree, hf_hiqnet_attrcount, tvb, offset, 2, ENC_BIG_ENDIAN, &attrcount);
+                attrcount = tvb_get_ntohs(tvb, offset);
+                proto_tree_add_item(hiqnet_payload_tree, hf_hiqnet_attrcount, tvb, offset, 2, ENC_BIG_ENDIAN);
                 offset += 2;
                 while (attrcount > 0) {
                     hiqnet_attribute_tree = proto_tree_add_subtree(
@@ -1077,12 +1090,16 @@ dissect_hiqnet_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
     tvbuff_t *next_tvb;
     int       offset_before;
     unsigned  plen;
+    unsigned  captured_length;
 
     /* loop on (possibly multiple) hiqnet PDUs in UDP payload */
     while (tvb_reported_length_remaining(tvb, offset) > 0) {
         plen = get_hiqnet_pdu_len(pinfo, tvb, offset, NULL);
+        captured_length = tvb_captured_length_remaining(tvb, offset);
 
-        next_tvb = tvb_new_subset_length(tvb, offset, plen);
+        if (captured_length > plen)
+            captured_length = plen;
+        next_tvb = tvb_new_subset_length_caplen(tvb, offset, captured_length, plen);
 
         dissect_hiqnet_pdu(next_tvb, pinfo, tree, data);
 

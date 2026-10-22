@@ -561,12 +561,12 @@ add_uint(dbus_packet_t *packet, int hf) {
 	return value;
 }
 
-static const char *
-add_dbus_string(dbus_packet_t *packet, int hf, unsigned uint_length) {
-	const char *string;
+static const uint8_t *
+add_dbus_string(dbus_packet_t *packet, int hf, int uint_length) {
+	const uint8_t *string;
 	int start_offset = ptvcursor_current_offset(packet->cursor);
 	proto_item *pi = ptvcursor_add_ret_string(packet->cursor, hf, uint_length,
-			packet->enc | ENC_UTF_8, packet->pinfo->pool, (const uint8_t**)&string);
+			packet->enc | ENC_UTF_8, packet->pinfo->pool, &string);
 	int item_length = ptvcursor_current_offset(packet->cursor) - start_offset;
 	uint8_t term_byte = tvb_get_uint8(ptvcursor_tvbuff(packet->cursor), ptvcursor_current_offset(packet->cursor));
 	proto_item_set_len(pi, item_length + 1);
@@ -1403,7 +1403,7 @@ dissect_dbus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
 	proto_item *pi = proto_tree_add_protocol_format(tree, proto_dbus, tvb, 0, -1, "D-Bus");
 	proto_tree *dbus_tree = proto_item_add_subtree(pi, ett_dbus);
 
-	unsigned offset = 0;
+	int offset = 0;
 	packet.cursor = ptvcursor_new(pinfo->pool, dbus_tree, tvb, offset);
 
 	(void)(dissect_dbus_header(&packet) ||
@@ -1421,23 +1421,23 @@ dissect_dbus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
 static unsigned
 get_dbus_message_len(packet_info *pinfo _U_, tvbuff_t *tvb,
                      int offset, void *data _U_) {
+	uint32_t (*get_uint32)(tvbuff_t *, const int);
 
-	unsigned encoding;
 	uint32_t len_body, len_hdr;
 
 	switch (tvb_get_uint8(tvb, offset)) {
 		case 'l':
-			encoding = ENC_LITTLE_ENDIAN;
+			get_uint32 = tvb_get_letohl;
 			break;
 		case 'B':
 		default:
-			encoding = ENC_BIG_ENDIAN;
+			get_uint32 = tvb_get_ntohl;
 			break;
 	}
 
-	len_hdr = DBUS_HEADER_LEN + tvb_get_uint32(tvb, offset + 12, encoding);
+	len_hdr = DBUS_HEADER_LEN + get_uint32(tvb, offset + 12);
 	len_hdr = WS_ROUNDUP_8(len_hdr);
-	len_body = tvb_get_uint32(tvb, offset + 4, encoding);
+	len_body = get_uint32(tvb, offset + 4);
 
 	return len_hdr + len_body;
 }

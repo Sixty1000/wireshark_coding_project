@@ -165,6 +165,7 @@ save_command(uint32_t cmd, uint32_t arg0, uint32_t arg1, uint32_t data_length,
         interface_id = 0;
 
     if (proto == proto_usb) {
+        urb = (urb_info_t *) data;
         DISSECTOR_ASSERT(urb);
 
         direction = urb->direction;
@@ -248,8 +249,7 @@ save_command(uint32_t cmd, uint32_t arg0, uint32_t arg1, uint32_t data_length,
     else
         command_data->completed_in_frame = max_in_frame;
     command_data->reassemble_data_length = 0;
-    /* Lazy allocation: allocate only when payload bytes are actually copied. */
-    command_data->reassemble_data = NULL;
+    command_data->reassemble_data = (uint8_t *) wmem_alloc(wmem_file_scope(), command_data->data_length);
     command_data->reassemble_error_in_frame = 0;
 
     key[3].length = 1;
@@ -257,7 +257,6 @@ save_command(uint32_t cmd, uint32_t arg0, uint32_t arg1, uint32_t data_length,
     key[4].length = 0;
     key[4].key = NULL;
     wmem_tree_insert32_array(command_info, key, command_data);
-
 
     if (direction == P2P_DIR_SENT)
         if (command_data->command == A_CLSE)
@@ -333,7 +332,7 @@ dissect_adb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     proto_item      *crc_item;
     proto_tree      *crc_tree = NULL;
     proto_item      *sub_item;
-    unsigned         offset = 0;
+    int              offset = 0;
     uint32_t         command;
     uint32_t         arg0;
     uint32_t         arg1;
@@ -498,7 +497,8 @@ dissect_adb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     }
 
     if (is_command) {
-        proto_tree_add_item_ret_uint(main_tree, hf_command, tvb, offset, 4, ENC_LITTLE_ENDIAN, &command);
+        proto_tree_add_item(main_tree, hf_command, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+        command = tvb_get_letohl(tvb, offset);
         offset += 4;
 
         col_append_str(pinfo->cinfo, COL_INFO, val_to_str_const(command, command_vals, "Unknown command"));
@@ -576,6 +576,7 @@ dissect_adb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
             save_command(command, arg0, arg1, data_length, crc32, service_data, proto, data, pinfo, &service_data, &command_data);
         offset += 4;
     }
+
     if (!pinfo->fd->visited && command_data) {
             if (command_data->command_in_frame != frame_number) {
                 is_command = false;
@@ -614,27 +615,21 @@ dissect_adb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     }
 
 
-
     if (tvb_captured_length_remaining(tvb, offset) > 0 && (!is_command || data_length > 0)) {
         uint32_t crc = 0;
         uint32_t i_offset;
-        uint32_t reported_payload_remaining = (uint32_t)tvb_reported_length_remaining(tvb, offset);
 
         /* First pass: store message payload (usually a single packet, but
          * potentially multiple fragments). */
         if (!pinfo->fd->visited && command_data && command_data->reassemble_data_length < command_data->data_length) {
             unsigned chunklen = tvb_captured_length_remaining(tvb, offset);
-            uint32_t remaining = command_data->data_length - command_data->reassemble_data_length;
-
-            if (chunklen > remaining) {
-                chunklen = remaining;
-                /* Payload mismatch detected - mark reassembly error */
+            if (chunklen > command_data->data_length - command_data->reassemble_data_length) {
+                chunklen = command_data->data_length - command_data->reassemble_data_length;
+                /* This should never happen, but when it does, then either we
+                 * have a malicious application OR we failed to correctly match
+                 * this payload with a message header. */
                 command_data->reassemble_error_in_frame = frame_number;
             }
-
-            command_data->reassemble_data = (uint8_t *) wmem_realloc(wmem_file_scope(),
-                                                                     command_data->reassemble_data,
-                                                                     command_data->reassemble_data_length + chunklen);
 
             tvb_memcpy(tvb, command_data->reassemble_data + command_data->reassemble_data_length, offset, chunklen);
             command_data->reassemble_data_length += chunklen;
@@ -645,10 +640,10 @@ dissect_adb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
         if (command_data && frame_number == command_data->reassemble_error_in_frame) {
             /* data reassembly error was detected in the first pass. */
-            proto_tree_add_expert_remaining(main_tree, pinfo, &ei_invalid_data, tvb, offset);
+            proto_tree_add_expert(main_tree, pinfo, &ei_invalid_data, tvb, offset, -1);
         }
 
-        if ((!pinfo->fd->visited && command_data && command_data->reassemble_data_length < command_data->data_length) || data_length > (uint32_t) tvb_captured_length_remaining(tvb, offset) || data_length > reported_payload_remaining) { /* need reassemble */
+        if ((!pinfo->fd->visited && command_data && command_data->reassemble_data_length < command_data->data_length) || data_length > (uint32_t) tvb_captured_length_remaining(tvb, offset)) { /* need reassemble */
             proto_tree_add_item(main_tree, hf_data_fragment, tvb, offset, -1, ENC_NA);
             col_append_str(pinfo->cinfo, COL_INFO, "Data Fragment");
             offset = tvb_captured_length(tvb);
@@ -687,10 +682,10 @@ dissect_adb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
                 crc += tvb_get_uint8(tvb, offset + i_offset);
 
             if (crc32 > 0 && crc32 != crc)
-                proto_tree_add_expert_remaining(crc_tree, pinfo, &ei_invalid_crc, tvb, offset);
+                proto_tree_add_expert(crc_tree, pinfo, &ei_invalid_crc, tvb, offset, -1);
 
             if (is_service) {
-                proto_tree_add_item(main_tree, hf_service, tvb, offset, -1, ENC_ASCII);
+                proto_tree_add_item(main_tree, hf_service, tvb, offset, -1, ENC_ASCII | ENC_NA);
                 if (!pinfo->fd->visited && service_data) {
                     service_data->service = (char *) tvb_get_stringz_enc(wmem_file_scope(), tvb, offset, NULL, ENC_ASCII);
                 }

@@ -9,16 +9,10 @@
 #ifndef __W_BTSNOOP_H__
 #define __W_BTSNOOP_H__
 
+#include <glib.h>
+#include "ws_symbol_export.h"
 #include "wtap.h"
 
-/**
- * @brief Open a BTSnoop file.
- *
- * @param wth Pointer to the wtap structure.
- * @param err Error code if an error occurs.
- * @param err_info Error information if an error occurs.
- * @return wtap_open_return_val The result of opening the file.
- */
 wtap_open_return_val btsnoop_open(wtap *wth, int *err, char **err_info);
 
 #endif

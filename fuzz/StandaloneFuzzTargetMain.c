@@ -106,10 +106,7 @@ Software.
 
 int main(int argc, char **argv) {
   fprintf(stderr, "StandaloneFuzzTargetMain: running %d inputs\n", argc - 1);
-  int ret = LLVMFuzzerInitialize(&argc, &argv);
-  if (ret != 0)
-    return ret;
-
+  LLVMFuzzerInitialize(&argc, &argv);
   for (int i = 1; i < argc; i++) {
     fprintf(stderr, "Running: %s\n", argv[i]);
     FILE *f = ws_fopen(argv[i], "r");
@@ -126,6 +123,4 @@ int main(int argc, char **argv) {
     g_free(buf);
     fprintf(stderr, "Done:    %s: (%zd bytes)\n", argv[i], n_read);
   }
-
-  return 0;
 }

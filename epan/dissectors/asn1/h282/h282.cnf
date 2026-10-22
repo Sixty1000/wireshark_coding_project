@@ -11,10 +11,6 @@ ALIGNED
 IrisContinuous
 #.END
 
-#.USE_VALS_EXT
-DeviceAttribute
-#.END
-
 #.PDU
 RDCPDU
 NonCollapsingCapabilities

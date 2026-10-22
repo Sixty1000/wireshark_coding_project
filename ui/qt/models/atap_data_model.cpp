@@ -28,11 +28,9 @@
 #include <QWidget>
 #include <QDateTime>
 
-static QString formatString(qlonglong value, bool machineReadable)
+static QString formatString(qlonglong value)
 {
-    return machineReadable ?
-        QString::number(value) :
-        QLocale().formattedDataSize(value, 0, QLocale::DataSizeSIFormat);
+    return QLocale().formattedDataSize(value, 0, QLocale::DataSizeSIFormat);
 }
 
 ATapDataModel::ATapDataModel(dataModelType type, int protoId, QString filter, QObject *parent):
@@ -46,7 +44,6 @@ ATapDataModel::ATapDataModel(dataModelType type, int protoId, QString filter, QO
     _resolveNames = false;
     _absoluteTime = false;
     _nanoseconds = false;
-    _machineReadable = false;
 
     _protoId = protoId;
     _filter = filter;
@@ -56,8 +53,6 @@ ATapDataModel::ATapDataModel(dataModelType type, int protoId, QString filter, QO
 
     _type = type;
     _disableTap = true;
-
-    _tapFlags = TL_IGNORE_DISPLAY_FILTER+TL_IP_AGGREGATION_ORI;
 
     QString _tap(proto_get_protocol_filter_name(protoId));
 }
@@ -117,7 +112,7 @@ bool ATapDataModel::enableTap()
     /* The errorString is ignored. If this is not working, there is nothing really the user may do about
      * it, so the error is only interesting to the developer.*/
     GString * errorString = register_tap_listener(tap().toUtf8().constData(), hash(), _filter.toUtf8().constData(),
-        _tapFlags, &ATapDataModel::tapReset, conversationPacketHandler(), &ATapDataModel::tapDraw, nullptr);
+        TL_IGNORE_DISPLAY_FILTER, &ATapDataModel::tapReset, conversationPacketHandler(), &ATapDataModel::tapDraw, nullptr);
     if (errorString && errorString->len > 0) {
         g_string_free(errorString, TRUE);
         _disableTap = true;
@@ -140,43 +135,6 @@ void ATapDataModel::disableTap()
         remove_tap_listener(hash());
     _disableTap = true;
     emit tapListenerChanged(false);
-}
-
-void ATapDataModel::updateFlags(unsigned flag)
-{
-
-    if(flag==0) {
-        _tapFlags |= TL_IP_AGGREGATION_ORI;
-    }
-    else {
-        _tapFlags &= ~(TL_IP_AGGREGATION_NULL|
-                       TL_IP_AGGREGATION_ORI|
-                       TL_IP_AGGREGATION_RESERVED);
-    }
-    set_tap_flags(&hash_, _tapFlags);
-}
-
-void ATapDataModel::setMachineReadable(bool machineReadable)
-{
-    if (_machineReadable == machineReadable)
-        return;
-
-    _machineReadable = machineReadable;
-    if (rowCount() > 0) {
-        dataChanged(index(0, 0), index(rowCount() - 1, columnCount() - 1));
-    }
-}
-
-void ATapDataModel::limitToDisplayFilter(bool limit)
-{
-
-    if(limit) {
-        _tapFlags |= TL_LIMIT_TO_DISPLAY_FILTER;
-    }
-    else {
-        _tapFlags &= ~(TL_LIMIT_TO_DISPLAY_FILTER);
-    }
-    set_tap_flags(&hash_, _tapFlags);
 }
 
 int ATapDataModel::rowCount(const QModelIndex &parent) const
@@ -254,9 +212,9 @@ void ATapDataModel::updateData(GArray * newData)
     if (_disableTap)
         return;
 
-    emit layoutAboutToBeChanged();
+    beginResetModel();
     storage_ = newData;
-    emit layoutChanged();
+    endResetModel();
 
     if (_type == ATapDataModel::DATAMODEL_CONVERSATION)
         ((ConversationDataModel *)(this))->doDataUpdate();
@@ -265,6 +223,16 @@ void ATapDataModel::updateData(GArray * newData)
 bool ATapDataModel::resolveNames() const
 {
     return _resolveNames;
+}
+
+void ATapDataModel::setResolveNames(bool resolve)
+{
+    if (_resolveNames == resolve)
+        return;
+
+    beginResetModel();
+    _resolveNames = resolve;
+    endResetModel();
 }
 
 bool ATapDataModel::allowsNameResolution() const
@@ -291,6 +259,26 @@ bool ATapDataModel::allowsNameResolution() const
         return true;
 
     return false;
+}
+
+void ATapDataModel::useAbsoluteTime(bool absolute)
+{
+    if (absolute == _absoluteTime)
+        return;
+
+    beginResetModel();
+    _absoluteTime = absolute;
+    endResetModel();
+}
+
+void ATapDataModel::useNanosecondTimestamps(bool nanoseconds)
+{
+    if (_nanoseconds == nanoseconds)
+        return;
+
+    beginResetModel();
+    _nanoseconds = nanoseconds;
+    endResetModel();
 }
 
 void ATapDataModel::setFilter(QString filter)
@@ -325,10 +313,10 @@ bool ATapDataModel::portsAreHidden() const
     return (get_conversation_hide_ports(registerTable()));
 }
 
-bool ATapDataModel::isFilterApplied() const
+bool ATapDataModel::showTotalColumn() const
 {
     /* Implemented to ensure future changes may be done more easily */
-    return _tapFlags & TL_LIMIT_TO_DISPLAY_FILTER;
+    return _filter.length() > 0;
 }
 
 EndpointDataModel::EndpointDataModel(int protoId, QString filter, QObject *parent) :
@@ -446,29 +434,23 @@ QVariant EndpointDataModel::data(const QModelIndex &idx, int role) const
             }
         case ENDP_COLUMN_PACKETS:
         {
-            qlonglong packets = (_tapFlags & TL_LIMIT_TO_DISPLAY_FILTER) ?
-                                (qlonglong)(item->tx_frames + item->rx_frames) :
-                                (qlonglong)(item->tx_frames_total + item->rx_frames_total);
-            return role == Qt::DisplayRole ? QStringLiteral("%L1").arg(packets) : (QVariant)packets;
+            qlonglong packets = (qlonglong)(item->tx_frames + item->rx_frames);
+            return role == Qt::DisplayRole ? QString("%L1").arg(packets) : (QVariant)packets;
         }
         case ENDP_COLUMN_BYTES:
-        {
-            qlonglong bytes = (_tapFlags & TL_LIMIT_TO_DISPLAY_FILTER) ?
-                              (qlonglong)(item->tx_bytes + item->rx_bytes) :
-                              (qlonglong)(item->tx_bytes_total + item->rx_bytes_total);
-            return role == Qt::DisplayRole ? formatString(bytes, _machineReadable) : (QVariant)bytes;
-        }
+            return role == Qt::DisplayRole ? formatString((qlonglong)(item->tx_bytes + item->rx_bytes)) :
+                QVariant((qlonglong)(item->tx_bytes + item->rx_bytes));
         case ENDP_COLUMN_PACKETS_TOTAL:
         {
             qlonglong packets = 0;
-            if (isFilterApplied())
+            if (showTotalColumn())
                 packets = item->tx_frames_total + item->rx_frames_total;
-            return role == Qt::DisplayRole ? QStringLiteral("%L1").arg(packets) : (QVariant)packets;
+            return role == Qt::DisplayRole ? QString("%L1").arg(packets) : (QVariant)packets;
         }
         case ENDP_COLUMN_BYTES_TOTAL:
         {
             double percent = 0;
-            if (isFilterApplied()) {
+            if (showTotalColumn()) {
                 qlonglong totalPackets = (qlonglong)(item->tx_frames_total + item->rx_frames_total);
                 qlonglong packets = (qlonglong)(item->tx_frames + item->rx_frames);
                 percent = totalPackets == 0 ? 0 : (double) packets * 100 / (double) totalPackets;
@@ -476,39 +458,19 @@ QVariant EndpointDataModel::data(const QModelIndex &idx, int role) const
             QString rounded = QString::number(percent, 'f', 2);
             /* Qt guarantees that this roundtrip conversion compares equally,
              * so filtering with equality will work as expected.
-             * Perhaps the UNFORMATTED_DISPLAYDATA role should be split
+             * Perhaps the UNFORMATTED_DISPLAYDATA role shoud be split
              * into one used for raw data export, and one used for comparisons.
              */
             return role == Qt::DisplayRole ? rounded + "%" : QVariant(rounded.toDouble());
         }
         case ENDP_COLUMN_PKT_AB:
-        {
-            qlonglong packets = (_tapFlags & TL_LIMIT_TO_DISPLAY_FILTER) ?
-                                (qlonglong)(item->tx_frames) :
-                                (qlonglong)(item->tx_frames_total);
-            return role == Qt::DisplayRole ? QStringLiteral("%L1").arg(packets) : (QVariant)packets;
-        }
+            return role == Qt::DisplayRole ? QString("%L1").arg((qlonglong)item->tx_frames) : QVariant((qlonglong) item->tx_frames);
         case ENDP_COLUMN_BYTES_AB:
-        {
-            qlonglong bytes = (_tapFlags & TL_LIMIT_TO_DISPLAY_FILTER) ?
-                              (qlonglong)(item->tx_bytes) :
-                              (qlonglong)(item->tx_bytes_total);
-            return role == Qt::DisplayRole ? formatString(bytes, _machineReadable) : (QVariant)bytes;
-        }
+            return role == Qt::DisplayRole ? formatString((qlonglong)item->tx_bytes) : QVariant((qlonglong)item->tx_bytes);
         case ENDP_COLUMN_PKT_BA:
-        {
-            qlonglong packets = (_tapFlags & TL_LIMIT_TO_DISPLAY_FILTER) ?
-                                (qlonglong)(item->rx_frames) :
-                                (qlonglong)(item->rx_frames_total);
-            return role == Qt::DisplayRole ? QStringLiteral("%L1").arg(packets) : (QVariant)packets;
-        }
+            return role == Qt::DisplayRole ? QString("%L1").arg((qlonglong)item->rx_frames) : QVariant((qlonglong) item->rx_frames);
         case ENDP_COLUMN_BYTES_BA:
-        {
-            qlonglong bytes = (_tapFlags & TL_LIMIT_TO_DISPLAY_FILTER) ?
-                              (qlonglong)(item->rx_bytes) :
-                              (qlonglong)(item->rx_bytes_total);
-            return role == Qt::DisplayRole ? formatString(bytes, _machineReadable) : (QVariant)bytes;
-        }
+            return role == Qt::DisplayRole ? formatString((qlonglong)item->rx_bytes) : QVariant((qlonglong)item->rx_bytes);
         case ENDP_COLUMN_GEO_COUNTRY:
             if (mmdb_lookup && mmdb_lookup->found && mmdb_lookup->country) {
                 return QVariant(mmdb_lookup->country);
@@ -521,12 +483,12 @@ QVariant EndpointDataModel::data(const QModelIndex &idx, int role) const
             return QVariant();
         case ENDP_COLUMN_GEO_LATITUDE:
             if (mmdb_lookup && mmdb_lookup->found && mmdb_lookup->latitude >= -90.0 && mmdb_lookup->latitude <= 90.0) {
-                return role == Qt::DisplayRole ? QStringLiteral("%L1%2").arg(mmdb_lookup->latitude).arg(UTF8_DEGREE_SIGN) : QVariant(mmdb_lookup->latitude);
+                return role == Qt::DisplayRole ? QString("%L1" UTF8_DEGREE_SIGN).arg(mmdb_lookup->latitude) : QVariant(mmdb_lookup->latitude);
             }
             return QVariant();
         case ENDP_COLUMN_GEO_LONGITUDE:
             if (mmdb_lookup && mmdb_lookup->found && mmdb_lookup->longitude >= -180.0 && mmdb_lookup->longitude <= 180.0) {
-                return role == Qt::DisplayRole ? QStringLiteral("%L1%2").arg(mmdb_lookup->longitude).arg(UTF8_DEGREE_SIGN) : QVariant(mmdb_lookup->longitude);
+                return role == Qt::DisplayRole ? QString("%L1" UTF8_DEGREE_SIGN).arg(mmdb_lookup->longitude) : QVariant(mmdb_lookup->longitude);
             }
             return QVariant();
         case ENDP_COLUMN_GEO_AS_NUM:
@@ -554,9 +516,9 @@ QVariant EndpointDataModel::data(const QModelIndex &idx, int role) const
         }
         return Qt::AlignRight;
     } else if (role == ATapDataModel::DISPLAY_FILTER) {
-        return gchar_free_to_qstring(get_endpoint_filter(item));
+        return QString(get_endpoint_filter(item));
     } else if (role == ATapDataModel::ROW_IS_FILTERED) {
-        return (bool)item->filtered && isFilterApplied();
+        return (bool)item->filtered && showTotalColumn();
     }
 #ifdef HAVE_MAXMINDDB
     else if (role == ATapDataModel::GEODATA_AVAILABLE) {
@@ -590,35 +552,6 @@ QVariant EndpointDataModel::data(const QModelIndex &idx, int role) const
     }
 
     return QVariant();
-}
-
-void EndpointDataModel::setResolveNames(bool resolve)
-{
-    if (_resolveNames == resolve)
-        return;
-
-    _resolveNames = resolve;
-    if (rowCount() > 0) {
-        dataChanged(index(0, ENDP_COLUMN_ADDR), index(rowCount() - 1, ENDP_COLUMN_PORT));
-    }
-}
-
-void EndpointDataModel::useAbsoluteTime(bool absolute)
-{
-    if (absolute == _absoluteTime)
-        return;
-
-    _absoluteTime = absolute;
-    // No columns that depend on absoluteTime
-}
-
-void EndpointDataModel::useNanosecondTimestamps(bool nanoseconds)
-{
-    if (_nanoseconds == nanoseconds)
-        return;
-
-    _nanoseconds = nanoseconds;
-    // No columns that use time precision
 }
 
 ConversationDataModel::ConversationDataModel(int protoId, QString filter, QObject *parent) :
@@ -771,18 +704,12 @@ QVariant ConversationDataModel::data(const QModelIndex &idx, int role) const
             }
         case CONV_COLUMN_PACKETS:
         {
-            qlonglong packets = (_tapFlags & TL_LIMIT_TO_DISPLAY_FILTER) ?
-                                (qlonglong)(conv_item->tx_frames + conv_item->rx_frames) :
-                                (qlonglong)(conv_item->tx_frames_total + conv_item->rx_frames_total);
-            return role == Qt::DisplayRole ? QStringLiteral("%L1").arg(packets) : (QVariant)packets;
+            qlonglong packets = conv_item->tx_frames + conv_item->rx_frames;
+            return role == Qt::DisplayRole ? QString("%L1").arg(packets) : (QVariant)packets;
         }
         case CONV_COLUMN_BYTES:
-        {
-            qlonglong bytes = (_tapFlags & TL_LIMIT_TO_DISPLAY_FILTER) ?
-                              (qlonglong)(conv_item->tx_bytes + conv_item->rx_bytes) :
-                              (qlonglong)(conv_item->tx_bytes_total + conv_item->rx_bytes_total);
-            return role == Qt::DisplayRole ? formatString(bytes, _machineReadable) : (QVariant)bytes;
-        }
+            return role == Qt::DisplayRole ? formatString((qlonglong)conv_item->tx_bytes + conv_item->rx_bytes) :
+                QVariant((qlonglong)conv_item->tx_bytes + conv_item->rx_bytes);
         case CONV_COLUMN_CONV_ID:
             if(conv_item->conv_id!=CONV_ID_UNSET) {
                 return (int) conv_item->conv_id;
@@ -791,15 +718,15 @@ QVariant ConversationDataModel::data(const QModelIndex &idx, int role) const
         case CONV_COLUMN_PACKETS_TOTAL:
         {
             qlonglong packets = 0;
-            if (isFilterApplied())
+            if (showTotalColumn())
                 packets = conv_item->tx_frames_total + conv_item->rx_frames_total;
 
-            return role == Qt::DisplayRole ? QStringLiteral("%L1").arg(packets) : (QVariant)packets;
+            return role == Qt::DisplayRole ? QString("%L1").arg(packets) : (QVariant)packets;
         }
         case CONV_COLUMN_BYTES_TOTAL:
         {
             double percent = 0;
-            if (isFilterApplied()) {
+            if (showTotalColumn()) {
                 qlonglong totalPackets = (qlonglong)(conv_item->tx_frames_total + conv_item->rx_frames_total);
                 qlonglong packets = (qlonglong)(conv_item->tx_frames + conv_item->rx_frames);
                 percent = totalPackets == 0 ? 0 : (double) packets * 100 / (double) totalPackets;
@@ -807,7 +734,7 @@ QVariant ConversationDataModel::data(const QModelIndex &idx, int role) const
             QString rounded = QString::number(percent, 'f', 2);
             /* Qt guarantees that this roundtrip conversion compares equally,
              * so filtering with equality will work as expected.
-             * XXX: Perhaps the UNFORMATTED_DISPLAYDATA role should be split
+             * XXX: Perhaps the UNFORMATTED_DISPLAYDATA role shoud be split
              * into one used for raw data export and comparisons with each
              * other, and another for comparing with filters?
              */
@@ -815,32 +742,18 @@ QVariant ConversationDataModel::data(const QModelIndex &idx, int role) const
         }
         case CONV_COLUMN_PKT_AB:
         {
-            qlonglong packets = (_tapFlags & TL_LIMIT_TO_DISPLAY_FILTER) ?
-                                (qlonglong)(conv_item->tx_frames) :
-                                (qlonglong)(conv_item->tx_frames_total);
-            return role == Qt::DisplayRole ? QStringLiteral("%L1").arg(packets) : (QVariant)packets;
+            qlonglong packets = conv_item->tx_frames;
+            return role == Qt::DisplayRole ? QString("%L1").arg(packets) : (QVariant)packets;
         }
         case CONV_COLUMN_BYTES_AB:
-        {
-            qlonglong bytes = (_tapFlags & TL_LIMIT_TO_DISPLAY_FILTER) ?
-                              (qlonglong)(conv_item->tx_bytes) :
-                              (qlonglong)(conv_item->tx_bytes_total);
-            return role == Qt::DisplayRole ? formatString(bytes, _machineReadable) : (QVariant)bytes;
-        }
+            return role == Qt::DisplayRole ? formatString((qlonglong)conv_item->tx_bytes) : QVariant((qlonglong)conv_item->tx_bytes);
         case CONV_COLUMN_PKT_BA:
         {
-            qlonglong packets = (_tapFlags & TL_LIMIT_TO_DISPLAY_FILTER) ?
-                                (qlonglong)(conv_item->rx_frames) :
-                                (qlonglong)(conv_item->rx_frames_total);
-            return role == Qt::DisplayRole ? QStringLiteral("%L1").arg(packets) : (QVariant)packets;
+            qlonglong packets = conv_item->rx_frames;
+            return role == Qt::DisplayRole ? QString("%L1").arg(packets) : (QVariant)packets;
         }
         case CONV_COLUMN_BYTES_BA:
-        {
-            qlonglong bytes = (_tapFlags & TL_LIMIT_TO_DISPLAY_FILTER) ?
-                              (qlonglong)(conv_item->rx_bytes) :
-                              (qlonglong)(conv_item->rx_bytes_total);
-            return role == Qt::DisplayRole ? formatString(bytes, _machineReadable) : (QVariant)bytes;
-        }
+            return role == Qt::DisplayRole ? formatString((qlonglong)conv_item->rx_bytes) : QVariant((qlonglong)conv_item->rx_bytes);
         case CONV_COLUMN_START:
         {
             int width = _nanoseconds ? 9 : 6;
@@ -874,21 +787,9 @@ QVariant ConversationDataModel::data(const QModelIndex &idx, int role) const
             return role == Qt::DisplayRole ? QString::number(duration, 'f', width) : (QVariant)duration;
         }
         case CONV_COLUMN_BPS_AB:
-            if (!bpsCalculated)
-                break;
-            if (role == Qt::DisplayRole) {
-                return _machineReadable ? QString::number((qlonglong)bps_ab) : gchar_free_to_qstring(format_size((int64_t)bps_ab, FORMAT_SIZE_UNIT_BITS_S, FORMAT_SIZE_PREFIX_SI));
-            } else {
-                return QVariant((qlonglong)bps_ab);
-            }
+            return bpsCalculated ? (role == Qt::DisplayRole ? gchar_free_to_qstring(format_size((int64_t)bps_ab, FORMAT_SIZE_UNIT_BITS_S, FORMAT_SIZE_PREFIX_SI)) : QVariant((qlonglong)bps_ab)): QVariant();
         case CONV_COLUMN_BPS_BA:
-            if (!bpsCalculated)
-                break;
-            if (role == Qt::DisplayRole) {
-                return _machineReadable ? QString::number((qlonglong)bps_ba) : gchar_free_to_qstring(format_size((int64_t)bps_ba, FORMAT_SIZE_UNIT_BITS_S, FORMAT_SIZE_PREFIX_SI));
-            } else {
-                return QVariant((qlonglong)bps_ba);
-            }
+            return bpsCalculated ? (role == Qt::DisplayRole ? gchar_free_to_qstring(format_size((int64_t)bps_ba, FORMAT_SIZE_UNIT_BITS_S, FORMAT_SIZE_PREFIX_SI)) : QVariant((qlonglong)bps_ba)): QVariant();
         }
         /* Extended conversations columns, e.g. TCP */
         if(tap()=="tcp") {
@@ -896,7 +797,7 @@ QVariant ConversationDataModel::data(const QModelIndex &idx, int role) const
             case CONV_TCP_EXT_COLUMN_A:
                 {
                 qlonglong flows = (qlonglong)conv_item->ext_tcp.flows;
-                return role == Qt::DisplayRole ? QStringLiteral("%L1").arg(flows) : (QVariant)flows; break;
+                return role == Qt::DisplayRole ? QString("%L1").arg(flows) : (QVariant)flows; break;
                 }
             }
         }
@@ -926,7 +827,7 @@ QVariant ConversationDataModel::data(const QModelIndex &idx, int role) const
     } else if (role == ATapDataModel::CONVERSATION_ID) {
         return (int)(conv_item->conv_id);
     } else if (role == ATapDataModel::ROW_IS_FILTERED) {
-        return (bool)conv_item->filtered && isFilterApplied();
+        return (bool)conv_item->filtered && showTotalColumn();
     } else if (role == ATapDataModel::DATA_ADDRESS_TYPE) {
         if (idx.column() == ConversationDataModel::CONV_COLUMN_SRC_ADDR || idx.column() == ConversationDataModel::CONV_COLUMN_DST_ADDR) {
             address tst_address = idx.column() == ConversationDataModel::CONV_COLUMN_SRC_ADDR ? conv_item->src_address : conv_item->dst_address;
@@ -974,38 +875,3 @@ bool ConversationDataModel::showConversationId(int row) const
         return true;
     return false;
 }
-
-void ConversationDataModel::setResolveNames(bool resolve)
-{
-    if (_resolveNames == resolve)
-        return;
-
-    _resolveNames = resolve;
-    if (rowCount() > 0) {
-        dataChanged(index(0, CONV_COLUMN_SRC_ADDR), index(rowCount() - 1, CONV_COLUMN_DST_PORT));
-    }
-}
-
-void ConversationDataModel::useAbsoluteTime(bool absolute)
-{
-    if (absolute == _absoluteTime)
-        return;
-
-    _absoluteTime = absolute;
-    headerDataChanged(Qt::Horizontal, CONV_COLUMN_START, CONV_COLUMN_START);
-    if (rowCount() > 0) {
-        dataChanged(index(0, CONV_COLUMN_START), index(rowCount() - 1, CONV_COLUMN_START));
-    }
-}
-
-void ConversationDataModel::useNanosecondTimestamps(bool nanoseconds)
-{
-    if (_nanoseconds == nanoseconds)
-        return;
-
-    _nanoseconds = nanoseconds;
-    if (rowCount() > 0) {
-        dataChanged(index(0, CONV_COLUMN_START), index(rowCount() - 1, CONV_COLUMN_DURATION));
-    }
-}
-

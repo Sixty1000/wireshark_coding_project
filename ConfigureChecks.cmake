@@ -24,41 +24,9 @@ check_include_file("pwd.h"                  HAVE_PWD_H)
 check_include_file("sys/select.h"           HAVE_SYS_SELECT_H)
 check_include_file("sys/socket.h"           HAVE_SYS_SOCKET_H)
 check_include_file("sys/time.h"             HAVE_SYS_TIME_H)
-check_include_file("sys/ucred.h"            HAVE_SYS_UCRED_H)
 check_include_file("sys/utsname.h"          HAVE_SYS_UTSNAME_H)
 check_include_file("sys/wait.h"             HAVE_SYS_WAIT_H)
 check_include_file("unistd.h"               HAVE_UNISTD_H)
-
-check_include_file("valgrind/valgrind.h"    HAVE_VALGRIND_H)
-
-# Check that the C compiler works on a trivial program.
-# Do this early on before more specific tests so we can give
-# an appropriate error message.
-if(NOT CMAKE_CROSSCOMPILING)
-	check_c_source_runs("
-		int main(void)
-		{
-			return 0;
-		}
-		"
-		COMPILER_RUNS
-	)
-	if(NOT COMPILER_RUNS)
-		if(WIN32)
-			message(FATAL_ERROR
-"${CMAKE_C_COMPILER} failed to compile and run a trivial test program. \
-This is likely a permissions error or the result of security software like \
-Windows Defender preventing untrusted code from running."
-			)
-		else()
-			message(FATAL_ERROR
-"${CMAKE_C_COMPILER} failed to compile and run a trivial test program. \
-This is likely a permissions error or the result of security software \
-preventing untrusted code from running."
-			)
-		endif()
-	endif()
-endif()
 
 #
 # On Linux, check for some additional headers, which we need as a
@@ -93,12 +61,6 @@ endif()
 include(CheckFunctionExists)
 include(CheckSymbolExists)
 
-if(WIN32)
-	check_symbol_exists(AF_UNIX "winsock2.h;afunix.h" HAVE_AF_UNIX)
-elseif(HAVE_SYS_SOCKET_H)
-	check_symbol_exists(AF_UNIX "sys/socket.h" HAVE_AF_UNIX)
-	check_function_exists("getpeereid"      HAVE_GETPEEREID)
-endif()
 #
 # Platform-specific functions used in platform-specific code.
 # We check for them only on the platform on which we use them.
@@ -113,27 +75,20 @@ if(CMAKE_SYSTEM_NAME STREQUAL "HP-UX")
 	cmake_pop_check_state()
 elseif(CMAKE_SYSTEM_NAME STREQUAL "SunOS" AND CMAKE_SYSTEM_VERSION MATCHES "5[.][0-9.]*")
 	#
-	# Solaris/Illumos
+	# Solaris
 	#
 	check_function_exists("getexecname"     HAVE_GETEXECNAME)
-	check_function_exists("getpeerucred"    HAVE_GETPEERUCRED)
 endif()
 
 check_symbol_exists("clock_gettime"  "time.h"   HAVE_CLOCK_GETTIME)
 # Some platforms (macOS pre 10.15) are non-conformant with C11 and lack timespec_get()
 check_symbol_exists("timespec_get"   "time.h"   HAVE_TIMESPEC_GET)
-# C23 memset_explicit
-check_symbol_exists("memset_explicit" "string.h" HAVE_MEMSET_EXPLICIT)
 if(NOT MSVC)
 	check_symbol_exists("localtime_r"    "time.h"   HAVE_LOCALTIME_R)
 	check_symbol_exists("gmtime_r"       "time.h"   HAVE_GMTIME_R)
 	check_symbol_exists("timegm"         "time.h"   HAVE_TIMEGM)
 	check_symbol_exists("tzset"          "time.h"   HAVE_TZSET)
 	check_symbol_exists("tzname"         "time.h"   HAVE_TZNAME)
-	check_symbol_exists("getline"	     "stdio.h"  HAVE_GETLINE)
-	check_symbol_exists("memset_s"       "string.h" HAVE_MEMSET_S)
-	# BSDs, older glibc, musl
-	check_symbol_exists("explicit_bzero" "string.h" HAVE_EXPLICIT_BZERO)
 endif()
 check_function_exists("getifaddrs"       HAVE_GETIFADDRS)
 check_function_exists("issetugid"        HAVE_ISSETUGID)
@@ -150,7 +105,6 @@ if(UNIX)
 	list(APPEND CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
 	check_symbol_exists("memmem"        "string.h"   HAVE_MEMMEM)
 	check_symbol_exists("memrchr"       "string.h"   HAVE_MEMRCHR)
-	check_symbol_exists("strchrnul"     "string.h"   HAVE_STRCHRNUL)
 	check_symbol_exists("strerrorname_np" "string.h" HAVE_STRERRORNAME_NP)
 	check_symbol_exists("strptime"      "time.h"     HAVE_STRPTIME)
 	check_symbol_exists("vasprintf"     "stdio.h"    HAVE_VASPRINTF)
@@ -169,16 +123,6 @@ check_struct_has_member("struct tm"       tm_gmtoff      time.h       HAVE_STRUC
 include(CheckTypeSize)
 check_type_size("ssize_t"       SSIZE_T)
 
-# Check for types in sys/socket.h
-if(HAVE_SYS_SOCKET_H)
-	# Linux, Haiku
-	cmake_push_check_state()
-	set(CMAKE_EXTRA_INCLUDE_FILES sys/socket.h)
-	set(CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
-	check_type_size("struct ucred" STRUCT_UCRED)
-	cmake_pop_check_state()
-endif(HAVE_SYS_SOCKET_H)
-
 #
 # Check if the libc vsnprintf() conforms to C99. If this fails we may
 # need to fall-back on GLib I/O.
@@ -188,9 +132,6 @@ endif(HAVE_SYS_SOCKET_H)
 if(NOT CMAKE_CROSSCOMPILING)
 	check_c_source_runs("
 		#include <stdio.h>
-
-		#pragma GCC diagnostic push
-		#pragma GCC diagnostic ignored \"-Wall\"
 		int main(void)
 		{
 			/* Check that snprintf() and vsnprintf() don't return
@@ -199,8 +140,7 @@ if(NOT CMAKE_CROSSCOMPILING)
 			* the nul byte. */
 			char buf[3];
 			return snprintf(buf, sizeof(buf), \"%s\", \"ABCDEF\") > 0 ? 0 : 1;
-		}
-		#pragma GCC diagnostic pop"
+		}"
 		HAVE_C99_VSNPRINTF
 	)
 	if (NOT HAVE_C99_VSNPRINTF)
@@ -217,7 +157,6 @@ endif()
 # *If* we found libnl, check if we can use nl80211 stuff with it.
 #
 if (NL_FOUND)
-	# Base set of necessary features
 	check_c_source_compiles(
 		"#include <linux/nl80211.h>
 		int main(void) {
@@ -230,9 +169,6 @@ if (NL_FOUND)
 		}"
 		HAVE_NL80211
 	)
-	# Check for optional features. At some point we can move the
-	# older ones to mandatory.
-	# SET_CHANNEL, Linux kernel 2.6.35 (August 2010)
 	check_c_source_compiles(
 		"#include <linux/nl80211.h>
 		int main(void) {
@@ -240,7 +176,6 @@ if (NL_FOUND)
 		}"
 		HAVE_NL80211_CMD_SET_CHANNEL
 	)
-	# SPLIT_WIPHY_DUMP, Linux kernel 3.10 (June 2013)
 	check_c_source_compiles(
 		"#include <linux/nl80211.h>
 		int main(void) {
@@ -248,29 +183,12 @@ if (NL_FOUND)
 		}"
 		HAVE_NL80211_SPLIT_WIPHY_DUMP
 	)
-	# VHT_CAPABILITY, Linux kernel 3.8 (February 2013)
 	check_c_source_compiles(
 		"#include <linux/nl80211.h>
 		int main(void) {
 			enum nl80211_attrs x = NL80211_ATTR_VHT_CAPABILITY;
 		}"
 		HAVE_NL80211_VHT_CAPABILITY
-	)
-	# HE_CAPABILITY, Linux kernel 4.19 (October 2018)
-	check_c_source_compiles(
-		"#include <linux/nl80211.h>
-		int main(void) {
-			enum nl80211_attrs x = NL80211_ATTR_HE_CAPABILITY;
-		}"
-		HAVE_NL80211_HE_CAPABILITY
-	)
-	# EHT_CAPABILITY, Linux kernel 5.18 (May 2022)
-	check_c_source_compiles(
-		"#include <linux/nl80211.h>
-		int main(void) {
-			enum nl80211_attrs x = NL80211_ATTR_EHT_CAPABILITY;
-		}"
-		HAVE_NL80211_EHT_CAPABILITY
 	)
 endif()
 

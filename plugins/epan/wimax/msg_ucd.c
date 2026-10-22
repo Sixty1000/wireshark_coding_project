@@ -25,7 +25,6 @@
 #include <epan/unit_strings.h>
 
 #include <wsutil/array.h>
-#include "msg-int.h"
 #include "wimax_tlv.h"
 #include "wimax_mac.h"
 #include "wimax_utils.h"
@@ -426,7 +425,7 @@ static int dissect_mac_mgmt_msg_ucd_decoder(tvbuff_t *tvb, packet_info *pinfo, p
 					add_tlv_subtree(&tlv_info, ucd_tree, hf_ucd_tlv_t_158_optional_permutation_ul_allocated_subchannels_bitmap, tvb, offset-tlv_value_offset, ENC_NA);
 					break;
 				}
-				case UCD_TLV_T_159_BAND_AMC_ALLOCATION_THRESHOLD:
+				case UCD_TLV_T_159_BAND_AMC_ALLOCATION_THRESHHOLD:
 				{
 					add_tlv_subtree(&tlv_info, ucd_tree, hf_ucd_tlv_t_159_band_amc_allocation_threshold, tvb, offset-tlv_value_offset, ENC_BIG_ENDIAN);
 					break;
@@ -490,10 +489,10 @@ static int dissect_mac_mgmt_msg_ucd_decoder(tvbuff_t *tvb, packet_info *pinfo, p
 				case UCD_TLV_T_177_NORMALIZED_CN_OVERRIDE_2:
 				{
 					/* add TLV subtree */
-					tlv_item1 = add_tlv_subtree(&tlv_info, ucd_tree, hf_ucd_tlv_t_177_normalized_cn_override2, tvb, offset-tlv_value_offset, ENC_ASCII);
+					tlv_item1 = add_tlv_subtree(&tlv_info, ucd_tree, hf_ucd_tlv_t_177_normalized_cn_override2, tvb, offset-tlv_value_offset, ENC_NA|ENC_ASCII);
 					tlv_tree = proto_item_add_subtree(tlv_item1, ett_mac_mgmt_msg_ucd_decoder);
 					proto_tree_add_item(tlv_tree, hf_ucd_tlv_t_177_normalized_cn_override2_first_line, tvb, offset + 2, 1, ENC_BIG_ENDIAN);
-					proto_tree_add_item(tlv_tree, hf_ucd_tlv_t_177_normalized_cn_override2_list, tvb, offset + 3, 7, ENC_ASCII);
+					proto_tree_add_item(tlv_tree, hf_ucd_tlv_t_177_normalized_cn_override2_list, tvb, offset + 3, 7, ENC_ASCII|ENC_NA);
 					break;
 				}
 				case UCD_TLV_T_186_UPPER_BOUND__AAS_PREAMBLE:

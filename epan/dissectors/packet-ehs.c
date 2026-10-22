@@ -191,7 +191,7 @@ static int hf_ehs_dz_udsm_num_pkts_xmtd_rollover;
 
 static dissector_handle_t ehs_handle;
 
-/* handle to CCSDS Space Packet dissector */
+/* handle to ccsds packet dissector */
 static dissector_handle_t ccsds_handle;
 
 /* Initialize the subtree pointers */
@@ -240,7 +240,7 @@ enum
   EHS_SECONDARY_HEADER_SIZE     = 12
 };
 
-/* determine if a CCSDS Space Packet primary header indicates a secondary exists */
+/* determine if a ccsds primary header indicates a secondary exists */
 #define HDR_SECHDR   0x0800
 
 
@@ -367,7 +367,7 @@ static const value_string ehs_data_zone_aoslos_indicator[] =
 
 static const value_string ehs_data_zone_udsm_ccsds_vs_bpdu[] =
 {
-  { 0, "CCSDS SP" },
+  { 0, "CCSDS" },
   { 1, "BPDU" },
   { 0, NULL }
 };
@@ -508,7 +508,7 @@ aoslos_secondary_header_dissector ( proto_tree* ehs_secondary_header_tree, tvbuf
 }
 
 
-/* payload CCSDS Space Packet secondary header dissector */
+/* payload ccsds secondary header dissector */
 static void
 payload_ccsds_secondary_header_dissector ( proto_tree* ehs_secondary_header_tree, tvbuff_t* tvb, int* offset )
 {
@@ -525,7 +525,7 @@ payload_ccsds_secondary_header_dissector ( proto_tree* ehs_secondary_header_tree
 }
 
 
-/* core CCSDS Space Packet secondary header dissector */
+/* core ccsds secondary header dissector */
 static void
 core_ccsds_secondary_header_dissector ( proto_tree* ehs_secondary_header_tree, tvbuff_t* tvb, int* offset )
 {
@@ -712,12 +712,11 @@ tdm_secondary_header_dissector ( proto_tree* ehs_secondary_header_tree, tvbuff_t
     /* format a more readable time */
     proto_item_append_text ( time_item, "%04d/%03d:%02d:%02d:%02d.%1d", year + 1900, jday, hour, minute, second, tenths );
 
-    /* These flags are all 2-bytes, was it correct to change length here to 2? */
-    proto_tree_add_item ( ehs_secondary_header_tree, hf_ehs_sh_tdm_obt_delta_time_flag, tvb, *offset, 2, ENC_BIG_ENDIAN );
-    proto_tree_add_item ( ehs_secondary_header_tree, hf_ehs_sh_tdm_obt_computed_flag, tvb, *offset, 2, ENC_BIG_ENDIAN );
-    proto_tree_add_item ( ehs_secondary_header_tree, hf_ehs_sh_tdm_obt_not_retrieved_flag, tvb, *offset, 2, ENC_BIG_ENDIAN );
-    /* proto_tree_add_item ( ehs_secondary_header_tree, hf_ehs_sh_tdm_obt_reserved, tvb, *offset, 2, ENC_BIG_ENDIAN ); */
-    proto_tree_add_item ( ehs_secondary_header_tree, hf_ehs_sh_tdm_obt_source_apid, tvb, *offset, 2, ENC_BIG_ENDIAN );
+    proto_tree_add_item ( ehs_secondary_header_tree, hf_ehs_sh_tdm_obt_delta_time_flag, tvb, *offset, 1, ENC_BIG_ENDIAN );
+    proto_tree_add_item ( ehs_secondary_header_tree, hf_ehs_sh_tdm_obt_computed_flag, tvb, *offset, 1, ENC_BIG_ENDIAN );
+    proto_tree_add_item ( ehs_secondary_header_tree, hf_ehs_sh_tdm_obt_not_retrieved_flag, tvb, *offset, 1, ENC_BIG_ENDIAN );
+    /* proto_tree_add_item ( ehs_secondary_header_tree, hf_ehs_sh_tdm_obt_reserved, tvb, *offset, 1, ENC_BIG_ENDIAN ); */
+    proto_tree_add_item ( ehs_secondary_header_tree, hf_ehs_sh_tdm_obt_source_apid, tvb, *offset, 1, ENC_BIG_ENDIAN );
   }
 
   if ( mjfs_present )
@@ -1158,7 +1157,7 @@ dissect_ehs(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
    */
   ehs_secondary_header_dissector ( protocol, ehs_secondary_header_tree, tvb, &offset );
 
-  /* for CCSDS Space Packet protocol types pass the remaining packet off to the CCSDS Space Packet dissector */
+  /* for ccsds protocol types pass the remaining packet off to the ccsds packet dissector */
   switch ( protocol )
   {
   case EHS_PROTOCOL__TDM_TELEMETRY:
@@ -1784,7 +1783,7 @@ proto_register_ehs(void)
 
       /* udsm protocol data zone */
       { &hf_ehs_dz_udsm_ccsds_vs_bpdu,
-        { "CCSDS Space Packet vs BPDU", "ehs.dz.udsm_ccsds_vs_bpdu",
+        { "CCSDS vs BPDU", "ehs.dz.udsm_ccsds_vs_bpdu",
           FT_UINT8, BASE_DEC, VALS(ehs_data_zone_udsm_ccsds_vs_bpdu), 0x80,
           NULL, HFILL }
       },

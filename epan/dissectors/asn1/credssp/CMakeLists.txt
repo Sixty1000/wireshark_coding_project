@@ -25,6 +25,7 @@ set( ASN_FILE_LIST
 set( EXTRA_DIST
 	${ASN_FILE_LIST}
 	packet-${PROTOCOL_NAME}-template.c
+	packet-${PROTOCOL_NAME}-template.h
 	${PROTOCOL_NAME}.cnf
 )
 
@@ -33,6 +34,6 @@ set( SRC_FILES
 	${EXT_ASN_FILE_LIST}
 )
 
-set( A2W_FLAGS -b )
+set( A2W_FLAGS -b -C )
 
 ASN2WRS()

@@ -13,8 +13,6 @@
 #define __PREFERENCE_UTILS_H__
 
 #include <glib.h>
-#include <epan/prefs.h>
-typedef struct capture_options_tag capture_options;
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,19 +29,7 @@ extern bool auto_scroll_live;
 
 /** Fill in capture options with values from the preferences
  */
-extern void prefs_to_capture_opts(capture_options* capture_opts);
-
-/**
- * @brief Set what is recorded of the processes that packets belong to.
- *
- * What the preference asks for is recorded where it can be: dumpcap refuses
- * to do it for a pcap file, or where it cannot look processes up, and a
- * capture must not fail because of a preference.
- *
- * @param capture_opts The capture options, of which use_pcapng has been set.
- * @param level What the user would like to have recorded.
- */
-extern void capture_opts_set_process_info(capture_options* capture_opts, capture_process_info_e level);
+extern void prefs_to_capture_opts(void);
 
 /** Save all preferences
  */
@@ -100,7 +86,7 @@ int column_prefs_has_custom(const char *custom_field);
  * resolved or unresolved, e.g. it has a field with a value string.
  *
  * This is for when adding or editing custom columns. Compare with
- * display_column_strings() in packet_list_utils.h, which is for columns
+ * resolve_column() in packet_list_utils.h, which is for columns
  * that have already been added.
  *
  * @param custom_field column custom field
@@ -109,18 +95,7 @@ int column_prefs_has_custom(const char *custom_field);
  * would support being displayed differently resolved or unresolved,
  * false otherwise.
  */
-bool column_prefs_custom_display_strings(const char *custom_field);
-
-/** Check if a custom column's data can be displayed with details,
- * e.g. it has a field.
- *
- * This is for when adding or editing custom columns.
- *
- * @param custom_field column custom field
- *
- * @return true if a custom column has at least one single field.
- */
-bool column_prefs_custom_display_details(const char *custom_field);
+bool column_prefs_custom_resolve(const char *custom_field);
 
 /** Remove a column.
  *

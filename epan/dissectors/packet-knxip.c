@@ -26,14 +26,11 @@
 #include <epan/packet.h>
 #include <epan/expert.h>
 #include <epan/proto.h>
+#include <epan/ipproto.h>
 #include <epan/prefs.h>
 #include <epan/proto_data.h>
-#include <epan/to_str.h>
 #include <epan/tvbuff.h>
 #include <epan/strutil.h>
-#include <epan/unit_strings.h>
-#include <epan/iana-info.h>
-#include <wsutil/to_str.h>
 
 #include "packet-tcp.h"
 #include "packet-udp.h"
@@ -226,18 +223,9 @@ static int hf_knxip_ip_address;
 static int hf_knxip_port;
 static int hf_knxip_description_type;
 static int hf_knxip_knx_medium;
-static int hf_knxip_knx_medium_flags_ip;
-static int hf_knxip_knx_medium_flags_rf;
-static int hf_knxip_knx_medium_flags_pl132;
-static int hf_knxip_knx_medium_flags_pl110;
-static int hf_knxip_knx_medium_flags_tp1;
-static int hf_knxip_knx_medium_flags_tp0;
 static int hf_knxip_device_status;
 static int hf_knxip_program_mode;
 static int hf_knxip_knx_address;
-static int hf_knxip_knx_tunnel_usable;
-static int hf_knxip_knx_tunnel_authorized;
-static int hf_knxip_knx_tunnel_free;
 static int hf_knxip_project_id;
 static int hf_knxip_project_number;
 static int hf_knxip_installation_number;
@@ -257,15 +245,8 @@ static int hf_knxip_seq_counter;
 static int hf_knxip_ip_subnet;
 static int hf_knxip_ip_gateway;
 static int hf_knxip_ip_assign;
-static int hf_knxip_ip_assign_auto;
-static int hf_knxip_ip_assign_dhcp;
-static int hf_knxip_ip_assign_bootp;
-static int hf_knxip_ip_assign_manual;
 static int hf_knxip_ip_caps;
 static int hf_knxip_ip_dhcp;
-static int hf_knxip_ip_caps_auto;
-static int hf_knxip_ip_caps_dhcp;
-static int hf_knxip_ip_caps_bootp;
 static int hf_knxip_tunnel_feature;
 static int hf_knxip_routing_loss;
 static int hf_knxip_busy_time;
@@ -503,14 +484,6 @@ static const value_string session_status_vals[] = {
   { 0, NULL }
 };
 
-static int* const knx_ip_assign_flags[] = {
-  &hf_knxip_ip_assign_auto,
-  &hf_knxip_ip_assign_dhcp,
-  &hf_knxip_ip_assign_bootp,
-  &hf_knxip_ip_assign_manual,
-  NULL
-};
-
 uint8_t knxip_error;
 uint8_t knxip_host_protocol;
 
@@ -609,6 +582,10 @@ static proto_item* knxip_tree_add_missing_reserved( proto_tree* tree, tvbuff_t* 
   return new_item;
 }
 
+static proto_item* knxip_tree_add_length( proto_tree* tree, tvbuff_t* tvb, int offset, int value )
+{
+  return proto_tree_add_uint_format_value( tree, hf_knxip_structure_length, tvb, offset, 1, value, "%u bytes", value );
+}
 
 static void knxip_item_illegal_length( proto_item* length_item, packet_info* pinfo, const char* info )
 {
@@ -616,13 +593,60 @@ static void knxip_item_illegal_length( proto_item* length_item, packet_info* pin
   expert_add_info_format( pinfo, length_item, KIP_ERROR, "%s", info );
 }
 
-static proto_item* knxip_tree_add_knx_address( proto_tree* tree, int hfindex, tvbuff_t* tvb, int offset, char** output, wmem_allocator_t* output_scope )
+static proto_item* knxip_tree_add_ip_address( proto_tree* tree, tvbuff_t* tvb, int offset, char* output, int output_max )
+{
+  if( output )
+  {
+    const uint8_t* ipa = tvb_get_ptr( tvb, offset, 4 );
+    snprintf( output, output_max, "%u.%u.%u.%u", ipa[ 0 ], ipa[ 1 ], ipa[ 2 ], ipa[ 3 ] );
+  }
+  return proto_tree_add_item( tree, hf_knxip_ip_address, tvb, offset, 4, ENC_BIG_ENDIAN );
+}
+
+static proto_item* knxip_tree_add_knx_address( proto_tree* tree, int hfindex, tvbuff_t* tvb, int offset, char* output, int output_max )
 {
   uint16_t value = tvb_get_ntohs( tvb, offset );
-  *output = wmem_strdup_printf(output_scope, "%u.%u.%u", (value >> 12) & 0xF, (value >> 8) & 0xF, value & 0xFF);
+  char text[ 32 ];
+  snprintf( text, sizeof text, "%u.%u.%u", (value >> 12) & 0xF, (value >> 8) & 0xF, value & 0xFF );
+  if( output ) snprintf( output, output_max, "%s", text );
   proto_item* new_item = proto_tree_add_item( tree, hfindex, tvb, offset, 2, ENC_BIG_ENDIAN );
-  proto_item_append_text( new_item, " = %s", *output);
+  proto_item_append_text( new_item, " = %s", text );
   return new_item;
+}
+
+static proto_item* knxip_tree_add_bit( proto_tree* tree, tvbuff_t* tvb, int offset, int bitpos, const char* name, char* output, int output_max )
+{
+  char format[ 32 ] = ".... .... = %s: %d";
+  uint8_t value = (tvb_get_uint8( tvb, offset ) >> bitpos) & 1;
+  format[ 7 - bitpos + (bitpos < 4) ] = '0' + value;
+
+  if( value && output )
+  {
+    if( *output )
+    {
+      do { ++output; --output_max; } while( *output );
+      snprintf( output, output_max, " | " );
+      while( *output ) { ++output; --output_max; }
+    }
+
+    snprintf( output, output_max, "%s", name );
+  }
+
+  return proto_tree_add_bytes_format( tree, hf_bytes, tvb, offset, 1, NULL, format, name, value );
+}
+
+static proto_item* knxip_tree_add_ip_assignment( proto_tree* tree, int hfindex, tvbuff_t* tvb, int offset, uint8_t manual )
+{
+  proto_item* node = proto_tree_add_item( tree, hfindex, tvb, offset, 1, ENC_BIG_ENDIAN );
+  proto_tree* list = proto_item_add_subtree( node, ett_ip_assignment );
+  char output[ 128 ];
+  *output = '\0';
+  knxip_tree_add_bit( list, tvb, offset, 2 + manual, "AutoIP", output, sizeof output );
+  knxip_tree_add_bit( list, tvb, offset, 1 + manual, "DHCP", output, sizeof output );
+  knxip_tree_add_bit( list, tvb, offset, 0 + manual, "BootP", output, sizeof output );
+  if( manual ) knxip_tree_add_bit( list, tvb, offset, 0, "manual", output, sizeof output );
+  if( *output ) proto_item_append_text( node, " = %s", output );
+  return node;
 }
 
 /* Dissect HPAI field
@@ -637,7 +661,10 @@ static uint8_t dissect_hpai( tvbuff_t* tvb, packet_info* pinfo, proto_item* item
 
   proto_item* hpai_item = proto_tree_add_none_format( tree, hf_folder, tvb, offset, eff_struct_len, "HPAI %s Endpoint", name );
 
-  wmem_strbuf_t* info = wmem_strbuf_new(pinfo->pool, "???");
+  char info[ 80 ];
+  char* output = info;
+  int output_max = sizeof info;
+  snprintf( info, sizeof info, "???" );
 
   if( struct_len <= 0 )
   {
@@ -649,7 +676,7 @@ static uint8_t dissect_hpai( tvbuff_t* tvb, packet_info* pinfo, proto_item* item
   {
     /* 1 byte Structure Length */
     proto_tree* hpai_tree = proto_item_add_subtree( hpai_item, ett_hpai );
-    proto_item* length_item = proto_tree_add_uint( hpai_tree, hf_knxip_structure_length, tvb, offset, 1, struct_len);
+    proto_item* length_item = knxip_tree_add_length( hpai_tree, tvb, offset, struct_len );
     proto_item* node;
 
     int end_pos = offset + eff_struct_len;
@@ -730,10 +757,9 @@ static uint8_t dissect_hpai( tvbuff_t* tvb, packet_info* pinfo, proto_item* item
       else
       {
         /* 4 bytes IP Address */
-        ws_in4_addr addr_ipv4;
-        node = proto_tree_add_item_ret_ipv4(hpai_tree, hf_knxip_ip_address, tvb, offset, 4, ENC_BIG_ENDIAN, &addr_ipv4);
+        node = knxip_tree_add_ip_address( hpai_tree, tvb, offset, output, output_max );
 
-        if( host_protocol == KIP_IPV4_TCP && addr_ipv4 != 0 )
+        if( host_protocol == KIP_IPV4_TCP && strcmp( output, "0.0.0.0" ) != 0 )
         {
           proto_item_prepend_text( node, "? " );
           expert_add_info_format( pinfo, node, KIP_ERROR, "Expected: 0.0.0.0" );
@@ -742,8 +768,9 @@ static uint8_t dissect_hpai( tvbuff_t* tvb, packet_info* pinfo, proto_item* item
 
         offset += 4;
 
-        info = wmem_strbuf_new(pinfo->pool, ip_addr_to_str(pinfo->pool, &addr_ipv4));
-        wmem_strbuf_append_c(info, ':');
+        while( *output ) { ++output; --output_max; }
+        if( output_max > 1 ) { *output++ = ':'; --output_max; }
+        snprintf( output, output_max, "???" );
 
         if( struct_len < 8 )
         {
@@ -753,10 +780,12 @@ static uint8_t dissect_hpai( tvbuff_t* tvb, packet_info* pinfo, proto_item* item
         else
         {
           /* 2 bytes Port Number */
-          uint32_t port = tvb_get_ntohs( tvb, offset );
+          uint16_t port = tvb_get_ntohs( tvb, offset );
 
-          node = proto_tree_add_item_ret_uint( hpai_tree, hf_knxip_port, tvb, offset, 2, ENC_BIG_ENDIAN, &port);
-          wmem_strbuf_append_printf(info, "%u", port);
+          snprintf( output, output_max, "%u", port );
+          while( *output ) { ++output; --output_max; }
+
+          node = proto_tree_add_item( hpai_tree, hf_knxip_port, tvb, offset, 2, ENC_BIG_ENDIAN );
 
           if( host_protocol == KIP_IPV4_TCP && port != 0 )
           {
@@ -775,12 +804,12 @@ static uint8_t dissect_hpai( tvbuff_t* tvb, packet_info* pinfo, proto_item* item
         ok = 0;
       }
 
-      proto_item_append_text( hpai_item, ": %s %s", wmem_strbuf_get_str(info), host_protocol_name );
+      proto_item_append_text( hpai_item, ": %s %s", info, host_protocol_name );
     }
   }
 
-  col_append_fstr( pinfo->cinfo, COL_INFO, " @%s", wmem_strbuf_get_str(info));
-  proto_item_append_text( item, ", %s @ %s", name, wmem_strbuf_get_str(info));
+  col_append_fstr( pinfo->cinfo, COL_INFO, " @%s", info );
+  proto_item_append_text( item, ", %s @ %s", name, info );
 
   if( !ok )
   {
@@ -806,7 +835,8 @@ static uint8_t dissect_cri( tvbuff_t* tvb, packet_info* pinfo, proto_item* item,
   uint8_t conn_type = 0;
   const char* conn_type_name = NULL;
   uint8_t ok = 0;
-  char* extra_text = NULL;
+  char extra_text[ 32 ];
+  *extra_text = '\0';
 
   if( struct_len <= 0 )
   {
@@ -817,7 +847,7 @@ static uint8_t dissect_cri( tvbuff_t* tvb, packet_info* pinfo, proto_item* item,
   else
   {
     proto_tree* cri_tree = proto_item_add_subtree( cri_item, ett_cri );
-    proto_item* length_item = proto_tree_add_uint(cri_tree, hf_knxip_structure_length, tvb, offset, 1, struct_len);
+    proto_item* length_item = knxip_tree_add_length( cri_tree, tvb, offset, struct_len );
     proto_item* type_item = NULL;
     uint8_t length_ok = 1;
 
@@ -902,7 +932,7 @@ static uint8_t dissect_cri( tvbuff_t* tvb, packet_info* pinfo, proto_item* item,
             }
             if( struct_len >= 6 )
             {
-              knxip_tree_add_knx_address( cri_tree, hf_knxip_knx_address, tvb, offset + 4, &extra_text, pinfo->pool );
+              knxip_tree_add_knx_address( cri_tree, hf_knxip_knx_address, tvb, offset + 4, extra_text, sizeof extra_text );
             }
             if( struct_len > 6 )
             {
@@ -932,16 +962,16 @@ static uint8_t dissect_cri( tvbuff_t* tvb, packet_info* pinfo, proto_item* item,
     {
       column_info* cinfo = pinfo->cinfo;
       col_prepend_fstr( cinfo, COL_INFO, "%s ", conn_type_name );
-      if (extra_text != NULL)
+      if( *extra_text )
       {
-        col_append_fstr( cinfo, COL_INFO, ", %s", extra_text);
+        col_append_fstr( cinfo, COL_INFO, ", %s", extra_text );
       }
     }
 
     proto_item_append_text( item, ", %s", conn_type_name );
-    if (extra_text != NULL)
+    if( *extra_text )
     {
-      proto_item_append_text( item, ", %s", extra_text);
+      proto_item_append_text( item, ", %s", extra_text );
     }
   }
 
@@ -979,7 +1009,7 @@ static uint8_t dissect_crd( tvbuff_t* tvb, packet_info* pinfo, proto_item* item,
   else
   {
     proto_tree* crd_tree = proto_item_add_subtree( crd_item, ett_crd );
-    proto_item* length_item = proto_tree_add_uint(crd_tree, hf_knxip_structure_length, tvb, offset, 1, struct_len);
+    proto_item* length_item = knxip_tree_add_length( crd_tree, tvb, offset, struct_len );
     proto_item* type_item = NULL;
     uint8_t length_ok = 1;
 
@@ -1051,10 +1081,13 @@ static uint8_t dissect_crd( tvbuff_t* tvb, packet_info* pinfo, proto_item* item,
           }
           else
           {
-            char* output;
-            knxip_tree_add_knx_address( crd_tree, hf_knxip_knx_address, tvb, offset + 2, &output, pinfo->pool );
+            char output[ 40 ];
+            knxip_tree_add_knx_address( crd_tree, hf_knxip_knx_address, tvb, offset + 2, output, sizeof output );
             proto_item_append_text( crd_item, ", KNX Address: %s", output );
-            col_append_fstr( pinfo->cinfo, COL_INFO, ", %s", output );
+            if( pinfo )
+            {
+              col_append_fstr( pinfo->cinfo, COL_INFO, ", %s", output );
+            }
             if( item )
             {
               proto_item_append_text( item, ", %s", output );
@@ -1077,7 +1110,7 @@ static uint8_t dissect_crd( tvbuff_t* tvb, packet_info* pinfo, proto_item* item,
   }
 
   conn_type_name = try_val_to_str( conn_type, conn_type_vals );
-  if( conn_type_name ) col_prepend_fstr( pinfo->cinfo, COL_INFO, "%s ", conn_type_name );
+  if( pinfo && conn_type_name ) col_prepend_fstr( pinfo->cinfo, COL_INFO, "%s ", conn_type_name );
   proto_item_append_text( item, ", %s", conn_type_name ? conn_type_name : "???" );
 
   if( !ok )
@@ -1102,7 +1135,13 @@ static uint8_t dissect_cnhdr( tvbuff_t* tvb, packet_info* pinfo, proto_item* ite
   proto_item* cnhdr_item = proto_tree_add_none_format( tree, hf_folder, tvb, offset, eff_struct_len, "Connection Header" );
 
   uint8_t ok = 0;
-  wmem_strbuf_t* info = wmem_strbuf_new(pinfo->pool, "#");
+  char info[ 100 ];
+  int output_max = sizeof info;
+  char* output = info;
+
+  *output++ = '#';
+  output_max--;
+  snprintf( output, output_max, "???" );
 
   if( struct_len <= 0 )
   {
@@ -1112,7 +1151,7 @@ static uint8_t dissect_cnhdr( tvbuff_t* tvb, packet_info* pinfo, proto_item* ite
   else
   {
     proto_tree* cnhdr_tree = proto_item_add_subtree( cnhdr_item, ett_cnhdr );
-    proto_item* length_item = proto_tree_add_uint(cnhdr_tree, hf_knxip_structure_length, tvb, offset, 1, struct_len);
+    proto_item* length_item = knxip_tree_add_length( cnhdr_tree, tvb, offset, struct_len );
 
     int end_pos = offset + eff_struct_len;
     offset++;
@@ -1145,7 +1184,10 @@ static uint8_t dissect_cnhdr( tvbuff_t* tvb, packet_info* pinfo, proto_item* ite
     }
     else
     {
-      wmem_strbuf_append_printf(info, "%02X:", tvb_get_uint8(tvb, offset));
+      snprintf( output, output_max, "%02X:", tvb_get_uint8( tvb, offset ) );
+      while( *output ) { ++output; --output_max; }
+      snprintf( output, output_max, "???" );
+
       proto_tree_add_item( cnhdr_tree, hf_knxip_channel, tvb, offset, 1, ENC_BIG_ENDIAN );
       offset++;
 
@@ -1156,22 +1198,32 @@ static uint8_t dissect_cnhdr( tvbuff_t* tvb, packet_info* pinfo, proto_item* ite
       }
       else
       {
-        wmem_strbuf_append_printf(info, "%u", tvb_get_uint8(tvb, offset));
+        snprintf( output, output_max, "%u", tvb_get_uint8( tvb, offset ) );
+        while( *output ) { ++output; --output_max; }
+
         proto_tree_add_item( cnhdr_tree, hf_knxip_seq_counter, tvb, offset, 1, ENC_BIG_ENDIAN );
         offset++;
 
         if( response )
-          wmem_strbuf_append_c(info, ' ');
+        {
+          if( output_max > 1 )
+          {
+            *output++ = ' ';
+            output_max--;
+            snprintf( output, output_max, "???" );
+          }
+        }
 
         if( struct_len < 4 )
         {
           expert_add_info_format( pinfo, cnhdr_item, KIP_ERROR, "Missing 1 byte %s", response ? "Status" : "Reserved" );
+          //ok = 0;
         }
         else
         {
           if( response )
           {
-            wmem_strbuf_append_printf(info, "%s", val_to_str(pinfo->pool, tvb_get_uint8( tvb, offset ), error_vals, "Error 0x%02x" ) );
+            snprintf( output, output_max, "%s", val_to_str( tvb_get_uint8( tvb, offset ), error_vals, "Error 0x%02x" ) );
             knxip_tree_add_status( cnhdr_tree, tvb, offset );
           }
           else
@@ -1189,12 +1241,12 @@ static uint8_t dissect_cnhdr( tvbuff_t* tvb, packet_info* pinfo, proto_item* ite
         //ok = 0;
       }
 
-      proto_item_append_text( cnhdr_item, ": %s", wmem_strbuf_get_str(info) );
+      proto_item_append_text( cnhdr_item, ": %s", info );
     }
   }
 
-  col_append_fstr( pinfo->cinfo, COL_INFO, " %s", wmem_strbuf_get_str(info));
-  proto_item_append_text( item, ", %s", wmem_strbuf_get_str(info));
+  if( pinfo ) col_append_fstr( pinfo->cinfo, COL_INFO, " %s", info );
+  proto_item_append_text( item, ", %s", info );
 
   if( !ok )
   {
@@ -1325,7 +1377,8 @@ static uint8_t dissect_routing_loss( tvbuff_t* tvb, packet_info* pinfo, proto_it
 
   proto_item* info_item = proto_tree_add_none_format( tree, hf_folder, tvb, offset, struct_len, "Loss Info" );
 
-  char* info = "???";
+  char info[ 16 ];
+  snprintf( info, sizeof info, "???" );
 
   if( struct_len <= 0 )
   {
@@ -1335,7 +1388,7 @@ static uint8_t dissect_routing_loss( tvbuff_t* tvb, packet_info* pinfo, proto_it
   else
   {
     proto_tree* info_tree = proto_item_add_subtree( info_item, ett_loss );
-    proto_item* length_item = proto_tree_add_uint(info_tree, hf_knxip_structure_length, tvb, offset, 1, struct_len);
+    proto_item* length_item = knxip_tree_add_length( info_tree, tvb, offset, struct_len );
 
     int end_pos = offset + eff_struct_len;
     offset++;
@@ -1369,9 +1422,9 @@ static uint8_t dissect_routing_loss( tvbuff_t* tvb, packet_info* pinfo, proto_it
       /* 2 bytes Lost Messages */
       if( struct_len >= 4 )
       {
-        uint32_t loss;
-        proto_tree_add_item_ret_uint( info_tree, hf_knxip_routing_loss, tvb, offset, 2, ENC_BIG_ENDIAN, &loss );
-        info = wmem_strdup_printf(pinfo->pool, "%u", loss);
+        uint16_t loss = tvb_get_ntohs( tvb, offset );
+        snprintf( info, sizeof info, "%u", loss );
+        proto_tree_add_item( info_tree, hf_knxip_routing_loss, tvb, offset, 2, ENC_BIG_ENDIAN );
         offset += 2;
       }
 
@@ -1408,7 +1461,8 @@ static uint8_t dissect_routing_busy( tvbuff_t* tvb, packet_info* pinfo, proto_it
 
   proto_item* info_item = proto_tree_add_none_format( tree, hf_folder, tvb, offset, eff_struct_len, "Busy Info" );
 
-  char* info = "???";
+  char info[ 16 ];
+  snprintf( info, sizeof info, "???" );
 
   if( struct_len <= 0 )
   {
@@ -1418,7 +1472,7 @@ static uint8_t dissect_routing_busy( tvbuff_t* tvb, packet_info* pinfo, proto_it
   else
   {
     proto_tree* info_tree = proto_item_add_subtree( info_item, ett_loss );
-    proto_item* length_item = proto_tree_add_uint(info_tree, hf_knxip_structure_length, tvb, offset, 1, struct_len);
+    proto_item* length_item = knxip_tree_add_length( info_tree, tvb, offset, struct_len );
 
     int end_pos = offset + eff_struct_len;
     offset++;
@@ -1452,9 +1506,9 @@ static uint8_t dissect_routing_busy( tvbuff_t* tvb, packet_info* pinfo, proto_it
       if( struct_len >= 4 )
       {
         /* 2 bytes Wait Time (ms) */
-        uint32_t busy_time;
-        proto_tree_add_item_ret_uint( info_tree, hf_knxip_busy_time, tvb, offset, 2, ENC_BIG_ENDIAN, &busy_time );
-        info = wmem_strdup_printf(pinfo->pool, "%u ms", busy_time);
+        proto_item* new_item = proto_tree_add_item( info_tree, hf_knxip_busy_time, tvb, offset, 2, ENC_BIG_ENDIAN );
+        proto_item_append_text( new_item, " ms" );
+        snprintf( info, sizeof info, "%u ms", tvb_get_ntohs( tvb, offset ) );
         offset += 2;
 
         if( struct_len >= 6 )
@@ -1498,7 +1552,8 @@ static uint8_t dissect_selector( tvbuff_t* tvb, packet_info* pinfo, proto_item* 
 
   proto_item* info_item = proto_tree_add_none_format( tree, hf_folder, tvb, offset, eff_struct_len, "Selector" );
 
-  char* info = "???";
+  char info[ 40 ];
+  snprintf( info, sizeof info, "???" );
 
   if( struct_len <= 0 )
   {
@@ -1509,7 +1564,7 @@ static uint8_t dissect_selector( tvbuff_t* tvb, packet_info* pinfo, proto_item* 
   else
   {
     proto_tree* info_tree = proto_item_add_subtree( info_item, ett_loss );
-    proto_item* length_item = proto_tree_add_uint(info_tree, hf_knxip_structure_length, tvb, offset, 1, struct_len);
+    proto_item* length_item = knxip_tree_add_length( info_tree, tvb, offset, struct_len );
     uint8_t length_ok = 1;
 
     int end_pos = offset + eff_struct_len;
@@ -1540,7 +1595,7 @@ static uint8_t dissect_selector( tvbuff_t* tvb, packet_info* pinfo, proto_item* 
 
       if( sel == SELECT_PROGMODE )
       {
-        info = "ProgMode";
+        snprintf( info, sizeof info, "ProgMode" );
 
         if( struct_len != 2 )
         {
@@ -1551,7 +1606,11 @@ static uint8_t dissect_selector( tvbuff_t* tvb, packet_info* pinfo, proto_item* 
       }
       else if( sel == SELECT_MACADDRESS )
       {
-        info = "MAC=???";
+        char* output = info;
+        int output_max = sizeof info;
+        snprintf( output, output_max, "MAC=" );
+        while( *output ) { ++output; --output_max; }
+        snprintf( output, output_max, "???" );
 
         if( struct_len != 8 )
         {
@@ -1563,8 +1622,10 @@ static uint8_t dissect_selector( tvbuff_t* tvb, packet_info* pinfo, proto_item* 
         if( struct_len >= 8 )
         {
           /* 6 bytes MAC Address */
+          uint8_t mac[ 6 ];
+          tvb_memcpy( tvb, mac, offset, 6 );
+          snprintf( output, output_max, "%02x:%02x:%02x:%02x:%02x:%02x", mac[ 0 ], mac[ 1 ], mac[ 2 ], mac[ 3 ], mac[ 4 ], mac[ 5 ] );
           proto_tree_add_item( info_tree, hf_knxip_mac_address, tvb, offset, 6, ENC_NA );
-          info = wmem_strdup_printf(pinfo->pool, "MAC=%s", tvb_ether_to_str(pinfo->pool, tvb, offset));
           offset += 6;
         }
       }
@@ -1623,19 +1684,16 @@ static uint8_t dissect_dib_devinfo( tvbuff_t* tvb, packet_info* pinfo,
 
   if( struct_len >= 3 )
   {
-    static int* const knx_medium_flags[] = {
-        &hf_knxip_knx_medium_flags_ip,
-        &hf_knxip_knx_medium_flags_rf,
-        &hf_knxip_knx_medium_flags_pl132,
-        &hf_knxip_knx_medium_flags_pl110,
-        &hf_knxip_knx_medium_flags_tp1,
-        &hf_knxip_knx_medium_flags_tp0,
-        NULL
-    };
-
     /* 1 byte KNX Medium */
     uint8_t knx_medium = tvb_get_uint8( tvb, offset );
-    proto_item* item = proto_tree_add_bitmask( dib_tree, tvb, offset, hf_knxip_knx_medium, ett_medium, knx_medium_flags, ENC_BIG_ENDIAN);
+    proto_item* item = proto_tree_add_item( dib_tree, hf_knxip_knx_medium, tvb, offset, 1, ENC_BIG_ENDIAN );
+    proto_tree* tree = proto_item_add_subtree( item, ett_medium );
+    knxip_tree_add_bit( tree, tvb, offset, 5, "IP", NULL, 0 );
+    knxip_tree_add_bit( tree, tvb, offset, 4, "RF", NULL, 0 );
+    knxip_tree_add_bit( tree, tvb, offset, 3, "PL132", NULL, 0 );
+    knxip_tree_add_bit( tree, tvb, offset, 2, "PL110", NULL, 0 );
+    knxip_tree_add_bit( tree, tvb, offset, 1, "TP1", NULL, 0 );
+    knxip_tree_add_bit( tree, tvb, offset, 0, "TP0", NULL, 0 );
 
     /* Check for missing or multiple medium */
     {
@@ -1660,22 +1718,25 @@ static uint8_t dissect_dib_devinfo( tvbuff_t* tvb, packet_info* pinfo,
 
     if( struct_len >= 4 )
     {
-      static int* const knx_status_flags[] = {
-        &hf_knxip_program_mode,
-        NULL
-      };
-
       /* 1 byte Device Status */
-      uint8_t status = tvb_get_uint8(tvb, offset);
-      proto_tree_add_bitmask(dib_tree, tvb, offset, hf_knxip_device_status, ett_status, knx_status_flags, ENC_BIG_ENDIAN);
-      prog_mode = (status & 0x01);
+      uint8_t status = tvb_get_uint8( tvb, offset );
+      item = proto_tree_add_item( dib_tree, hf_knxip_device_status, tvb, offset, 1, ENC_BIG_ENDIAN );
+      tree = proto_item_add_subtree( item, ett_status );
+      proto_tree_add_item( tree, hf_knxip_program_mode, tvb, offset, 1, ENC_BIG_ENDIAN );
+
+      if( status & 0x01 )
+      {
+        proto_item_append_text( item, " (ProgMode)" );
+        prog_mode = 1;
+      }
+
       offset++;
 
       if( struct_len >= 6 )
       {
         /* 2 bytes KNX Address */
-        char* addr;
-        knxip_tree_add_knx_address( dib_tree, hf_knxip_knx_address, tvb, offset, &addr, pinfo->pool );
+        char addr[ 32 ];
+        knxip_tree_add_knx_address( dib_tree, hf_knxip_knx_address, tvb, offset, addr, sizeof addr );
         wmem_strbuf_append( info, addr );
 
         offset += 2;
@@ -1685,7 +1746,7 @@ static uint8_t dissect_dib_devinfo( tvbuff_t* tvb, packet_info* pinfo,
           /* 2 bytes Project Installation Identifier */
           uint16_t project_id = tvb_get_ntohs( tvb, offset );
           item = proto_tree_add_item( dib_tree, hf_knxip_project_id, tvb, offset, 2, ENC_BIG_ENDIAN );
-          proto_tree* tree = proto_item_add_subtree( item, ett_projectid );
+          tree = proto_item_add_subtree( item, ett_projectid );
           proto_tree_add_item( tree, hf_knxip_project_number, tvb, offset, 2, ENC_BIG_ENDIAN );
           proto_tree_add_item( tree, hf_knxip_installation_number, tvb, offset, 2, ENC_BIG_ENDIAN );
           proto_item_append_text( item, " (%u:%u)", project_id / 16, project_id % 16 );
@@ -1815,7 +1876,7 @@ static uint8_t dissect_dib_ipconfig( tvbuff_t* tvb, packet_info* pinfo,
 {
   int offset = *p_offset;
   uint8_t ok = 1;
-  char* text;
+  char text[ 32 ];
 
   if( struct_len != 16 )
   {
@@ -1825,14 +1886,12 @@ static uint8_t dissect_dib_ipconfig( tvbuff_t* tvb, packet_info* pinfo,
 
   if( struct_len < 6 )
   {
-    text = "???";
+    snprintf( text, sizeof text, "???" );
   }
   else
   {
     /* 4 bytes IP Address */
-    ws_in4_addr addr_ipv4;
-    proto_tree_add_item_ret_ipv4(dib_tree, hf_knxip_ip_address, tvb, offset, 4, ENC_BIG_ENDIAN, &addr_ipv4);
-    text = ip_addr_to_str(pinfo->pool, &addr_ipv4);
+    knxip_tree_add_ip_address( dib_tree, tvb, offset, text, sizeof text );
     offset += 4;
 
     if( struct_len >= 10 )
@@ -1849,21 +1908,14 @@ static uint8_t dissect_dib_ipconfig( tvbuff_t* tvb, packet_info* pinfo,
 
         if( struct_len >= 15 )
         {
-          static int* const ip_caps_flags[] = {
-            &hf_knxip_ip_caps_auto,
-            &hf_knxip_ip_caps_dhcp,
-            &hf_knxip_ip_caps_bootp,
-            NULL
-          };
-
           /* 1 byte IP Capabilities */
-          proto_tree_add_bitmask_with_flags(dib_tree, tvb, offset, hf_knxip_ip_caps, ett_ip_assignment, ip_caps_flags, ENC_BIG_ENDIAN, BMT_NO_FALSE);
+          knxip_tree_add_ip_assignment( dib_tree, hf_knxip_ip_caps, tvb, offset, 0 );
           offset++;
 
           if( struct_len >= 16 )
           {
             /* 1 byte IP Assignment Method */
-            proto_tree_add_bitmask_with_flags(dib_tree, tvb, offset, hf_knxip_ip_assign, ett_ip_assignment, knx_ip_assign_flags, ENC_BIG_ENDIAN, BMT_NO_FALSE);
+            knxip_tree_add_ip_assignment( dib_tree, hf_knxip_ip_assign, tvb, offset, 1 );
             offset++;
           }
         }
@@ -1885,7 +1937,7 @@ static uint8_t dissect_dib_curconfig( tvbuff_t* tvb, packet_info* pinfo,
 {
   int offset = *p_offset;
   uint8_t ok = 1;
-  char* text;
+  char text[ 32 ];
 
   if( struct_len != 20 )
   {
@@ -1895,14 +1947,12 @@ static uint8_t dissect_dib_curconfig( tvbuff_t* tvb, packet_info* pinfo,
 
   if( struct_len < 6 )
   {
-    text = "???" ;
+    snprintf( text, sizeof text, "???" );
   }
   else
   {
     /* 4 bytes IP Address */
-    ws_in4_addr addr_ipv4;
-    proto_tree_add_item_ret_ipv4(dib_tree, hf_knxip_ip_address, tvb, offset, 4, ENC_BIG_ENDIAN, &addr_ipv4);
-    text = ip_addr_to_str(pinfo->pool, &addr_ipv4);
+    knxip_tree_add_ip_address( dib_tree, tvb, offset, text, sizeof text );
     offset += 4;
 
     if( struct_len >= 10 )
@@ -1926,7 +1976,7 @@ static uint8_t dissect_dib_curconfig( tvbuff_t* tvb, packet_info* pinfo,
           if( struct_len >= 19 )
           {
             /* IP Assignment Method */
-            proto_tree_add_bitmask_with_flags(dib_tree, tvb, offset, hf_knxip_ip_assign, ett_ip_assignment, knx_ip_assign_flags, ENC_BIG_ENDIAN, BMT_NO_FALSE);
+            knxip_tree_add_ip_assignment( dib_tree, hf_knxip_ip_assign, tvb, offset, 1 );
             offset++;
 
             if( struct_len >= 20 )
@@ -1955,13 +2005,13 @@ static uint8_t dissect_dib_knxaddr( tvbuff_t* tvb, packet_info* pinfo,
 {
   int offset = *p_offset;
   uint8_t ok = 1;
-  char* text1;
-  char* text2;
+  char text1[ 32 ];
+  char text2[ 32 ];
 
   if( struct_len < 4 )
   {
     if( length_ok ) knxip_item_illegal_length( length_item, pinfo, "Expected: >= 4 bytes" );
-    text1 = "???";
+    snprintf( text1, sizeof text1, "???" );
     ok = 0;
   }
   else
@@ -1975,14 +2025,14 @@ static uint8_t dissect_dib_knxaddr( tvbuff_t* tvb, packet_info* pinfo,
     }
 
     /* 2 bytes KNX Address */
-    knxip_tree_add_knx_address( dib_tree, hf_knxip_knx_address, tvb, offset, &text1, pinfo->pool);
+    knxip_tree_add_knx_address( dib_tree, hf_knxip_knx_address, tvb, offset, text1, sizeof text1 );
     proto_item_append_text( dib_item, ": %s", text1 );
     offset += 2;
 
     while( offset + 2 <= end_pos )
     {
       /* 2 bytes Additional KNX Address */
-      knxip_tree_add_knx_address( dib_tree, hf_knxip_knx_address, tvb, offset, &text2, pinfo->pool);
+      knxip_tree_add_knx_address( dib_tree, hf_knxip_knx_address, tvb, offset, text2, sizeof text2 );
       proto_item_append_text( dib_item, ", %s", text2 );
       offset += 2;
     }
@@ -2045,12 +2095,6 @@ static uint8_t dissect_dib_tunneling_info( tvbuff_t* tvb, packet_info* pinfo,
 {
   int offset = *p_offset;
   uint8_t ok = 1;
-  static int* const tunnel_flags[] = {
-      &hf_knxip_knx_tunnel_usable,
-      &hf_knxip_knx_tunnel_authorized,
-      &hf_knxip_knx_tunnel_free,
-      NULL
-  };
 
   if( struct_len < 4 )
   {
@@ -2080,9 +2124,9 @@ static uint8_t dissect_dib_tunneling_info( tvbuff_t* tvb, packet_info* pinfo,
 
     while( offset + 4 <= end_pos )
     {
-      uint8_t flags;
-      uint8_t is_free;
-      char* text;
+      uint8_t flags = tvb_get_uint8( tvb, offset + 3 );
+      uint8_t is_free = flags & 1;
+      char text[ 32 ];
       proto_item* node;
       proto_tree* list;
 
@@ -2090,14 +2134,14 @@ static uint8_t dissect_dib_tunneling_info( tvbuff_t* tvb, packet_info* pinfo,
       list = proto_item_add_subtree( node, ett_tunnel );
 
       /* 2 bytes KNX Address, 1 byte reserved */
-      knxip_tree_add_knx_address( list, hf_knxip_knx_address, tvb, offset, &text, pinfo->pool );
+      knxip_tree_add_knx_address( list, hf_knxip_knx_address, tvb, offset, text, sizeof text );
+      proto_item_append_text( node, ": %s Free=%u", text, is_free );
       offset += 3;
 
       /* 1 byte flags */
-      proto_tree_add_bitmask_list(list, tvb, offset, 1, tunnel_flags, ENC_BIG_ENDIAN);
-      flags = tvb_get_uint8(tvb, offset);
-      is_free = flags & 1;
-      proto_item_append_text(node, ": %s Free=%u", text, is_free);
+      knxip_tree_add_bit( list, tvb, offset, 2, "Usable", NULL, 0 );
+      knxip_tree_add_bit( list, tvb, offset, 1, "Authorized", NULL, 0 );
+      knxip_tree_add_bit( list, tvb, offset, 0, "Free", NULL, 0 );
       offset++;
 
       if( !is_free )
@@ -2174,19 +2218,18 @@ static uint8_t dissect_dib_mfrdata( tvbuff_t* tvb, packet_info* pinfo,
 {
   int offset = *p_offset;
   uint8_t ok = 1;
-  char* text;
+  char text[ 32 ];
 
   if( struct_len < 4 )
   {
     if( length_ok ) knxip_item_illegal_length( length_item, pinfo, "Expected: >= 4 bytes" );
-    text = "???";
+    snprintf( text, sizeof text, "???" );
     ok = 0;
   }
   else
   {
-    uint32_t code;
-    proto_tree_add_item_ret_uint( dib_tree, hf_knxip_manufacturer_code, tvb, offset, 2, ENC_BIG_ENDIAN, &code);
-    text = wmem_strdup_printf(pinfo->pool, "0x%04x", code);
+    proto_tree_add_item( dib_tree, hf_knxip_manufacturer_code, tvb, offset, 2, ENC_BIG_ENDIAN );
+    snprintf( text, sizeof text, "0x%04x", tvb_get_ntohs( tvb, offset ) );
     offset += 2;
   }
 
@@ -2215,7 +2258,7 @@ static uint8_t dissect_dib( tvbuff_t* tvb, packet_info* pinfo, proto_item* item,
 
     proto_item* dib_item = proto_tree_add_none_format( tree, hf_folder, tvb, offset, eff_struct_len, "DIB" );
     proto_tree* dib_tree = proto_item_add_subtree( dib_item, ett_dib );
-    proto_item* length_item = proto_tree_add_uint(dib_tree, hf_knxip_structure_length, tvb, offset, 1, struct_len);
+    proto_item* length_item = knxip_tree_add_length( dib_tree, tvb, offset, struct_len );
 
     offset++;
 
@@ -2378,7 +2421,7 @@ static uint8_t dissect_srp( tvbuff_t* tvb, packet_info* pinfo, proto_item* item,
     column_info* cinfo = pinfo ? pinfo->cinfo : NULL;
     proto_item* srp_item = proto_tree_add_none_format( tree, hf_folder, tvb, offset, eff_struct_len, "SRP" );
     proto_tree* srp_tree = proto_item_add_subtree( srp_item, ett_dib );
-    proto_item* length_item = proto_tree_add_uint(srp_tree, hf_knxip_structure_length, tvb, offset, 1, struct_len);
+    proto_item* length_item = knxip_tree_add_length( srp_tree, tvb, offset, struct_len );
     uint8_t ok = 1;
     uint8_t length_ok = 1;
 
@@ -2538,7 +2581,7 @@ static uint8_t dissect_resetter( tvbuff_t* tvb, packet_info* pinfo, proto_item* 
 
 /* Decrypt SECURE_WRAPPER. Returns decrypted part if MAC matches
 */
-static uint8_t* decrypt_secure_wrapper(wmem_allocator_t* scope, const uint8_t* key, const uint8_t* data, int h_length, int p_length )
+static uint8_t* decrypt_secure_wrapper( const uint8_t* key, const uint8_t* data, int h_length, int p_length )
 {
   uint8_t header_length = *data;
   int a_length = header_length + 2;
@@ -2550,7 +2593,7 @@ static uint8_t* decrypt_secure_wrapper(wmem_allocator_t* scope, const uint8_t* k
   if( h_length >= header_length + 16 && p_length >= 16 )
   {
     const uint8_t* nonce = data + a_length;
-    uint8_t* decrypted = knxip_ccm_decrypt(scope, NULL, key, data + h_length, p_length, nonce, 14 );
+    uint8_t* decrypted = knxip_ccm_decrypt( NULL, key, data + h_length, p_length, nonce, 14 );
 
     if( decrypted )
     {
@@ -2563,7 +2606,7 @@ static uint8_t* decrypt_secure_wrapper(wmem_allocator_t* scope, const uint8_t* k
       /* Check MAC */
       if( memcmp( decrypted + p_length, mac, 16 ) != 0 )
       {
-        wmem_free(scope, decrypted );
+        wmem_free( wmem_packet_scope(), decrypted );
         decrypted = NULL;
       }
     }
@@ -2574,29 +2617,31 @@ static uint8_t* decrypt_secure_wrapper(wmem_allocator_t* scope, const uint8_t* k
   return NULL;
 }
 
-static const char* make_key_info(wmem_allocator_t* scope, const uint8_t* key, const char* context )
+static void make_key_info( char* text, int text_max, const uint8_t* key, const char* context )
 {
   uint8_t count;
 
-  if( key  == NULL)
-    return "without key";
-
-  wmem_strbuf_t* buf = wmem_strbuf_new(scope, "");
-  if (context)
+  if( !key )
   {
-      wmem_strbuf_append_printf(buf, "with %s key", context);
+    snprintf( text, text_max, "without key" );
   }
   else
   {
-      wmem_strbuf_append(buf, "with key");
-  }
+    if( context  )
+    {
+      snprintf( text, text_max, "with %s key", context );
+    }
+    else
+    {
+      snprintf( text, text_max, "with key" );
+    }
 
-  for (count = 16; count; --count)
-  {
-      wmem_strbuf_append_printf(buf, " %02X", *key++);
+    for( count = 16; count; --count )
+    {
+      while( *text ) { ++text; --text_max; }
+      snprintf( text, text_max, " %02X", *key++ );
+    }
   }
-
-  return wmem_strbuf_finalize(buf);
 }
 
 /* Dissect SECURE_WRAPPER
@@ -2683,16 +2728,18 @@ static uint8_t dissect_secure_wrapper( uint8_t header_length, tvbuff_t* tvb, pac
           }
           else
           {
-            const uint8_t* encrypted = tvb_get_ptr( tvb, offset, size );
+            const uint8_t* encrypted = tvb_get_ptr( tvb, offset, size - offset );
             const int a_length = header_length + 16;  // length of leading non-encrypted data
             const uint8_t* a_data = encrypted - a_length;  // ptr to KIP header
             uint8_t* decrypted = NULL;
             const uint8_t* key = NULL;
-            const char* decrypt_info = NULL;
+            char decrypt_info[ 128 ];
             struct knx_keyring_mca_keys* mca_key;
             uint8_t key_index;
 
             node = proto_tree_add_bytes_format( tree, hf_bytes, tvb, offset, size, encrypted, "Encrypted (%d bytes)", size );
+
+            *decrypt_info = '\0';
 
             if( dest_addr )
             {
@@ -2702,10 +2749,10 @@ static uint8_t dissect_secure_wrapper( uint8_t header_length, tvbuff_t* tvb, pac
                 if( memcmp( mca_key->mca, dest_addr, 4 ) == 0 )
                 {
                   key = mca_key->key;
-                  decrypted = decrypt_secure_wrapper(pinfo->pool, key, a_data, a_length, size );
+                  decrypted = decrypt_secure_wrapper( key, a_data, a_length, size );
                   if( decrypted )
                   {
-                    decrypt_info = make_key_info(pinfo->pool, key, "MCA");
+                    make_key_info( decrypt_info, sizeof decrypt_info, key, "MCA" );
                     break;
                   }
                 }
@@ -2718,10 +2765,10 @@ static uint8_t dissect_secure_wrapper( uint8_t header_length, tvbuff_t* tvb, pac
               for( key_index = 0; key_index < knx_decryption_key_count; ++key_index )
               {
                 key = knx_decryption_keys[ key_index ];
-                decrypted = decrypt_secure_wrapper(pinfo->pool, key, a_data, a_length, size );
+                decrypted = decrypt_secure_wrapper( key, a_data, a_length, size );
                 if( decrypted )
                 {
-                  decrypt_info = make_key_info(pinfo->pool, key, NULL );
+                  make_key_info( decrypt_info, sizeof decrypt_info, key, NULL );
                   break;
                 }
               }
@@ -2743,7 +2790,7 @@ static uint8_t dissect_secure_wrapper( uint8_t header_length, tvbuff_t* tvb, pac
               item = proto_tree_add_none_format( root, hf_folder, tvb2, 0, size, "Decrypted" );
               tree = proto_item_add_subtree( item, ett_decrypted );
 
-              if ( decrypt_info != NULL )
+              if( *decrypt_info )
               {
                 proto_item_append_text( item, " (%s)", decrypt_info );
               }
@@ -2774,13 +2821,13 @@ static uint8_t dissect_secure_wrapper( uint8_t header_length, tvbuff_t* tvb, pac
 
 /* Check encrypted MAC in TIMER_NOTIFY
 */
-static uint8_t check_timer_sync_mac(wmem_allocator_t* scope, const uint8_t* key, const uint8_t* data, int header_length )
+static uint8_t check_timer_sync_mac( const uint8_t* key, const uint8_t* data, int header_length )
 {
   // Calculate and encrypt MAC
   const uint8_t* nonce = data + header_length;
   uint8_t mac[ KNX_KEY_LENGTH ];
-  knxip_ccm_calc_cbc_mac(mac, key, data, header_length, NULL, 0, nonce, 14 );
-  knxip_ccm_encrypt( scope, mac, key, NULL, 0, mac, nonce, 14 );
+  knxip_ccm_calc_cbc_mac( mac, key, data, header_length, NULL, 0, nonce, 14 );
+  knxip_ccm_encrypt( mac, key, NULL, 0, mac, nonce, 14 );
 
   // Check MAC
   return (memcmp( nonce + 14, mac, 16 ) == 0);
@@ -2853,11 +2900,13 @@ static uint8_t dissect_timer_notify( uint8_t header_length, tvbuff_t* tvb, packe
           const uint8_t* key = NULL;
           uint8_t mac_ok = 0;
           uint8_t mac_error = 0;
-          const char* mac_info = NULL;
+          char mac_info[ 128 ];
           struct knx_keyring_mca_keys* mca_key;
           uint8_t key_index;
 
           knxip_tree_add_data( tree, tvb, offset, 16, NULL, NULL, "Message Authentication Code", NULL, NULL );
+
+          *mac_info = '\0';
 
           if( dest_addr )
           {
@@ -2867,10 +2916,10 @@ static uint8_t dissect_timer_notify( uint8_t header_length, tvbuff_t* tvb, packe
               if( memcmp( mca_key->mca, dest_addr, 4 ) == 0 )
               {
                 key = mca_key->key;
-                if( check_timer_sync_mac(pinfo->pool, key, a_data, header_length ) )
+                if( check_timer_sync_mac( key, a_data, header_length ) )
                 {
                   mac_ok = 1;
-                  mac_info = make_key_info(pinfo->pool, key, "MCA");
+                  make_key_info( mac_info, sizeof mac_info, key, "MCA" );
                   break;
                 }
               }
@@ -2883,10 +2932,10 @@ static uint8_t dissect_timer_notify( uint8_t header_length, tvbuff_t* tvb, packe
             for( key_index = 0; key_index < knx_decryption_key_count; ++key_index )
             {
               key = knx_decryption_keys[ key_index ];
-              if( check_timer_sync_mac(pinfo->pool, key, a_data, header_length ) )
+              if( check_timer_sync_mac( key, a_data, header_length ) )
               {
                 mac_ok = 1;
-                mac_info = make_key_info(pinfo->pool, key, NULL );
+                make_key_info( mac_info, sizeof mac_info, key, NULL );
                 break;
               }
             }
@@ -2898,7 +2947,7 @@ static uint8_t dissect_timer_notify( uint8_t header_length, tvbuff_t* tvb, packe
             col_append_str( cinfo, COL_INFO, " OK" );
             proto_item_append_text( item, ", MAC OK" );
 
-            if ( mac_info != NULL )
+            if( *mac_info )
             {
               proto_item_append_text( node, " (%s)", mac_info );
             }
@@ -3141,12 +3190,13 @@ static void dissect_knxip_data( uint8_t header_length, uint8_t protocol_version 
   const char* svc_name = try_val_to_str( service, svc_vals );
   int offset = header_length;
   int remaining_len = tvb_captured_length_remaining( tvb, offset );
+  column_info* cinfo = pinfo->cinfo;
 
   /* Make sure that we cope with a well known service family
   */
   if( service_family_name == NULL )
   {
-    col_set_str(pinfo->cinfo, COL_INFO, "Unknown Service Family" );
+    col_set_str( cinfo, COL_INFO, "Unknown Service Family" );
     proto_item_append_text( kip_item, " Unknown Service Family" );
     ok = 0;
   }
@@ -3156,13 +3206,13 @@ static void dissect_knxip_data( uint8_t header_length, uint8_t protocol_version 
     */
     if( service_name == NULL )
     {
-      col_append_fstr(pinfo->cinfo, COL_INFO, "%s: ? Unknown Service Type", service_family_name );
+      col_append_fstr( cinfo, COL_INFO, "%s: ? Unknown Service Type", service_family_name );
       proto_item_append_text( kip_item, " Unknown Service Type" );
       ok = 0;
     }
     else
     {
-      col_append_str(pinfo->cinfo, COL_INFO, svc_name ? svc_name : service_name );
+      col_append_str( cinfo, COL_INFO, svc_name ? svc_name : service_name );
       proto_item_append_text( kip_item, " %s", service_name );
 
       /* Dissect according to Service Type
@@ -3206,7 +3256,7 @@ static void dissect_knxip_data( uint8_t header_length, uint8_t protocol_version 
             info = wmem_strbuf_finalize(output);
             if( *info )
             {
-              col_append_fstr(pinfo->cinfo, COL_INFO, ", %s", info );
+              col_append_fstr( cinfo, COL_INFO, ", %s", info );
               proto_item_append_text( kip_item, ", %s", info );
             }
 
@@ -3272,7 +3322,7 @@ static void dissect_knxip_data( uint8_t header_length, uint8_t protocol_version 
           /* 1 byte Channel ID */
           if( remaining_len < 1 )
           {
-            col_append_str(pinfo->cinfo, COL_INFO, " ???" );
+            col_append_str( cinfo, COL_INFO, " ???" );
             proto_item_append_text( kip_item, ", ???" );
             expert_add_info_format( pinfo, kip_item, KIP_ERROR, "Missing 1 byte Channel" );
             ok = 0;
@@ -3286,7 +3336,7 @@ static void dissect_knxip_data( uint8_t header_length, uint8_t protocol_version 
             /* 1 byte Status */
             if( remaining_len < 2 )
             {
-              col_append_str(pinfo->cinfo, COL_INFO, " ???" );
+              col_append_str( cinfo, COL_INFO, " ???" );
               proto_item_append_text( kip_item, ", ???" );
               expert_add_info_format( pinfo, kip_item, KIP_ERROR, "Missing 1 byte Status" );
               ok = 0;
@@ -3299,7 +3349,7 @@ static void dissect_knxip_data( uint8_t header_length, uint8_t protocol_version 
 
               if( status == KIP_E_NO_ERROR )
               {
-                col_append_fstr(pinfo->cinfo, COL_INFO, " #%02X", channel );
+                col_append_fstr( cinfo, COL_INFO, " #%02X", channel );
                 proto_item_append_text( kip_item, ", Conn #%02X", channel );
 
                 /* Data Endpoint HPAI */
@@ -3311,8 +3361,8 @@ static void dissect_knxip_data( uint8_t header_length, uint8_t protocol_version 
               }
               else
               {
-                const char* status_info = val_to_str(pinfo->pool, status, error_vals, "Error 0x%02x" );
-                col_append_fstr(pinfo->cinfo, COL_INFO, " %s", status_info );
+                const char* status_info = val_to_str( status, error_vals, "Error 0x%02x" );
+                col_append_fstr( cinfo, COL_INFO, " %s", status_info );
                 proto_item_append_text( kip_item, ": %s", status_info );
               }
             }
@@ -3323,12 +3373,12 @@ static void dissect_knxip_data( uint8_t header_length, uint8_t protocol_version 
       case KIP_CONNECTIONSTATE_REQUEST:
         {
           /* 1 byte Channel ID */
-          col_append_str(pinfo->cinfo, COL_INFO, " #" );
+          col_append_str( cinfo, COL_INFO, " #" );
           proto_item_append_text( kip_item, ", Conn #" );
 
           if( remaining_len < 1 )
           {
-            col_append_str(pinfo->cinfo, COL_INFO, "???" );
+            col_append_str( cinfo, COL_INFO, "???" );
             proto_item_append_text( kip_item, "???" );
             expert_add_info_format( pinfo, kip_item, KIP_ERROR, "Missing 1 byte Channel" );
             ok = 0;
@@ -3336,7 +3386,7 @@ static void dissect_knxip_data( uint8_t header_length, uint8_t protocol_version 
           else
           {
             uint8_t channel = tvb_get_uint8( tvb, offset );
-            col_append_fstr(pinfo->cinfo, COL_INFO, "%02X", channel );
+            col_append_fstr( cinfo, COL_INFO, "%02X", channel );
             proto_item_append_text( kip_item, "%02X", channel );
             proto_tree_add_item( kip_tree, hf_knxip_channel, tvb, offset, 1, ENC_BIG_ENDIAN );
             offset++;
@@ -3362,12 +3412,12 @@ static void dissect_knxip_data( uint8_t header_length, uint8_t protocol_version 
       case KIP_CONNECTIONSTATE_RESPONSE:
         {
           /* 1 byte Channel ID */
-          col_append_str(pinfo->cinfo, COL_INFO, " #" );
+          col_append_str( cinfo, COL_INFO, " #" );
           proto_item_append_text( kip_item, ", Conn #" );
 
           if( remaining_len < 1 )
           {
-            col_append_str(pinfo->cinfo, COL_INFO, "???" );
+            col_append_str( cinfo, COL_INFO, "???" );
             proto_item_append_text( kip_item, "???" );
             expert_add_info_format( pinfo, kip_item, KIP_ERROR, "Missing 1 byte Channel" );
             ok = 0;
@@ -3375,7 +3425,7 @@ static void dissect_knxip_data( uint8_t header_length, uint8_t protocol_version 
           else
           {
             uint8_t channel = tvb_get_uint8( tvb, offset );
-            col_append_fstr(pinfo->cinfo, COL_INFO, "%02X ", channel );
+            col_append_fstr( cinfo, COL_INFO, "%02X ", channel );
             proto_item_append_text( kip_item, "%02X: ", channel );
             proto_tree_add_item( kip_tree, hf_knxip_channel, tvb, offset, 1, ENC_BIG_ENDIAN );
             offset++;
@@ -3383,7 +3433,7 @@ static void dissect_knxip_data( uint8_t header_length, uint8_t protocol_version 
             /* 1 byte Status */
             if( remaining_len < 2 )
             {
-              col_append_str(pinfo->cinfo, COL_INFO, "???" );
+              col_append_str( cinfo, COL_INFO, "???" );
               proto_item_append_text( kip_item, "???" );
               expert_add_info_format( pinfo, kip_item, KIP_ERROR, "Missing 1 byte Status" );
               ok = 0;
@@ -3391,8 +3441,8 @@ static void dissect_knxip_data( uint8_t header_length, uint8_t protocol_version 
             else
             {
               uint8_t status = tvb_get_uint8( tvb, offset );
-              const char* status_info = val_to_str(pinfo->pool, status, error_vals, "Error 0x%02x" );
-              col_append_str(pinfo->cinfo, COL_INFO, status_info );
+              const char* status_info = val_to_str( status, error_vals, "Error 0x%02x" );
+              col_append_str( cinfo, COL_INFO, status_info );
               proto_item_append_text( kip_item, "%s", status_info );
               knxip_tree_add_status( kip_tree, tvb, offset );
               offset++;
@@ -3404,12 +3454,12 @@ static void dissect_knxip_data( uint8_t header_length, uint8_t protocol_version 
       case KIP_DISCONNECT_REQUEST:
         {
           /* 1 byte Channel ID */
-          col_append_str(pinfo->cinfo, COL_INFO, " #" );
+          col_append_str( cinfo, COL_INFO, " #" );
           proto_item_append_text( kip_item, ", Conn #" );
 
           if( remaining_len < 1 )
           {
-            col_append_str(pinfo->cinfo, COL_INFO, "???" );
+            col_append_str( cinfo, COL_INFO, "???" );
             proto_item_append_text( kip_item, "???" );
             expert_add_info_format( pinfo, kip_item, KIP_ERROR, "Missing 1 byte Channel" );
             ok = 0;
@@ -3417,7 +3467,7 @@ static void dissect_knxip_data( uint8_t header_length, uint8_t protocol_version 
           else
           {
             uint8_t channel = tvb_get_uint8( tvb, offset );
-            col_append_fstr(pinfo->cinfo, COL_INFO, "%02X", channel );
+            col_append_fstr( cinfo, COL_INFO, "%02X", channel );
             proto_item_append_text( kip_item, "%02X", channel );
             proto_tree_add_item( kip_tree, hf_knxip_channel, tvb, offset, 1, ENC_BIG_ENDIAN );
             offset++;
@@ -3443,12 +3493,12 @@ static void dissect_knxip_data( uint8_t header_length, uint8_t protocol_version 
       case KIP_DISCONNECT_RESPONSE:
         {
           /* 1 byte Channel ID */
-          col_append_str(pinfo->cinfo, COL_INFO, " #" );
+          col_append_str( cinfo, COL_INFO, " #" );
           proto_item_append_text( kip_item, ", Conn #" );
 
           if( remaining_len < 1 )
           {
-            col_append_str(pinfo->cinfo, COL_INFO, "???" );
+            col_append_str( cinfo, COL_INFO, "???" );
             proto_item_append_text( kip_item, "???" );
             expert_add_info_format( pinfo, kip_item, KIP_ERROR, "Missing 1 byte Channel" );
             ok = 0;
@@ -3456,7 +3506,7 @@ static void dissect_knxip_data( uint8_t header_length, uint8_t protocol_version 
           else
           {
             uint8_t channel = tvb_get_uint8( tvb, offset );
-            col_append_fstr(pinfo->cinfo, COL_INFO, "%02X ", channel );
+            col_append_fstr( cinfo, COL_INFO, "%02X ", channel );
             proto_item_append_text( kip_item, "%02X: ", channel );
             proto_tree_add_item( kip_tree, hf_knxip_channel, tvb, offset, 1, ENC_BIG_ENDIAN );
             offset++;
@@ -3464,7 +3514,7 @@ static void dissect_knxip_data( uint8_t header_length, uint8_t protocol_version 
             /* 1 byte Status */
             if( remaining_len < 2 )
             {
-              col_append_str(pinfo->cinfo, COL_INFO, "???" );
+              col_append_str( cinfo, COL_INFO, "???" );
               proto_item_append_text( kip_item, "???" );
               expert_add_info_format( pinfo, kip_item, KIP_ERROR, "Missing 1 byte Status" );
               ok = 0;
@@ -3472,8 +3522,8 @@ static void dissect_knxip_data( uint8_t header_length, uint8_t protocol_version 
             else
             {
               uint8_t status = tvb_get_uint8( tvb, offset );
-              const char* status_info = val_to_str(pinfo->pool, status, error_vals, "Error 0x%02x" );
-              col_append_str(pinfo->cinfo, COL_INFO, status_info );
+              const char* status_info = val_to_str( status, error_vals, "Error 0x%02x" );
+              col_append_str( cinfo, COL_INFO, status_info );
               proto_item_append_text( kip_item, "%s", status_info );
               knxip_tree_add_status( kip_tree, tvb, offset );
               offset++;
@@ -3681,7 +3731,7 @@ static void dissect_knxip_data( uint8_t header_length, uint8_t protocol_version 
     if( !knxip_error )
     {
       knxip_error = 1;
-      col_prepend_fstr(pinfo->cinfo, COL_INFO, "? " );
+      col_prepend_fstr( cinfo, COL_INFO, "? " );
     }
 
     proto_item_prepend_text( kip_item, "? " );
@@ -3717,7 +3767,7 @@ static int dissect_knxip( tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, v
   proto_tree* service_tree = NULL;
   proto_item* total_length_item = NULL;
 
-  char* version_info2;
+  char version_info[ 16 ];
 
   unsigned level = p_get_proto_depth(pinfo, proto_knxip);
   if( level == 0 )
@@ -3760,8 +3810,8 @@ static int dissect_knxip( tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, v
       header_item = proto_tree_add_none_format( kip_tree, hf_folder, tvb, 0,
         (header_len <= remaining_len) ? header_len : remaining_len, "KNX/IP Header" );
       header_tree = proto_item_add_subtree( header_item, ett_efcp );
-      header_len_item = proto_tree_add_uint_format_value( header_tree, hf_knxip_header_length,
-        tvb, 0, 1, header_len, "%u bytes", header_len );
+      header_len_item = proto_tree_add_uint_format( header_tree, hf_knxip_header_length,
+        tvb, 0, 1, header_len, "Header Length: %u bytes", header_len );
     }
 
     if( header_len > remaining_len )
@@ -3784,10 +3834,13 @@ static int dissect_knxip( tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, v
     {
       /* 1 byte Protocol Version */
       protocol_version = tvb_get_uint8( tvb, 1 );
-      version_info2 = wmem_strdup_printf(pinfo->pool, "%u.%u", hi_nibble( protocol_version ), lo_nibble( protocol_version ) );
+      snprintf( version_info, sizeof version_info, "%u.%u", hi_nibble( protocol_version ), lo_nibble( protocol_version ) );
 
-      version_item = proto_tree_add_uint_format_value( header_tree, hf_knxip_protocol_version,
-          tvb, 1, 1, protocol_version, "%s", version_info2 );
+      if( tree )
+      {
+        version_item = proto_tree_add_uint_format( header_tree, hf_knxip_protocol_version,
+          tvb, 1, 1, protocol_version, "Protocol Version: %s", version_info );
+      }
 
       if( protocol_version != 0x10 )
       {
@@ -3826,8 +3879,8 @@ static int dissect_knxip( tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, v
 
           if( tree )
           {
-            total_length_item = proto_tree_add_uint_format_value( header_tree, hf_knxip_total_length,
-              tvb, 4, 2, total_len, "%u bytes", total_len );
+            total_length_item = proto_tree_add_uint_format( header_tree, hf_knxip_total_length,
+              tvb, 4, 2, total_len, "Total Length: %u bytes", total_len );
           }
 
           if( total_len < header_len )
@@ -3911,24 +3964,15 @@ void proto_register_knxip( void )
     { &hf_knxip_service_family, { "Service Family", "knxip.service.family", FT_UINT8, BASE_HEX, VALS( knxip_service_family_vals ), 0, NULL, HFILL } },
     { &hf_knxip_service_type, { "Service Type", "knxip.service.type", FT_UINT16, BASE_HEX, VALS( knxip_service_type_vals ), 0, NULL, HFILL } },
     { &hf_knxip_total_length, { "Total Length", "knxip.totallength", FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL } },
-    { &hf_knxip_structure_length, { "Structure Length", "knxip.struct.length", FT_UINT8, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0, NULL, HFILL } },
+    { &hf_knxip_structure_length, { "Structure Length", "knxip.struct.length", FT_UINT8, BASE_DEC, NULL, 0, NULL, HFILL } },
     { &hf_knxip_host_protocol, { "Host Protocol", "knxip.hostprotocol", FT_UINT8, BASE_HEX, VALS( host_protocol_vals ), 0, NULL, HFILL } },
     { &hf_knxip_ip_address, { "IP Address", "knxip.ipaddr", FT_IPv4, BASE_NONE, NULL, 0, NULL, HFILL } },
     { &hf_knxip_port, { "Port Number", "knxip.port", FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL } },
     { &hf_knxip_description_type, { "Description Type", "knxip.dibtype", FT_UINT8, BASE_HEX, VALS( description_type_vals ), 0, NULL, HFILL } },
     { &hf_knxip_knx_medium, { "KNX Medium", "knxip.medium", FT_UINT8, BASE_HEX, VALS( medium_type_vals ), 0, NULL, HFILL } },
-    { &hf_knxip_knx_medium_flags_ip, { "IP", "knxip.medium.ip", FT_UINT8, BASE_DEC, NULL, KIP_KNXTYPE_IP, NULL, HFILL } },
-    { &hf_knxip_knx_medium_flags_rf, { "RF", "knxip.medium.rf", FT_UINT8, BASE_DEC, NULL, KIP_KNXTYPE_RF, NULL, HFILL } },
-    { &hf_knxip_knx_medium_flags_pl132, { "PL132", "knxip.medium.pl132", FT_UINT8, BASE_DEC, NULL, KIP_KNXTYPE_PL132, NULL, HFILL } },
-    { &hf_knxip_knx_medium_flags_pl110, { "PL110", "knxip.medium.pl110", FT_UINT8, BASE_DEC, NULL, KIP_KNXTYPE_PL110, NULL, HFILL } },
-    { &hf_knxip_knx_medium_flags_tp1, { "TP1", "knxip.medium.tp1", FT_UINT8, BASE_DEC, NULL, KIP_KNXTYPE_TP1, NULL, HFILL } },
-    { &hf_knxip_knx_medium_flags_tp0, { "TP0", "knxip.medium.tp0", FT_UINT8, BASE_DEC, NULL, KIP_KNXTYPE_TP0, NULL, HFILL } },
     { &hf_knxip_device_status, { "Device Status", "knxip.device.status", FT_UINT8, BASE_HEX, NULL, 0, NULL, HFILL } },
-    { &hf_knxip_program_mode, { "Programming Mode", "knxip.progmode", FT_UINT8, BASE_DEC, NULL, 0x1, NULL, HFILL } },
+    { &hf_knxip_program_mode, { "Programming Mode", "knxip.progmode", FT_UINT8, BASE_DEC, NULL, 0, NULL, HFILL } },
     { &hf_knxip_knx_address, { "KNX Individual Address", "knxip.knxaddr", FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL } },
-    { &hf_knxip_knx_tunnel_usable, { "Usable", "knxip.tunnel.usable", FT_UINT8, BASE_DEC, NULL, 0x04, NULL, HFILL } },
-    { &hf_knxip_knx_tunnel_authorized, { "Authorized", "knxip.tunnel.authorized", FT_UINT8, BASE_DEC, NULL, 0x02, NULL, HFILL } },
-    { &hf_knxip_knx_tunnel_free, { "Free", "knxip.tunnel.free", FT_UINT8, BASE_DEC, NULL, 0x01, NULL, HFILL } },
     { &hf_knxip_project_id, { "Project Installation Identifier", "knxip.project", FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL } },
     { &hf_knxip_project_number, { "Project Number", "knxip.project.nr", FT_UINT16, BASE_DEC, NULL, 0xFFF0, NULL, HFILL } },
     { &hf_knxip_installation_number, { "Installation Number", "knxip.project.installation", FT_UINT16, BASE_DEC, NULL, 0x000F, NULL, HFILL } },
@@ -3948,18 +3992,11 @@ void proto_register_knxip( void )
     { &hf_knxip_ip_subnet, { "Subnet Mask", "knxip.subnet", FT_IPv4, BASE_NONE, NULL, 0, NULL, HFILL } },
     { &hf_knxip_ip_gateway, { "Default Gateway", "knxip.gateway", FT_IPv4, BASE_NONE, NULL, 0, NULL, HFILL } },
     { &hf_knxip_ip_assign, { "IP Assignment", "knxip.ipassign", FT_UINT8, BASE_HEX, NULL, 0, NULL, HFILL } },
-    { &hf_knxip_ip_assign_auto, { "AutoIP", "knxip.ipassign.auto", FT_BOOLEAN, 8, NULL, 0x08, NULL, HFILL } },
-    { &hf_knxip_ip_assign_dhcp, { "DHCP", "knxip.ipassign.dhcp", FT_BOOLEAN, 8, NULL, 0x04, NULL, HFILL } },
-    { &hf_knxip_ip_assign_bootp, { "BootP", "knxip.ipassign.bootp", FT_BOOLEAN, 8, NULL, 0x02, NULL, HFILL } },
-    { &hf_knxip_ip_assign_manual, { "Manual", "knxip.ipassign.manual", FT_BOOLEAN, 8, NULL, 0x01, NULL, HFILL } },
     { &hf_knxip_ip_caps, { "IP Capabilities", "knxip.ipcaps", FT_UINT8, BASE_HEX, NULL, 0, NULL, HFILL } },
-    { &hf_knxip_ip_caps_auto, { "AutoIP", "knxip.ipcaps.auto", FT_BOOLEAN, 8, NULL, 0x04, NULL, HFILL } },
-    { &hf_knxip_ip_caps_dhcp, { "DHCP", "knxip.ipcaps.dhcp", FT_BOOLEAN, 8, NULL, 0x02, NULL, HFILL } },
-    { &hf_knxip_ip_caps_bootp, { "BootP", "knxip.ipcaps.bootp", FT_BOOLEAN, 8, NULL, 0x01, NULL, HFILL } },
     { &hf_knxip_ip_dhcp, { "DHCP Server", "knxip.dhcp", FT_IPv4, BASE_NONE, NULL, 0, NULL, HFILL } },
     { &hf_knxip_tunnel_feature, { "Tunneling Feature Identifier", "knxip.tunnel.feature", FT_UINT8, BASE_HEX, NULL, 0, NULL, HFILL } },
     { &hf_knxip_routing_loss, { "Lost Messages", "knxip.loss", FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL } },
-    { &hf_knxip_busy_time, { "Wait Time", "knxip.busy.time", FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_milliseconds), 0, NULL, HFILL}},
+    { &hf_knxip_busy_time, { "Wait Time", "knxip.busy.time", FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL } },
     { &hf_knxip_busy_control, { "Control", "knxip.busy.control", FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL } },
     { &hf_knxip_selector, { "Selector", "knxip.selector", FT_UINT8, BASE_HEX, NULL, 0, NULL, HFILL } },
     { &hf_knxip_max_apdu_length, { "Max APDU Length", "knxip.maxapdulength", FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL } },
@@ -4067,7 +4104,7 @@ void proto_reg_handoff_knxip( void )
 
   /* Evaluate preferences
   */
-  if ((pref_key_file_name != NULL) && (pref_key_file_name[0] != '\0'))
+  if( pref_key_file_name )
   {
     /* Read Keyring.XML file (containing decryption keys, exported from ETS) */
     read_knx_keyring_xml_file( pref_key_file_name, pref_key_file_pwd, pref_key_info_file_name );

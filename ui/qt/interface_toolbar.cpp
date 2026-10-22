@@ -29,16 +29,11 @@ DIAG_ON(restrict)
 #include <ui/qt/widgets/interface_toolbar_lineedit.h>
 #include "simple_dialog.h"
 #include "main_application.h"
-#include <ui/qt/main_window.h>
-#include <ui/qt/manager/interface_list_manager.h>
 #include <ui_interface_toolbar.h>
-#include <ui/qt/utils/qt_ui_utils.h>
 
-#include <epan/prefs.h>
-#include "ui/capture_opts.h"
+#include "capture_opts.h"
 #include "ui/capture_globals.h"
-#include <capture/sync_pipe.h>
-#include <capture/capture_session.h>
+#include "sync_pipe.h"
 #include "wsutil/file_util.h"
 
 #ifdef _WIN32
@@ -71,8 +66,7 @@ enum InterfaceControlCommand {
 };
 
 // To do:
-// - Move control pipe out handling to extcap? (So the control pipe out could
-// also be used to send other messages, like a QUIT message - #17131.)
+// - Move control pipe handling to extcap
 
 InterfaceToolbar::InterfaceToolbar(QWidget *parent, const iface_toolbar *toolbar) :
     QFrame(parent),
@@ -82,16 +76,17 @@ InterfaceToolbar::InterfaceToolbar(QWidget *parent, const iface_toolbar *toolbar
 {
     ui->setupUi(this);
 
-    // Fill in interfaces list and initialize default interface values
+    // Fill inn interfaces list and initialize default interface values
     for (GList *walker = toolbar->ifnames; walker; walker = walker->next)
     {
         QString ifname((char *)walker->data);
-        interface_[ifname].control_out_queue = nullptr;
+        interface_[ifname].reader_thread = NULL;
+        interface_[ifname].out_fd = -1;
     }
 
     initializeControls(toolbar);
 
-#ifdef Q_OS_MACOS
+#ifdef Q_OS_MAC
     foreach (QWidget *w, findChildren<QWidget *>())
     {
         w->setAttribute(Qt::WA_MacSmallSize, true);
@@ -102,8 +97,6 @@ InterfaceToolbar::InterfaceToolbar(QWidget *parent, const iface_toolbar *toolbar
     {
         ui->horizontalSpacer->changeSize(0,0, QSizePolicy::Fixed, QSizePolicy::Fixed);
     }
-
-    connect(mainApp, &MainApplication::interfaceListChanged, this, &InterfaceToolbar::interfaceListChanged);
 
     updateWidgets();
 }
@@ -191,11 +184,7 @@ QWidget *InterfaceToolbar::createCheckbox(iface_toolbar_control *control)
         setDefaultValue(control->num, default_value);
     }
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
-    connect(checkbox, &QCheckBox::checkStateChanged, this, &InterfaceToolbar::onCheckBoxChanged);
-#else
-    connect(checkbox, &QCheckBox::stateChanged, this, &InterfaceToolbar::onCheckBoxChanged);
-#endif
+    connect(checkbox, SIGNAL(stateChanged(int)), this, SLOT(onCheckBoxChanged(int)));
 
     ui->leftLayout->addWidget(checkbox);
 
@@ -212,11 +201,11 @@ QWidget *InterfaceToolbar::createButton(iface_toolbar_control *control)
     {
         case INTERFACE_ROLE_CONTROL:
             setDefaultValue(control->num, (char *)control->display);
-            connect(button, &QPushButton::clicked, this, &InterfaceToolbar::onControlButtonClicked);
+            connect(button, SIGNAL(clicked()), this, SLOT(onControlButtonClicked()));
             break;
 
         case INTERFACE_ROLE_HELP:
-            connect(button, &QPushButton::clicked, this, &InterfaceToolbar::onHelpButtonClicked);
+            connect(button, SIGNAL(clicked()), this, SLOT(onHelpButtonClicked()));
             if (help_link_.isEmpty())
             {
                 // No help URL provided
@@ -225,11 +214,11 @@ QWidget *InterfaceToolbar::createButton(iface_toolbar_control *control)
             break;
 
         case INTERFACE_ROLE_LOGGER:
-            connect(button, &QPushButton::clicked, this, &InterfaceToolbar::onLogButtonClicked);
+            connect(button, SIGNAL(clicked()), this, SLOT(onLogButtonClicked()));
             break;
 
         case INTERFACE_ROLE_RESTORE:
-            connect(button, &QPushButton::clicked, this, &InterfaceToolbar::onRestoreButtonClicked);
+            connect(button, SIGNAL(clicked()), this, SLOT(onRestoreButtonClicked()));
             break;
 
         default:
@@ -285,7 +274,7 @@ QWidget *InterfaceToolbar::createSelector(iface_toolbar_control *control)
         default_list_[control->num].append(interface_value);
     }
 
-    connect(combobox, &QComboBox::currentIndexChanged, this, &InterfaceToolbar::onComboBoxChanged);
+    connect(combobox, SIGNAL(currentIndexChanged(int)), this, SLOT(onComboBoxChanged(int)));
 
     ui->leftLayout->addWidget(label);
     ui->leftLayout->addWidget(combobox);
@@ -308,7 +297,7 @@ QWidget *InterfaceToolbar::createString(iface_toolbar_control *control)
         setDefaultValue(control->num, control->default_value.string);
     }
 
-    connect(lineedit, &InterfaceToolbarLineEdit::editedTextApplied, this, &InterfaceToolbar::onLineEditChanged);
+    connect(lineedit, SIGNAL(editedTextApplied()), this, SLOT(onLineEditChanged()));
 
     ui->leftLayout->addWidget(label);
     ui->leftLayout->addWidget(lineedit);
@@ -522,13 +511,7 @@ void InterfaceToolbar::setInterfaceValue(QString ifname, QWidget *widget, int nu
             {
                 interface_[ifname].log_dialog[num]->appendText(payload);
             }
-#if WS_IS_AT_LEAST_GNUC_VERSION(12,1)
-            DIAG_OFF(stringop-overread)
-#endif
             interface_[ifname].log_text[num].append(payload);
-#if WS_IS_AT_LEAST_GNUC_VERSION(12,1)
-            DIAG_ON(stringop-overread)
-#endif
         }
     }
     else if (widget->property(interface_role_property).toInt() == INTERFACE_ROLE_CONTROL)
@@ -621,7 +604,7 @@ void InterfaceToolbar::controlSend(QString ifname, int num, int command, const Q
         return;
     }
 
-    if (ifname.isEmpty() || interface_[ifname].control_out_queue == nullptr)
+    if (ifname.isEmpty() || interface_[ifname].out_fd == -1)
     {
         // Does not have a control out channel
         return;
@@ -642,8 +625,12 @@ void InterfaceToolbar::controlSend(QString ifname, int num, int command, const Q
     ba.append(command);
     ba.append(payload);
 
-    g_async_queue_push(interface_[ifname].control_out_queue, g_bytes_new(ba.data(), ba.length()));
-    g_main_context_wakeup(NULL); // Necessary, at least on Windows
+    if (ws_write(interface_[ifname].out_fd, ba.data(), ba.length()) != ba.length())
+    {
+        simple_dialog_async(ESD_TYPE_ERROR, ESD_BTN_OK,
+                            "Unable to send control message:\n%s.",
+                            g_strerror(errno));
+    }
 }
 
 void InterfaceToolbar::onControlButtonClicked()
@@ -701,8 +688,8 @@ void InterfaceToolbar::onLogButtonClicked()
     if (!interface_[ifname].log_dialog.contains(num))
     {
         interface_[ifname].log_dialog[num] = new FunnelTextDialog(window(), ifname + " " + button->text());
-        connect(interface_[ifname].log_dialog[num], &FunnelTextDialog::accepted, this, &InterfaceToolbar::closeLog);
-        connect(interface_[ifname].log_dialog[num], &FunnelTextDialog::rejected, this, &InterfaceToolbar::closeLog);
+        connect(interface_[ifname].log_dialog[num], SIGNAL(accepted()), this, SLOT(closeLog()));
+        connect(interface_[ifname].log_dialog[num], SIGNAL(rejected()), this, SLOT(closeLog()));
 
         interface_[ifname].log_dialog[num]->setText(interface_[ifname].log_text[num]);
     }
@@ -739,37 +726,22 @@ void InterfaceToolbar::closeLog()
 }
 
 
-void InterfaceToolbar::captureEventHandler(CaptureEvent ev)
+void InterfaceToolbar::startReaderThread(QString ifname, void *control_in)
 {
-#ifdef HAVE_LIBPCAP
-    if (ev.captureContext() != CaptureEvent::Capture)
-        return;
+    QThread *thread = new QThread;
+    InterfaceToolbarReader *reader = new InterfaceToolbarReader(ifname, control_in);
+    reader->moveToThread(thread);
 
-    capture_session *cap_session = ev.capSession();
-    GList *iter, *next;
-    iface_toolbar_message_t *msg;
-    switch (ev.eventType()) {
-    case CaptureEvent::Toolbar:
-        g_mutex_lock(&cap_session->toolbar_mutex);
-        iter = g_queue_peek_head_link(&cap_session->toolbar_queue);
-        while (iter != nullptr) {
-            next = gxx_list_next(iter);
-            msg = gxx_list_data(iface_toolbar_message_t*, iter);
-            if (hasInterface(msg->ifname)) {
-                g_queue_delete_link(&cap_session->toolbar_queue, iter);
-                // The payload can never be more than SSIZE_MAX
-                controlReceived(msg->ifname, msg->ifnum, msg->command, gbytes_free_to_qbytearray(msg->payload));
-                g_free(msg);
-            }
-            iter = next;
-        }
-        g_mutex_unlock(&cap_session->toolbar_mutex);
-    default:
-        break;
-    }
-#else
-    Q_UNUSED(ev);
-#endif
+    connect(thread, SIGNAL(started()), reader, SLOT(loop()));
+    connect(reader, SIGNAL(finished()), thread, SLOT(quit()));
+    connect(reader, SIGNAL(finished()), reader, SLOT(deleteLater()));
+    connect(thread, SIGNAL(finished()), reader, SLOT(deleteLater()));
+    connect(reader, SIGNAL(received(QString, int, int, QByteArray)),
+            this, SLOT(controlReceived(QString, int, int, QByteArray)));
+
+    interface_[ifname].reader_thread = thread;
+
+    thread->start();
 }
 
 void InterfaceToolbar::startCapture(GArray *ifaces)
@@ -777,10 +749,6 @@ void InterfaceToolbar::startCapture(GArray *ifaces)
     if (!ifaces || ifaces->len == 0)
         return;
 
-    MainWindow *mainWindow = mainApp->mainWindow();
-    if (mainWindow && mainWindow->captureFile()) {
-        connect(mainWindow->captureFile(), &CaptureFile::captureEvent, this, &InterfaceToolbar::captureEventHandler);
-    }
     const QString &selected_ifname = ui->interfacesComboBox->currentText();
     QString first_capturing_ifname;
     bool selected_found = false;
@@ -800,11 +768,33 @@ void InterfaceToolbar::startCapture(GArray *ifaces)
         if (ifname.compare(selected_ifname) == 0)
             selected_found = true;
 
-        if (interface_[ifname].control_out_queue != nullptr)
+        if (interface_[ifname].out_fd != -1)
             // Already have control channels for this interface
             continue;
 
-        interface_[ifname].control_out_queue = g_async_queue_ref(interface_opts->extcap_control_out_q);
+        // Open control out channel
+#ifdef _WIN32
+        startReaderThread(ifname, interface_opts->extcap_control_in_h);
+        // Duplicate control out handle and pass the duplicate handle to _open_osfhandle().
+        // This allows the C run-time file descriptor (out_fd) and the extcap_control_out_h to be closed independently.
+        // The duplicated handle will get closed at the same time the file descriptor is closed.
+        // The control out pipe will close when both out_fd and extcap_control_out_h are closed.
+        HANDLE duplicate_out_handle = INVALID_HANDLE_VALUE;
+        if (!DuplicateHandle(GetCurrentProcess(), interface_opts->extcap_control_out_h,
+                             GetCurrentProcess(), &duplicate_out_handle, 0, true, DUPLICATE_SAME_ACCESS))
+        {
+            simple_dialog_async(ESD_TYPE_ERROR, ESD_BTN_OK,
+                                "Failed to duplicate extcap control out handle: %s\n.",
+                                win32strerror(GetLastError()));
+        }
+        else
+        {
+            interface_[ifname].out_fd = _open_osfhandle((intptr_t)duplicate_out_handle, O_APPEND | O_BINARY);
+        }
+#else
+        startReaderThread(ifname, interface_opts->extcap_control_in);
+        interface_[ifname].out_fd = ws_open(interface_opts->extcap_control_out, O_WRONLY | O_BINARY, 0);
+#endif
         sendChangedValues(ifname);
         controlSend(ifname, 0, commandControlInitialized);
     }
@@ -823,10 +813,20 @@ void InterfaceToolbar::stopCapture()
 {
     foreach (QString ifname, interface_.keys())
     {
-        if (interface_[ifname].control_out_queue != nullptr)
+        if (interface_[ifname].reader_thread)
         {
-            g_async_queue_unref(interface_[ifname].control_out_queue);
-            interface_[ifname].control_out_queue = nullptr;
+            if (!interface_[ifname].reader_thread->isFinished())
+            {
+                interface_[ifname].reader_thread->requestInterruption();
+            }
+            interface_[ifname].reader_thread = NULL;
+        }
+
+        if (interface_[ifname].out_fd != -1)
+        {
+            ws_close_if_possible (interface_[ifname].out_fd);
+
+            interface_[ifname].out_fd = -1;
         }
 
         foreach (int num, control_widget_.keys())
@@ -910,7 +910,7 @@ void InterfaceToolbar::onRestoreButtonClicked()
     }
 }
 
-bool InterfaceToolbar::hasInterface(QString ifname) const
+bool InterfaceToolbar::hasInterface(QString ifname)
 {
     return interface_.contains(ifname);
 }
@@ -918,7 +918,7 @@ bool InterfaceToolbar::hasInterface(QString ifname) const
 void InterfaceToolbar::updateWidgets()
 {
     const QString &ifname = ui->interfacesComboBox->currentText();
-    bool is_capturing = (interface_[ifname].control_out_queue == nullptr ? false : true);
+    bool is_capturing = (interface_[ifname].out_fd == -1 ? false : true);
 
     foreach (int num, control_widget_.keys())
     {
@@ -972,10 +972,10 @@ void InterfaceToolbar::interfaceListChanged()
     for (unsigned i = 0; i < global_capture_opts.all_ifaces->len; i++)
     {
         interface_t *device = &g_array_index(global_capture_opts.all_ifaces, interface_t, i);
-        if (!prefs.gui_interfaces_show_hidden && device->hidden)
+        if (device->hidden)
             continue;
 
-        if (interface_.contains(device->name))
+        if (interface_.keys().contains(device->name))
         {
             ui->interfacesComboBox->addItem(device->name);
             if (selected_ifname.compare(device->name) == 0)

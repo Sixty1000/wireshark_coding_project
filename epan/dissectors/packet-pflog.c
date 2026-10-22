@@ -396,8 +396,8 @@ dissect_pflog(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
   }
 
   proto_item_set_text(ti, "PF Log %s %s on %s by rule %d",
-    val_to_str(pinfo->pool, af, pflog_af_vals, "unknown (%u)"),
-    val_to_str(pinfo->pool, action, pflog_action_vals, "unknown (%u)"),
+    val_to_str(af, pflog_af_vals, "unknown (%u)"),
+    val_to_str(action, pflog_action_vals, "unknown (%u)"),
     ifname,
     rulenr);
   proto_item_set_len(ti, offset);
@@ -423,7 +423,7 @@ dissect_pflog(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
   }
 
   col_prepend_fstr(pinfo->cinfo, COL_INFO, "[%s %s/%d] ",
-        val_to_str(pinfo->pool, action, pflog_action_vals, "unknown (%u)"),
+        val_to_str(action, pflog_action_vals, "unknown (%u)"),
         ifname,
         rulenr);
   return tvb_captured_length(tvb);
@@ -517,7 +517,7 @@ proto_register_pflog(void)
   static int *ett[] = { &ett_pflog };
 
   static ei_register_info ei[] = {
-     { &ei_pflog_invalid_header_length, { "pflog.invalid_header_length", PI_MALFORMED, PI_ERROR, "Invalid header length", EXPFILL }},
+     { &ei_pflog_invalid_header_length, { "pflog.invalid_header_length", PI_MALFORMED, PI_ERROR, "Invalid header length ", EXPFILL }},
   };
 
   expert_module_t* expert_pflog;
@@ -565,27 +565,31 @@ dissect_old_pflog(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
   ti = proto_tree_add_item(tree, proto_old_pflog, tvb, 0, -1, ENC_NA);
   pflog_tree = proto_item_add_subtree(ti, ett_pflog);
 
-  proto_tree_add_item_ret_uint(pflog_tree, hf_old_pflog_af, tvb, offset, 4, ENC_BIG_ENDIAN, &af);
+  proto_tree_add_item(pflog_tree, hf_old_pflog_af, tvb, offset, 4, ENC_BIG_ENDIAN);
+
+  af = tvb_get_ntohl(tvb, offset);
   offset +=4;
 
   proto_tree_add_item_ret_string(pflog_tree, hf_old_pflog_ifname, tvb, offset, 16, ENC_ASCII|ENC_NA, pinfo->pool, &ifname);
   offset +=16;
 
-  proto_tree_add_item_ret_uint16(pflog_tree, hf_old_pflog_rnr, tvb, offset, 2, ENC_BIG_ENDIAN, &rnr);
+  proto_tree_add_item(pflog_tree, hf_old_pflog_rnr, tvb, offset, 2, ENC_BIG_ENDIAN);
+  rnr = tvb_get_ntohs(tvb, offset);
   offset +=2;
 
   proto_tree_add_item(pflog_tree, hf_old_pflog_reason, tvb, offset, 2, ENC_BIG_ENDIAN);
   offset +=2;
 
-  proto_tree_add_item_ret_uint16(pflog_tree, hf_old_pflog_action, tvb, offset, 2, ENC_BIG_ENDIAN, &action);
+  proto_tree_add_item(pflog_tree, hf_old_pflog_action, tvb, offset, 2, ENC_BIG_ENDIAN);
+  action = tvb_get_ntohs(tvb, offset);
   offset +=2;
 
   proto_tree_add_item(pflog_tree, hf_old_pflog_dir, tvb, offset, 2, ENC_BIG_ENDIAN);
   offset +=2;
 
   proto_item_set_text(ti, "PF Log (pre 3.4) %s %s on %s by rule %d",
-      val_to_str(pinfo->pool, af, pflog_af_vals, "unknown (%u)"),
-      val_to_str(pinfo->pool, action, pflog_action_vals, "unknown (%u)"),
+      val_to_str(af, pflog_af_vals, "unknown (%u)"),
+      val_to_str(action, pflog_action_vals, "unknown (%u)"),
       ifname,
       rnr);
   proto_item_set_len(ti, offset);
@@ -609,7 +613,7 @@ dissect_old_pflog(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
   }
 
   col_prepend_fstr(pinfo->cinfo, COL_INFO, "[%s %s/#%d] ",
-        val_to_str(pinfo->pool, action, pflog_action_vals, "unknown (%u)"),
+        val_to_str(action, pflog_action_vals, "unknown (%u)"),
         ifname,
         rnr);
 
@@ -627,7 +631,7 @@ proto_register_old_pflog(void)
       { "Interface", "pflog.ifname", FT_STRING, BASE_NONE, NULL, 0x0,
         NULL, HFILL }},
     { &hf_old_pflog_rnr,
-      { "Rule Number", "pflog.rnr", FT_UINT16, BASE_DEC, NULL, 0x0,
+      { "Rule Number", "pflog.rnr", FT_INT16, BASE_DEC, NULL, 0x0,
         "Last matched firewall rule number", HFILL }},
     { &hf_old_pflog_reason,
       { "Reason", "pflog.reason", FT_UINT16, BASE_DEC, VALS(pflog_reason_vals), 0x0,

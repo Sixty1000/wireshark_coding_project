@@ -16,14 +16,13 @@
 #include "ui/capture_globals.h"
 #include "remote_capture_dialog.h"
 #include <ui_remote_capture_dialog.h>
-#include "ui/capture_opts.h"
+#include "capture_opts.h"
 #include "capture/capture-pcap-util.h"
 #include "ui/capture_ui_utils.h"
 #include "epan/prefs.h"
 #include "epan/to_str.h"
 #include "ui/ws_ui_util.h"
 #include "ui/recent.h"
-#include "app/application_flavor.h"
 
 #include <QMessageBox>
 
@@ -83,7 +82,7 @@ void RemoteCaptureDialog::fillComboBox()
     if (remote_host_list_size > 0) {
         recent_remote_host_list_foreach(fillBox, ui->hostCombo);
         ui->hostCombo->insertSeparator(remote_host_list_size+1);
-        ui->hostCombo->addItem(tr("Clear list"));
+        ui->hostCombo->addItem(QString(tr("Clear list")));
     }
 }
 
@@ -120,7 +119,6 @@ void RemoteCaptureDialog::apply_remote()
 
     GList *rlist = get_remote_interface_list(global_remote_opts.remote_host_opts.remote_host,
                                               global_remote_opts.remote_host_opts.remote_port,
-                                              application_flavor_is_wireshark(),
                                               global_remote_opts.remote_host_opts.auth_type,
                                               global_remote_opts.remote_host_opts.auth_username,
                                               global_remote_opts.remote_host_opts.auth_password,

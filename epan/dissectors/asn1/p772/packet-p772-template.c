@@ -19,8 +19,13 @@
 
 #include "packet-x509if.h"
 
+#include "packet-p772.h"
 #include "packet-p1.h"
 #include "packet-p22.h"
+
+#define PNAME  "STANAG 4406 Message"
+#define PSNAME "P772"
+#define PFNAME "p772"
 
 void proto_register_p772(void);
 void proto_reg_handoff_p772(void);
@@ -46,7 +51,7 @@ static int ett_p772;
 static int
 dissect_p772(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* data _U_)
 {
-	unsigned offset = 0;
+	int offset = 0;
 	proto_item *item=NULL;
 	proto_tree *tree=NULL;
 	asn1_ctx_t asn1_ctx;
@@ -82,7 +87,7 @@ void proto_register_p772(void) {
   };
 
   /* Register protocol */
-  proto_p772 = proto_register_protocol("STANAG 4406 Message", "P772", "p772");
+  proto_p772 = proto_register_protocol(PNAME, PSNAME, PFNAME);
   register_dissector("p772", dissect_p772, proto_p772);
 
   /* Register fields and subtrees */

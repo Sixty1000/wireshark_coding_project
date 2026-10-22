@@ -10,16 +10,9 @@
 #ifndef __PACKETLOGGER_H__
 #define __PACKETLOGGER_H__
 
+#include <glib.h>
 #include "wtap.h"
 
-/**
- * @brief Open a PacketLogger file for reading.
- *
- * @param wth Pointer to the wtap structure.
- * @param err Error code if an error occurs.
- * @param err_info Error information if an error occurs.
- * @return A value indicating the result of the operation.
- */
 wtap_open_return_val packetlogger_open(wtap *wth, int *err, char **err_info _U_);
 
 #endif /* __PACKETLOGGER_H__ */

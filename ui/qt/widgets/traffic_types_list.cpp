@@ -75,16 +75,8 @@ TrafficTypesModel::TrafficTypesModel(GList ** recentList, QObject *parent) :
 
     if (_protocols.isEmpty()) {
         QStringList protoNames = QStringList() << "eth" << "ip" << "ipv6" << "tcp" << "udp";
-        foreach(QString name, protoNames) {
-            int protoId = proto_get_id_by_filter_name(name.toStdString().c_str());
-            _protocols << protoId;
-
-            /* immediate saving in the recent list, then all next openings don't need to build
-             * this default list again.
-             */
-            char *title = g_strdup(proto_get_protocol_short_name(find_protocol_by_id(protoId)));
-            *_recentList = g_list_append(*_recentList, title);
-        }
+        foreach(QString name, protoNames)
+            _protocols << proto_get_id_by_filter_name(name.toStdString().c_str());
     }
 
     for(int cnt = 0; cnt < _allTaps.count(); cnt++)
@@ -238,15 +230,8 @@ bool TrafficListSortModel::lessThan(const QModelIndex &source_left, const QModel
 void TrafficListSortModel::setFilter(QString filter)
 {
     if ( filter.compare(_filter) != 0 ) {
-#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
-        beginFilterChange();
-#endif
         _filter = filter;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-        endFilterChange(QSortFilterProxyModel::Direction::Rows);
-#else
         invalidateFilter();
-#endif
     }
 }
 
@@ -274,6 +259,7 @@ TrafficTypesList::TrafficTypesList(QWidget *parent) :
     _model = nullptr;
     _sortModel = nullptr;
 
+    setAlternatingRowColors(true);
     setRootIsDecorated(false);
 }
 

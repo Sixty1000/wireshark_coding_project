@@ -23,7 +23,7 @@ GSList *dfilter_plugins;
 
 void dfilter_plugins_register(const dfilter_plugin *plug)
 {
-	dfilter_plugins = g_slist_prepend(dfilter_plugins, (void *)plug);
+	dfilter_plugins = g_slist_prepend(dfilter_plugins, (gpointer)plug);
 }
 
 void dfilter_plugins_init(void)

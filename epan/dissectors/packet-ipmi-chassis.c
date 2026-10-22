@@ -12,8 +12,6 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 
 #include "packet-ipmi.h"
 
@@ -400,7 +398,7 @@ bootopt_07(packet_info *pinfo _U_, tvbuff_t *tvb, proto_tree *tree)
 }
 
 
-static const struct {
+static struct {
 	void (*intrp)(packet_info *pinfo, tvbuff_t *tvb, proto_tree *tree);
 	const char *name;
 } boot_options[] = {

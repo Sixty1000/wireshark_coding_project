@@ -32,61 +32,35 @@
 
 #include <QStyledItemDelegate>
 
-/**
- * @brief Describes a single time-span bar to be rendered inside a timeline cell,
- *        with pixel geometry and normalised time coordinates for positioning.
- *
- * All pixel fields are relative to the item's bounding rectangle and will be
- * clipped to it during painting.
- */
+// Pixels are relative to item rect and will be clipped.
 struct timeline_span {
-    int start; /**< Left edge of the span bar in pixels, relative to the item rect. */
-    int width; /**< Width of the span bar in pixels. */
+    int start;
+    int width;
 
-    double startTime;   /**< Absolute start time of the span in seconds. */
-    double stopTime;    /**< Absolute stop time of the span in seconds. */
-    double minRelTime;  /**< Minimum relative time across all spans in the cell, used for normalisation. */
-    double maxRelTime;  /**< Maximum relative time across all spans in the cell, used for normalisation. */
+    double startTime;
+    double stopTime;
+    double minRelTime;
+    double maxRelTime;
 
-    int colStart;    /**< Start colour index or gradient stop for the span bar. */
-    int colDuration; /**< Duration used to select the span bar colour or gradient width. */
+    int colStart;
+    int colDuration;
 };
 
 Q_DECLARE_METATYPE(timeline_span)
 
-
-/**
- * @brief Item delegate that paints a horizontal timeline bar inside a table or
- *        tree cell, using timeline_span data retrieved from a configurable model role.
- */
 class TimelineDelegate : public QStyledItemDelegate
 {
 public:
-    /**
-     * @brief Constructs the TimelineDelegate.
-     * @param parent Optional parent widget passed to QStyledItemDelegate.
-     */
     TimelineDelegate(QWidget *parent = 0);
 
-    /**
-     * @brief Sets the model role from which timeline_span data is retrieved during painting.
-     * @param role Qt item data role that returns a QVariant containing a timeline_span.
-     */
     void setDataRole(int role);
 
 protected:
-    /**
-     * @brief Paints the timeline bar for the cell at @p index using the span geometry
-     *        stored in the configured data role.
-     * @param painter Painter to draw with; clipped to the item rectangle.
-     * @param option  Style options including the item rectangle and state flags.
-     * @param index   Model index of the cell being painted.
-     */
     void paint(QPainter *painter, const QStyleOptionViewItem &option,
-               const QModelIndex &index) const override;
-
+               const QModelIndex &index) const;
 private:
-    int _dataRole; /**< Model role used to retrieve timeline_span data for each cell. */
+
+    int _dataRole;
 };
 
 #endif // TIMELINE_DELEGATE_H

@@ -16,6 +16,7 @@
 #include "epan/epan_dissect.h"
 
 #include "file.h"
+#include "frame_tvbuff.h"
 
 #include "rtp_analysis_dialog.h"
 
@@ -29,20 +30,23 @@
 #include <wsutil/pint.h>
 
 #include <ui/qt/utils/color_utils.h>
-#include <ui/qt/utils/theme_manager.h>
-#include <ui/qt/utils/plot_theme.h>
 #include <ui/qt/widgets/qcustomplot.h>
 #include <ui/qt/utils/qt_ui_utils.h>
 #include "rtp_audio_stream.h"
+#include <ui/qt/utils/tango_colors.h>
 #include <widgets/rtp_audio_graph.h>
 #include "main_application.h"
 #include "ui/qt/widgets/wireshark_file_dialog.h"
 
 #include <QAudio>
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
 #include <algorithm>
 #include <QAudioDevice>
 #include <QAudioSink>
 #include <QMediaDevices>
+#else
+#include <QAudioDeviceInfo>
+#endif
 #include <QFrame>
 #include <QMenu>
 #include <QVBoxLayout>
@@ -57,7 +61,7 @@
 #include <QPushButton>
 #include <QToolButton>
 
-#include <ui/qt/utils/themes/themed_icon.h>
+#include <ui/qt/utils/stock_icon.h>
 #include "main_application.h"
 
 // To do:
@@ -109,7 +113,7 @@ public:
     {
     }
 
-    bool operator< (const QTreeWidgetItem &other) const override
+    bool operator< (const QTreeWidgetItem &other) const
     {
         // Handle numeric sorting
         switch (treeWidget()->sortColumn()) {
@@ -152,7 +156,7 @@ RtpPlayerDialog *RtpPlayerDialog::openRtpPlayerDialog(QWidget &parent, CaptureFi
 }
 
 RtpPlayerDialog::RtpPlayerDialog(QWidget &parent, CaptureFile &cf, bool capture_running _U_) :
-    RtpBaseDialog(parent, cf)
+    WiresharkDialog(parent, cf)
 #ifdef QT_MULTIMEDIA_LIB
     , ui(new Ui::RtpPlayerDialog)
     , first_stream_rel_start_time_(0.0)
@@ -160,12 +164,10 @@ RtpPlayerDialog::RtpPlayerDialog(QWidget &parent, CaptureFile &cf, bool capture_
     , first_stream_rel_stop_time_(0.0)
     , streams_length_(0.0)
     , start_marker_time_(0.0)
-    , start_marker_time_play_(0.0)
     , number_ticker_(new QCPAxisTicker)
     , datetime_ticker_(new QCPAxisTickerDateTime)
     , stereo_available_(false)
     , marker_stream_(0)
-    , notify_timer_start_diff_(0)
     , marker_stream_requested_out_rate_(0)
     , last_ti_(0)
     , listener_removed_(true)
@@ -201,6 +203,7 @@ RtpPlayerDialog::RtpPlayerDialog(QWidget &parent, CaptureFile &cf, bool capture_
     graph_ctx_menu_->addSeparator();
     graph_ctx_menu_->addAction(ui->actionGoToPacket);
     graph_ctx_menu_->addAction(ui->actionGoToSetupPacketPlot);
+    set_action_shortcuts_visible_in_context_menu(graph_ctx_menu_->actions());
 
     ui->audioPlot->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(ui->audioPlot, &QCustomPlot::customContextMenuRequested, this, &RtpPlayerDialog::showGraphContextMenu);
@@ -222,31 +225,31 @@ RtpPlayerDialog::RtpPlayerDialog(QWidget &parent, CaptureFile &cf, bool capture_
     cur_play_pos_->setVisible(false);
 
     start_marker_pos_ = new QCPItemStraightLine(ui->audioPlot);
+    start_marker_pos_->setPen(QPen(Qt::green,4));
     setStartPlayMarker(0);
     drawStartPlayMarker();
     start_marker_pos_->setVisible(true);
 
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
     notify_timer_.setInterval(100); // ~15 fps
     connect(&notify_timer_, &QTimer::timeout, this, &RtpPlayerDialog::outputNotify);
+#endif
 
     datetime_ticker_->setDateTimeFormat("yyyy-MM-dd\nhh:mm:ss.zzz");
 
-    PlotTheme::track(ui->audioPlot, [this]() {
-        start_marker_pos_->setPen(QPen(ThemeManager::instance()->color(ThemeManager::AccentSuccess), 4));
-    });
     ui->audioPlot->xAxis->setNumberFormat("gb");
     ui->audioPlot->xAxis->setNumberPrecision(3);
     ui->audioPlot->xAxis->setTicker(datetime_ticker_);
     ui->audioPlot->yAxis->setVisible(false);
 
-    ui->playButton->setIcon(ThemedIcon("media-playback-start"));
+    ui->playButton->setIcon(StockIcon("media-playback-start"));
     ui->playButton->setEnabled(false);
-    ui->pauseButton->setIcon(ThemedIcon("media-playback-pause"));
+    ui->pauseButton->setIcon(StockIcon("media-playback-pause"));
     ui->pauseButton->setCheckable(true);
     ui->pauseButton->setVisible(false);
-    ui->stopButton->setIcon(ThemedIcon("media-playback-stop"));
+    ui->stopButton->setIcon(StockIcon("media-playback-stop"));
     ui->stopButton->setEnabled(false);
-    ui->skipSilenceButton->setIcon(ThemedIcon("media-seek-forward"));
+    ui->skipSilenceButton->setIcon(StockIcon("media-seek-forward"));
     ui->skipSilenceButton->setCheckable(true);
     ui->skipSilenceButton->setEnabled(false);
 
@@ -280,12 +283,21 @@ RtpPlayerDialog::RtpPlayerDialog(QWidget &parent, CaptureFile &cf, bool capture_
 
     // Ordered, unique device names starting with the system default
     QMap<QString, bool> out_device_map; // true == default device
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
     out_device_map.insert(QMediaDevices::defaultAudioOutput().description(), true);
     foreach (QAudioDevice out_device, QMediaDevices::audioOutputs()) {
         if (!out_device_map.contains(out_device.description())) {
             out_device_map.insert(out_device.description(), false);
         }
     }
+#else
+    out_device_map.insert(QAudioDeviceInfo::defaultOutputDevice().deviceName(), true);
+    foreach (QAudioDeviceInfo out_device, QAudioDeviceInfo::availableDevices(QAudio::AudioOutput)) {
+        if (!out_device_map.contains(out_device.deviceName())) {
+            out_device_map.insert(out_device.deviceName(), false);
+        }
+    }
+#endif
 
     ui->outputDeviceComboBox->blockSignals(true);
     foreach (QString out_name, out_device_map.keys()) {
@@ -315,7 +327,6 @@ RtpPlayerDialog::RtpPlayerDialog(QWidget &parent, CaptureFile &cf, bool capture_
                 QCP::iRangeDrag |
                 QCP::iRangeZoom
                 );
-    ui->audioPlot->axisRect()->setRangeZoom(Qt::Horizontal);
 
     graph_ctx_menu_->addSeparator();
     list_ctx_menu_ = new QMenu(this);
@@ -330,6 +341,7 @@ RtpPlayerDialog::RtpPlayerDialog(QWidget &parent, CaptureFile &cf, bool capture_
     list_ctx_menu_->addAction(ui->actionRemoveStream);
     graph_ctx_menu_->addAction(ui->actionRemoveStream);
     list_ctx_menu_->addAction(ui->actionGoToSetupPacketTree);
+    set_action_shortcuts_visible_in_context_menu(list_ctx_menu_->actions());
 
     connect(&cap_file_, &CaptureFile::captureEvent, this, &RtpPlayerDialog::captureEvent);
     connect(this, SIGNAL(updateFilter(QString, bool)),
@@ -356,7 +368,7 @@ QToolButton *RtpPlayerDialog::addPlayerButton(QDialogButtonBox *button_box, QDia
 
     ca = new QAction(tr("&Play Streams"), player_button);
     ca->setToolTip(tr("Open RTP player dialog"));
-    ca->setIcon(ThemedIcon("media-playback-start"));
+    ca->setIcon(StockIcon("media-playback-start"));
     connect(ca, SIGNAL(triggered()), dialog, SLOT(rtpPlayerReplace()));
     player_button->setDefaultAction(ca);
     // Overrides text striping of shortcut undercode in QAction
@@ -429,7 +441,7 @@ void RtpPlayerDialog::retapPackets()
         return;
     }
     lockUI();
-    ui->hintLabel->setText("<i><small>" + tr("Decoding streams…") + "</i></small>");
+    ui->hintLabel->setText("<i><small>" + tr("Decoding streams...") + "</i></small>");
     mainApp->processEvents();
 
     // Clear packets from existing streams before retap
@@ -440,7 +452,7 @@ void RtpPlayerDialog::retapPackets()
         row_stream->clearPackets();
     }
 
-    // destroyCheck is protection against destroying dialog during recap.
+    // destroyCheck is protection againts destroying dialog during recap.
     // It stores dialog pointer in data() and if dialog destroyed, it
     // returns null
     QPointer<RtpPlayerDialog> destroyCheck=this;
@@ -473,10 +485,14 @@ void RtpPlayerDialog::rescanPackets(bool rescale_axes)
     lockUI();
     // Show information for a user - it can last long time...
     playback_error_.clear();
-    ui->hintLabel->setText("<i><small>" + tr("Decoding streams…") + "</i></small>");
+    ui->hintLabel->setText("<i><small>" + tr("Decoding streams...") + "</i></small>");
     mainApp->processEvents();
 
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
     QAudioDevice cur_out_device = getCurrentDeviceInfo();
+#else
+    QAudioDeviceInfo cur_out_device = getCurrentDeviceInfo();
+#endif
     int row_count = ui->streamTreeWidget->topLevelItemCount();
 
     // Reset stream values
@@ -528,9 +544,6 @@ void RtpPlayerDialog::createPlot(bool rescale_axes)
 
     ui->audioPlot->clearGraphs();
 
-    ThemeManager *tm = ThemeManager::instance();
-    const QColor scatter_fill = tm->color(ThemeManager::PaletteBase);
-
     if (relative_timestamps) {
         ui->audioPlot->xAxis->setTicker(number_ticker_);
     } else {
@@ -577,12 +590,12 @@ void RtpPlayerDialog::createPlot(bool rescale_axes)
             QDateTime date_time2 = QDateTime::fromMSecsSinceEpoch((audio_stream->stopRelTime() + first_stream_abs_start_time_ - audio_stream->startRelTime()) * 1000.0);
             QString time_str1 = date_time1.toString("yyyy-MM-dd hh:mm:ss.zzz");
             QString time_str2 = date_time2.toString("yyyy-MM-dd hh:mm:ss.zzz");
-            span_str = QStringLiteral("%1 - %2 (%3)")
+            span_str = QString("%1 - %2 (%3)")
                 .arg(time_str1)
                 .arg(time_str2)
                 .arg(QString::number(audio_stream->stopRelTime() - audio_stream->startRelTime(), 'f', prefs.gui_decimal_places1));
         } else {
-            span_str = QStringLiteral("%1 - %2 (%3)")
+            span_str = QString("%1 - %2 (%3)")
                 .arg(QString::number(audio_stream->startRelTime(), 'f', prefs.gui_decimal_places1))
                 .arg(QString::number(audio_stream->stopRelTime(), 'f', prefs.gui_decimal_places1))
                 .arg(QString::number(audio_stream->stopRelTime() - audio_stream->startRelTime(), 'f', prefs.gui_decimal_places1));
@@ -596,7 +609,7 @@ void RtpPlayerDialog::createPlot(bool rescale_axes)
             // Sequence numbers
             QCPGraph *seq_graph = ui->audioPlot->addGraph();
             seq_graph->setLineStyle(QCPGraph::lsNone);
-            seq_graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssSquare, PlotTheme::textColor(), scatter_fill, mainApp->font().pointSize())); // Arbitrary
+            seq_graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssSquare, tango_aluminium_6, Qt::white, mainApp->font().pointSize())); // Arbitrary
             seq_graph->setSelectable(QCP::stNone);
             seq_graph->setData(audio_stream->outOfSequenceTimestamps(relative_timestamps), audio_stream->outOfSequenceSamples(y_offset));
             ti->setData(graph_sequence_data_col_, Qt::UserRole, QVariant::fromValue<QCPGraph *>(seq_graph));
@@ -612,7 +625,7 @@ void RtpPlayerDialog::createPlot(bool rescale_axes)
             // Jitter drops
             QCPGraph *seq_graph = ui->audioPlot->addGraph();
             seq_graph->setLineStyle(QCPGraph::lsNone);
-            seq_graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, tm->color(ThemeManager::AccentError), scatter_fill, mainApp->font().pointSize())); // Arbitrary
+            seq_graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssCircle, tango_scarlet_red_5, Qt::white, mainApp->font().pointSize())); // Arbitrary
             seq_graph->setSelectable(QCP::stNone);
             seq_graph->setData(audio_stream->jitterDroppedTimestamps(relative_timestamps), audio_stream->jitterDroppedSamples(y_offset));
             ti->setData(graph_jitter_data_col_, Qt::UserRole, QVariant::fromValue<QCPGraph *>(seq_graph));
@@ -628,7 +641,7 @@ void RtpPlayerDialog::createPlot(bool rescale_axes)
             // Wrong timestamps
             QCPGraph *seq_graph = ui->audioPlot->addGraph();
             seq_graph->setLineStyle(QCPGraph::lsNone);
-            seq_graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssDiamond, tm->color(ThemeManager::AccentInfo), scatter_fill, mainApp->font().pointSize())); // Arbitrary
+            seq_graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssDiamond, tango_sky_blue_5, Qt::white, mainApp->font().pointSize())); // Arbitrary
             seq_graph->setSelectable(QCP::stNone);
             seq_graph->setData(audio_stream->wrongTimestampTimestamps(relative_timestamps), audio_stream->wrongTimestampSamples(y_offset));
             ti->setData(graph_timestamp_data_col_, Qt::UserRole, QVariant::fromValue<QCPGraph *>(seq_graph));
@@ -644,7 +657,7 @@ void RtpPlayerDialog::createPlot(bool rescale_axes)
             // Inserted silence
             QCPGraph *seq_graph = ui->audioPlot->addGraph();
             seq_graph->setLineStyle(QCPGraph::lsNone);
-            seq_graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssTriangle, tm->color(ThemeManager::AccentWarning), scatter_fill, mainApp->font().pointSize())); // Arbitrary
+            seq_graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssTriangle, tango_butter_5, Qt::white, mainApp->font().pointSize())); // Arbitrary
             seq_graph->setSelectable(QCP::stNone);
             seq_graph->setData(audio_stream->insertedSilenceTimestamps(relative_timestamps), audio_stream->insertedSilenceSamples(y_offset));
             ti->setData(graph_silence_data_col_, Qt::UserRole, QVariant::fromValue<QCPGraph *>(seq_graph));
@@ -669,7 +682,7 @@ void RtpPlayerDialog::fillTappedColumns()
 
     // Get all rows, immutable list. Later changes in rows might reorder them
     QList<QTreeWidgetItem *> items = ui->streamTreeWidget->findItems(
-        QStringLiteral("*"), Qt::MatchWrap | Qt::MatchWildcard | Qt::MatchRecursive);
+        QString("*"), Qt::MatchWrap | Qt::MatchWildcard | Qt::MatchRecursive);
 
     // Update rows by calculated values, it might reorder them in view...
     foreach(QTreeWidgetItem *ti, items) {
@@ -684,11 +697,11 @@ void RtpPlayerDialog::fillTappedColumns()
                 (rtpstream->rtp_stats.first_packet_num == rtpstream->setup_frame_number)
                ) {
                 int packet = rtpstream->rtp_stats.first_packet_num;
-                ti->setText(first_pkt_col_, QStringLiteral("RTP %1").arg(packet));
+                ti->setText(first_pkt_col_, QString("RTP %1").arg(packet));
                 ti->setData(first_pkt_col_, Qt::UserRole, QVariant(packet));
             } else {
                 int packet = rtpstream->setup_frame_number;
-                ti->setText(first_pkt_col_, QStringLiteral("SETUP %1").arg(rtpstream->setup_frame_number));
+                ti->setText(first_pkt_col_, QString("SETUP %1").arg(rtpstream->setup_frame_number));
                 ti->setData(first_pkt_col_, Qt::UserRole, QVariant(packet));
             }
             ti->setText(num_pkts_col_, QString::number(rtpstream->packet_count));
@@ -728,7 +741,7 @@ void RtpPlayerDialog::addSingleRtpStream(rtpstream_id_t *id)
         int tli_count = ui->streamTreeWidget->topLevelItemCount();
 
         RtpAudioStream *audio_stream = new RtpAudioStream(this, id, stereo_available_);
-        audio_stream->setColor(ThemeManager::instance()->graphColor(tli_count));
+        audio_stream->setColor(ColorUtils::graphColor(tli_count));
 
         QTreeWidgetItem *ti = new RtpPlayerTreeWidgetItem(ui->streamTreeWidget);
         stream_hash_.insert(rtpstream_id_to_hash(id), audio_stream);
@@ -750,7 +763,7 @@ void RtpPlayerDialog::addSingleRtpStream(rtpstream_id_t *id)
         } else {
             audio_routing.setChannel(channel_mono);
         }
-        ti->setToolTip(channel_col_, tr("Double click on cell to change audio routing"));
+        ti->setToolTip(channel_col_, QString(tr("Double click on cell to change audio routing")));
         formatAudioRouting(ti, audio_routing);
         audio_stream->setAudioRouting(audio_routing);
 
@@ -963,9 +976,6 @@ bool RtpPlayerDialog::eventFilter(QObject *, QEvent *event)
                     return true;
                 } else if (keyEvent.modifiers() == Qt::ControlModifier) {
                     on_actionAudioRoutingMuteInvert_triggered();
-                    return true;
-                } else if (keyEvent.modifiers() == (Qt::ShiftModifier | Qt::ControlModifier)) {
-                    on_actionAudioRoutingSolo_triggered();
                     return true;
                 } else  {
                     on_actionAudioRoutingMute_triggered();
@@ -1219,7 +1229,7 @@ void RtpPlayerDialog::updateHintLabel()
     qsizetype selected = ui->streamTreeWidget->selectedItems().count();
     int not_muted = 0;
 
-    hint += tr("%Ln stream(s)", "", row_count);
+    hint += tr("%1 streams").arg(row_count);
 
     if (row_count > 0) {
         if (selected > 0) {
@@ -1292,20 +1302,10 @@ void RtpPlayerDialog::updateGraphs()
 
 void RtpPlayerDialog::playFinished(RtpAudioStream *stream, QAudio::Error error)
 {
-    if (error != QAudio::NoError) {
-#if (QT_VERSION < QT_VERSION_CHECK(6, 11, 0))
-        if (error != QAudio::UnderrunError) {
-            setPlaybackError(tr("Playback of stream %1 failed.")
-                .arg(stream->getIDAsQString())
-            );
-        }
-#else
-        if (stream->outputState() != QAudio::IdleState) {
-            setPlaybackError(tr("Playback of stream %1 failed.")
-                .arg(stream->getIDAsQString())
-            );
-        }
-#endif // QT_VERSION < QT_VERSION_CHECK(6,11,0)
+    if ((error != QAudio::NoError) && (error != QAudio::UnderrunError)) {
+        setPlaybackError(tr("Playback of stream %1 failed!")
+            .arg(stream->getIDAsQString())
+        );
     }
     playing_streams_.removeOne(stream);
     if (playing_streams_.isEmpty()) {
@@ -1367,7 +1367,7 @@ void RtpPlayerDialog::addPacket(packet_info *pinfo, const _rtp_info *rtpinfo)
         }
     }
 
-//    qDebug() << "=ap no match." << address_to_qstring(&pinfo->src) << address_to_qstring(&pinfo->dst);
+//    qDebug() << "=ap no match!" << address_to_qstring(&pinfo->src) << address_to_qstring(&pinfo->dst);
 }
 
 void RtpPlayerDialog::zoomXAxis(bool in)
@@ -1402,7 +1402,7 @@ void RtpPlayerDialog::on_playButton_clicked()
     double start_time;
     QList<RtpAudioStream *> streams_to_start;
 
-    ui->hintLabel->setText("<i><small>" + tr("Preparing to play…") + "</i></small>");
+    ui->hintLabel->setText("<i><small>" + tr("Preparing to play...") + "</i></small>");
     mainApp->processEvents();
     ui->pauseButton->setChecked(false);
 
@@ -1420,7 +1420,11 @@ void RtpPlayerDialog::on_playButton_clicked()
         start_time = start_marker_time_play_ - first_stream_rel_start_time_;
     }
 
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
     QAudioDevice cur_out_device = getCurrentDeviceInfo();
+#else
+    QAudioDeviceInfo cur_out_device = getCurrentDeviceInfo();
+#endif
     playing_streams_.clear();
     int row_count = ui->streamTreeWidget->topLevelItemCount();
     for (int row = 0; row < row_count; row++) {
@@ -1441,7 +1445,9 @@ void RtpPlayerDialog::on_playButton_clicked()
     }
 
     // Start progress marker and then audio streams
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
     notify_timer_start_diff_ = -1;
+#endif
     marker_stream_->start(new AudioSilenceGenerator(marker_stream_));
     // It may happen that stream play is finished before all others are started
     // therefore we do not use playing_streams_ there, but separate temporarily
@@ -1454,6 +1460,7 @@ void RtpPlayerDialog::on_playButton_clicked()
     updateWidgets();
 }
 
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
 QAudioDevice RtpPlayerDialog::getCurrentDeviceInfo()
 {
     QAudioDevice cur_out_device = QMediaDevices::defaultAudioOutput();
@@ -1475,7 +1482,22 @@ void RtpPlayerDialog::sinkStateChanged()
         notify_timer_.stop();
     }
 }
+#else
+QAudioDeviceInfo RtpPlayerDialog::getCurrentDeviceInfo()
+{
+    QAudioDeviceInfo cur_out_device = QAudioDeviceInfo::defaultOutputDevice();
+    QString cur_out_name = currentOutputDeviceName();
+    foreach (QAudioDeviceInfo out_device, QAudioDeviceInfo::availableDevices(QAudio::AudioOutput)) {
+        if (cur_out_name == out_device.deviceName()) {
+            cur_out_device = out_device;
+        }
+    }
 
+    return cur_out_device;
+}
+#endif
+
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
 QAudioSink *RtpPlayerDialog::getSilenceAudioOutput()
 {
     QAudioDevice cur_out_device = getCurrentDeviceInfo();
@@ -1497,6 +1519,33 @@ QAudioSink *RtpPlayerDialog::getSilenceAudioOutput()
     connect(sink, &QAudioSink::stateChanged, this, &RtpPlayerDialog::sinkStateChanged);
     return sink;
 }
+#else
+QAudioOutput *RtpPlayerDialog::getSilenceAudioOutput()
+{
+    QAudioOutput *o;
+    QAudioDeviceInfo cur_out_device = getCurrentDeviceInfo();
+
+    QAudioFormat format;
+    if (marker_stream_requested_out_rate_ > 0) {
+        format.setSampleRate(marker_stream_requested_out_rate_);
+    } else {
+        format.setSampleRate(8000);
+    }
+    format.setSampleSize(SAMPLE_BYTES * 8); // bits
+    format.setSampleType(QAudioFormat::SignedInt);
+    format.setChannelCount(1);
+    format.setCodec("audio/pcm");
+    if (!cur_out_device.isFormatSupported(format)) {
+        format = cur_out_device.nearestFormat(format);
+    }
+
+    o = new QAudioOutput(cur_out_device, format, this);
+    o->setNotifyInterval(100); // ~15 fps
+    connect(o, &QAudioOutput::notify, this, &RtpPlayerDialog::outputNotify);
+
+    return o;
+}
+#endif
 
 void RtpPlayerDialog::outputNotify()
 {
@@ -1504,12 +1553,14 @@ void RtpPlayerDialog::outputNotify()
     double current_pos = 0.0;
     qint64 usecs = marker_stream_->processedUSecs();
 
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
     // First notify can show end of buffer, not play point so we have
     // remember the shift
     if ( -1 == notify_timer_start_diff_ || 0 == notify_timer_start_diff_) {
       notify_timer_start_diff_ = usecs;
     }
     usecs -= notify_timer_start_diff_;
+#endif
     double secs = usecs / 1000000.0;
 
     if (ui->skipSilenceButton->isChecked() && !playing_streams_.isEmpty()) {
@@ -1877,22 +1928,6 @@ void RtpPlayerDialog::on_actionAudioRoutingMuteInvert_triggered()
     unlockUI();
 }
 
-// Listen to the selected streams only: unmute them and mute all the others
-void RtpPlayerDialog::on_actionAudioRoutingSolo_triggered()
-{
-    lockUI();
-
-    block_redraw_ = true;
-    for (int i = 0; i < ui->streamTreeWidget->topLevelItemCount(); i++) {
-        QTreeWidgetItem *ti = ui->streamTreeWidget->topLevelItem(i);
-        changeAudioRoutingOnItem(ti, AudioRouting(ti->isSelected() ? AUDIO_UNMUTED : AUDIO_MUTED, channel_any));
-    }
-    block_redraw_ = false;
-    ui->audioPlot->replot();
-    updateHintLabel();
-    unlockUI();
-}
-
 const QString RtpPlayerDialog::getFormatedTime(double f_time)
 {
     QString time_str;
@@ -1944,6 +1979,7 @@ void RtpPlayerDialog::fillAudioRateMenu()
     ui->outputAudioRate->blockSignals(true);
     ui->outputAudioRate->clear();
     ui->outputAudioRate->addItem(tr("Automatic"));
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
     // XXX QAudioDevice doesn't provide supportedSampleRates(). Fake it with
     // what's available.
     QAudioDevice cur_out_device = getCurrentDeviceInfo();
@@ -1978,6 +2014,15 @@ void RtpPlayerDialog::fillAudioRateMenu()
     for (auto rate : sorter) {
         ui->outputAudioRate->addItem(QString::number(rate));
     }
+#else
+    QAudioDeviceInfo cur_out_device = getCurrentDeviceInfo();
+
+    if (!cur_out_device.isNull()) {
+        foreach (int rate, cur_out_device.supportedSampleRates()) {
+            ui->outputAudioRate->addItem(QString::number(rate));
+        }
+    }
+#endif
     ui->outputAudioRate->blockSignals(false);
 }
 
@@ -2065,35 +2110,6 @@ void RtpPlayerDialog::on_todCheckBox_toggled(bool)
     ui->audioPlot->replot();
 }
 
-void RtpPlayerDialog::on_visualSRSpinBox_editingFinished()
-{
-    lockUI();
-    // Show information for a user - it can last a long time...
-    playback_error_.clear();
-    ui->hintLabel->setText("<i><small>" + tr("Resampling waveform…") + "</i></small>");
-    mainApp->processEvents();
-
-    int row_count = ui->streamTreeWidget->topLevelItemCount();
-
-    // Reset stream values
-    for (int row = 0; row < row_count; row++) {
-        QTreeWidgetItem *ti = ui->streamTreeWidget->topLevelItem(row);
-        RtpAudioStream *audio_stream = ti->data(stream_data_col_, Qt::UserRole).value<RtpAudioStream*>();
-
-        audio_stream->setVisualSampleRate(static_cast<unsigned>(ui->visualSRSpinBox->value()));
-        audio_stream->decodeVisual();
-    }
-
-    for (int col = 0; col < ui->streamTreeWidget->columnCount() - 1; col++) {
-        ui->streamTreeWidget->resizeColumnToContents(col);
-    }
-
-    createPlot();
-
-    updateWidgets();
-    unlockUI();
-}
-
 void RtpPlayerDialog::on_buttonBox_helpRequested()
 {
     mainApp->helpTopicAction(HELP_TELEPHONY_RTP_PLAYER_DIALOG);
@@ -2162,10 +2178,19 @@ void RtpPlayerDialog::formatAudioRouting(QTreeWidgetItem *ti, AudioRouting audio
 
 bool RtpPlayerDialog::isStereoAvailable()
 {
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
     QAudioDevice cur_out_device = getCurrentDeviceInfo();
     if (cur_out_device.maximumChannelCount() > 1) {
         return true;
     }
+#else
+    QAudioDeviceInfo cur_out_device = getCurrentDeviceInfo();
+    foreach(int count, cur_out_device.supportedChannelCounts()) {
+        if (count > 1) {
+            return true;
+        }
+    }
+#endif
 
     return false;
 }
@@ -2225,47 +2250,47 @@ qint64 RtpPlayerDialog::saveAudioHeaderAU(QFile *save_file, quint32 channels, un
 
     /* https://pubs.opengroup.org/external/auformat.html */
     /* First we write the .au header.  All values in the header are
-     * 4-byte big-endian values, so we use pntohu32() to copy them
+     * 4-byte big-endian values, so we use pntoh32() to copy them
      * to a 4-byte buffer, in big-endian order, and then write out
      * the buffer. */
 
     /* the magic word 0x2e736e64 == .snd */
-    phtonu32(pd, 0x2e736e64);
+    phton32(pd, 0x2e736e64);
     nchars = save_file->write((const char *)pd, 4);
     if (nchars != 4) {
         return -1;
     }
 
     /* header offset == 24 bytes */
-    phtonu32(pd, 24);
+    phton32(pd, 24);
     nchars = save_file->write((const char *)pd, 4);
     if (nchars != 4) {
         return -1;
     }
 
     /* total length; it is permitted to set this to 0xffffffff */
-    phtonu32(pd, 0xffffffff);
+    phton32(pd, 0xffffffff);
     nchars = save_file->write((const char *)pd, 4);
     if (nchars != 4) {
         return -1;
     }
 
     /* encoding format == 16-bit linear PCM */
-    phtonu32(pd, 3);
+    phton32(pd, 3);
     nchars = save_file->write((const char *)pd, 4);
     if (nchars != 4) {
         return -1;
     }
 
     /* sample rate [Hz] */
-    phtonu32(pd, audio_rate);
+    phton32(pd, audio_rate);
     nchars = save_file->write((const char *)pd, 4);
     if (nchars != 4) {
         return -1;
     }
 
     /* channels */
-    phtonu32(pd, channels);
+    phton32(pd, channels);
     nchars = save_file->write((const char *)pd, 4);
     if (nchars != 4) {
         return -1;
@@ -2287,7 +2312,7 @@ qint64 RtpPlayerDialog::saveAudioHeaderWAV(QFile *save_file, quint32 channels, u
     /* http://soundfile.sapp.org/doc/WaveFormat/ */
 
     /* RIFF header, ChunkID 0x52494646 == RIFF */
-    phtonu32(pd, 0x52494646);
+    phton32(pd, 0x52494646);
     nchars = save_file->write((const char *)pd, 4);
     if (nchars != 4) {
         return -1;
@@ -2301,14 +2326,14 @@ qint64 RtpPlayerDialog::saveAudioHeaderWAV(QFile *save_file, quint32 channels, u
     }
 
     /* RIFF header, Format 0x57415645 == WAVE */
-    phtonu32(pd, 0x57415645);
+    phton32(pd, 0x57415645);
     nchars = save_file->write((const char *)pd, 4);
     if (nchars != 4) {
         return -1;
     }
 
     /* WAVE fmt header, Subchunk1ID 0x666d7420 == 'fmt ' */
-    phtonu32(pd, 0x666d7420);
+    phton32(pd, 0x666d7420);
     nchars = save_file->write((const char *)pd, 4);
     if (nchars != 4) {
         return -1;
@@ -2364,7 +2389,7 @@ qint64 RtpPlayerDialog::saveAudioHeaderWAV(QFile *save_file, quint32 channels, u
     }
 
     /* WAVE data header, Subchunk2ID 0x64617461 == 'data' */
-    phtonu32(pd, 0x64617461);
+    phton32(pd, 0x64617461);
     nchars = save_file->write((const char *)pd, 4);
     if (nchars != 4) {
         return -1;
@@ -2386,7 +2411,7 @@ bool RtpPlayerDialog::writeAudioSilenceSamples(QFile *out_file, qint64 samples, 
 {
     uint8_t pd[2];
 
-    phtonu16(pd, 0x0000);
+    phton16(pd, 0x0000);
     for(int s=0; s < stream_count; s++) {
         for(qint64 i=0; i < samples; i++) {
             if (sizeof(SAMPLE) != out_file->write((char *)&pd, sizeof(SAMPLE))) {
@@ -2398,7 +2423,7 @@ bool RtpPlayerDialog::writeAudioSilenceSamples(QFile *out_file, qint64 samples, 
     return true;
 }
 
-bool RtpPlayerDialog::writeAudioStreamsSamples(QFile *out_file, QVector<RtpAudioStream *> streams, bool big_endian)
+bool RtpPlayerDialog::writeAudioStreamsSamples(QFile *out_file, QVector<RtpAudioStream *> streams, bool swap_bytes)
 {
     SAMPLE sample;
     uint8_t pd[2];
@@ -2411,15 +2436,20 @@ bool RtpPlayerDialog::writeAudioStreamsSamples(QFile *out_file, QVector<RtpAudio
         // Loop over all streams, read one sample from each, write to output
         foreach(RtpAudioStream *audio_stream, streams) {
             if (sizeof(sample) == audio_stream->readSample(&sample)) {
-                if (big_endian) {
-                    phtonu16(pd, sample);
+                if (swap_bytes) {
+                    // same as phton16(), but more clear in compare
+                    // to else branch
+                    pd[0] = (uint8_t)(sample >> 8);
+                    pd[1] = (uint8_t)(sample >> 0);
                 } else {
-                    phtoleu16(pd, sample);
+                    // just copy
+                    pd[1] = (uint8_t)(sample >> 8);
+                    pd[0] = (uint8_t)(sample >> 0);
                 }
                 read = true;
             } else {
                 // for 0x0000 doesn't matter on order
-                phtonu16(pd, 0x0000);
+                phton16(pd, 0x0000);
             }
             if (sizeof(sample) != out_file->write((char *)&pd, sizeof(sample))) {
                 return false;
@@ -2595,9 +2625,10 @@ void RtpPlayerDialog::saveAudio(save_mode_t save_mode)
     }
 
     QFile file(path);
+    file.open(QIODevice::WriteOnly);
 
-    if (!file.open(QIODevice::WriteOnly) || (file.error() != QFile::NoError)) {
-        QMessageBox::warning(this, tr("Warning"), tr("Save failed."));
+    if (!file.isOpen() || (file.error() != QFile::NoError)) {
+        QMessageBox::warning(this, tr("Warning"), tr("Save failed!"));
     } else {
         switch (format) {
             case save_audio_au:
@@ -2607,11 +2638,11 @@ void RtpPlayerDialog::saveAudio(save_mode_t save_mode)
                 }
                 if (lead_silence_samples > 0) {
                     if (!writeAudioSilenceSamples(&file, lead_silence_samples, static_cast<int>(streams.count()))) {
-                        QMessageBox::warning(this, tr("Warning"), tr("Save failed."));
+                        QMessageBox::warning(this, tr("Warning"), tr("Save failed!"));
                     }
                 }
                 if (!writeAudioStreamsSamples(&file, streams, true)) {
-                    QMessageBox::warning(this, tr("Warning"), tr("Save failed."));
+                    QMessageBox::warning(this, tr("Warning"), tr("Save failed!"));
                 }
                 break;
             case save_audio_wav:
@@ -2621,11 +2652,11 @@ void RtpPlayerDialog::saveAudio(save_mode_t save_mode)
                 }
                 if (lead_silence_samples > 0) {
                     if (!writeAudioSilenceSamples(&file, lead_silence_samples, static_cast<int>(streams.count()))) {
-                        QMessageBox::warning(this, tr("Warning"), tr("Save failed."));
+                        QMessageBox::warning(this, tr("Warning"), tr("Save failed!"));
                     }
                 }
                 if (!writeAudioStreamsSamples(&file, streams, false)) {
-                    QMessageBox::warning(this, tr("Warning"), tr("Save failed."));
+                    QMessageBox::warning(this, tr("Warning"), tr("Save failed!"));
                 }
                 break;
             case save_audio_none:
@@ -2657,11 +2688,12 @@ void RtpPlayerDialog::savePayload()
     if (format == save_payload_none) return;
 
     QFile file(path);
+    file.open(QIODevice::WriteOnly);
 
-    if (!file.open(QIODevice::WriteOnly) || (file.error() != QFile::NoError)) {
-        QMessageBox::warning(this, tr("Warning"), tr("Save failed."));
+    if (!file.isOpen() || (file.error() != QFile::NoError)) {
+        QMessageBox::warning(this, tr("Warning"), tr("Save failed!"));
     } else if (!audio_stream->savePayload(&file)) {
-        QMessageBox::warning(this, tr("Warning"), tr("Save failed."));
+        QMessageBox::warning(this, tr("Warning"), tr("Save failed!"));
     }
 
     file.close();
@@ -2724,7 +2756,6 @@ void RtpPlayerDialog::on_actionPrepareFilter_triggered()
     }
 }
 
-#ifdef QT_MULTIMEDIA_LIB
 void RtpPlayerDialog::rtpAnalysisReplace()
 {
     if (ui->streamTreeWidget->selectedItems().count() < 1) return;
@@ -2745,7 +2776,6 @@ void RtpPlayerDialog::rtpAnalysisRemove()
 
     emit rtpAnalysisDialogRemoveRtpStreams(getSelectedRtpStreamIDs());
 }
-#endif // QT_MULTIMEDIA_LIB
 
 void RtpPlayerDialog::on_actionReadCapture_triggered()
 {

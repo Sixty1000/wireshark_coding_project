@@ -40,7 +40,7 @@ dissect_802_3(volatile int length, bool is_802_2, tvbuff_t *tvb,
   tvbuff_t   *volatile next_tvb = NULL;
   tvbuff_t   *trailer_tvb = NULL;
   const char *saved_proto;
-  int         reported_length;
+  int         captured_length, reported_length;
 
   length_it = proto_tree_add_uint(fh_tree, length_id, tvb,
                                   offset_after_length - 2, 2, length);
@@ -63,7 +63,10 @@ dissect_802_3(volatile int length, bool is_802_2, tvbuff_t *tvb,
   }
 
   /* Give the next dissector only 'length' number of bytes. */
-  next_tvb = tvb_new_subset_length(tvb, offset_after_length, length);
+  captured_length = tvb_captured_length_remaining(tvb, offset_after_length);
+  if (captured_length > length)
+    captured_length = length;
+  next_tvb = tvb_new_subset_length_caplen(tvb, offset_after_length, captured_length, length);
 
   /* Dissect the payload either as IPX or as an LLC frame.
      Catch non-fatal exceptions, so that if the reported length
@@ -76,8 +79,7 @@ dissect_802_3(volatile int length, bool is_802_2, tvbuff_t *tvb,
       call_dissector(llc_handle, next_tvb, pinfo, tree);
     else {
       /* Check if first three bits of payload are 0x7.
-         If so, then payload is IPX.  If not, then it's a CCSDS
-         Space Packet.
+         If so, then payload is IPX.  If not, then it's CCSDS.
          Refer to packet-eth.c for setting of is_802_2 variable. */
       if (tvb_get_bits8(next_tvb, 0, 3) == 7)
         call_dissector(ipx_handle, next_tvb, pinfo, tree);

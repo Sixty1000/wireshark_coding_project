@@ -248,7 +248,7 @@ show_setup_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 
 
 /* Returns index of headers */
-static int msrp_is_known_msrp_header(tvbuff_t *tvb, unsigned offset, unsigned header_len)
+static int msrp_is_known_msrp_header(tvbuff_t *tvb, int offset, unsigned header_len)
 {
     unsigned i;
 
@@ -270,13 +270,13 @@ static int msrp_is_known_msrp_header(tvbuff_t *tvb, unsigned offset, unsigned he
 static void
 tvb_raw_text_add(tvbuff_t *tvb, proto_tree *tree)
 {
-    unsigned offset, next_offset, linelen;
+    int offset, next_offset, linelen;
     offset = 0;
 
     while (tvb_offset_exists(tvb, offset)) {
         /* 'desegment' is false so will set next_offset to beyond the end of
            the buffer if no line ending is found */
-        tvb_find_line_end_remaining(tvb, offset, NULL, &next_offset);
+        tvb_find_line_end(tvb, offset, -1, &next_offset, false);
         linelen = next_offset - offset;
         proto_tree_add_format_text(tree, tvb, offset, linelen);
         offset = next_offset;
@@ -310,23 +310,26 @@ tvb_raw_text_add(tvbuff_t *tvb, proto_tree *tree)
 static bool
 check_msrp_header(tvbuff_t *tvb)
 {
-    unsigned linelen;
-    unsigned space_offset;
-    bool sp_found;
-    unsigned next_offset = 0;
+    int linelen;
+    int space_offset;
+    int next_offset = 0;
     unsigned token_1_len;
-    unsigned token_2_start;
+    int token_2_start;
 
-
+    /*
+     * Note that "tvb_find_line_end()" will return a value that
+     * is not longer than what's in the buffer, so the
+     * "tvb_get_ptr()" calls below won't throw exceptions.   *
+     */
     if(tvb_captured_length(tvb) < 4 ||  tvb_get_ntohl(tvb, 0) != 0x4d535250 /* MSRP */){
         return false;
     }
 
-    tvb_find_line_end_remaining(tvb, 0, &linelen , &next_offset);
+    linelen = tvb_find_line_end(tvb, 0, -1, &next_offset, false);
     /* Find the first SP */
-    sp_found = tvb_find_uint8_length(tvb, 0, linelen, ' ', &space_offset);
+    space_offset = tvb_find_uint8(tvb, 0, linelen, ' ');
 
-    if (sp_found == false || space_offset == 0) {
+    if (space_offset <= 0) {
         /*
          * Either there's no space in the line (which means
          * the line is empty or doesn't have a token followed
@@ -339,7 +342,8 @@ check_msrp_header(tvbuff_t *tvb)
 
     token_1_len = space_offset;
     token_2_start = space_offset + 1;
-    if (!tvb_find_uint8_length(tvb, token_2_start, linelen, ' ', &space_offset)) {
+    space_offset = tvb_find_uint8(tvb, token_2_start, linelen, ' ');
+    if (space_offset == -1) {
         /*
          * There's no space after the second token, so we don't
          * have a third token.
@@ -361,24 +365,24 @@ check_msrp_header(tvbuff_t *tvb)
  * end-line = "-------" transact-id continuation-flag CRLF
  * This code is modeled on the code in packet-multipart.c
  */
-static bool
-find_end_line(tvbuff_t *tvb, unsigned start, unsigned *next_offset)
+static int
+find_end_line(tvbuff_t *tvb, int start)
 {
-    unsigned offset = start, linelen;
+    int offset = start, next_offset, linelen;
 
     while (tvb_offset_exists(tvb, offset)) {
         /* 'desegment' is false so will set next_offset to beyond the end of
            the buffer if no line ending is found */
-        if (!tvb_find_line_end_remaining(tvb, offset, &linelen, next_offset)) {
+        linelen =  tvb_find_line_end(tvb, offset, -1, &next_offset, false);
+        if (linelen == -1) {
             return -1;
         }
-        if (tvb_strneql(tvb, *next_offset, (const char *)"-------", 7) == 0){
-            return true;
-        }
-        offset = *next_offset;
+        if (tvb_strneql(tvb, next_offset, (const char *)"-------", 7) == 0)
+            return next_offset;
+        offset = next_offset;
     }
-    *next_offset = tvb_captured_length(tvb);
-    return false;
+
+    return -1;
 }
 
 static bool
@@ -406,39 +410,39 @@ dissect_msrp_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 static int
 dissect_msrp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-    unsigned offset = 0;
-    unsigned next_offset = 0;
+    int offset = 0;
+    int next_offset = 0;
     proto_item *ti, *th, *msrp_headers_item;
     proto_tree *msrp_tree, *reqresp_tree, *raw_tree, *msrp_hdr_tree, *msrp_end_tree;
     proto_tree *msrp_data_tree;
-    unsigned linelen;
-    unsigned space_offset;
-    unsigned token_2_start;
+    int linelen;
+    int space_offset;
+    int token_2_start;
     unsigned token_2_len;
-    unsigned token_3_start;
+    int token_3_start;
     unsigned token_3_len;
-    unsigned token_4_start = 0;
+    int token_4_start = 0;
     unsigned token_4_len = 0;
     bool is_msrp_response;
-    unsigned end_line_offset;
-    unsigned end_line_len;
-    unsigned line_end_offset;
-    unsigned message_end_offset;
-    unsigned colon_offset;
-    unsigned header_len;
+    int end_line_offset;
+    int end_line_len;
+    int line_end_offset;
+    int message_end_offset;
+    int colon_offset;
+    int header_len;
     int hf_index;
-    unsigned value_offset;
+    int value_offset;
     unsigned char c;
-    unsigned value_len;
+    int value_len;
     char *value;
     bool have_body = false;
-    unsigned found_match = 0;
-    unsigned content_type_len, content_type_parameter_str_len;
+    int found_match = 0;
+    int content_type_len, content_type_parameter_str_len;
     char *media_type_str_lower_case = NULL;
     media_content_info_t content_info = { MEDIA_CONTAINER_OTHER, NULL, NULL, NULL };
     tvbuff_t *next_tvb;
-    unsigned parameter_offset;
-    unsigned semi_colon_offset;
+    int parameter_offset;
+    int semi_colon_offset;
     char* hdr_str;
 
     if ( !check_msrp_header(tvb)){
@@ -446,23 +450,23 @@ dissect_msrp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
     }
     /* We have a MSRP header with at least three tokens
      *
-     * Note that "tvb_find_line_end_remaining()" will return a value that
+     * Note that "tvb_find_line_end()" will return a value that
      * is not longer than what's in the buffer, so the
      * "tvb_get_ptr()" calls below won't throw exceptions.   *
      */
-    tvb_find_line_end_remaining(tvb, 0, &linelen , &next_offset);
+    linelen = tvb_find_line_end(tvb, 0, -1, &next_offset, false);
 
     /* Find the first SP and skip the first token */
-    token_2_start = tvb_find_uint8_length(tvb, 0, linelen, ' ', &token_2_start);
-    token_2_start =+1;
+    token_2_start = tvb_find_uint8(tvb, 0, linelen, ' ') + 1;
 
     /* Work out 2nd token's length by finding next space */
-    tvb_find_uint8_length(tvb, token_2_start, linelen-token_2_start, ' ', &space_offset);
+    space_offset = tvb_find_uint8(tvb, token_2_start, linelen-token_2_start, ' ');
     token_2_len = space_offset - token_2_start;
 
     /* Look for another space in this line to indicate a 4th token */
     token_3_start = space_offset + 1;
-    if ( !tvb_find_uint8_length(tvb, token_3_start, linelen - token_3_start, ' ', &space_offset)){
+    space_offset = tvb_find_uint8(tvb, token_3_start,linelen-token_3_start, ' ');
+    if ( space_offset == -1){
         /* 3rd token runs to the end of the line */
         token_3_len = linelen - token_3_start;
     }else{
@@ -491,12 +495,13 @@ dissect_msrp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
      */
 
     offset = next_offset;
-    if (!find_end_line(tvb, offset, &end_line_offset)) {
+    end_line_offset = find_end_line(tvb,offset);
+    if (end_line_offset < 0) {
         pinfo->desegment_offset = 0;
         pinfo->desegment_len = DESEGMENT_ONE_MORE_SEGMENT;
         return tvb_reported_length_remaining(tvb, offset);
     }
-    tvb_find_line_end_remaining(tvb, end_line_offset, &end_line_len , &next_offset);
+    end_line_len =  tvb_find_line_end(tvb, end_line_offset, -1, &next_offset, false);
     message_end_offset = end_line_offset + end_line_len + 2;
 
     /* Make entries in Protocol column and Info column on summary display */
@@ -531,7 +536,7 @@ dissect_msrp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
             reqresp_tree = proto_item_add_subtree(th, ett_msrp_reqresp);
             proto_tree_add_item(reqresp_tree,hf_msrp_transactionID,tvb,token_2_start,token_2_len,ENC_UTF_8);
             msrp_status_code_valid = ws_strtou32(
-                (char*)tvb_get_string_enc(pinfo->pool, tvb, token_3_start, token_3_len, ENC_UTF_8|ENC_NA),
+                tvb_get_string_enc(pinfo->pool, tvb, token_3_start, token_3_len, ENC_UTF_8|ENC_NA),
                 NULL, & msrp_status_code);
             pi = proto_tree_add_uint(reqresp_tree,hf_msrp_status_code,tvb,token_3_start,token_3_len,msrp_status_code);
             if (!msrp_status_code_valid)
@@ -559,7 +564,7 @@ dissect_msrp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
         while (tvb_offset_exists(tvb, offset) && offset < end_line_offset  ) {
             /* 'desegment' is false so will set next_offset to beyond the end of
                the buffer if no line ending is found */
-            tvb_find_line_end_remaining(tvb, offset, &linelen , &next_offset);
+            linelen = tvb_find_line_end(tvb, offset, -1, &next_offset, false);
             if (linelen == 0) {
                 /*
                  * This is a blank line separating the
@@ -569,7 +574,8 @@ dissect_msrp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
                 break;
             }
             line_end_offset = offset + linelen;
-            if (!tvb_find_uint8_length(tvb, offset, linelen, ':', &colon_offset)) {
+            colon_offset = tvb_find_uint8(tvb, offset, linelen, ':');
+            if (colon_offset == -1) {
                 /*
                  * Malformed header - no colon after the name.
                  */
@@ -597,7 +603,7 @@ dissect_msrp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
                      * Fetch the value.
                      */
                     value_len = line_end_offset - value_offset;
-                    value = (char*)tvb_get_string_enc(pinfo->pool, tvb, value_offset,
+                    value = tvb_get_string_enc(pinfo->pool, tvb, value_offset,
                                        value_len, ENC_UTF_8|ENC_NA);
 
                     /*
@@ -614,7 +620,8 @@ dissect_msrp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
 
                         case MSRP_CONTENT_TYPE :
                             content_type_len = value_len;
-                            if ( tvb_find_uint8_length(tvb, value_offset,linelen, ';', &semi_colon_offset)) {
+                            semi_colon_offset = tvb_find_uint8(tvb, value_offset,linelen, ';');
+                            if ( semi_colon_offset != -1) {
                                 parameter_offset = semi_colon_offset +1;
                                 /*
                                  * Skip whitespace after the semicolon.
@@ -625,7 +632,7 @@ dissect_msrp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
                                     parameter_offset++;
                                 content_type_len = semi_colon_offset - value_offset;
                                 content_type_parameter_str_len = line_end_offset - parameter_offset;
-                                content_info.media_str = (char*)tvb_get_string_enc(pinfo->pool, tvb,
+                                content_info.media_str = tvb_get_string_enc(pinfo->pool, tvb,
                                              parameter_offset, content_type_parameter_str_len, ENC_UTF_8|ENC_NA);
                             }
                             media_type_str_lower_case = ascii_strdown_inplace(
@@ -656,17 +663,17 @@ dissect_msrp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
             /* give the content type parameters to sub dissectors */
 
             if ( media_type_str_lower_case != NULL ) {
-                found_match = dissector_try_string_with_data(media_type_dissector_table,
+                found_match = dissector_try_string(media_type_dissector_table,
                                                media_type_str_lower_case,
                                                next_tvb, pinfo,
-                                               msrp_data_tree, true, &content_info);
+                                               msrp_data_tree, &content_info);
                 /* If no match dump as text */
             }
             if ( found_match == 0 )
             {
                 offset = 0;
                 while (tvb_offset_exists(next_tvb, offset)) {
-                    tvb_find_line_end_remaining(next_tvb, offset, NULL, &next_offset);
+                    tvb_find_line_end(next_tvb, offset, -1, &next_offset, false);
                     linelen = next_offset - offset;
                     proto_tree_add_format_text(msrp_data_tree, next_tvb, offset, linelen);
                     offset = next_offset;

@@ -11,11 +11,8 @@
  */
 
 #include "uat_model.h"
-#include "ui/qt/io_graph_dialog.h"
 #include <epan/to_str.h>
-#include <epan/uat-int.h>
 #include <ui/qt/utils/qt_ui_utils.h>
-#include <app/application_flavor.h>
 #include <QFont>
 #include <QBrush>
 #include <QDebug>
@@ -77,8 +74,8 @@ bool UatModel::applyChanges(QString &error)
     if (uat_->changed) {
         char *err = NULL;
 
-        if (!uat_save(uat_, application_configuration_environment_prefix(), &err)) {
-            error = QStringLiteral("Error while saving %1: %2").arg(uat_->name).arg(err);
+        if (!uat_save(uat_, &err)) {
+            error = QString("Error while saving %1: %2").arg(uat_->name).arg(err);
             g_free(err);
         }
 
@@ -105,8 +102,8 @@ bool UatModel::revertChanges(QString &error)
     if (uat_->changed) {
         char *err = NULL;
         uat_clear(uat_);
-        if (!uat_load(uat_, NULL, application_configuration_environment_prefix(), &err)) {
-            error = QStringLiteral("Error while loading %1: %2").arg(uat_->name).arg(err);
+        if (!uat_load(uat_, NULL, &err)) {
+            error = QString("Error while loading %1: %2").arg(uat_->name).arg(err);
             g_free(err);
         }
         return true;
@@ -125,47 +122,11 @@ Qt::ItemFlags UatModel::flags(const QModelIndex &index) const
 
     uat_field_t *field = &uat_->fields[index.column()];
 
-    /* UAT being multipurpose, we want to handle this specific
-     * case for I/O Graphs here.
-     * Column indexes are defined there (io_graph_dialog precisely).
-     */
-    bool isIOGraph = g_strcmp0(uat_->name, "I/O Graphs") == 0;
-    if(isIOGraph) {
-        UatColumnsIOG ucol = colAOT;
-        if(index.column()==colAOT) {
-            ucol = colYAxis;
-            uat_field_t *field2 = &uat_->fields[ucol];
-            void *rec = UAT_INDEX_PTR(uat_, index.row());
-            char *str = NULL;
-            unsigned length;
-            field2->cb.tostr(rec, &str, &length, field2->cbdata.tostr, field2->fld_data);
-            bool allowsAOT = (str &&
-                         ( (g_strcmp0(str, "Packets") == 0) ||
-                         (g_strcmp0(str, "Bytes") == 0) ||
-                         (g_strcmp0(str, "Bits") == 0) ));
-            g_free(str);
-
-            if ((field->mode == PT_TXTMOD_BOOL) && allowsAOT ) {
-                flags |= Qt::ItemIsUserCheckable;
-            }
-        }
-        else {
-            if (field->mode == PT_TXTMOD_BOOL) {
-                flags |= Qt::ItemIsUserCheckable;
-            }
-        }
-
-        flags |= Qt::ItemIsEditable | Qt::ItemIsDragEnabled;
+    if (field->mode == PT_TXTMOD_BOOL)
+    {
+        flags |= Qt::ItemIsUserCheckable;
     }
-    else {
-        // default case (non-I/O Graph)
-        if (field->mode == PT_TXTMOD_BOOL)
-        {
-            flags |= Qt::ItemIsUserCheckable;
-        }
-        flags |= Qt::ItemIsEditable | Qt::ItemIsDragEnabled;
-    }
-
+    flags |= Qt::ItemIsEditable | Qt::ItemIsDragEnabled;
     return flags;
 }
 
@@ -333,9 +294,9 @@ QModelIndex UatModel::appendEntry(QVariantList rowData)
                 data = rowData[col].toString();
             } else {
                 if (rowData[col].toInt() == Qt::Checked) {
-                    data = QStringLiteral("true");
+                    data = QString("true");
                 } else {
-                    data = QStringLiteral("false");
+                    data = QString("false");
                 }
             }
         }
@@ -387,11 +348,6 @@ bool UatModel::setData(const QModelIndex &index, const QVariant &value, int role
     if (field->mode != PT_TXTMOD_BOOL) {
         const QByteArray &str = value.toString().toUtf8();
         const QByteArray &bytes = field->mode == PT_TXTMOD_HEXBYTES ? QByteArray::fromHex(str) : str;
-        // XXX - This converts from string to value before checkRow converts
-        // back to a string to check the value. For, e.g., the numeric types,
-        // that means that they aren't really checked, just converted to a
-        // number if possible. The chk function for those needs to be called
-        // earlier (possibly in UatDelegate.)
         field->cb.set(rec, bytes.constData(), (unsigned) bytes.size(), field->cbdata.set, field->fld_data);
     } else {
         if (value.toInt() == Qt::Checked) {
@@ -551,7 +507,7 @@ QModelIndex UatModel::copyRow(QModelIndex original)
 
     uat_->changed = true;
 
-    endInsertRows();
+    endInsertRows();    
 
     return index(newRow, 0, QModelIndex());
 }

@@ -21,8 +21,6 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 
 void proto_register_v52(void);
 
@@ -633,9 +631,9 @@ static const value_string info_element_values_short [] = {
     { CONTROL_FUNCTION_ELEMENT, "CF element" },
     { CONTROL_FUNCTION_ID,      "CF ID" },
     { ENABLE_METERING,          "EM" },
-    /*{ VARIANT,                "Var" },  XXX - Duplicate value of ENABLE_METERING */
+    { VARIANT,                  "Var" },
     { METERING_REPORT,          "MR" },
-    /*{ INTERFACE_ID,           "Interface ID" }, XXX - Duplicate value of METERING_REPORT */
+    { INTERFACE_ID,             "Interface ID" },
     { ATTENUATION,              "ATT" },
     { LINK_CONTROL_FUNCTION,    "LC F" },
     { USER_PORT_ID,             "UP ID" },

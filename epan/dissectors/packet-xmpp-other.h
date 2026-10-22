@@ -1,4 +1,4 @@
-/* packet-xmpp-other.h
+/* xmpp-others.h
  *
  * Copyright 2011, Mariusz Okroj <okrojmariusz[]gmail.com>
  *

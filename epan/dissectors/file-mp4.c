@@ -25,7 +25,6 @@
 #include <epan/packet.h>
 #include <epan/to_str.h>
 #include <epan/expert.h>
-#include <wsutil/array.h>
 #include <wiretap/wtap.h>
 
 #define MAKE_TYPE_VAL(a, b, c, d)   ((a)<<24 | (b)<<16 | (c)<<8 | (d))
@@ -348,8 +347,9 @@ dissect_mp4_mvhd_body(tvbuff_t *tvb, int offset, int len _U_,
     offset += 9*4; /* XXX - unity matrix */
     offset += 6*4; /* 6 * 32 bits predefined = 0 */
 
-    next_tid_it = proto_tree_add_item_ret_uint(tree, hf_mp4_mvhd_next_tid,
-            tvb, offset, 4, ENC_BIG_ENDIAN, &next_tid);
+    next_tid = tvb_get_ntohl(tvb, offset);
+    next_tid_it = proto_tree_add_item(tree, hf_mp4_mvhd_next_tid,
+            tvb, offset, 4, ENC_BIG_ENDIAN);
     if (next_tid == UINT32_MAX)
         expert_add_info(pinfo, next_tid_it, &ei_mp4_mvhd_next_tid_unknown);
     offset += 4;
@@ -480,8 +480,9 @@ dissect_mp4_stsz_body(tvbuff_t *tvb, int offset, int len _U_,
     /* XXX - expert info for sample size == 0 */
     offset += 4;
 
-    proto_tree_add_item_ret_uint(tree, hf_mp4_stsz_sample_count,
-            tvb, offset, 4, ENC_BIG_ENDIAN, &sample_count);
+    sample_count = tvb_get_ntohl(tvb, offset);
+    proto_tree_add_item(tree, hf_mp4_stsz_sample_count,
+            tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
 
     if (sample_size != 0)
@@ -589,8 +590,9 @@ dissect_mp4_dref_body(tvbuff_t *tvb, int offset, int len _U_,
     offset += dissect_mp4_full_box (tvb, offset, tree, NULL, NULL, NULL);
     /* XXX - put up an expert info if version!=0 */
 
-    proto_tree_add_item_ret_uint(tree, hf_mp4_dref_entry_cnt,
-            tvb, offset, 4, ENC_BIG_ENDIAN, &entry_cnt);
+    entry_cnt = tvb_get_ntohl(tvb, offset);
+    proto_tree_add_item(tree, hf_mp4_dref_entry_cnt,
+            tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
 
     for(i=0; i<entry_cnt; i++) {
@@ -642,8 +644,9 @@ dissect_mp4_stsd_body(tvbuff_t *tvb, int offset, int len,
     offset += dissect_mp4_full_box (tvb, offset, tree, NULL, NULL, NULL);
     /* XXX - put up an expert info if version!=0 */
 
-    proto_tree_add_item_ret_uint(tree, hf_mp4_stsd_entry_cnt,
-            tvb, offset, 4, ENC_BIG_ENDIAN, &entry_cnt);
+    entry_cnt = tvb_get_ntohl(tvb, offset);
+    proto_tree_add_item(tree, hf_mp4_stsd_entry_cnt,
+            tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
 
     for(i=0; i<entry_cnt; i++) {

@@ -16,6 +16,7 @@
 
 #include <epan/packet.h>
 #include <epan/expert.h>
+#include <epan/llcsaps.h>
 
 void proto_register_gmrp(void);
 

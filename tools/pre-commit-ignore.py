@@ -6,13 +6,13 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-import fnmatch
 import sys
+import fnmatch
 
 IGNORE_CONF = "pre-commit-ignore.conf"
 
 if len(sys.argv) > 2:
-    print(f"Usage: {sys.argv[0]} [path/to/ignore.conf]")
+    print("Usage: {0} [path/to/ignore.conf]".format(sys.argv[0]))
     sys.exit(1)
 
 if len(sys.argv) == 2:

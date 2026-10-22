@@ -49,49 +49,37 @@ typedef enum {
     CF_PRINT_WRITE_ERROR    /**< print operation failed while writing to the printer */
 } cf_print_status_t;
 
-/**
- * @brief Event identifiers for capture file lifecycle callbacks.
- */
 typedef enum {
-    cf_cb_file_opened,           /**< A capture file has been successfully opened */
-    cf_cb_file_closing,          /**< A capture file is about to be closed */
-    cf_cb_file_closed,           /**< A capture file has been fully closed */
-    cf_cb_file_read_started,     /**< Reading of a capture file has begun */
-    cf_cb_file_read_finished,    /**< Reading of a capture file has completed */
-    cf_cb_file_reload_started,   /**< A capture file reload has begun */
-    cf_cb_file_reload_finished,  /**< A capture file reload has completed */
-    cf_cb_file_rescan_started,   /**< A packet rescan (without full redissection) has begun */
-    cf_cb_file_rescan_finished,  /**< A packet rescan has completed */
-    cf_cb_file_retap_started,    /**< A retap pass (re-running tap listeners) has begun */
-    cf_cb_file_retap_finished,   /**< A retap pass has completed */
-    cf_cb_file_merge_started,    /**< A file merge operation has begun (Qt only) */
-    cf_cb_file_merge_finished,   /**< A file merge operation has completed (Qt only) */
-    cf_cb_file_fast_save_finished, /**< A fast (append-mode) save operation has completed */
-    cf_cb_file_save_started,     /**< A full file save operation has begun */
-    cf_cb_file_save_finished,    /**< A full file save operation has completed successfully */
-    cf_cb_file_save_failed,      /**< A file save operation failed */
-    cf_cb_file_save_stopped      /**< A file save operation was cancelled by the user */
+    cf_cb_file_opened,
+    cf_cb_file_closing,
+    cf_cb_file_closed,
+    cf_cb_file_read_started,
+    cf_cb_file_read_finished,
+    cf_cb_file_reload_started,
+    cf_cb_file_reload_finished,
+    cf_cb_file_rescan_started,
+    cf_cb_file_rescan_finished,
+    cf_cb_file_retap_started,
+    cf_cb_file_retap_finished,
+    cf_cb_file_merge_started, /* Qt only */
+    cf_cb_file_merge_finished, /* Qt only */
+    cf_cb_file_fast_save_finished,
+    cf_cb_file_save_started,
+    cf_cb_file_save_finished,
+    cf_cb_file_save_failed,
+    cf_cb_file_save_stopped
 } cf_cbs;
 
-/**
- * @brief Callback function type invoked when a capture file lifecycle event occurs.
- * @param event     The cf_cbs event identifier that triggered this callback.
- * @param data      Event-specific data pointer; interpretation depends on the event type.
- * @param user_data Opaque pointer supplied by the caller at callback registration time.
- */
-typedef void (*cf_callback_t)(int event, void *data, void *user_data);
+typedef void (*cf_callback_t) (int event, void *data, void *user_data);
 
-/**
- * @brief State and result data for an in-progress packet or field search operation.
- */
 typedef struct {
-    const char   *string;        /**< Search string or pattern being matched against */
-    size_t        string_len;    /**< Length in bytes of @ref string */
-    capture_file *cf;            /**< The capture file being searched */
-    field_info   *finfo;         /**< The current field_info node being evaluated */
-    field_info   *prev_finfo;    /**< The previously evaluated field_info node; used for context */
-    bool          frame_matched; /**< Set to true when the current frame satisfies the search criteria */
-    bool          halt;          /**< Set to true to abort the search traversal early */
+    const char    *string;
+    size_t         string_len;
+    capture_file  *cf;
+    field_info    *finfo;
+    field_info    *prev_finfo;
+    bool           frame_matched;
+    bool           halt;
 } match_data;
 
 /**
@@ -163,35 +151,27 @@ cf_status_t cf_reload(capture_file *cf);
 cf_read_status_t cf_read(capture_file *cf, bool reloading);
 
 /**
- * Read the information for a record.  It will pop up an alert box
- * if there's an error.
+ * Read the metadata and raw data for a record.  It will pop
+ * up an alert box if there's an error.
  *
  * @param cf the capture file from which to read the record
  * @param fdata the frame_data structure for the record in question
  * @param rec pointer to a wtap_rec structure to contain the
- *           record's information
+ * record's metadata
+ * @param buf a Buffer into which to read the record's raw data
  * @return true if the read succeeded, false if there was an error
  */
 bool cf_read_record(capture_file *cf, const frame_data *fdata,
-                    wtap_rec *rec);
+                          wtap_rec *rec, Buffer *buf);
 
-/**
- * @brief Reads a record from the capture file without generating alerts.
- *
- * Same as cf_read_record() but does not pop alert box on error
- *
- * @param cf Pointer to the capture file structure.
- * @param fdata Pointer to the frame data structure.
- * @param rec Pointer to the wtap_rec structure where the record will be stored.
- * @return true if the record was successfully read, false otherwise.
- */
+/** Same as cf_read_record() but does not pop alert box on error */
 bool cf_read_record_no_alert(capture_file *cf, const frame_data *fdata,
-                             wtap_rec *rec);
+                                 wtap_rec *rec, Buffer *buf);
 
 
 /**
- * Read the information for the current record into a capture_file
- * structure's rec for the current record.
+ * Read the metadata and raw data for the current record into a
+ * capture_file structure's rec and buf for the current record.
  * It will pop up an alert box if there's an error.
  *
  * @param cf the capture file from which to read the record
@@ -200,39 +180,37 @@ bool cf_read_record_no_alert(capture_file *cf, const frame_data *fdata,
 bool cf_read_current_record(capture_file *cf);
 
 /**
- * @brief Read packets from the "end" of a capture file.
+ * Read packets from the "end" of a capture file.
  *
  * @param cf the capture file to be read from
  * @param to_read the number of packets to read
  * @param rec pointer to wtap_rec to use when reading
+ * @param buf pointer to Buffer to use when reading
  * @param err the error code, if an error had occurred
- * @param frame_dup_cache a cache to use for duplicate frames, or NULL if no cache should be used
- * @param frame_cksum a checksum to use for validating frames, or NULL if no checksum should be used
  * @return one of cf_read_status_t
  */
 cf_read_status_t cf_continue_tail(capture_file *cf, volatile int to_read,
-                                  wtap_rec *rec, int *err,
+                                  wtap_rec *rec, Buffer *buf, int *err,
                                   fifo_string_cache_t *frame_dup_cache, GChecksum *frame_cksum);
 
 /**
- * @brief Fake reading packets from the "end" of a capture file.
+ * Fake reading packets from the "end" of a capture file.
  *
  * @param cf the capture file to be read from
  */
 void cf_fake_continue_tail(capture_file *cf);
 
 /**
- * @brief Finish reading from "end" of a capture file.
+ * Finish reading from "end" of a capture file.
  *
  * @param cf the capture file to be read from
  * @param rec pointer to wtap_rec to use when reading
+ * @param buf pointer to Buffer to use when reading
  * @param err the error code, if an error had occurred
- * @param frame_dup_cache a cache to use for duplicate frames, or NULL if no cache should be used
- * @param frame_cksum a checksum to use for validating frames, or NULL if no checksum should be used
  * @return one of cf_read_status_t
  */
 cf_read_status_t cf_finish_tail(capture_file *cf, wtap_rec *rec,
-                                int *err,
+                                Buffer *buf, int *err,
                                 fifo_string_cache_t *frame_dup_cache, GChecksum *frame_cksum);
 
 /**
@@ -289,7 +267,7 @@ bool cf_has_unsaved_data(capture_file *cf);
  */
 cf_write_status_t cf_save_records(capture_file * cf, const char *fname,
                                   unsigned save_format,
-                                  ws_compression_type compression_type,
+                                  wtap_compression_type compression_type,
                                   bool discard_comments,
                                   bool dont_reopen);
 
@@ -311,10 +289,10 @@ cf_write_status_t cf_export_specified_packets(capture_file *cf,
                                               const char *fname,
                                               packet_range_t *range,
                                               unsigned save_format,
-                                              ws_compression_type compression_type);
+                                              wtap_compression_type compression_type);
 
 /**
- * @brief Get a displayable name of the capture file.
+ * Get a displayable name of the capture file.
  *
  * @param cf the capture file
  * @return the displayable name (must be g_free'd)
@@ -430,74 +408,49 @@ cf_status_t cf_filter_packets(capture_file *cf, char *dfilter, bool force);
 void cf_reftime_packets(capture_file *cf);
 
 /**
- * @brief Return the time it took to load the file (in msec).
- * @param cf the capture file
- * @return the time it took to load the file (in msec)
+ * Return the time it took to load the file (in msec).
  */
 unsigned long cf_get_computed_elapsed(capture_file *cf);
 
 /**
- * @brief "Something" has changed, rescan all packets.
+ * "Something" has changed, rescan all packets.
  *
  * @param cf the capture file
  */
 void cf_redissect_packets(capture_file *cf);
 
 /**
- * @brief Rescan all packets and just run taps - don't reconstruct the display.
+ * Rescan all packets and just run taps - don't reconstruct the display.
  *
  * @param cf the capture file
  * @return one of cf_read_status_t
  */
 cf_read_status_t cf_retap_packets(capture_file *cf);
 
-/**
- * Rescan all packets to switch to aggregation view.
- *
- * @param cf the capture file
- * @param enable the aggregation view
- */
-void cf_retap_aggregation_packets(capture_file* cf, bool enable);
-
-/**
- * @brief Selects which frames from a capture file should be included in a print or export operation.
- */
+/* print_range, enum which frames should be printed */
 typedef enum {
-    print_range_selected_only, /**< Print only the currently selected frame(s) */
-    print_range_marked_only,   /**< Print only frames that have been marked */
-    print_range_all_displayed, /**< Print all frames currently passing the active display filter */
-    print_range_all_captured   /**< Print every frame in the capture file regardless of display filter */
+    print_range_selected_only,    /* selected frame(s) only (currently only one) */
+    print_range_marked_only,      /* marked frames only */
+    print_range_all_displayed,    /* all frames currently displayed */
+    print_range_all_captured      /* all frames in capture */
 } print_range_e;
 
-
-/**
- * @brief Aggregates all options controlling a single print or export operation.
- */
 typedef struct {
-    print_stream_t *stream;    /**< Output stream to which formatted output is written */
-    print_format_e  format;    /**< Output format: plain text or PostScript */
-    bool            to_file;   /**< True if output is directed to a file; false if sent to a print command */
-    char           *file;      /**< Pathname of the output file (used when @p to_file is true) */
-    char           *cmd;       /**< Shell print command string (non-Windows only; used when @p to_file is false) */
-    packet_range_t  range;     /**< Packet range descriptor controlling which frames are processed */
+    print_stream_t *stream;       /* the stream to which we're printing */
+    print_format_e format;        /* plain text or PostScript */
+    bool to_file;             /* true if we're printing to a file */
+    char *file;                   /* file output pathname */
+    char *cmd;                    /* print command string (not win32) */
+    packet_range_t range;
 
-    /* --- Packet list and detail options --- */
-    bool                print_summary;    /**< True if a one-line summary should be printed for each frame */
-    bool                print_col_headings; /**< True if column header labels should be printed above the summary lines */
-    print_dissections_e print_dissections; /**< Controls whether and how the protocol dissection tree is printed */
-    bool                print_hex;        /**< True if a hex dump of the frame data should be printed */
-    unsigned            hexdump_options;  /**< Bitmask of hex dump formatting options applied when @p print_hex is true */
-    bool                print_formfeed;   /**< True if a form-feed character should be emitted before each new frame */
-
-    /* --- JSON output options --- */
-    bool no_duplicate_keys; /**< True if duplicate JSON keys within an object should be suppressed (JSON export only) */
-    bool json_compact;      /**< True if JSON output should omit indentation and whitespace (JSON export only) */
-
-    /* --- CSV output options -- */
-    print_args_csv_t csv_args;
-
-    /* --- C Arrays output options --- */
-    print_args_carrays_t carrays_args;
+    bool print_summary;       /* true if we should print summary line. */
+    bool print_col_headings;  /* true if we should print column headings */
+    print_dissections_e print_dissections;
+    bool print_hex;           /* true if we should print hex data;
+                                   * false if we should print only if not dissected. */
+    unsigned hexdump_options;        /* Hexdump options if print_hex is true. */
+    bool print_formfeed;      /* true if a formfeed should be printed before
+                                   * each new packet */
 } print_args_t;
 
 /**
@@ -611,11 +564,10 @@ bool cf_find_packet_data(capture_file *cf, const uint8_t *string,
  * @param cf the capture file
  * @param sfcode the display filter to match
  * @param dir direction in which to search
- * @param start_current whether to start searching from the current frame
  * @return true if a packet was found, false otherwise
  */
 bool cf_find_packet_dfilter(capture_file *cf, dfilter_t *sfcode,
-                                search_direction dir, bool start_current);
+                                search_direction dir);
 
 /**
  * Find packet that matches a display filter given as a text string.
@@ -729,19 +681,6 @@ void cf_unignore_frame(capture_file *cf, frame_data *frame);
  * @return one of cf_status_t
  */
 cf_status_t
-
-/**
- * @brief Merges multiple files into a temporary file.
- *
- * @param pd_window Pointer to the parent window for callback purposes.
- * @param temp_dir Directory where the temporary file will be created.
- * @param out_filenamep Pointer to store the name of the output temporary file.
- * @param in_file_count Number of input files to merge.
- * @param in_filenames Array of input filenames to merge.
- * @param file_type Type of files being merged.
- * @param do_append Whether to append to an existing file or overwrite it.
- * @return True if the merging was successful, false otherwise.
- */
 cf_merge_files_to_tempfile(void *pd_window, const char *temp_dir, char **out_filenamep,
                            int in_file_count, const char *const *in_filenames,
                            int file_type, bool do_append);
@@ -765,7 +704,7 @@ void cf_update_section_comment(capture_file *cf, char *comment);
  */
 void cf_update_section_comments(capture_file *cf, unsigned shb_idx, char **comments);
 
-/**
+/*
  * Get the packet block for a packet (record).
  * If the block has been edited, it returns the result of the edit,
  * otherwise it returns the block from the file.

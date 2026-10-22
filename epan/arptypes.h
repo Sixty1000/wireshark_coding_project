@@ -8,7 +8,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-#pragma once
+
+#ifndef __ARPTYPES_H__
+#define __ARPTYPES_H__
+
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
@@ -141,3 +144,5 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
+
+#endif /* arptypes.h */

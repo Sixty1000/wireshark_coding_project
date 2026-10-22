@@ -18,8 +18,9 @@
 #include <epan/timestamp.h>
 #include <epan/stat_tap_ui.h>
 #include <wsutil/cmdarg_err.h>
-#include <wsutil/nstime.h>
 #include <ui/cli/tshark-tap.h>
+
+#define NANOSECS_PER_SEC 1000000000
 
 typedef struct _srt_t {
 	const char *type;
@@ -50,23 +51,22 @@ draw_srt_table_data(srt_stat_table *rst, bool draw_footer, const char *subfilter
 		if(rst->procedures[i].stats.num==0){
 			continue;
 		}
-		/* tot.secs is a time_t which may be 32 or 64 bits (or even floating)
+		/* Scale the average SRT in units of 1us and round to the nearest us.
+		   tot.secs is a time_t which may be 32 or 64 bits (or even floating)
 		   depending uon the platform.  After casting tot.secs to 64 bits, it
 		   would take a capture with a duration of over 136 *years* to
 		   overflow the secs portion of td. */
-		/* Scale the average SRT in units of 1 ns */
-		td = ((uint64_t)(rst->procedures[i].stats.tot.secs))*WS_NSECS_PER_SEC + rst->procedures[i].stats.tot.nsecs;
-		/* Convert to us, rounded to the nearest us. */
-		sum = (td + (WS_NSECS_PER_USEC/2)) / WS_NSECS_PER_USEC;
-		td = ((td / rst->procedures[i].stats.num) + (WS_NSECS_PER_USEC/2)) / WS_NSECS_PER_USEC;
+		td = ((uint64_t)(rst->procedures[i].stats.tot.secs))*NANOSECS_PER_SEC + rst->procedures[i].stats.tot.nsecs;
+		sum = (td + 500) / 1000;
+		td = ((td / rst->procedures[i].stats.num) + 500) / 1000;
 
 		printf("%5d  %-22s %6u %3d.%06d %3d.%06d %3d.%06d %3d.%06d\n",
 		       i, rst->procedures[i].procedure,
 		       rst->procedures[i].stats.num,
-		       (int)rst->procedures[i].stats.min.secs, (rst->procedures[i].stats.min.nsecs+(WS_NSECS_PER_USEC/2))/WS_NSECS_PER_USEC,
-		       (int)rst->procedures[i].stats.max.secs, (rst->procedures[i].stats.max.nsecs+(WS_NSECS_PER_USEC/2))/WS_NSECS_PER_USEC,
-		       (int)(td/WS_USECS_PER_SEC), (int)(td%WS_USECS_PER_SEC),
-		       (int)(sum/WS_USECS_PER_SEC), (int)(sum%WS_USECS_PER_SEC)
+		       (int)rst->procedures[i].stats.min.secs, (rst->procedures[i].stats.min.nsecs+500)/1000,
+		       (int)rst->procedures[i].stats.max.secs, (rst->procedures[i].stats.max.nsecs+500)/1000,
+		       (int)(td/1000000), (int)(td%1000000),
+		       (int)(sum/1000000), (int)(sum%1000000)
 		);
 	}
 
@@ -110,7 +110,7 @@ srt_draw(void *arg)
 
 static GArray* global_srt_array;
 
-static bool
+static void
 init_srt_tables(register_srt_t* srt, const char *filter)
 {
 	srt_t *ui;
@@ -128,13 +128,11 @@ init_srt_tables(register_srt_t* srt, const char *filter)
 		g_free(ui);
 		cmdarg_err("Couldn't register srt tap: %s", error_string->str);
 		g_string_free(error_string, TRUE);
-		return false;
+		exit(1);
 	}
-
-	return true;
 }
 
-static bool
+static void
 dissector_srt_init(const char *opt_arg, void* userdata)
 {
 	register_srt_t *srt = (register_srt_t*)userdata;
@@ -148,14 +146,14 @@ dissector_srt_init(const char *opt_arg, void* userdata)
 		cmdarg_err("invalid \"-z %s,%s\" argument", cmd_str, err);
 		g_free(cmd_str);
 		g_free(err);
-		return false;
+		exit(1);
 	}
 
 	/* Need to create the SRT array now */
 	global_srt_array = g_array_new(false, true, sizeof(srt_stat_table*));
 
 	srt_table_dissector_init(srt, global_srt_array);
-	return init_srt_tables(srt, filter);
+	init_srt_tables(srt, filter);
 }
 
 /* Set GUI fields for register_srt list */

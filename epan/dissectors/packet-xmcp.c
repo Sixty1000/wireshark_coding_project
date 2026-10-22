@@ -19,14 +19,9 @@
 #include "config.h"
 
 #include <epan/packet.h>
+#include <epan/ipproto.h>
 #include <epan/addr_resolv.h>
 #include <epan/expert.h>
-#include <epan/tfs.h>
-#include <epan/iana-info.h>
-
-#include <wsutil/array.h>
-#include <wsutil/ws_padding_to.h>
-
 #include "packet-tcp.h"
 
 void proto_register_xmcp(void);
@@ -419,7 +414,6 @@ decode_xmcp_attr_value (proto_tree *attr_tree, uint16_t attr_type,
                         packet_info *pinfo)
 {
   proto_item *it;
-  unsigned attr_padding;
 
   switch (attr_type) {
   case XMCP_USERNAME:
@@ -503,8 +497,8 @@ decode_xmcp_attr_value (proto_tree *attr_tree, uint16_t attr_type,
     it = proto_tree_add_item(attr_tree, hf_xmcp_attr_realm, tvb, offset,
                         attr_length, ENC_ASCII);
     {
-      char *realm;
-      realm = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, attr_length, ENC_ASCII);
+      uint8_t *realm;
+      realm = tvb_get_string_enc(pinfo->pool, tvb, offset, attr_length, ENC_ASCII);
       proto_item_append_text(attr_tree, ": %s", realm);
       /* In XMCP the REALM string should always be "SAF" including the quotes */
       if (attr_length != 5 || strncmp(realm, "\"SAF\"", attr_length)) {
@@ -744,7 +738,7 @@ decode_xmcp_attr_value (proto_tree *attr_tree, uint16_t attr_type,
                         attr_length, ENC_NA);
     if (attr_length > 0) {
       tvbuff_t *next_tvb;
-      char *test_string, *tok;
+      uint8_t *test_string, *tok;
 
       next_tvb = tvb_new_subset_length(tvb, offset, attr_length);
       /*
@@ -753,17 +747,17 @@ decode_xmcp_attr_value (proto_tree *attr_tree, uint16_t attr_type,
        * a '<'), try XML.
        * Otherwise, try plain-text.
        */
-      test_string = (char*)tvb_get_string_enc(pinfo->pool, next_tvb, 0, (attr_length < 32 ?
+      test_string = tvb_get_string_enc(pinfo->pool, next_tvb, 0, (attr_length < 32 ?
                                                            attr_length : 32), ENC_ASCII);
       tok = strtok(test_string, " \t\r\n");
       if (tok && tok[0] == '<') {
         /* Looks like XML */
-        dissector_try_string_with_data(media_type_dissector_table, "application/xml",
-                             next_tvb, pinfo, attr_tree, true, NULL);
+        dissector_try_string(media_type_dissector_table, "application/xml",
+                             next_tvb, pinfo, attr_tree, NULL);
       } else {
         /* Try plain text */
-        dissector_try_string_with_data(media_type_dissector_table, "text/plain",
-                             next_tvb, pinfo, attr_tree, true, NULL);
+        dissector_try_string(media_type_dissector_table, "text/plain",
+                             next_tvb, pinfo, attr_tree, NULL);
       }
     }
     break;
@@ -798,10 +792,9 @@ decode_xmcp_attr_value (proto_tree *attr_tree, uint16_t attr_type,
     expert_add_info(pinfo, attr_tree, &ei_xmcp_attr_type_unknown);
     break;
   }
-  attr_padding = WS_PADDING_TO_4(attr_length);
-  if (attr_padding != 0) {
+  if (attr_length % 4 != 0) {
     proto_tree_add_item(attr_tree, hf_xmcp_attr_padding, tvb, (offset+attr_length),
-                        attr_padding, ENC_NA);
+                        (4 - (attr_length % 4)), ENC_NA);
   }
   if (attr_length < get_xmcp_attr_min_len(attr_type)) {
     expert_add_info_format(pinfo, attr_tree, &ei_xmcp_attr_length_bad, "Length less than minimum for this attribute type");
@@ -1106,12 +1099,12 @@ proto_register_xmcp(void)
     },
     { &hf_xmcp_response_in,
       { "Response In",          "xmcp.response-in",
-        FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_RESPONSE), 0x0,
+        FT_FRAMENUM, BASE_NONE, NULL, 0x0,
         "The response to this XMCP request is in this frame",   HFILL }
     },
     { &hf_xmcp_response_to,
       { "Response To",          "xmcp.response-to",
-        FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_REQUEST), 0x0,
+        FT_FRAMENUM, BASE_NONE, NULL, 0x0,
         "This is a response to the XMCP request in this frame", HFILL }
     },
     { &hf_xmcp_time,

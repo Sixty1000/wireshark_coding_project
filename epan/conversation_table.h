@@ -8,7 +8,11 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-#pragma once
+
+#ifndef __CONVERSATION_TABLE_H__
+#define __CONVERSATION_TABLE_H__
+
+#include "conv_id.h"
 #include "tap.h"
 #include "conversation.h"
 #include <epan/wmem_scopes.h>
@@ -17,56 +21,30 @@
 extern "C" {
 #endif /* __cplusplus */
 
-/** conv_id_t is a type that can aid in conversation identification. When
- *  included in a "conversation key", whatever that may be, in addition to the
- *  typical { address, port, address, port } quadruple, it helps differentiate
- *  in case the quadruple is not sufficiently unique. For example, it is not
- *  uncommon to see a TCP quadruple reused these days, and employing a
- *  conv_id_t field ensures that each instance of a reused TCP conversation is
- *  tracked independently. Currently this type is used in both Wireshark's and
- *  tshark's conversation tables implementations (they are different, hence
- *  the need for a whole header file for this one silly type alias).
- *
- *  The "protocol" or "statistic" code responsible for instantiating the
- *  "conversation key" is also responsible for assigning its conv_id_t, and
- *  therefore its interpretation is specific to its assignor. For example, the
- *  TCP conversations tables in Wireshark and tshark assign the value of
- *  tcp.stream. If a conv_id_t field is not used, it should be assigned the
- *  value CONV_ID_UNSET.
- */
-typedef uint32_t conv_id_t;
-#define CONV_ID_UNSET UINT32_MAX
-
 /** @file
  *  Conversation definitions.
  */
 
-/**
- * @brief Field type selector for building a conversation display filter.
- */
 typedef enum {
-    CONV_FT_SRC_ADDRESS, /**< Match on source address */
-    CONV_FT_DST_ADDRESS, /**< Match on destination address */
-    CONV_FT_ANY_ADDRESS, /**< Match on either source or destination address */
-    CONV_FT_SRC_PORT,    /**< Match on source port */
-    CONV_FT_DST_PORT,    /**< Match on destination port */
-    CONV_FT_ANY_PORT     /**< Match on either source or destination port */
+    CONV_FT_SRC_ADDRESS,
+    CONV_FT_DST_ADDRESS,
+    CONV_FT_ANY_ADDRESS,
+    CONV_FT_SRC_PORT,
+    CONV_FT_DST_PORT,
+    CONV_FT_ANY_PORT
 } conv_filter_type_e;
 
-
-/**
- * @brief Directional filter scope for a conversation, relative to endpoints A and B.
- */
+/* Filter direction */
 typedef enum {
-    CONV_DIR_A_TO_FROM_B,   /**< Traffic in both directions between A and B */
-    CONV_DIR_A_TO_B,        /**< Traffic from A to B only */
-    CONV_DIR_A_FROM_B,      /**< Traffic from B to A only */
-    CONV_DIR_A_TO_FROM_ANY, /**< All traffic to or from A (any remote endpoint) */
-    CONV_DIR_A_TO_ANY,      /**< Traffic sent from A to any endpoint */
-    CONV_DIR_A_FROM_ANY,    /**< Traffic received by A from any endpoint */
-    CONV_DIR_ANY_TO_FROM_B, /**< All traffic to or from B (any remote endpoint) */
-    CONV_DIR_ANY_TO_B,      /**< Traffic sent to B from any endpoint */
-    CONV_DIR_ANY_FROM_B     /**< Traffic sent from B to any endpoint */
+    CONV_DIR_A_TO_FROM_B,
+    CONV_DIR_A_TO_B,
+    CONV_DIR_A_FROM_B,
+    CONV_DIR_A_TO_FROM_ANY,
+    CONV_DIR_A_TO_ANY,
+    CONV_DIR_A_FROM_ANY,
+    CONV_DIR_ANY_TO_FROM_B,
+    CONV_DIR_ANY_TO_B,
+    CONV_DIR_ANY_FROM_B
 } conv_direction_e;
 
 /** Conversation hash + value storage
@@ -79,51 +57,45 @@ typedef struct _conversation_hash_t {
     unsigned    flags;            /**< flags given to the tap packet */
 } conv_hash_t;
 
-/**
- * @brief Composite hash table key identifying a conversation by its two endpoints and optional ID.
- */
+/** Key for hash lookups */
 typedef struct _conversation_key_t {
-    address   addr1;    /**< Address of the first endpoint of the conversation */
-    address   addr2;    /**< Address of the second endpoint of the conversation */
-    uint32_t  port1;    /**< Transport port of the first endpoint */
-    uint32_t  port2;    /**< Transport port of the second endpoint */
-    conv_id_t conv_id;  /**< Optional conversation ID used to disambiguate conversations sharing the same address/port 4-tuple */
+    address     addr1;
+    address     addr2;
+    uint32_t    port1;
+    uint32_t    port2;
+    conv_id_t   conv_id;
 } conv_key_t;
 
-/**
- * @brief Composite hash table key identifying a single network endpoint by address and port.
- */
 typedef struct {
-    address  myaddress; /**< Network address of the endpoint */
-    uint32_t port;      /**< Transport port of the endpoint */
+    address  myaddress;
+    uint32_t port;
 } endpoint_key_t;
+
+/*
+ * For backwards source compatibility.
+ * Yes, G_DEPRECATED_FOR() has to be at the beginning, so that this
+ * works with MSVC.
+ */
+G_DEPRECATED_FOR(endpoint_key_t)
+typedef endpoint_key_t host_key_t;
 
 struct _conversation_item_t;
 typedef const char* (*conv_get_filter_type)(struct _conversation_item_t* item, conv_filter_type_e filter);
 
-/**
- * @brief Dissector info block for a conversation table, providing filter-type resolution.
- */
 typedef struct _ct_dissector_info {
-    conv_get_filter_type get_filter_type; /**< Callback that returns the display filter field name for a given conversation filter type */
+    conv_get_filter_type get_filter_type;
 } ct_dissector_info_t;
 
 struct _endpoint_item_t;
-
-/**
- * @brief Callback that resolves a display filter field name for a given endpoint item and filter type.
- * @param item        Pointer to the endpoint item being queried.
- * @param filter_type The conversation filter type to resolve.
- * @return The display filter field name string corresponding to @p filter_type, or NULL if unsupported.
- */
 typedef const char* (*endpoint_get_filter_type)(struct _endpoint_item_t* item, conv_filter_type_e filter_type);
 
-/**
- * @brief Dissector info block for an endpoint table, providing filter-type resolution.
- */
 typedef struct _et_dissector_info {
-    endpoint_get_filter_type get_filter_type; /**< Callback that returns the display filter field name for a given endpoint filter type */
+    endpoint_get_filter_type get_filter_type;
 } et_dissector_info_t;
+
+/* For backwards source compatibiity */
+G_DEPRECATED_FOR(et_dissector_info_t)
+typedef et_dissector_info_t hostlist_dissector_info_t;
 
 #define CONV_FILTER_INVALID "INVALID"
 
@@ -196,14 +168,13 @@ typedef struct _endpoint_item_t {
 
 } endpoint_item_t;
 
+/* For backwards source compatibility */
+G_DEPRECATED_FOR(endpoint_item_t)
+typedef endpoint_item_t hostlist_talker_t;
+
 #define ENDPOINT_TAP_PREFIX     "endpoints"
 
-/**
- * @brief Initialize the conversation table system.
- */
-extern void conversation_table_init(void);
-
-/** @brief Register the conversation table for the conversation and endpoint windows.
+/** Register the conversation table for the conversation and endpoint windows.
  *
  * @param proto_id is the protocol with conversation
  * @param hide_ports hide the port columns
@@ -212,48 +183,47 @@ extern void conversation_table_init(void);
  */
 WS_DLL_PUBLIC void register_conversation_table(const int proto_id, bool hide_ports, tap_packet_cb conv_packet_func, tap_packet_cb endpoint_packet_func);
 
-/**
- * @brief Should port columns be hidden?
+/** Should port columns be hidden?
  *
  * @param ct Registered conversation table
  * @return true if port columns should be hidden for this conversation table.
  */
 WS_DLL_PUBLIC bool get_conversation_hide_ports(register_ct_t* ct);
 
-/**
- * @brief Get protocol ID of a conversation table
+/** Get protocol ID of a conversation table
  *
- * @param ct Registered conversation table
+ * @param ct Registered conversation tble
  * @return protocol id of conversation table
  */
 WS_DLL_PUBLIC int get_conversation_proto_id(register_ct_t* ct);
 
-/**
- * @brief Get conversation tap function handler of a conversation table
+/** Get conversation tap function handler of a conversation tble
  *
  * @param ct Registered conversation table
  * @return conversation tap function handler of conversation table
  */
 WS_DLL_PUBLIC tap_packet_cb get_conversation_packet_func(register_ct_t* ct);
 
-/**
- * @brief Get endpoint tap function handler for a conversation table
+/** Get endpoint tap function handler for a conversation table
  *
  * @param ct Registered conversation table
  * @return endpoint tap function handler of conversation table
  */
 WS_DLL_PUBLIC tap_packet_cb get_endpoint_packet_func(register_ct_t* ct);
 
-/**
- * @brief get conversation table from protocol ID
+/* For backwards source and binary compatibility */
+G_DEPRECATED_FOR(get_endpoint_packet_func)
+WS_DLL_PUBLIC tap_packet_cb get_hostlist_packet_func(register_ct_t* ct);
+
+
+/** get conversation table from protocol ID
  *
  * @param proto_id protocol ID
  * @return conversation table for that protocol ID
  */
 WS_DLL_PUBLIC register_ct_t* get_conversation_by_proto_id(int proto_id);
 
-/**
- * @brief Register "initialization function" used by the GUI to create conversation
+/** Register "initialization function" used by the GUI to create conversation
  * table display in GUI
  *
  * @param init_cb callback function that will be called when conversation table "display
@@ -261,8 +231,7 @@ WS_DLL_PUBLIC register_ct_t* get_conversation_by_proto_id(int proto_id);
  */
 WS_DLL_PUBLIC void conversation_table_set_gui_info(conv_gui_init_cb init_cb);
 
-/**
- * @brief Register "initialization function" used by the GUI to create endpoint
+/** Register "initialization function" used by the GUI to create endpoint
  * table display in GUI
  *
  * @param init_cb callback function that will be called when endpoint table "display"
@@ -270,52 +239,56 @@ WS_DLL_PUBLIC void conversation_table_set_gui_info(conv_gui_init_cb init_cb);
  */
 WS_DLL_PUBLIC void endpoint_table_set_gui_info(endpoint_gui_init_cb init_cb);
 
-/**
- * @brief Iterator to walk conversation tables and execute func
+/* For backwards source and binary compatibility */
+G_DEPRECATED_FOR(endpoint_table_set_gui_info)
+WS_DLL_PUBLIC void hostlist_table_set_gui_info(endpoint_gui_init_cb init_cb);
+
+/** Iterator to walk conversation tables and execute func
  *
  * @param func action to be performed on all conversation tables
  * @param user_data any data needed to help perform function
  */
 WS_DLL_PUBLIC void conversation_table_iterate_tables(wmem_foreach_func func, void* user_data);
 
-/**
- * @brief Get the total number of conversation tables.
- * @return The total number of conversation tables.
+/** Total number of conversation tables
  */
 WS_DLL_PUBLIC unsigned conversation_table_get_num(void);
 
-/**
- * @brief Remove all entries from the conversation table.
+/** Remove all entries from the conversation table.
  *
  * @param ch the table to reset
  */
 WS_DLL_PUBLIC void reset_conversation_table_data(conv_hash_t *ch);
 
-/**
- * @brief Remove all entries from the endpoint table.
+/** Remove all entries from the endpoint table.
  *
  * @param ch the table to reset
  */
 WS_DLL_PUBLIC void reset_endpoint_table_data(conv_hash_t *ch);
 
-/**
- * @brief Initialize dissector conversation for stats and (possibly) GUI.
+/* For backwards source and binary compatibility */
+G_DEPRECATED_FOR(reset_endpoint_table_data)
+WS_DLL_PUBLIC void reset_hostlist_table_data(conv_hash_t *ch);
+
+/** Initialize dissector conversation for stats and (possibly) GUI.
  *
  * @param opt_arg filter string to compare with dissector
  * @param userdata register_ct_t* for dissector conversation table
  */
 WS_DLL_PUBLIC void dissector_conversation_init(const char *opt_arg, void* userdata);
 
-/**
- * @brief Initialize dissector endpoint for stats and (possibly) GUI.
+/** Initialize dissector endpoint for stats and (possibly) GUI.
  *
  * @param opt_arg filter string to compare with dissector
  * @param userdata register_ct_t* for dissector conversation table
  */
 WS_DLL_PUBLIC void dissector_endpoint_init(const char *opt_arg, void* userdata);
 
-/**
- * @brief Get the string representation of an address.
+/* For backwards source and binary compatibility */
+G_DEPRECATED_FOR(dissector_endpoint_init)
+WS_DLL_PUBLIC void dissector_hostlist_init(const char *opt_arg, void* userdata);
+
+/** Get the string representation of an address.
  *
  * @param allocator The wmem allocator to use when allocating the string
  * @param addr The address.
@@ -324,8 +297,7 @@ WS_DLL_PUBLIC void dissector_endpoint_init(const char *opt_arg, void* userdata);
  */
 WS_DLL_PUBLIC char *get_conversation_address(wmem_allocator_t *allocator, address *addr, bool resolve_names);
 
-/**
- * @brief Get the string representation of a port.
+/** Get the string representation of a port.
  *
  * @param allocator The wmem allocator to use when allocating the string
  * @param port The port number.
@@ -337,8 +309,7 @@ WS_DLL_PUBLIC char *get_conversation_address(wmem_allocator_t *allocator, addres
  */
 WS_DLL_PUBLIC char *get_conversation_port(wmem_allocator_t *allocator, uint32_t port, conversation_type ctype, bool resolve_names);
 
-/**
- * @brief Get the string representation of the port for an endpoint_item_t.
+/** Get the string representation of the port for an endpoint_item_t.
  *
  * @param allocator The wmem allocator to use when allocating the string
  *
@@ -350,8 +321,7 @@ WS_DLL_PUBLIC char *get_conversation_port(wmem_allocator_t *allocator, uint32_t 
  */
 WS_DLL_PUBLIC char *get_endpoint_port(wmem_allocator_t *allocator, endpoint_item_t *item, bool resolve_names);
 
-/**
- * @brief Get a display filter for the given conversation and direction.
+/** Get a display filter for the given conversation and direction.
  *
  * @param conv_item The conversation.
  * @param direction The desired direction.
@@ -359,8 +329,7 @@ WS_DLL_PUBLIC char *get_endpoint_port(wmem_allocator_t *allocator, endpoint_item
  */
 WS_DLL_PUBLIC char *get_conversation_filter(conv_item_t *conv_item, conv_direction_e direction);
 
-/**
- * @brief Get a display filter for the given endpoint.
+/** Get a display filter for the given endpoint.
  *
  * @param endpoint_item The endpoint.
  * @return A string, allocated using the wmem NULL allocator,
@@ -368,8 +337,11 @@ WS_DLL_PUBLIC char *get_conversation_filter(conv_item_t *conv_item, conv_directi
  */
 WS_DLL_PUBLIC char *get_endpoint_filter(endpoint_item_t *endpoint_item);
 
-/**
- * @brief Add some data to the conversation table.
+/* For backwards source and binary compatibility */
+G_DEPRECATED_FOR(get_endpoint_filter)
+WS_DLL_PUBLIC char *get_hostlist_filter(endpoint_item_t *endpoint_item);
+
+/** Add some data to the conversation table.
  *
  * @param ch the table to add the data to
  * @param src source address
@@ -387,8 +359,7 @@ WS_DLL_PUBLIC void add_conversation_table_data(conv_hash_t *ch, const address *s
     uint32_t src_port, uint32_t dst_port, int num_frames, int num_bytes, nstime_t *ts, nstime_t *abs_ts,
     ct_dissector_info_t *ct_info, conversation_type ctype);
 
-/**
- * @brief Add some data to the conversation table, passing a value to be used in
+/** Add some data to the conversation table, passing a value to be used in
  *  addition to the address and port quadruple to uniquely identify the
  *  conversation.
  *
@@ -411,24 +382,9 @@ add_conversation_table_data_with_conv_id(conv_hash_t *ch, const address *src, co
     nstime_t *ts, nstime_t *abs_ts, ct_dissector_info_t *ct_info,
     conversation_type ctype);
 
-/**
- * @brief Decorates add_conversation_table_data_with_conv_id() in order to be
+/** Decorates add_conversation_table_data_with_conv_id() in order to be
  *  able to add protocol dependent additional statistics.
  *
- * @param ch the table to add the data to
- * @param src source address
- * @param dst destination address
- * @param src_port source port
- * @param dst_port destination port
- * @param conv_id a value to help differentiate the conversation in case the address and port quadruple is not sufficiently unique
- * @param num_frames number of packets
- * @param num_bytes number of bytes
- * @param ts timestamp
- * @param abs_ts absolute timestamp
- * @param ct_info callback handlers from the dissector
- * @param ctype the conversation type (e.g. CONVERSATION_TCP)
- * @param frameid the frame id of the packet being processed
- * @param proto_conv_cb a callback function that will be called with the conversation item as argument, and that can be used to set protocol dependent additional statistics in the conversation item
  */
 WS_DLL_PUBLIC void
 add_conversation_table_data_extended(conv_hash_t *ch, const address *src, const address *dst, uint32_t src_port,
@@ -436,22 +392,9 @@ add_conversation_table_data_extended(conv_hash_t *ch, const address *src, const 
     nstime_t *ts, nstime_t *abs_ts, ct_dissector_info_t *ct_info,
     conversation_type ctype, uint32_t frameid, int (*proto_conv_cb)(conversation_t *));
 
-/**
- * @brief Encapsulates add_conversation_table_data_with_conv_id() for the IPv4 specific case
+/** Encapsulates add_conversation_table_data_with_conv_id() for the IPv4 specific case
  *  when the subnet aggregation user preference is true.
  *
- * @param ch the table to add the data to
- * @param src source address
- * @param dst destination address
- * @param src_port source port
- * @param dst_port destination port
- * @param conv_id a value to help differentiate the conversation in case the address and port quadruple is not sufficiently unique
- * @param num_frames number of packets
- * @param num_bytes number of bytes
- * @param ts timestamp
- * @param abs_ts absolute timestamp
- * @param ct_info callback handlers from the dissector
- * @param ctype the conversation type (e.g. CONVERSATION_TCP)
  */
 WS_DLL_PUBLIC void
 add_conversation_table_data_ipv4_subnet(conv_hash_t *ch, const address *src, const address *dst, uint32_t src_port,
@@ -459,8 +402,7 @@ add_conversation_table_data_ipv4_subnet(conv_hash_t *ch, const address *src, con
     nstime_t *ts, nstime_t *abs_ts, ct_dissector_info_t *ct_info,
     conversation_type ctype);
 
-/**
- * @brief Add some data to the endpoint table.
+/** Add some data to the endpoint table.
  *
  * @param ch the table hash to add the data to
  * @param addr address
@@ -474,25 +416,23 @@ add_conversation_table_data_ipv4_subnet(conv_hash_t *ch, const address *src, con
 WS_DLL_PUBLIC void add_endpoint_table_data(conv_hash_t *ch, const address *addr,
     uint32_t port, bool sender, int num_frames, int num_bytes, et_dissector_info_t *et_info, endpoint_type etype);
 
-/**
- * @brief Encapsulates add_endpoint_table_data() for the IPv4 specific case
+/** Encapsulates add_endpoint_table_data() for the IPv4 specific case
  *  when the subnet aggregation user preference is true.
  *
- * @param ch the table hash to add the data to
- * @param addr address
- * @param port port
- * @param sender true, if this is a sender
- * @param num_frames number of packets
- * @param num_bytes number of bytes
- * @param et_info endpoint information provided by dissector
- * @param etype the endpoint type (e.g. ENDPOINT_TCP)
  */
 WS_DLL_PUBLIC void add_endpoint_table_data_ipv4_subnet(conv_hash_t *ch, const address *addr,
+    uint32_t port, bool sender, int num_frames, int num_bytes, et_dissector_info_t *et_info, endpoint_type etype);
+
+/* For backwards source and binary compatibility */
+G_DEPRECATED_FOR(add_endpoint_table_data)
+WS_DLL_PUBLIC void add_hostlist_table_data(conv_hash_t *ch, const address *addr,
     uint32_t port, bool sender, int num_frames, int num_bytes, et_dissector_info_t *et_info, endpoint_type etype);
 
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
+
+#endif /* __CONVERSATION_TABLE_H__ */
 
 /*
  * Editor modelines

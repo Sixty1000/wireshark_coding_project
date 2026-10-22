@@ -10,16 +10,13 @@
 #include <ui/qt/widgets/filter_expression_toolbar.h>
 #include <ui/qt/utils/color_utils.h>
 #include <ui/qt/utils/qt_ui_utils.h>
-#include <ui/qt/utils/theme_manager.h>
 #include <ui/qt/utils/wireshark_mime_data.h>
 #include <ui/qt/models/uat_model.h>
 #include <ui/qt/filter_action.h>
 #include <ui/qt/main_application.h>
 
 #include <epan/filter_expressions.h>
-#include <epan/uat-int.h>
 #include <ui/preference_utils.h>
-#include <app/application_flavor.h>
 
 #include <QApplication>
 #include <QFrame>
@@ -47,8 +44,6 @@ FilterExpressionToolBar::FilterExpressionToolBar(QWidget * parent) :
     DragDropToolBar(parent)
 {
     updateStyleSheet();
-    connect(ThemeManager::instance(), &ThemeManager::themeChanged,
-            this, &FilterExpressionToolBar::updateStyleSheet);
 
     setContextMenuPolicy(Qt::CustomContextMenu);
     /* Give minimum space to the bar, so that drops on an empty bar will work */
@@ -87,7 +82,7 @@ void FilterExpressionToolBar::onCustomMenuHandler(const QPoint& pos)
     customMenu(this, filterAction, pos);
 }
 
-void FilterExpressionToolBar::customMenu(QWidget* target, QAction * filterAction, const QPoint& pos)
+void FilterExpressionToolBar::customMenu(FilterExpressionToolBar * target, QAction * filterAction, const QPoint& pos)
 {
     QMenu * filterMenu = new QMenu(target);
     filterMenu->setAttribute(Qt::WA_DeleteOnClose);
@@ -103,24 +98,24 @@ void FilterExpressionToolBar::customMenu(QWidget* target, QAction * filterAction
         filterMenu->addAction(FilterAction::copyFilterAction(filterText, target));
         filterMenu->addSeparator();
         QAction * actEdit = filterMenu->addAction(tr("Edit"));
-        connect(actEdit, &QAction::triggered, this, &FilterExpressionToolBar::editFilter);
+        connect(actEdit, &QAction::triggered, target, &FilterExpressionToolBar::editFilter);
         actEdit->setProperty(dfe_property_label_, filterAction->property(dfe_property_label_));
         actEdit->setProperty(dfe_property_expression_, filterAction->property(dfe_property_expression_));
         actEdit->setData(filterAction->data());
         QAction * actDisable = filterMenu->addAction(tr("Disable"));
-        connect(actDisable, &QAction::triggered, this, &FilterExpressionToolBar::disableFilter);
+        connect(actDisable, &QAction::triggered, target, &FilterExpressionToolBar::disableFilter);
         actDisable->setProperty(dfe_property_label_, filterAction->property(dfe_property_label_));
         actDisable->setProperty(dfe_property_expression_, filterAction->property(dfe_property_expression_));
         actDisable->setData(filterAction->data());
         QAction * actRemove = filterMenu->addAction(tr("Remove"));
-        connect(actRemove, &QAction::triggered, this, &FilterExpressionToolBar::removeFilter);
+        connect(actRemove, &QAction::triggered, target, &FilterExpressionToolBar::removeFilter);
         actRemove->setProperty(dfe_property_label_, filterAction->property(dfe_property_label_));
         actRemove->setProperty(dfe_property_expression_, filterAction->property(dfe_property_expression_));
         actRemove->setData(filterAction->data());
         filterMenu->addSeparator();
     }
-    QAction *actFilter = filterMenu->addAction(tr("Filter Button Preferences…"));
-    connect(actFilter, &QAction::triggered, this, &FilterExpressionToolBar::toolBarShowPreferences);
+    QAction *actFilter = filterMenu->addAction(tr("Filter Button Preferences..."));
+    connect(actFilter, &QAction::triggered, target, &FilterExpressionToolBar::toolBarShowPreferences);
 
     /* Forcing the menus to get closed, no matter which action has been triggered */
     connect(filterMenu, &QMenu::triggered, this, &FilterExpressionToolBar::closeMenu);
@@ -199,7 +194,7 @@ void FilterExpressionToolBar::onActionMoved(QAction* action, int oldPos, int new
     {
         uat_t * table = uat_get_table_by_name("Display expressions");
         uat_move_index(table, oldPos, newPos);
-        uat_save(table, application_configuration_environment_prefix(), &err);
+        uat_save(table, &err);
 
         g_free(err);
     }
@@ -257,7 +252,7 @@ void FilterExpressionToolBar::updateStyleSheet()
 {
     // Try to draw 1-pixel-wide separator lines from the button label
     // ascent to its baseline.
-    setStyleSheet(QStringLiteral(
+    setStyleSheet(QString(
                 "QToolBar { background: none; border: none; spacing: 1px; }"
                 "QFrame { background: none; min-width: 1px; max-width: 1px; }"
                 ));
@@ -312,7 +307,7 @@ bool FilterExpressionToolBar::eventFilter(QObject *obj, QEvent *event)
 
             if (filterAction) {
                 QPoint tb_pos = this->mapFromGlobal(ctx->globalPos());
-                customMenu(qm, filterAction, tb_pos);
+                customMenu(this, filterAction, tb_pos);
             }
             return true;
         }
@@ -345,7 +340,6 @@ void FilterExpressionToolBar::closeMenu(QAction * /*sender*/)
     }
 }
 
-// NOLINTNEXTLINE(misc-no-recursion)
 QMenu * FilterExpressionToolBar::findParentMenu(const QStringList tree, void *fed_data, QMenu *parent )
 {
     if (!fed_data)
@@ -363,7 +357,6 @@ QMenu * FilterExpressionToolBar::findParentMenu(const QStringList tree, void *fe
             foreach(QAction * entry, data->toolbar->actions())
             {
                 if (entry->text().compare(tree.at(0).trimmed()) == 0)
-                    // We recurse here, but we're limited to mainApp->maxMenuDepth
                     return findParentMenu(tree.mid(1), fed_data, entry->menu());
             }
         }
@@ -373,10 +366,8 @@ QMenu * FilterExpressionToolBar::findParentMenu(const QStringList tree, void *fe
             /* Iterate to see if we next have to jump into another submenu */
             foreach(QAction *entry, parent->actions())
             {
-                if (entry->menu() && entry->text().compare(menuName) == 0) {
-                    // We recurse here, but we're limited to mainApp->maxMenuDepth
+                if (entry->menu() && entry->text().compare(menuName) == 0)
                     return findParentMenu(tree.mid(1), fed_data, entry->menu());
-                }
             }
 
             /* Submenu not found, creating */
@@ -384,7 +375,6 @@ QMenu * FilterExpressionToolBar::findParentMenu(const QStringList tree, void *fe
             subMenu->installEventFilter(data->toolbar);
             subMenu->setProperty(dfe_menu_, QVariant::fromValue(true));
             parent->addMenu(subMenu);
-            // We recurse here, but we're limited to mainApp->maxMenuDepth
             return findParentMenu(tree.mid(1), fed_data, subMenu);
         }
 
@@ -405,7 +395,6 @@ QMenu * FilterExpressionToolBar::findParentMenu(const QStringList tree, void *fe
         if (menuButton != nullptr) {
             menuButton->setPopupMode(QToolButton::InstantPopup);
         }
-        // We recurse here, but we're limited to mainApp->maxMenuDepth
         return findParentMenu(tree.mid(1), fed_data, parentMenu);
     }
     else if (parent)
@@ -425,29 +414,17 @@ bool FilterExpressionToolBar::filter_expression_add_action(const void *key _U_, 
     QString label = QString(fe->label);
 
     /* Search for parent menu and create if not found */
-    QStringList full_tree = label.split(PARENT_SEPARATOR);
-    QStringList tree = full_tree.mid(0, mainApp->maxMenuDepth());
-    QString remaining_label = full_tree.mid(mainApp->maxMenuDepth()).join(" / ");
-
-    if (!remaining_label.isEmpty()) {
-        tree << remaining_label;
-    }
-    if (!tree.isEmpty()) {
+    QStringList tree = label.split(PARENT_SEPARATOR);
+    if (!tree.isEmpty())
         tree.removeLast();
-    }
     QMenu * parentMenu = findParentMenu(tree, data);
-    if (parentMenu) {
-        if (!remaining_label.isEmpty()) {
-            label = remaining_label;
-        } else {
-            label = label.mid(label.lastIndexOf(PARENT_SEPARATOR) + QString(PARENT_SEPARATOR).length()).trimmed();
-        }
-    }
+    if (parentMenu)
+        label = label.mid(label.lastIndexOf(PARENT_SEPARATOR) + QString(PARENT_SEPARATOR).length()).trimmed();
 
     QAction *dfb_action = new QAction(label, data->toolbar);
     if (strlen(fe->comment) > 0)
     {
-        QString tooltip = QStringLiteral("%1\n%2").arg(fe->comment, fe->expression);
+        QString tooltip = QString("%1\n%2").arg(fe->comment).arg(fe->expression);
         dfb_action->setToolTip(tooltip);
         dfb_action->setProperty(dfe_property_comment_, tooltip);
     }
@@ -461,20 +438,16 @@ bool FilterExpressionToolBar::filter_expression_add_action(const void *key _U_, 
     dfb_action->setProperty(dfe_property_label_, QString(fe->label));
     dfb_action->setProperty(dfe_property_expression_, QString(fe->expression));
 
-    if (parentMenu) {
-        parentMenu->addAction(dfb_action);
-    } else {
-        /* Only add a visual separator between toolbar-level buttons.
-         * Submenu items must not create separators because disabled
-         * QFrame widgets still occupy ~1 px on the toolbar, causing
-         * progressively wider gaps when many submenu entries exist. */
-        if (data->actions_added) {
-            QFrame *sep = new QFrame();
-            sep->setEnabled(false);
-            data->toolbar->addWidget(sep);
-        }
-        data->toolbar->addAction(dfb_action);
+    if (data->actions_added) {
+        QFrame *sep = new QFrame();
+        sep->setEnabled(false);
+        data->toolbar->addWidget(sep);
     }
+
+    if (parentMenu)
+        parentMenu->addAction(dfb_action);
+    else
+        data->toolbar->addAction(dfb_action);
 
     connect(dfb_action, &QAction::triggered, data->toolbar, &FilterExpressionToolBar::filterClicked);
     data->actions_added = true;

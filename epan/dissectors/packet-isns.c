@@ -19,9 +19,9 @@
 
 #include <epan/packet.h>
 #include <epan/expert.h>
+#include <epan/exceptions.h>
 #include <epan/prefs.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
+
 #include "packet-tcp.h"
 
 void proto_register_isns(void);
@@ -553,7 +553,7 @@ dissect_isns_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
 
     /* Add the function name in the info col */
     col_add_str(pinfo->cinfo, COL_INFO,
-                val_to_str_ext(pinfo->pool, function_id, &isns_function_ids_ext,
+                val_to_str_ext(function_id, &isns_function_ids_ext,
                                "Unknown function ID 0x%04x"));
 
     /* create display subtree for the protocol */
@@ -645,7 +645,7 @@ dissect_isns_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
     default:
         /* we can only look at the attributes for the first PDU */
         if(!(flags&ISNS_FLAGS_FIRST_PDU)){
-            proto_tree_add_expert_remaining(tt, pinfo, &ei_isns_not_first_pdu, tvb, offset);
+            proto_tree_add_expert(tt, pinfo, &ei_isns_not_first_pdu, tvb, offset, -1);
             return tvb_captured_length(tvb);
         }
 
@@ -840,12 +840,14 @@ AddAttribute(packet_info *pinfo, tvbuff_t *tvb, proto_tree *tree, unsigned offse
     attr_tree = proto_tree_add_subtree(tree, tvb, offset, -1,
             ett_isns_attribute, &attr_item, "Attribute");
 
-    proto_tree_add_item_ret_uint(attr_tree, hf_isns_attr_tag,
-            tvb, offset, 4, ENC_BIG_ENDIAN, &tag);
+    tag = tvb_get_ntohl(tvb, offset);
+    proto_tree_add_item(attr_tree, hf_isns_attr_tag,
+            tvb, offset, 4, ENC_BIG_ENDIAN);
     offset +=4;
 
-    len_item = proto_tree_add_item_ret_uint(attr_tree, hf_isns_attr_len,
-            tvb, offset, 4, ENC_BIG_ENDIAN, &len);
+    len = tvb_get_ntohl(tvb, offset);
+    len_item = proto_tree_add_item(attr_tree, hf_isns_attr_len,
+            tvb, offset, 4, ENC_BIG_ENDIAN);
     offset +=4;
 
     proto_item_append_text(attr_item, ": %s", val_to_str_ext_const(tag, &isns_attribute_tags_ext, "Unknown"));
@@ -1374,12 +1376,12 @@ void proto_register_isns(void)
 
     { &hf_isns_heartbeat_tcp_port,
       { "Heartbeat TCP Port", "isns.heartbeat.tcpport",
-        FT_UINT16, BASE_PT_TCP, NULL, 0x0,
+        FT_UINT16, BASE_DEC, NULL, 0x0,
         "Server TCP Port", HFILL }},
 
     { &hf_isns_heartbeat_udp_port,
       { "Heartbeat UDP Port", "isns.heartbeat.udpport",
-        FT_UINT16, BASE_PT_UDP, NULL, 0x0,
+        FT_UINT16, BASE_DEC, NULL, 0x0,
         "Server UDP Port", HFILL }},
 
 

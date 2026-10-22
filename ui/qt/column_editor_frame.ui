@@ -80,7 +80,7 @@
     </widget>
    </item>
    <item>
-    <widget class="DisplayFilterEdit" name="fieldsNameLineEdit"/>
+    <widget class="FieldFilterEdit" name="fieldsNameLineEdit"/>
    </item>
    <item>
     <spacer name="horizontalSpacer_4">
@@ -106,16 +106,15 @@
     <widget class="SyntaxLineEdit" name="occurrenceLineEdit"/>
    </item>
    <item>
-    <widget class="QLabel" name="displayLabel">
+    <widget class="QCheckBox" name="resolvedCheckBox">
      <property name="text">
-      <string>Display as:</string>
+      <string>Resolve Names:</string>
      </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QComboBox" name="displayComboBox">
      <property name="toolTip">
-      <string>&lt;html&gt;&lt;head/&gt;&lt;p&gt;Values will show the raw values for fields.&lt;p&gt;Strings will show human-readable strings instead of raw values for fields. Only applicable to custom columns with fields that have value strings and custom columns which can be resolved to strings.&lt;p&gt;Details will show the values using the same format as in Packet Details. Only applicable to custom columns.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      <string>&lt;html&gt;&lt;head/&gt;&lt;p&gt;Show human-readable strings instead of raw values for fields. Only applicable to custom columns with fields that have value strings.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+     </property>
+     <property name="layoutDirection">
+      <enum>Qt::RightToLeft</enum>
      </property>
     </widget>
    </item>
@@ -155,9 +154,9 @@
    <container>1</container>
   </customwidget>
   <customwidget>
-   <class>DisplayFilterEdit</class>
+   <class>FieldFilterEdit</class>
    <extends>QLineEdit</extends>
-   <header>widgets/display_filter_edit.h</header>
+   <header>widgets/field_filter_edit.h</header>
   </customwidget>
   <customwidget>
    <class>SyntaxLineEdit</class>

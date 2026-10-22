@@ -10,8 +10,6 @@
 #include <config.h>
 #include <epan/packet.h>
 #include <epan/expert.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 #include "packet-ieee80211.h"
 
 #include <wsutil/str_util.h>
@@ -264,7 +262,7 @@ static int hf_nan_attr_ndpe_ctrl_confirm;
 static int hf_nan_attr_ndpe_ctrl_security_pres;
 static int hf_nan_attr_ndpe_ctrl_publish_id_pres;
 static int hf_nan_attr_ndpe_ctrl_responder_ndi_pres;
-static int hf_nan_attr_ndpe_ctrl_gtk_required;
+static int hf_nan_attr_ndpe_ctrl_gtk_requried;
 static int hf_nan_attr_ndp_control;
 static int hf_nan_attr_ndpe_control;
 static int hf_nan_attr_ndp_responder_ndi;
@@ -379,7 +377,7 @@ static int hf_nan_attr_pairing_bootstrapping_dialog_token;
 static int hf_nan_attr_pairing_bootstrapping_type_status;
 static int hf_nan_attr_pairing_bootstrapping_type;
 static int hf_nan_attr_pairing_bootstrapping_status;
-static int hf_nan_attr_pairing_bootstrapping_reason_code;
+static int hf_nan_attr_pairing_bootstrapping_resaon_code;
 static int hf_nan_attr_pairing_bootstrapping_comeback_after;
 static int hf_nan_attr_pairing_bootstrapping_comeback_cookie_len;
 static int hf_nan_attr_pairing_bootstrapping_comeback_cookie;
@@ -1022,7 +1020,7 @@ dissect_attr_cluster(proto_tree* attr_tree, tvbuff_t* tvb, int offset, uint16_t 
     proto_tree_add_item(anchor_master_tree, hf_nan_attr_cluster_hop_count, tvb,
         offset + 11, 1, ENC_BIG_ENDIAN);
     proto_tree_add_item(anchor_master_tree, hf_nan_attr_cluster_beacon_transmission_time, tvb,
-        offset + 12, 4, ENC_LITTLE_ENDIAN);
+        offset + 12, 4, ENC_BIG_ENDIAN);
 }
 
 static void
@@ -1584,7 +1582,7 @@ dissect_attr_ndpe(proto_tree* attr_tree, tvbuff_t* tvb, int offset, uint16_t att
         &hf_nan_attr_ndpe_ctrl_security_pres,
         &hf_nan_attr_ndpe_ctrl_publish_id_pres,
         &hf_nan_attr_ndpe_ctrl_responder_ndi_pres,
-        &hf_nan_attr_ndpe_ctrl_gtk_required,
+        &hf_nan_attr_ndpe_ctrl_gtk_requried,
         NULL
     };
 
@@ -1697,7 +1695,7 @@ dissect_attr_availability(proto_tree* attr_tree, tvbuff_t* tvb, int offset, uint
         uint8_t hdr_len = 2;
         uint32_t time_bitmap_len = 0;
         uint64_t avail_entry;
-        const char* entry_type_msg = val_to_str(pinfo->pool, entry_type, availability_entry_type,
+        const char* entry_type_msg = val_to_str(entry_type, availability_entry_type,
             "Unknown type (%u)");
         char* info_msg = wmem_strconcat(pinfo->pool, "Availability Type : ", entry_type_msg, NULL);
         proto_tree* entry_tree = proto_tree_add_subtree(attr_tree, tvb, offset, entry_len + 2,
@@ -1736,7 +1734,7 @@ dissect_attr_availability(proto_tree* attr_tree, tvbuff_t* tvb, int offset, uint
             tvb, offset * 8 + 4, 4, &num_entries, ENC_LITTLE_ENDIAN);
 
         offset += 1;
-        for (uint64_t i = 0; i < num_entries; i++)
+        for (uint8_t i = 0; i < num_entries; i++)
         {
             switch (entries_type) {
             case 0:
@@ -1796,7 +1794,7 @@ dissect_attr_availability(proto_tree* attr_tree, tvbuff_t* tvb, int offset, uint
                 else
                 {
                     /* This is the new and standard rules for mapping channels for 6G channels introduced in NAN R4.
-                     * Some vendors may have already implemented a different approach to support NAN 6G before
+                     * Some vendors may have already implemetned a different approach to support NAN 6G before
                      * the introduction of standard 6G NAN operation. And hence, in this case, the availability
                      * may not be correct. */
                     uint8_t start_ch_number = bitmap & 0xff;
@@ -2214,7 +2212,7 @@ dissect_attr_element_container(proto_tree* attr_tree, tvbuff_t* tvb, int offset,
     {
         unsigned element_id = tvb_get_uint8(tvb, sub_offset);
         unsigned element_len = tvb_get_uint8(tvb, sub_offset + 1);
-        const char* msg = val_to_str(pinfo->pool, element_id, ie_tag_num_vals, "Unknown element ID (%u)");
+        const char* msg = val_to_str(element_id, ie_tag_num_vals, "Unknown element ID (%u)");
 
         sub_tree = proto_tree_add_subtree(attr_tree, tvb, sub_offset, element_len + 2, ett_ie_tree, NULL, msg);
         proto_tree_add_item(sub_tree, hf_nan_attr_container_element_id, tvb, sub_offset, 1, ENC_BIG_ENDIAN);
@@ -2225,7 +2223,7 @@ dissect_attr_element_container(proto_tree* attr_tree, tvbuff_t* tvb, int offset,
         ieee80211_tagged_field_data_t field_data = { 0 };
         tvbuff_t* ie_tvb = tvb_new_subset_length(tvb, sub_offset, element_len);
         field_data.item_tag = sub_tree;
-        dissector_try_uint_with_data(ie_handle_table, element_id, ie_tvb, pinfo, sub_tree, true, &field_data);
+        dissector_try_uint_new(ie_handle_table, element_id, ie_tvb, pinfo, sub_tree, true, &field_data);
         sub_offset += element_len;
         dissected_length += element_len + 2;
     }
@@ -2491,10 +2489,10 @@ dissect_attr_vendor_specific(proto_tree* attr_tree, tvbuff_t* tvb, int offset, u
     }
 
     unsigned sub_offset = offset + 3;
-    tvbuff_t* ie_tvb = tvb_new_subset_remaining(tvb, sub_offset);
+    tvbuff_t* ie_tvb = tvb_new_subset_length(tvb, sub_offset, -1);
     ieee80211_tagged_field_data_t field_data = { 0 };
     field_data.item_tag = attr_tree;
-    dissector_try_uint_with_data(ie_handle_table, TAG_VENDOR_SPECIFIC_IE, ie_tvb, pinfo, attr_tree, true, &field_data);
+    dissector_try_uint_new(ie_handle_table, TAG_VENDOR_SPECIFIC_IE, ie_tvb, pinfo, attr_tree, true, &field_data);
 }
 
 static void
@@ -2578,11 +2576,11 @@ dissect_attr_nan_pairing_bootstrapping(proto_tree* attr_tree, tvbuff_t* tvb, int
         ett_nan_pairing_bootstrapping_type_status, type_and_status_fields, ENC_LITTLE_ENDIAN);
     npba_local_offset += 1;
 
-    /* reason code
+    /* Resaon code
      * Indicate the reject reason when Type = 2 (Response) and Status = 1 (Rejected); otherwise, reserved */
     if ((type == 2) && (status == 1))
     {
-        proto_tree_add_item(attr_tree, hf_nan_attr_pairing_bootstrapping_reason_code, tvb,
+        proto_tree_add_item(attr_tree, hf_nan_attr_pairing_bootstrapping_resaon_code, tvb,
             npba_local_offset, 1, ENC_LITTLE_ENDIAN);
     }
     else
@@ -2592,9 +2590,9 @@ dissect_attr_nan_pairing_bootstrapping(proto_tree* attr_tree, tvbuff_t* tvb, int
     }
     npba_local_offset += 1;
 
-    /* Comeback, if any. Presented if,
+    /* Comeback, if any. Presetned if,
      * a) type is 2 and status is 2, or
-     * b) type is 1 and status is 2, and cookie is required (based on attribute length)
+     * b) type is 1 and status is 2, and cookie is requried (based on attribute length)
      */
     bool comeback_presented = (attr_len > NAN_PAIRING_BOOTSTRAPPING_LEN);
 
@@ -2655,7 +2653,7 @@ find_attribute_field(proto_tree* nan_tree, tvbuff_t* tvb, unsigned tvb_len, unsi
 {
     if ((tvb_len - *offset) < 3)
     {
-        proto_tree_add_expert_format_remaining(nan_tree, pinfo, &ei_nan_elem_len_invalid, tvb, *offset,
+        proto_tree_add_expert_format(nan_tree, pinfo, &ei_nan_elem_len_invalid, tvb, *offset, -1,
             "Insufficient remaining packet bytes for NAN attribute");
         *offset = tvb_len;
         return;
@@ -2666,14 +2664,14 @@ find_attribute_field(proto_tree* nan_tree, tvbuff_t* tvb, unsigned tvb_len, unsi
 
     if ((*offset + 3 + attr_len) > tvb_len)
     {
-        proto_tree_add_expert_format_remaining(nan_tree, pinfo, &ei_nan_elem_len_invalid, tvb, *offset,
+        proto_tree_add_expert_format(nan_tree, pinfo, &ei_nan_elem_len_invalid, tvb, *offset, -1,
             "Attribute length (%u) exceeds remaining packet length. Attribute id: %u", attr_len, attr_id);
         *offset = tvb_len;
         return;
     }
 
     proto_tree* attr_tree = proto_tree_add_subtree(nan_tree, tvb, *offset, attr_len + 3,
-        ett_attributes, NULL, val_to_str(pinfo->pool, attr_id, attribute_types, "Unknown attribute ID (%u)"));
+        ett_attributes, NULL, val_to_str(attr_id, attribute_types, "Unknown attribute ID (%u)"));
 
     proto_tree_add_item(attr_tree, hf_nan_attribute_type, tvb, *offset, 1, ENC_NA);
     proto_tree_add_item(attr_tree, hf_nan_attribute_len, tvb, *offset + 1, 2, ENC_LITTLE_ENDIAN);
@@ -2825,17 +2823,23 @@ dissect_nan_beacon(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* da
     // we can just fetch the Info column string and, if it's present, extract
     // that value.
     //
-    // An interval of 512, meaning .524288 seconds, means
-    // it's a Sync beacon. Otherwise, it's a Discovery Beacon.
+    // An interval of 100, meaning .1024 seconds, means it's a Discovery
+    // beacon, and an interval of 512, meaning .524288 seconds, means
+    // it's a Sync beacon.
     //
     const char* info_text = col_get_text(pinfo->cinfo, COL_INFO);
-    if (info_text != NULL && g_str_has_suffix(info_text, "512"))
+    if (info_text != NULL && g_str_has_suffix(info_text, "100"))
+    {
+        col_prepend_fstr(pinfo->cinfo, COL_INFO, "Discovery ");
+    }
+    else if (info_text != NULL && g_str_has_suffix(info_text, "512"))
     {
         col_prepend_fstr(pinfo->cinfo, COL_INFO, "Sync ");
     }
     else
     {
-        col_prepend_fstr(pinfo->cinfo, COL_INFO, "Discovery ");
+        expert_add_info(pinfo, tree, &ei_nan_unknown_beacon_type);
+        col_prepend_fstr(pinfo->cinfo, COL_INFO, "[Unknown] ");
     }
 
     proto_item* ti = proto_tree_add_item(tree, proto_nan, tvb, 0, -1, ENC_NA);
@@ -2861,7 +2865,7 @@ dissect_nan_action(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* da
     proto_tree* nan_tree = proto_item_add_subtree(ti, ett_nan);
 
     uint8_t subtype = tvb_get_uint8(tvb, offset);
-    const char* subtype_text = rval_to_str_wmem(pinfo->pool, subtype, action_frame_type_values, "Unknown type (%u)");
+    const char* subtype_text = rval_to_str(subtype, action_frame_type_values, "Unknown type (%u)");
     proto_item_set_text(ti, "%s", subtype_text);
     proto_tree_add_item(nan_tree, hf_nan_action_subtype, tvb, offset, 1, ENC_BIG_ENDIAN);
 
@@ -3871,7 +3875,7 @@ proto_register_nan(void)
              FT_BOOLEAN, 8, NULL, 0x10, NULL, HFILL
              }
         },
-        { &hf_nan_attr_ndpe_ctrl_gtk_required,
+        { &hf_nan_attr_ndpe_ctrl_gtk_requried,
              {
              "GTK Required",
              "wifi_nan.ndpe.ctrl.gtk_required",
@@ -4653,14 +4657,6 @@ proto_register_nan(void)
                 "Status",
                 "wifi_nan.nan_pairing_bootstrapping.status",
                 FT_UINT8, BASE_HEX_DEC, VALS(nan_pairing_bootstrapping_pairing_bootstrapping_status), 0xf0, NULL, HFILL
-            }
-        },
-        /* TODO: add a VALS() for this */
-        { &hf_nan_attr_pairing_bootstrapping_reason_code,
-            {
-                "Reason code",
-                "wifi_nan.nan_pairing_bootstrapping.reason_code",
-                FT_UINT8, BASE_HEX_DEC, NULL, 0x0, NULL, HFILL
             }
         },
         { &hf_nan_attr_pairing_bootstrapping_comeback_after,

@@ -22,10 +22,7 @@ set( ASN_FILE_LIST
 #	ISO_TS_24534-3.asn
 #	ISO_TS_17419.asn
 	ISO_TS_14906_Application.asn
-#	ISO_TS_19091.asn
-    DSRC.asn
-    DSRC-region.asn
-    DSRC-addgrp-C.asn 
+	ISO_TS_19091.asn
 	GDD.asn
 	ISO19321IVIv2.asn
 	ETSI_TS_103301.asn
@@ -47,10 +44,6 @@ set( ASN_FILE_LIST
 	VAM-PDU-Descriptions.asn
 #	VAM-Temp-Imports.asn
 	IMZM-PDU-Descriptions.asn
-	PIM-PDU-Descriptions.asn
-	AVM-Commons.asn
-	MIM-PDU-Descriptions.asn
-	MVM-PDU-Descriptions.asn
 )
 
 set( EXTRA_DIST

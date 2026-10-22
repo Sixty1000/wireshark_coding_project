@@ -65,6 +65,9 @@ static int ett_fdp_vlanmap;
 
 static expert_field ei_fdp_tlv_length;
 
+#define PROTO_SHORT_NAME "FDP"
+#define PROTO_LONG_NAME "Foundry Discovery Protocol"
+
 static const value_string foundry_pid_vals[] = {
 	{ 0x2000,	"FDP" },
 
@@ -108,7 +111,7 @@ dissect_tlv_header(tvbuff_t *tvb, packet_info *pinfo _U_, int offset, int length
 	tlv_tree = proto_tree_add_subtree_format(tree, tvb, offset, 4,
 		ett_fdp_tlv_header, NULL, "Length %d, type %d = %s",
 		tlv_length, tlv_type,
-		val_to_str(pinfo->pool, tlv_type, fdp_type_vals, "Unknown (%d)"));
+		val_to_str(tlv_type, fdp_type_vals, "Unknown (%d)"));
 
 	proto_tree_add_uint(tlv_tree, hf_fdp_tlv_type, tvb, offset, 2, tlv_type);
 	offset += 2;
@@ -124,7 +127,7 @@ dissect_string_tlv(tvbuff_t *tvb, packet_info *pinfo, int offset, int length, pr
 {
 	proto_item	*string_item;
 	proto_tree	*string_tree;
-	const char	*string_value;
+	const uint8_t	*string_value;
 
 	string_item = proto_tree_add_protocol_format(tree, hf_fdp_string,
 		tvb, offset, length, "%s", type_string);
@@ -136,7 +139,7 @@ dissect_string_tlv(tvbuff_t *tvb, packet_info *pinfo, int offset, int length, pr
 	length -= 4;
 
 	proto_tree_add_item(string_tree, hf_fdp_string_data, tvb, offset, length, ENC_NA);
-	proto_tree_add_item_ret_string(string_tree, hf_fdp_string_text, tvb, offset, length, ENC_ASCII|ENC_NA, pinfo->pool, (const uint8_t**)&string_value);
+	proto_tree_add_item_ret_string(string_tree, hf_fdp_string_text, tvb, offset, length, ENC_ASCII|ENC_NA, pinfo->pool, &string_value);
 	proto_item_append_text(string_item, ": \"%s\"",
 		format_text(pinfo->pool, string_value, strlen(string_value)));
 
@@ -168,7 +171,7 @@ dissect_net_tlv(tvbuff_t *tvb, packet_info *pinfo, int offset, int length, proto
 	length -= 2;
 
 	while (length >= 4) {
-		proto_tree_add_item(net_tree, hf_fdp_net_ip, tvb, offset, 4, ENC_BIG_ENDIAN);
+		proto_tree_add_item(net_tree, hf_fdp_net_ip, tvb, offset, 4, ENC_NA);
 		offset += 4;
 		length -= 4;
 	}
@@ -252,14 +255,14 @@ dissect_fdp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	proto_item *ti;
 	proto_tree *fdp_tree = NULL;
-	unsigned offset = 0;
+	int offset = 0;
 	uint16_t tlv_type;
 	uint16_t tlv_length;
-	unsigned data_length;
+	int data_length;
 	const char *type_string;
 
-	col_set_str(pinfo->cinfo, COL_PROTOCOL, "FDP");
-	col_set_str(pinfo->cinfo, COL_INFO, "FDP:");
+	col_set_str(pinfo->cinfo, COL_PROTOCOL, PROTO_SHORT_NAME);
+	col_set_str(pinfo->cinfo, COL_INFO, PROTO_SHORT_NAME ":");
 
 	if (tree) {
 		data_length = tvb_reported_length_remaining(tvb, offset);
@@ -289,7 +292,7 @@ dissect_fdp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 					"TLV with invalid length: %u", tlv_length);
 				break;
 			}
-			type_string = val_to_str(pinfo->pool, tlv_type, fdp_type_vals, "[%u]");
+			type_string = val_to_str(tlv_type, fdp_type_vals, "[%u]");
 			col_append_fstr(pinfo->cinfo, COL_INFO, " %s", type_string);
 
 			switch (tlv_type) {
@@ -437,7 +440,7 @@ proto_register_fdp(void)
 
 	expert_module_t* expert_fdp;
 
-	proto_fdp = proto_register_protocol("Foundry Discovery Protocol", "FDP", "fdp");
+	proto_fdp = proto_register_protocol(PROTO_LONG_NAME, PROTO_SHORT_NAME, "fdp");
 
 	proto_register_field_array(proto_fdp, hf, array_length(hf));
 	proto_register_subtree_array(ett, array_length(ett));

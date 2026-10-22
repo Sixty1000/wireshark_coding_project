@@ -19,9 +19,10 @@
 #include "packet-umts_mac.h"
 #include "packet-umts_rlc.h"
 
-static int proto_fp;
-static int proto_umts_mac;
-static int proto_umts_rlc;
+/* Externals */
+extern int proto_fp;
+extern int proto_umts_mac;
+extern int proto_umts_rlc;
 
 void proto_register_fp_mux(void);
 void proto_reg_handoff_fp_mux(void);
@@ -163,7 +164,7 @@ static int dissect_fp_mux(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
     col_clear(pinfo->cinfo, COL_INFO);
 
     while (offset != total_length) {
-        ext_flag = tvb_get_bits8(tvb, (offset+2)*8, 1) == 0x01;
+        ext_flag = tvb_get_bits(tvb, (offset+2)*8, 1, ENC_NA) == 0x01;
         header_length = ext_flag ? 4 : 3;
 
         /* Adding another FP Mux tree */
@@ -216,8 +217,8 @@ static int dissect_fp_mux(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
         /* Dissecting Payload */
         next_tvb = tvb_new_subset_length(tvb,offset,length);
         if(payload_index >= MAX_PAYLOADS) {
-            /* Too many FP payloads. Showing error and aborting dissection*/
-            proto_tree_add_expert_format_remaining(fpmux_tree, pinfo, &ei_fpm_too_many_payloads, tvb, offset,
+            /* Too many FP payloads. Showing error and aboring dissection*/
+            proto_tree_add_expert_format(fpmux_tree, pinfo, &ei_fpm_too_many_payloads, tvb, offset, -1,
                 "Too many FP packets muxed in a single packet ( Maximum expected: %d )", MAX_PAYLOADS);
             return total_length;
         }
@@ -363,10 +364,6 @@ proto_register_fp_mux(void)
 void
 proto_reg_handoff_fp_mux(void)
 {
-    proto_fp = proto_get_id_by_filter_name("fp");
-    proto_umts_mac = proto_get_id_by_filter_name("mac");
-    proto_umts_rlc = proto_get_id_by_filter_name("rlc");
-
     dissector_add_uint_range_with_preference("udp.port", "", fp_mux_handle);
     heur_dissector_add("udp", heur_dissect_fp_mux, "FP Mux over UDP", "fp_mux_udp", proto_fp_mux, HEURISTIC_DISABLE);
 }

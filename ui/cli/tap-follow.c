@@ -26,7 +26,6 @@
 #include <epan/stat_tap_ui.h>
 #include <epan/tap.h>
 #include <wsutil/ws_assert.h>
-#include <wsutil/cmdarg_err.h>
 
 void register_tap_listener_follow(void);
 
@@ -65,11 +64,16 @@ typedef struct _cli_follow_info {
 
 #define STR_HEX         ",hex"
 #define STR_ASCII       ",ascii"
-#define STR_CARRAY      ",carray"
 #define STR_EBCDIC      ",ebcdic"
 #define STR_RAW         ",raw"
 #define STR_CODEC       ",utf-8"
 #define STR_YAML        ",yaml"
+
+WS_NORETURN static void follow_exit(const char *strp)
+{
+  fprintf(stderr, "tshark: follow - %s\n", strp);
+  exit(1);
+}
 
 static const char * follow_str_type(cli_follow_info_t* cli_follow_info)
 {
@@ -77,7 +81,6 @@ static const char * follow_str_type(cli_follow_info_t* cli_follow_info)
   {
   case SHOW_HEXDUMP:    return "hex";
   case SHOW_ASCII:      return "ascii";
-  case SHOW_CARRAY:     return "carray";
   case SHOW_EBCDIC:     return "ebcdic";
   case SHOW_RAW:        return "raw";
   case SHOW_CODEC:      return "utf-8";
@@ -185,7 +188,6 @@ static void follow_draw(void *contextp)
   unsigned          chunk;
   char              *b64encoded;
   const uint32_t    base64_raw_len = 57; /* Encodes to 76 bytes, common in RFCs */
-  unsigned          server_buffer_count = 0, client_buffer_count = 0;
 
   /* Print header */
   switch (cli_follow_info->show_type)
@@ -243,6 +245,7 @@ static void follow_draw(void *contextp)
     switch (cli_follow_info->show_type)
     {
     case SHOW_HEXDUMP:
+    case SHOW_YAML:
     case SHOW_CODEC: /* The transformation to UTF-8 can change the length */
       break;
 
@@ -256,21 +259,6 @@ static void follow_draw(void *contextp)
       {
         putchar('\t');
       }
-      break;
-
-    case SHOW_CARRAY:
-      printf("char peer%d_%d[] = { /* Packet %u */\n",
-        follow_record->is_server ? 1 : 0,
-        follow_record->is_server ? server_buffer_count++ : client_buffer_count++,
-        follow_record->packet_num);
-      break;
-
-    case SHOW_YAML:
-      printf("  - packet: %d\n", follow_record->packet_num);
-      printf("    peer: %d\n", follow_record->is_server ? 1 : 0);
-      printf("    index: %d\n", follow_record->is_server ? server_buffer_count++ : client_buffer_count++);
-      printf("    timestamp: %.9f\n", nstime_to_sec(&follow_record->abs_ts));
-      printf("    data: !!binary |\n");
       break;
 
     default:
@@ -312,7 +300,7 @@ static void follow_draw(void *contextp)
       buffer[ii++] = '\n';
       buffer[ii] = 0;
       if (cli_follow_info->show_type == SHOW_EBCDIC) {
-        EBCDIC_to_ASCII((uint8_t*)buffer, ii);
+        EBCDIC_to_ASCII(buffer, ii);
       }
       printf("%s", buffer);
       g_free(buffer);
@@ -348,6 +336,10 @@ static void follow_draw(void *contextp)
       break;
 
     case SHOW_YAML:
+      printf("  - packet: %d\n", follow_record->packet_num);
+      printf("    peer: %d\n", follow_record->is_server ? 1 : 0);
+      printf("    timestamp: %.9f\n", nstime_to_sec(&follow_record->abs_ts));
+      printf("    data: !!binary |\n");
       ii = 0;
       while (ii < follow_record->data->len) {
           uint32_t len = ii + base64_raw_len < follow_record->data->len
@@ -358,22 +350,6 @@ static void follow_draw(void *contextp)
           g_free(b64encoded);
           ii += len;
       }
-      break;
-
-    case SHOW_CARRAY:
-      strbuf = wmem_strbuf_new_sized(NULL, 2 + 6 * follow_record->data->len);
-      for (ii = 0; ii < follow_record->data->len; ii++)
-      {
-        wmem_strbuf_append_printf(strbuf, "0x%02x,", follow_record->data->data[ii]);
-        if ((ii % 8 == 7) && (ii + 1 < follow_record->data->len)) {
-          wmem_strbuf_append_c(strbuf, '\n');
-        } else {
-          wmem_strbuf_append_c(strbuf, ' ');
-        }
-      }
-      wmem_strbuf_append(strbuf, "};");
-      puts(wmem_strbuf_get_str(strbuf));
-      wmem_strbuf_destroy(strbuf);
       break;
 
     default:
@@ -405,7 +381,7 @@ static bool follow_arg_strncmp(const char **opt_argp, const char *strp)
   return false;
 }
 
-static bool
+static void
 follow_arg_mode(const char **opt_argp, follow_info_t *follow_info)
 {
   cli_follow_info_t* cli_follow_info = (cli_follow_info_t*)follow_info->gui_data;
@@ -434,17 +410,10 @@ follow_arg_mode(const char **opt_argp, follow_info_t *follow_info)
   {
     cli_follow_info->show_type = SHOW_YAML;
   }
-  else if (follow_arg_strncmp(opt_argp, STR_CARRAY))
-  {
-    cli_follow_info->show_type = SHOW_CARRAY;
-  }
   else
   {
-    cmdarg_err("Invalid display mode.");
-    return false;
+    follow_exit("Invalid display mode.");
   }
-
-  return true;
 }
 
 #define _STRING(s)      # s
@@ -455,7 +424,7 @@ follow_arg_mode(const char **opt_argp, follow_info_t *follow_info)
 #define ADDRv6_FMT      ",[%" STRING(ADDR_CHARS) "[^]]]:%d%n"
 #define ADDRv4_FMT      ",%" STRING(ADDR_CHARS) "[^:]:%d%n"
 
-static bool
+static void
 follow_arg_filter(const char **opt_argp, follow_info_t *follow_info)
 {
   int           len;
@@ -468,7 +437,6 @@ follow_arg_filter(const char **opt_argp, follow_info_t *follow_info)
       ((*opt_argp)[len] == 0 || (*opt_argp)[len] == ','))
   {
     *opt_argp += len;
-    follow_info->stream_id = cli_follow_info->stream_index;
 
     /* if it's HTTP2 or QUIC protocol we should read substream id otherwise it's a range parameter from follow_arg_range */
     if (cli_follow_info->sub_stream_index == -1 && sscanf(*opt_argp, ",%d%n", &cli_follow_info->sub_stream_index, &len) == 1 &&
@@ -492,22 +460,19 @@ follow_arg_filter(const char **opt_argp, follow_info_t *follow_info)
       }
       else
       {
-        cmdarg_err("Invalid address.");
-        return false;
+        follow_exit("Invalid address.");
       }
 
       if (cli_follow_info->port[ii] <= 0 || cli_follow_info->port[ii] > UINT16_MAX)
       {
-        cmdarg_err("Invalid port.");
-        return false;
+        follow_exit("Invalid port.");
       }
 
       if (is_ipv6)
       {
         if (!get_host_ipaddr6(addr, &cli_follow_info->addrBuf[ii].addrBuf_v6))
         {
-          cmdarg_err("Can't get IPv6 address");
-          return false;
+          follow_exit("Can't get IPv6 address");
         }
         set_address(&cli_follow_info->addr[ii], AT_IPv6, 16, (void *)&cli_follow_info->addrBuf[ii].addrBuf_v6);
       }
@@ -515,8 +480,7 @@ follow_arg_filter(const char **opt_argp, follow_info_t *follow_info)
       {
         if (!get_host_ipaddr(addr, &cli_follow_info->addrBuf[ii].addrBuf_v4))
         {
-          cmdarg_err("Can't get IPv4 address");
-          return false;
+          follow_exit("Can't get IPv4 address");
         }
         set_address(&cli_follow_info->addr[ii], AT_IPv4, 4, (void *)&cli_follow_info->addrBuf[ii].addrBuf_v4);
       }
@@ -526,16 +490,13 @@ follow_arg_filter(const char **opt_argp, follow_info_t *follow_info)
 
     if (cli_follow_info->addr[0].type != cli_follow_info->addr[1].type)
     {
-      cmdarg_err("Mismatched IP address types.");
-      return false;
+      follow_exit("Mismatched IP address types.");
     }
     cli_follow_info->stream_index = -1;
   }
-
-  return true;
 }
 
-static bool follow_arg_range(const char **opt_argp, cli_follow_info_t* cli_follow_info)
+static void follow_arg_range(const char **opt_argp, cli_follow_info_t* cli_follow_info)
 {
   int           len;
 
@@ -557,33 +518,26 @@ static bool follow_arg_range(const char **opt_argp, cli_follow_info_t* cli_follo
     }
     else
     {
-      cmdarg_err("Invalid range.");
-      return false;
+      follow_exit("Invalid range.");
     }
 
     if (cli_follow_info->chunkMin < 1 || cli_follow_info->chunkMin > cli_follow_info->chunkMax)
     {
-      cmdarg_err("Invalid range value.");
-      return false;
+      follow_exit("Invalid range value.");
     }
   }
-
-  return true;
 }
 
-static bool
+static void
 follow_arg_done(const char *opt_argp)
 {
   if (*opt_argp != 0)
   {
-    cmdarg_err("Invalid parameter.");
-    return false;
+    follow_exit("Invalid parameter.");
   }
-
-  return true;
 }
 
-static bool follow_stream(const char *opt_argp, void *userdata)
+static void follow_stream(const char *opt_argp, void *userdata)
 {
   follow_info_t *follow_info;
   cli_follow_info_t* cli_follow_info;
@@ -593,7 +547,6 @@ static bool follow_stream(const char *opt_argp, void *userdata)
   follow_address_filter_func address_filter;
   int proto_id = get_follow_proto_id(follower);
   const char* proto_filter_name = proto_get_protocol_filter_name(proto_id);
-  bool arg_success = true;
 
   opt_argp += strlen(STR_FOLLOW);
   opt_argp += strlen(proto_filter_name);
@@ -612,14 +565,10 @@ static bool follow_stream(const char *opt_argp, void *userdata)
   follow_info->substream_id = SUBSTREAM_UNUSED;
   cli_follow_info->follower = follower;
 
-  arg_success &= follow_arg_mode(&opt_argp, follow_info);
-  arg_success &= follow_arg_filter(&opt_argp, follow_info);
-  arg_success &= follow_arg_range(&opt_argp, cli_follow_info);
-  arg_success &= follow_arg_done(opt_argp);
-  if (!arg_success) {
-    follow_free(follow_info);
-    return false;
-  }
+  follow_arg_mode(&opt_argp, follow_info);
+  follow_arg_filter(&opt_argp, follow_info);
+  follow_arg_range(&opt_argp, cli_follow_info);
+  follow_arg_done(opt_argp);
 
   if (cli_follow_info->stream_index >= 0)
   {
@@ -627,9 +576,7 @@ static bool follow_stream(const char *opt_argp, void *userdata)
     follow_info->filter_out_filter = index_filter(cli_follow_info->stream_index, cli_follow_info->sub_stream_index);
     if (follow_info->filter_out_filter == NULL || cli_follow_info->sub_stream_index < 0)
     {
-      follow_free(follow_info);
-      cmdarg_err("Error creating filter for this stream.");
-      return false;
+      follow_exit("Error creating filter for this stream.");
     }
   }
   else
@@ -638,9 +585,7 @@ static bool follow_stream(const char *opt_argp, void *userdata)
     follow_info->filter_out_filter = address_filter(&cli_follow_info->addr[0], &cli_follow_info->addr[1], cli_follow_info->port[0], cli_follow_info->port[1]);
     if (follow_info->filter_out_filter == NULL)
     {
-      follow_free(follow_info);
-      cmdarg_err("Error creating filter for this address/port pair.\n");
-      return false;
+      follow_exit("Error creating filter for this address/port pair.\n");
     }
   }
 
@@ -651,10 +596,8 @@ static bool follow_stream(const char *opt_argp, void *userdata)
   {
     follow_free(follow_info);
     g_string_free(errp, TRUE);
-    cmdarg_err("Error registering tap listener.");
-    return false;
+    follow_exit("Error registering tap listener.");
   }
-  return true;
 }
 
 static bool

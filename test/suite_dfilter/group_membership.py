@@ -2,7 +2,8 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-# from suite_dfilter.dfiltertest import *
+import pytest
+from suite_dfilter.dfiltertest import *
 
 
 class TestDfilterMembership:
@@ -69,18 +70,9 @@ class TestDfilterMembership:
         dfilter = 'tcp.port in {1 .. 79,81 .. 3266,3268 .. 65535}'
         checkDFilterCount(dfilter, 0)
 
-    #
-    # XXX - http.pcap is a one-packet file, which now means that there
-    # is no "time relative to the previous packet" value in it.
-    #
-    # Even when we said the time relative to the previous packet is
-    # 0 if there is no previous packet, this wasn't checking the
-    # behavior with negative field values, as the value was zero,
-    # not negative.
-    #
     def test_membership_5_negative_range_float(self, checkDFilterCount):
         dfilter = 'frame.time_delta in {-2.0 .. 0.0}'
-        checkDFilterCount(dfilter, 0)
+        checkDFilterCount(dfilter, 1)
 
     def test_membership_6_both_negative_range_float(self, checkDFilterCount):
         dfilter = 'frame.time_delta in {-20 .. -0.7}'
@@ -114,12 +106,6 @@ class TestDfilterMembership:
     def test_membership_12_value_string(self, checkDFilterCount):
         dfilter = 'tcp.checksum.status in {"Unverified", "Good"}'
         checkDFilterCount(dfilter, 1)
-
-    def test_membership_value_string_2(self, checkDFilterSucceed):
-        # These appear in different value strings registered to different
-        # versions of vlan.priority
-        dfilter = 'vlan.priority in {"Spare", "Critical Applications"}'
-        checkDFilterSucceed(dfilter)
 
     def test_membership_arithmetic_1(self, checkDFilterCountWithSelectedFrame):
         dfilter = 'frame.time_epoch in {${frame.time_epoch}-46..${frame.time_epoch}+43}'

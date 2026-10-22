@@ -52,13 +52,13 @@ static const value_string cmdvals[] = {
 
 static int
 dissect_ripng(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_) {
-    unsigned offset = 0;
+    int offset = 0;
     proto_tree *ripng_tree = NULL, *rte_tree = NULL;
     proto_item *ti, *rte_ti;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "RIPng");
     col_add_fstr(pinfo->cinfo, COL_INFO," Command %s, Version %u",
-                 val_to_str(pinfo->pool, tvb_get_uint8(tvb, offset), cmdvals, "Unknown (%u)"),
+                 val_to_str(tvb_get_uint8(tvb, offset), cmdvals, "Unknown (%u)"),
                  tvb_get_uint8(tvb, offset +1));
 
     if (tree) {

@@ -18,7 +18,6 @@
 #include <epan/expert.h>
 #include <epan/exceptions.h>
 #include <epan/show_exception.h>
-#include <wsutil/array.h>
 
 #include "packet-pcap_pktdata.h"
 
@@ -80,7 +79,7 @@ dissect_pcap(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
     proto_item      *header_item;
     proto_item      *magic_number_item;
     proto_tree      *packet_tree;
-    proto_item      *volatile packet_item;
+    proto_item      *packet_item;
     proto_tree      *timestamp_tree;
     proto_item      *timestamp_item;
     proto_tree      *packet_data_tree;
@@ -145,7 +144,8 @@ dissect_pcap(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
     proto_tree_add_item_ret_uint(header_tree, hf_pcap_header_snapshot_length, tvb, offset, 4, encoding, &snap_length);
     offset += 4;
 
-    proto_tree_add_item_ret_uint(header_tree, hf_pcap_header_link_type, tvb, offset, 4, encoding, &link_type);
+    proto_tree_add_item(header_tree, hf_pcap_header_link_type, tvb, offset, 4, encoding);
+    link_type = tvb_get_uint32(tvb, offset, encoding);
     offset += 4;
 
     while (offset < (int) tvb_reported_length(tvb)) {

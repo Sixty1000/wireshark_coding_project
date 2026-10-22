@@ -76,7 +76,10 @@ if(MINIZIPNG_FOUND)
   list(APPEND MINIZIPNG_LIBRARIES ${ZSTD_LIBRARY})
 
   if(WIN32)
-    set(Bcrypt_LIBRARY bcrypt)
+    find_library(Bcrypt_LIBRARY
+      NAMES
+        Bcrypt
+    )
 
     list(APPEND MINIZIPNG_LIBRARIES ${Bcrypt_LIBRARY})
   endif()
@@ -101,21 +104,9 @@ if(MINIZIPNG_FOUND)
       CACHE PATH "Path to Minizip DLL"
     )
 
-    # minizip-ng from vcpkg provides bz2, zstd, zlib (*not* zlib-ng),
-    # and liblzma DLLs. liblzma used to be provided in the vcpkg-export
-    # (glib, libxml2, and zlib) bundle, but since vcpkg tag 2025.04.09
-    # isn't since libxml2 no longer depends on it by default.
-    # XXX - This can causes this zstd.dll to be used instead of the one
-    # from the separately packaged zstd
-    AddWSWinDLLS(MINIZIPNG MINIZIPNG_HINTS "bz2*" "liblzma*" "zstd*")
+    AddWSWinDLLS(MINIZIPNG MINIZIPNG_HINTS "bz2*" "zstd*")
 
     mark_as_advanced(MINIZIPNG_DLL_DIR MINIZIPNG_DLLS MINIZIPNG_PDBS)
-  endif()
-  if(MINIZIPNG_INCLUDE_DIR)
-    set(_version_regex "^#define[ \t]+MZ_VERSION[ \t(]+\"([^\"]+)\".*")
-    file(STRINGS "${MINIZIPNG_INCLUDE_DIR}/minizip-ng/mz.h" MINIZIPNG_VERSION REGEX "${_version_regex}")
-    string(REGEX REPLACE "${_version_regex}" "\\1" MINIZIPNG_VERSION "${MINIZIPNG_VERSION}")
-    unset(_version_regex)
   endif()
 else()
   set(MINIZIPNG_LIBRARIES)

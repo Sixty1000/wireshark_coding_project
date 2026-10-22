@@ -17,7 +17,6 @@ AttributeCertificate
 AttributeCertificateAssertion
 AttributeCertificateInfo
 AttributeCertificationPath
-AvlSerialNumber
 Certificate_PDU
 Certificates
 CertificateList
@@ -68,27 +67,6 @@ IssuerSerial/issuer			issuerName
 CertificateList/signedCertificateList/revokedCertificates/_item/userCertificate		revokedUserCertificate
 #.END
 
-#.FN_BODY Certificate
-  int start_offset = offset;
-  x509af_eo_t *eo_info = NULL;
-  if (have_tap_listener(x509af_eo_tap)) {
-    eo_info = wmem_new0(actx->pinfo->pool, x509af_eo_t);
-    p_add_proto_data(actx->pinfo->pool, actx->pinfo, proto_x509af, X509AF_EO_INFO_KEY, eo_info);
-  }
-
-  %(DEFAULT_BODY)s
-
-  if (eo_info) {
-    eo_info->payload = tvb_new_subset_length(tvb, start_offset, offset - start_offset);
-    tap_queue_packet(x509af_eo_tap, actx->pinfo, eo_info);
-  }
-
-#.FN_HDR AlgorithmIdentifier
-  if (algorithm_id) {
-    wmem_free(wmem_file_scope(), (void*)algorithm_id);
-    algorithm_id = NULL;
-  }
-
 #.FN_PARS AlgorithmIdentifier/algorithmId
   FN_VARIANT = _str  HF_INDEX = hf_x509af_algorithm_id  VAL_PTR = &actx->external.direct_reference
 
@@ -97,12 +75,18 @@ CertificateList/signedCertificateList/revokedCertificates/_item/userCertificate	
 
   %(DEFAULT_BODY)s
 
+  if (algorithm_id) {
+    wmem_free(wmem_file_scope(), (void*)algorithm_id);
+  }
+
   if(actx->external.direct_reference) {
     algorithm_id = (const char *)wmem_strdup(wmem_file_scope(), actx->external.direct_reference);
 
     name = oid_resolved_from_string(actx->pinfo->pool, actx->external.direct_reference);
 
     proto_item_append_text(tree, " (%%s)", name ? name : actx->external.direct_reference);
+  } else {
+    algorithm_id = NULL;
   }
 
 #.FN_BODY AlgorithmIdentifier/parameters
@@ -116,24 +100,28 @@ CertificateList/signedCertificateList/revokedCertificates/_item/userCertificate	
 
 #.FN_BODY SubjectPublicKeyInfo/subjectPublicKey
   tvbuff_t *bs_tvb = NULL;
+# proto_tree *subtree;
 
-  offset = dissect_ber_bitstring(false, actx, tree, tvb, offset,
-                                 NULL, 0, hf_index, -1, &bs_tvb);
+  dissect_ber_bitstring(false, actx, NULL, tvb, offset,
+                        NULL, 0, hf_index, -1, &bs_tvb);
 
   /* See RFC 3279 for possible subjectPublicKey values given an Algorithm ID.
    * The contents of subjectPublicKey are always explicitly tagged. */
   if (bs_tvb && !g_strcmp0(algorithm_id, "1.2.840.113549.1.1.1")) { /* id-rsa */
-    proto_tree *subtree = proto_item_add_subtree(actx->created_item, ett_x509af_SubjectPublicKey);
-    dissect_pkixalgs_RSAPublicKey(false, bs_tvb, 0, actx, subtree, hf_x509af_subjectPublicKey_rsa);
+    offset += dissect_pkcs1_RSAPublicKey(false, bs_tvb, 0, actx, tree, hf_index);
 
-  } else if (bs_tvb && !g_strcmp0(algorithm_id, "1.2.840.10040.4.1")) { /* id-dsa */
-    proto_tree *subtree = proto_item_add_subtree(actx->created_item, ett_x509af_SubjectPublicKey);
-    dissect_pkixalgs_DSAPublicKey(false, bs_tvb, 0, actx, subtree, hf_x509af_subjectPublicKey_dsa);
-
-  } else if (bs_tvb && !g_strcmp0(algorithm_id, "1.2.840.10046.2.1")) { /* dhpublicnumber */
-    proto_tree *subtree = proto_item_add_subtree(actx->created_item, ett_x509af_SubjectPublicKey);
-    dissect_pkixalgs_DHPublicKey(false, bs_tvb, 0, actx, subtree, hf_x509af_subjectPublicKey_dh);
-
+# TODO: PKCS#1 only defines RSA; DH and DSA are from PKIX1Algorithms2008
+# } else if (bs_tvb && !g_strcmp0(algorithm_id, "1.2.840.10040.4.1")) { /* id-dsa */
+#   subtree = proto_item_add_subtree(actx->created_item, ett_subjectpublickey);
+#   offset += dissect_DSAPublicKey(false, bs_tvb, 0, actx, subtree, hf_dsa_y);
+#
+# } else if (bs_tvb && !g_strcmp0(algorithm_id, "1.2.840.10046.2.1")) { /* dhpublicnumber */
+#   subtree = proto_item_add_subtree(actx->created_item, ett_subjectpublickey);
+#   offset += dissect_DHPublicKey(false, bs_tvb, 0, actx, subtree, hf_dh_y);
+#
+  } else {
+    offset = dissect_ber_bitstring(false, actx, tree, tvb, offset,
+                                   NULL, 0, hf_index, -1, NULL);
   }
 
 #.FN_PARS Extension/extnId
@@ -160,49 +148,15 @@ CertificateList/signedCertificateList/revokedCertificates/_item/userCertificate	
   offset = dissect_ber_length(actx->pinfo, tree, tvb, offset, &len, &ind);
   offset=call_ber_oid_callback(actx->external.direct_reference, tvb, offset, actx->pinfo, tree, NULL);
 
-#.FN_FTR Validity/notBefore
-  x509af_private_data_t *x509af_data = x509af_get_private_data(actx->pinfo);
-  nstime_copy(&x509af_data->not_before, &x509af_data->last_time);
-
-#.FN_FTR Validity/notAfter
-  x509af_private_data_t *x509af_data = x509af_get_private_data(actx->pinfo);
-  nstime_copy(&x509af_data->not_after, &x509af_data->last_time);
-  if (actx->pinfo->presence_flags & PINFO_HAS_TS &&
-      !nstime_is_unset(&x509af_data->not_before) &&
-      !nstime_is_unset(&x509af_data->not_after)) {
-
-    if (nstime_cmp(&x509af_data->not_before, &x509af_data->not_after) > 0) {
-      expert_add_info_format(actx->pinfo, proto_tree_get_parent(tree), &ei_x509af_certificate_invalid, "Invalid certificate (notBefore time is after notAfter time)");
-    } else if ((nstime_cmp(&x509af_data->not_before, &actx->pinfo->abs_ts) > 0) || (nstime_cmp(&actx->pinfo->abs_ts, &x509af_data->not_after) > 0)) {
-      expert_add_info_format(actx->pinfo, proto_tree_get_parent(tree), &ei_x509af_certificate_invalid, "Invalid certificate (frame arrival time %s not in valid interval)", abs_time_to_str(actx->pinfo->pool, &actx->pinfo->abs_ts, ABSOLUTE_TIME_UTC, true));
-    }
-  }
-
-#.FN_HDR Time
-  x509af_private_data_t *x509af_data = x509af_get_private_data(actx->pinfo);
-  nstime_set_unset(&x509af_data->last_time);
-
-#.FN_BODY Time/utcTime HF_INDEX = -1 VAL_PTR = &outstr
+#.FN_BODY Time/utcTime
   char *outstr, *newstr;
-  int old_offset = offset;
-
-  x509af_private_data_t *x509af_data = x509af_get_private_data(actx->pinfo);
+  uint32_t tvblen;
 
   /* the 2-digit year can only be in the range 1950..2049 https://tools.ietf.org/html/rfc5280#section-4.1.2.5.1 */
-%(DEFAULT_BODY)s
+  offset = dissect_ber_UTCTime(implicit_tag, actx, tree, tvb, offset, hf_index, &outstr, &tvblen);
   if (hf_index > 0 && outstr) {
-    nstime_t time_val;
     newstr = wmem_strconcat(actx->pinfo->pool, outstr[0] < '5' ? "20": "19", outstr, NULL);
-
-    iso8601_to_nstime(&time_val, newstr, ISO8601_DATETIME_AUTO);
-
-    /* move past TLV */
-    old_offset = get_ber_identifier(tvb, old_offset, NULL, NULL, NULL);
-    old_offset = get_ber_length(tvb, old_offset, NULL, NULL);
-
-    proto_tree_add_time(tree, hf_index, tvb, old_offset, offset - old_offset, &time_val);
-
-    nstime_copy(&x509af_data->last_time, &time_val);
+    proto_tree_add_string(tree, hf_index, tvb, offset - tvblen, tvblen, newstr);
   }
 
 #.FN_BODY SubjectName
@@ -212,17 +166,12 @@ CertificateList/signedCertificateList/revokedCertificates/_item/userCertificate	
 
   str = x509if_get_last_dn();
   proto_item_append_text(proto_item_get_parent(tree), " (%%s)", str?str:"");
-  x509af_eo_t *eo_info = p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_x509af, X509AF_EO_INFO_KEY);
-  if (eo_info) {
-    eo_info->subjectname = str;
-  }
 
 #.TYPE_ATTR
 CertificateSerialNumber TYPE = FT_BYTES  DISPLAY = BASE_NONE
 DSS-Params/p TYPE = FT_BYTES  DISPLAY = BASE_NONE
 DSS-Params/q TYPE = FT_BYTES  DISPLAY = BASE_NONE
 DSS-Params/g TYPE = FT_BYTES  DISPLAY = BASE_NONE
-Time/utcTime TYPE = FT_ABSOLUTE_TIME DISPLAY = ABSOLUTE_TIME_UTC
 
 #.FN_PARS CertificateSerialNumber FN_VARIANT = 64
 

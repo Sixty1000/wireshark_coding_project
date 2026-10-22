@@ -8,10 +8,11 @@
 '''Follow Stream tests'''
 
 import subprocess
+import pytest
 
 
 class TestFollowTcp:
-    def test_follow_tcp_bad_conditions(self, cmd_tshark, capture_file, base_env):
+    def test_follow_tcp_bad_conditions(self, cmd_tshark, capture_file):
         '''Checks whether Follow TCP correctly handles lots of edge cases.'''
         # Edge cases include:
         # 1. two sequential segments
@@ -26,7 +27,7 @@ class TestFollowTcp:
         proc_stdout = subprocess.check_output((cmd_tshark,
                                 '-r', capture_file('tcp-badsegments.pcap'),
                                 '-qz', 'follow,tcp,hex,0',
-                                ), encoding='utf-8', env=base_env)
+                                ), encoding='utf-8')
 
         assert """\
 ===================================================================
@@ -68,12 +69,12 @@ Node 1: 10.0.0.2:80
 ===================================================================
 """.replace("\r\n", "\n") in proc_stdout
 
-    def test_follow_websocket(self, cmd_tshark, capture_file, base_env):
+    def test_follow_websocket(self, cmd_tshark, capture_file):
         '''Checks whether Follow Websocket correctly handles masked data.'''
         proc_stdout = subprocess.check_output((cmd_tshark,
                         '-r', capture_file('websocket.pcapng.gz'),
                         '-qz', 'follow,websocket,hex,0',
-                        ), encoding='utf-8', env=base_env)
+                        ), encoding='utf-8')
 
         assert """\
 ===================================================================
@@ -112,12 +113,12 @@ Node 1: 127.0.0.1:8080
 ===================================================================
 """.replace("\r\n", "\n") in proc_stdout
 
-    def test_follow_websocket_fragmented(self, cmd_tshark, capture_file, base_env):
+    def test_follow_websocket_fragmented(self, cmd_tshark, capture_file):
         '''Checks whether Follow Websocket correctly handles fragmented data.'''
         proc_stdout = subprocess.check_output((cmd_tshark,
                         '-r', capture_file('websocket-fragmented.pcapng.gz'),
                         '-qz', 'follow,websocket,hex,0',
-                        ), encoding='utf-8', env=base_env)
+                        ), encoding='utf-8')
 
         assert """\
 ===================================================================
@@ -176,12 +177,12 @@ Node 1: 127.0.0.1:8080
 ===================================================================
 """.replace("\r\n", "\n") in proc_stdout
 
-    def test_follow_websocket_compressed(self, cmd_tshark, capture_file, base_env):
+    def test_follow_websocket_compressed(self, cmd_tshark, capture_file):
         '''Checks whether Follow Websocket correctly handles compressed data.'''
         proc_stdout = subprocess.check_output((cmd_tshark,
                         '-r', capture_file('websocket-compressed.pcapng.gz'),
                         '-qz', 'follow,websocket,hex,0',
-                        ), encoding='utf-8', env=base_env)
+                        ), encoding='utf-8')
 
         assert """\
 ===================================================================
@@ -240,12 +241,12 @@ Node 1: 127.0.0.1:8080
 ===================================================================
 """.replace("\r\n", "\n") in proc_stdout
 
-    def test_follow_websocket_compressed_fragmented(self, cmd_tshark, capture_file, base_env):
+    def test_follow_websocket_compressed_fragmented(self, cmd_tshark, capture_file):
         '''Checks whether Follow Websocket correctly handles compressed and fragmented data.'''
         proc_stdout = subprocess.check_output((cmd_tshark,
                         '-r', capture_file('websocket-compressed-fragmented.pcapng.gz'),
                         '-qz', 'follow,websocket,hex,0',
-                        ), encoding='utf-8', env=base_env)
+                        ), encoding='utf-8')
 
         assert """\
 ===================================================================

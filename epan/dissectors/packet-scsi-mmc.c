@@ -13,8 +13,7 @@
 
 #include <epan/packet.h>
 #include <epan/expert.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
+#include <epan/conversation.h>
 #include "packet-scsi.h"
 #include "packet-scsi-mmc.h"
 #include "packet-scsi-sbc.h"
@@ -441,7 +440,7 @@ dissect_mmc4_getconfiguration (tvbuff_t *tvb_a, packet_info *pinfo,
 
                     profile=tvb_get_ntohs(try_tvb, try_offset);
                     proto_tree_add_item (tr, hf_scsi_mmc_feature_profile, try_tvb, try_offset, 2, ENC_BIG_ENDIAN);
-                    proto_item_append_text(it, "%s", val_to_str_ext(pinfo->pool, profile, &scsi_getconf_current_profile_val_ext, "Unknown 0x%04x"));
+                    proto_item_append_text(it, "%s", val_to_str_ext(profile, &scsi_getconf_current_profile_val_ext, "Unknown 0x%04x"));
 
                     cur_profile=tvb_get_uint8(try_tvb, try_offset+2);
                     proto_tree_add_item (tr, hf_scsi_mmc_feature_profile_current, try_tvb, try_offset+2, 1, ENC_BIG_ENDIAN);
@@ -1001,14 +1000,14 @@ dissect_mmc4_readtrackinformation (tvbuff_t *tvb_a, packet_info *pinfo _U_, prot
         proto_tree_add_item (tree, hf_scsi_mmc_data_length, try_tvb, 0, 2, ENC_BIG_ENDIAN);
         /* track  try_offset+2 and try_offset+32, only use the high byte if we have it */
         if (tvb_reported_length(try_tvb) < 33) {
-            proto_tree_add_item (tree, hf_scsi_mmc_track, try_tvb, 2, 1, ENC_BIG_ENDIAN);
+            proto_tree_add_uint (tree, hf_scsi_mmc_track, try_tvb, 2, 1, tvb_get_uint8(try_tvb, try_offset + 2));
         } else {
             proto_tree_add_uint (tree, hf_scsi_mmc_track, try_tvb, 2, 1, (tvb_get_uint8(try_tvb, try_offset + 32) << 8) | tvb_get_uint8(try_tvb, try_offset + 2));
         }
 
         /* session  try_offset+3 and try_offset+33 */
         if (tvb_reported_length(try_tvb) < 34) {
-            proto_tree_add_item (tree, hf_scsi_mmc_session, try_tvb, 3, 1, ENC_BIG_ENDIAN);
+            proto_tree_add_uint (tree, hf_scsi_mmc_session, try_tvb, 3, 1, tvb_get_uint8(try_tvb, try_offset + 3));
         } else {
             proto_tree_add_uint (tree, hf_scsi_mmc_session, try_tvb, 3, 1, (tvb_get_uint8(try_tvb, try_offset + 33) << 8) | tvb_get_uint8(try_tvb, try_offset + 3));
         }

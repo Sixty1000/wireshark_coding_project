@@ -29,8 +29,6 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 
 #define SCTE35_CMD_SPLICE_NULL (0x00)
 #define SCTE35_CMD_SPLICE_SCHEDULE (0x04)
@@ -383,7 +381,7 @@ dissect_scte35_private_command(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 {
     int tvb_len;
     uint32_t identifier;
-    unsigned offset = 0;
+    int offset = 0;
     proto_item *ti;
     proto_tree *pc_tree;
 
@@ -447,7 +445,7 @@ proto_reg_handoff_scte35_private_command(void)
 static int
 dissect_component(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, uint8_t sif, int idx)
 {
-    unsigned offset = 0;
+    int offset = 0;
     uint8_t component_tag, tsf = 0;
     proto_tree *component_tree;
     int tvb_len, min_length = sif ? 1 : 2;
@@ -502,7 +500,7 @@ dissect_scte35_splice_insert(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
     uint8_t cancel_flag, psf, df, sif, tsf, component_count;
     uint32_t event_id;
     int component;
-    unsigned offset = 0;
+    int offset = 0;
     proto_item *ti;
     proto_tree *si_tree, *st_tree;
 
@@ -585,7 +583,8 @@ dissect_scte35_splice_insert(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
             if (tvb_len < min_length)
                 return offset;
 
-            proto_tree_add_item_ret_uint8(si_tree, hf_component_count, tvb, offset, 1, ENC_BIG_ENDIAN, &component_count);
+            component_count = tvb_get_uint8(tvb, offset);
+            proto_tree_add_item(si_tree, hf_component_count, tvb, offset, 1, ENC_BIG_ENDIAN);
             offset++;
 
             min_length += component_count * (sif ? 1 : 2);
@@ -814,7 +813,8 @@ dissect_scte35_splice_schedule(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
                                     offset, 4, ENC_BIG_ENDIAN);
                 offset += 4;
             } else {
-                proto_tree_add_item_ret_uint8(ss_tree, hf_splice_component_count, tvb, offset, 1, ENC_NA, &component_count);
+                component_count = tvb_get_uint8(tvb, offset);
+                proto_tree_add_item(ss_tree, hf_splice_component_count, tvb, offset, 1, ENC_NA);
                 offset++;
 
                 min_length += 5 * component_count;
@@ -830,7 +830,7 @@ dissect_scte35_splice_schedule(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
                     offset++;
 
                     proto_tree_add_item(component_tree, hf_splice_component_utc_splice_time, tvb,
-                        offset, 4, ENC_BIG_ENDIAN);
+                        offset, 4, ENC_NA);
                     offset += 4;
                 }
             }
@@ -947,7 +947,7 @@ proto_reg_handoff_scte35_splice_schedule(void)
 static int
 dissect_scte35_avail_descriptor(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree)
 {
-    unsigned offset = 0;
+    int offset = 0;
     int tvb_len;
 
     /* Check length. */
@@ -956,7 +956,7 @@ dissect_scte35_avail_descriptor(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tre
         return 0;
 
     /* Show the field. */
-    proto_tree_add_item(tree, hf_descriptor_provider_avail_id, tvb, offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item(tree, hf_descriptor_provider_avail_id, tvb, offset, 4, ENC_NA);
     offset += 4;
 
     return offset;
@@ -965,7 +965,7 @@ dissect_scte35_avail_descriptor(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tre
 static int
 dissect_scte35_dtmf_descriptor(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree)
 {
-    unsigned offset = 0;
+    int offset = 0;
     int tvb_len, min_length = 2;
     uint8_t dtmf_count;
 
@@ -991,7 +991,7 @@ dissect_scte35_dtmf_descriptor(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree
 
     /* Show the DTMF string field. */
     proto_tree_add_item(tree, hf_descriptor_dtmf, tvb,
-                        offset, dtmf_count, ENC_ASCII);
+                        offset, dtmf_count, ENC_NA | ENC_ASCII);
 
     offset += dtmf_count;
     return offset;
@@ -999,7 +999,7 @@ dissect_scte35_dtmf_descriptor(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree
 
 static int
 dissect_scte35_component(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int idx) {
-    unsigned offset = 0;
+    int offset = 0;
     proto_tree *subtree;
 
     /* Create the subtree. */
@@ -1102,7 +1102,7 @@ dissect_scte35_segmentation_descriptor(tvbuff_t *tvb, packet_info *pinfo, proto_
         /* Only show non-empty UPIDs. */
         if (upid_length) {
             proto_tree_add_item(tree, hf_descriptor_segmentation_upid, tvb,
-                                offset, upid_length, ENC_ASCII);
+                                offset, upid_length, ENC_NA | ENC_ASCII);
             offset += upid_length;
         }
 
@@ -1295,7 +1295,7 @@ dissect_scte35_splice_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
     offset += 4;
 
     /* We've reached the end. Run a child dissector for the splice command. */
-    dissector_try_uint_with_data(scte35_cmd_dissector_table, command_type, command_tvb, pinfo, tree,
+    dissector_try_uint_new(scte35_cmd_dissector_table, command_type, command_tvb, pinfo, tree,
         false, NULL);
 
     return offset;

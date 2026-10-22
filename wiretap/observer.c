@@ -17,9 +17,8 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include "wtap_module.h"
+#include "wtap-int.h"
 #include "file_wrappers.h"
-#include <wsutil/epochs.h>
 #include <wsutil/802_11-utils.h>
 
 static const char observer_magic[] = {"ObserverPktBufferVersion=15.00"};
@@ -44,51 +43,52 @@ typedef struct {
  * timestamps as they are read or written.
  *
  * The Wiretap API expects timestamps in nanoseconds relative to
- * January 1, 1970, 00:00:00 UTC (the UNIX/POSIX epoch).
+ * January 1, 1970, 00:00:00 GMT (the Wiretap epoch).
  *
  * Observer versions before 13.10 encode frame timestamps in nanoseconds
  * relative to January 1, 2000, 00:00:00 local time (the Observer epoch).
- * Versions 13.10 and later switch over to UTC encoding. Which encoding was used
+ * Versions 13.10 and later switch over to GMT encoding. Which encoding was used
  * when saving the file is identified via the time format TLV following
  * the file header.
  *
  * Unfortunately, even though Observer versions before 13.10 saved in local
  * time, they didn't include the timezone from which the frames were captured,
- * so converting to UTC correctly from all timezones is impossible. So an
+ * so converting to GMT correctly from all timezones is impossible. So an
  * assumption is made that the file is being read from within the same timezone
  * that it was written.
  *
  * All code herein is normalized to versions 13.10 and later, special casing for
  * versions earlier. In other words, timestamps are worked with as if
- * they are UTC-encoded, and adjustments from local time are made only if
+ * they are GMT-encoded, and adjustments from local time are made only if
  * the source file warrants it.
  *
- * All destination files are saved in UTC format.
+ * All destination files are saved in GMT format.
  */
+static const time_t ansi_to_observer_epoch_offset = 946684800;
 static time_t gmt_to_localtime_offset = (time_t) -1;
 
 static const char *init_gmt_to_localtime_offset(void)
 {
     if (gmt_to_localtime_offset == (time_t) -1) {
-        time_t time_t_epoch_plus_one_day = 86400;
+        time_t ansi_epoch_plus_one_day = 86400;
         struct tm *tm;
         struct tm gmt_tm;
         struct tm local_tm;
 
         /*
          * Compute the local time zone offset as the number of seconds west
-         * of UTC. There's no obvious cross-platform API for querying this
-         * directly. As a workaround, UTC and local tm structures are populated
-         * relative to the time_t epoch (plus one day to ensure that
+         * of GMT. There's no obvious cross-platform API for querying this
+         * directly. As a workaround, GMT and local tm structures are populated
+         * relative to the ANSI time_t epoch (plus one day to ensure that
          * local time stays after 1970/1/1 00:00:00). They are then converted
          * back to time_t as if they were both local times, resulting in the
          * time zone offset being the difference between them.
          */
-        tm = gmtime(&time_t_epoch_plus_one_day);
+        tm = gmtime(&ansi_epoch_plus_one_day);
         if (tm == NULL)
             return "gmtime(one day past the Epoch) fails (this \"shouldn't happen\")";
         gmt_tm = *tm;
-        tm = localtime(&time_t_epoch_plus_one_day);
+        tm = localtime(&ansi_epoch_plus_one_day);
         if (tm == NULL)
             return "localtime(one day past the Epoch) fails (this \"shouldn't happen\")";
         local_tm = *tm;
@@ -98,21 +98,21 @@ static const char *init_gmt_to_localtime_offset(void)
     return NULL;
 }
 
-static bool observer_read(wtap *wth, wtap_rec *rec,
+static bool observer_read(wtap *wth, wtap_rec *rec, Buffer *buf,
     int *err, char **err_info, int64_t *data_offset);
-static bool observer_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
-    int *err, char **err_info);
+static bool observer_seek_read(wtap *wth, int64_t seek_off,
+    wtap_rec *rec, Buffer *buf, int *err, char **err_info);
 static int read_packet_header(wtap *wth, FILE_T fh, union wtap_pseudo_header *pseudo_header,
     packet_entry_header *packet_header, int *err, char **err_info);
 static bool process_packet_header(wtap *wth,
     packet_entry_header *packet_header, wtap_rec *rec, int *err,
     char **err_info);
 static int read_packet_data(FILE_T fh, int offset_to_frame, int current_offset_from_packet_header,
-    wtap_rec *rec, int *err, char **err_info);
+    Buffer *buf, int length, int *err, char **err_info);
 static bool skip_to_next_packet(wtap *wth, int offset_to_next_packet,
     int current_offset_from_packet_header, int *err, char **err_info);
 static bool observer_dump(wtap_dumper *wdh, const wtap_rec *rec,
-    int *err, char **err_info);
+    const uint8_t *pd, int *err, char **err_info);
 static int observer_to_wtap_encap(int observer_encap);
 static int wtap_to_observer_encap(int wtap_encap);
 
@@ -322,7 +322,7 @@ wtap_open_return_val observer_open(wtap *wth, int *err, char **err_info)
 }
 
 /* Reads the next packet. */
-static bool observer_read(wtap *wth, wtap_rec *rec,
+static bool observer_read(wtap *wth, wtap_rec *rec, Buffer *buf,
     int *err, char **err_info, int64_t *data_offset)
 {
     int header_bytes_consumed;
@@ -354,7 +354,8 @@ static bool observer_read(wtap *wth, wtap_rec *rec,
 
     /* read the frame data */
     data_bytes_consumed = read_packet_data(wth->fh, packet_header.offset_to_frame,
-            header_bytes_consumed, rec, err, err_info);
+            header_bytes_consumed, buf, rec->rec_header.packet_header.caplen,
+            err, err_info);
     if (data_bytes_consumed < 0) {
         return false;
     }
@@ -369,8 +370,8 @@ static bool observer_read(wtap *wth, wtap_rec *rec,
 }
 
 /* Reads a packet at an offset. */
-static bool observer_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
-    int *err, char **err_info)
+static bool observer_seek_read(wtap *wth, int64_t seek_off,
+    wtap_rec *rec, Buffer *buf, int *err, char **err_info)
 {
     union wtap_pseudo_header *pseudo_header = &rec->rec_header.packet_header.pseudo_header;
     packet_entry_header packet_header;
@@ -391,7 +392,7 @@ static bool observer_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
 
     /* read the frame data */
     data_bytes_consumed = read_packet_data(wth->random_fh, packet_header.offset_to_frame,
-        offset, rec, err, err_info);
+        offset, buf, rec->rec_header.packet_header.caplen, err, err_info);
     if (data_bytes_consumed < 0) {
         return false;
     }
@@ -542,18 +543,11 @@ static bool
 process_packet_header(wtap *wth, packet_entry_header *packet_header,
     wtap_rec *rec, int *err, char **err_info)
 {
-    /*
-     * Set the wiretap record metadata fields.
-     *
-     * XXX - the link=layer type is per-packet, as it's in the packet
-     * header, but there's also a link-layer type in the file header,
-     * from which we get the file's encapsulation.  What relationship
-     * does the latter have to the former?  Do we ever need to make
-     * the file's encapsulation WTAP_ENCAP_PER_PACKET?
-     */
-    wtap_setup_packet_rec(rec, observer_to_wtap_encap(packet_header->network_type));
+    /* set the wiretap record metadata fields */
+    rec->rec_type = REC_TYPE_PACKET;
     rec->block = wtap_block_create(WTAP_BLOCK_PACKET);
     rec->presence_flags = WTAP_HAS_TS|WTAP_HAS_CAP_LEN;
+    rec->rec_header.packet_header.pkt_encap = observer_to_wtap_encap(packet_header->network_type);
     if(wth->file_encap == WTAP_ENCAP_FIBRE_CHANNEL_FC2_WITH_FRAME_DELIMS) {
         rec->rec_header.packet_header.len = packet_header->network_size;
         rec->rec_header.packet_header.caplen = packet_header->captured_size;
@@ -594,8 +588,8 @@ process_packet_header(wtap *wth, packet_entry_header *packet_header,
      * to check it.
      */
 
-    /* set the wiretap timestamp, assuming for the moment that Observer encoded it in UTC */
-    rec->ts.secs = (time_t) ((packet_header->nano_seconds_since_2000 / 1000000000) + EPOCH_DELTA_2000_01_01_00_00_00_UTC);
+    /* set the wiretap timestamp, assuming for the moment that Observer encoded it in GMT */
+    rec->ts.secs = (time_t) ((packet_header->nano_seconds_since_2000 / 1000000000) + ansi_to_observer_epoch_offset);
     rec->ts.nsecs = (int) (packet_header->nano_seconds_since_2000 % 1000000000);
 
     /* adjust to local time, if necessary, also accounting for DST if the frame
@@ -608,7 +602,7 @@ process_packet_header(wtap *wth, packet_entry_header *packet_header,
         time_t    dst_offset;
 
         /* the Observer timestamp was encoded as local time, so add a
-           correction from local time to UTC */
+           correction from local time to GMT */
         rec->ts.secs += gmt_to_localtime_offset;
 
         /* perform a DST adjustment if necessary */
@@ -628,11 +622,11 @@ process_packet_header(wtap *wth, packet_entry_header *packet_header,
 }
 
 static int
-read_packet_data(FILE_T fh, int offset_to_frame, int current_offset_from_packet_header,
-    wtap_rec *rec, int *err, char **err_info)
+read_packet_data(FILE_T fh, int offset_to_frame, int current_offset_from_packet_header, Buffer *buf,
+    int length, int *err, char **err_info)
 {
     int seek_increment;
-    uint32_t bytes_consumed = 0;
+    int bytes_consumed = 0;
 
     /* validate offsets */
     if (offset_to_frame < current_offset_from_packet_header) {
@@ -652,11 +646,9 @@ read_packet_data(FILE_T fh, int offset_to_frame, int current_offset_from_packet_
     }
 
     /* read in the packet data */
-    if (!wtap_read_bytes_buffer(fh, &rec->data,
-                                rec->rec_header.packet_header.caplen,
-                                err, err_info))
-        return -1;
-    bytes_consumed += rec->rec_header.packet_header.caplen;
+    if (!wtap_read_packet_bytes(fh, buf, length, err, err_info))
+        return false;
+    bytes_consumed += length;
 
     return bytes_consumed;
 }
@@ -809,6 +801,7 @@ static bool observer_dump_open(wtap_dumper *wdh, int *err,
 /* Write a record for a packet to a dump file.
    Returns true on success, false on failure. */
 static bool observer_dump(wtap_dumper *wdh, const wtap_rec *rec,
+    const uint8_t *pd,
     int *err, char **err_info _U_)
 {
     observer_dump_private_state * private_state = NULL;
@@ -818,7 +811,6 @@ static bool observer_dump(wtap_dumper *wdh, const wtap_rec *rec,
     /* We can only write packet records. */
     if (rec->rec_type != REC_TYPE_PACKET) {
         *err = WTAP_ERR_UNWRITABLE_REC_TYPE;
-        *err_info = wtap_unwritable_rec_type_err_string(rec);
         return false;
     }
 
@@ -838,22 +830,16 @@ static bool observer_dump(wtap_dumper *wdh, const wtap_rec *rec,
         return false;
     }
 
-    /* Convert the number of seconds since epoch from the time_t epoch
-       to Observer's 2000-01-01 00:00:00 UTC epoch.
-
-       The number of seconds since the Observer epoch must be non-negative,
-       presumably because Observer treats it as such, and can't handle
-       dates/times before its epoch. If the time stamp precedes the Observer
-       epoch, just use the Observer epoch.
-
-       We first check for negative time_t values, and then cast the
-       known-to-be-nonnegative value to uint64_t and compare against
-       the epoch, to avoid signed vs. unsigned comparison warnings.
-       If we make the epoch offsets signed, we won't have to do this. */
-    if (rec->ts.secs < 0 || (uint64_t)rec->ts.secs < EPOCH_DELTA_2000_01_01_00_00_00_UTC) {
-        seconds_since_2000 = 0;
+    /* convert the number of seconds since epoch from ANSI-relative to
+       Observer-relative */
+    if (rec->ts.secs < ansi_to_observer_epoch_offset) {
+        if(rec->ts.secs > (time_t) 0) {
+            seconds_since_2000 = rec->ts.secs;
+        } else {
+            seconds_since_2000 = (time_t) 0;
+        }
     } else {
-        seconds_since_2000 = rec->ts.secs - EPOCH_DELTA_2000_01_01_00_00_00_UTC;
+        seconds_since_2000 = rec->ts.secs - ansi_to_observer_epoch_offset;
     }
 
     /* populate the fields of the packet header */
@@ -884,7 +870,7 @@ static bool observer_dump(wtap_dumper *wdh, const wtap_rec *rec,
     }
 
     /* write the packet data */
-    if (!wtap_dump_file_write(wdh, ws_buffer_start_ptr(&rec->data), rec->rec_header.packet_header.caplen, err)) {
+    if (!wtap_dump_file_write(wdh, pd, rec->rec_header.packet_header.caplen, err)) {
         return false;
     }
 

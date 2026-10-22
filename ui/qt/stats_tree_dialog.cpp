@@ -34,7 +34,7 @@ public:
             setTextAlignment(col, Qt::AlignRight);
         }
     }
-    bool operator< (const QTreeWidgetItem &other) const override
+    bool operator< (const QTreeWidgetItem &other) const
     {
         stat_node *thisnode = VariantPointer<stat_node>::asPtr(data(item_col_, Qt::UserRole));
         stat_node *othernode = VariantPointer<stat_node>::asPtr(other.data(item_col_, Qt::UserRole));
@@ -110,11 +110,8 @@ void StatsTreeDialog::fillTree()
     st_cfg_->pr = &cfg_pr_;
     cfg_pr_.st_dlg = this;
 
-    bool first_time = true;
-
     if (st_) {
         stats_tree_free(st_);
-        first_time = false;
     }
     QString display_filter = displayFilter();
     st_ = stats_tree_new(st_cfg_, NULL, display_filter.toUtf8().constData());
@@ -145,11 +142,6 @@ void StatsTreeDialog::fillTree()
     removeTapListeners();
     st_cfg_->pr = NULL;
 
-    if (first_time) {
-        // Keep the same sort order on retapping (which might be
-        // user-selected to be different from the default.)
-        statsTreeWidget()->sortItems(stats_tree_get_default_sort_col(st_), stats_tree_is_default_sort_DESC(st_) ? Qt::DescendingOrder : Qt::AscendingOrder);
-    }
     statsTreeWidget()->setSortingEnabled(true);
     statsTreeWidget()->resizeColumnToContents(item_col_);
 }

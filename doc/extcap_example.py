@@ -10,33 +10,33 @@
 #
 
 r"""
-This is a generic example, which produces pcap packets every n seconds, and
+This is a generic example, which produces pcap packages every n seconds, and
 is configurable via extcap options.
 
 @note
 {
-To use this script on Windows, please either make sure that the .py extension is
-associated with the Python interpreter *and* is in the PATHEXT environment
-variable, or also include extcap_example.bat inside the extcap folder, next to
-extcap_example.py.
+To use this script on Windows, please generate an extcap_example.bat inside
+the extcap folder, with the following content:
 
-https://gitlab.com/wireshark/wireshark/-/blob/master/doc/extcap_example.bat
+-------
+@echo off
+C:\Windows\py.exe C:\Path\to\extcap_example.py %*
+-------
 
-Windows is not able to execute Python scripts directly unless the extension is
-in PATHEXT, which also goes for all other script-based formats (the extensions
-for Batch, PowerShell, and (deprecated) VBScript scripts are in PATHEXT by
-default.)
+Windows is not able to execute Python scripts directly, which also goes for all
+other script-based formats beside VBScript
 }
 
 """
 
+from __future__ import print_function
 
-import argparse
-import re
-import struct
 import sys
+import re
+import argparse
 import time
-from threading import Event, Thread
+import struct
+from threading import Thread
 
 ERROR_USAGE          = 0
 ERROR_ARG            = 1
@@ -70,7 +70,6 @@ delay = 0.0
 verify = False
 button = False
 button_disabled = False
-stop_event = Event()
 
 """
 This code has been taken from http://stackoverflow.com/questions/5943249/python-argparse-and-controlling-overriding-the-exit-status-code - originally developed by Rob Cowie http://stackoverflow.com/users/46690/rob-cowie
@@ -85,7 +84,11 @@ class ArgumentParser(argparse.ArgumentParser):
         if name is None:
             return None
         for action in container:
-            if '/'.join(action.option_strings) == name or action.metavar == name or action.dest == name:
+            if '/'.join(action.option_strings) == name:
+                return action
+            elif action.metavar == name:
+                return action
+            elif action.dest == name:
                 return action
 
     def error(self, message):
@@ -93,7 +96,7 @@ class ArgumentParser(argparse.ArgumentParser):
         if exc:
             exc.argument = self._get_action_from_name(exc.argument_name)
             raise exc
-        super().error(message)
+        super(ArgumentParser, self).error(message)
 
 #### EXTCAP FUNCTIONALITY
 
@@ -120,8 +123,6 @@ def extcap_config(interface, option):
     args.append((10, '--logfile', 'Log File Test', 'The Log File Test', 'fileselect', '{group=Time / Log}'))
     args.append((11, '--radio', 'Radio Test', 'Radio Test Value', 'radio', '{group=Selection}'))
     args.append((12, '--multi', 'MultiCheck Test', 'MultiCheck Test Value', 'multicheck', '{group=Selection}'))
-    args.append((13, '--table', 'Table Test', 'Table test value', 'table', '{configurable=true}{prefix=--opt}{group=Table}'))
-    args.append((14, '--logdir', 'Log Folder Test', 'The Log Folder Test', 'folderselect', '{mustexist=true}{group=Time / Log}'))
 
     if option == "remote":
         values.append((3, "if1", "Remote Interface 1", "false"))
@@ -155,9 +156,6 @@ def extcap_config(interface, option):
         multi_values.append(((12, "m2c1g1", "Checkable Grandchild", "false", "true"), "m2c1"))
         multi_values.append(((12, "m2c2", "Uncheckable Child 2", "false", "false"), "m2"))
         multi_values.append(((12, "m2c2g1", "Uncheckable Grandchild", "false", "false"), "m2c2"))
-        # Table
-        multi_values.append(((13, "m1", "Configurable option 1", "false", "true"), None))
-        multi_values.append(((13, "m2", "Configurable option 2", "false", "true"), None))
 
     for value in values:
         print("value {arg=%d}{value=%s}{display=%s}{default=%s}" % value)
@@ -165,29 +163,14 @@ def extcap_config(interface, option):
     for (value, parent) in multi_values:
         sentence = "value {arg=%d}{value=%s}{display=%s}{default=%s}{enabled=%s}" % value
         extra = "{parent=%s}" % parent if parent else ""
-        print(f"{sentence}{extra}")
+        print("".join((sentence, extra)))
 
-def extcap_config_option(interface, option_name, option_value):
-    args = []
-
-    if option_name != "table":
-        return
-    if option_value == "m1":
-        args.append((0, '--delay', 'Time delay', 'Time delay between packages', 'integer', '{range=1,15}{default=5}'))
-        args.append((1, '--message', 'Message', 'Package message content', 'string', '{required=true}{placeholder=Please enter a message here ...}'))
-    elif option_value == "m2":
-        args.append((0, '--d1test', 'Double 1 Test', 'Long Test Value', 'double', '{default=123.456}{group=Numeric Values}'))
-        args.append((1, '--d2test', 'Double 2 Test', 'Long Test Value', 'double', '{default= 123,456}{group=Numeric Values}'))
-
-    for arg in args:
-        print("arg {number=%d}{call=%s}{display=%s}{tooltip=%s}{type=%s}%s" % arg)
 
 def extcap_version():
-    # control=3 == EXTCAP_CONTROL_TOOLBAR | EXTCAP_CONTROL_QUIT
-    print("extcap {version=1.0}{help=https://www.wireshark.org}{display=Example extcap interface}{control=3}")
+    print("extcap {version=1.0}{help=https://www.wireshark.org}{display=Example extcap interface}")
 
 def extcap_interfaces():
-    extcap_version();
+    print("extcap {version=1.0}{help=https://www.wireshark.org}{display=Example extcap interface}")
     print("interface {value=example1}{display=Example interface 1 for extcap}")
     print("interface {value=example2}{display=Example interface 2 for extcap}")
     print("control {number=%d}{type=string}{display=Message}{tooltip=Package message content. Must start with a capital letter.}{placeholder=Enter package message content here ...}{validation=^[A-Z]+}" % CTRL_ARG_MESSAGE)
@@ -238,11 +221,22 @@ def pcap_fake_header():
     header += struct.pack('<L', int('a1b2c3d4', 16))
     header += struct.pack('<H', unsigned(2))  # Pcap Major Version
     header += struct.pack('<H', unsigned(4))  # Pcap Minor Version
-    header += struct.pack('<I', 0)  # Timezone
-    header += struct.pack('<I', 0)  # Accuracy of timestamps
+    header += struct.pack('<I', int(0))  # Timezone
+    header += struct.pack('<I', int(0))  # Accuracy of timestamps
     header += struct.pack('<L', int('0000ffff', 16))  # Max Length of capture frame
     header += struct.pack('<L', unsigned(1))  # Ethernet
     return header
+
+# Calculates and returns the IP checksum based on the given IP Header
+def ip_checksum(iph):
+    #split into bytes
+    words = splitN(''.join(iph.split()), 4)  # TODO splitN() func undefined, this code will fail
+    csum = 0
+    for word in words:
+        csum += int(word, base=16)
+    csum += (csum >> 16)
+    csum = csum & 0xFFFF ^ 0xFFFF
+    return csum
 
 iterateCounter = 0
 
@@ -278,7 +272,7 @@ def pcap_fake_package(message, fake_ip):
 
 # IP
     pcap += struct.pack('b', int('45', 16))  # IP version
-    pcap += struct.pack('b', int('0', 16))
+    pcap += struct.pack('b', int('0', 16))  #
     pcap += struct.pack('>H', unsigned(len(message)+20))  # length of data + payload
     pcap += struct.pack('<H', int('0', 16))  # Identification
     pcap += struct.pack('b', int('40', 16))  # Don't fragment
@@ -298,21 +292,13 @@ def pcap_fake_package(message, fake_ip):
 
 def control_read(fn):
     try:
-        header = fn.read(4)
-        # length really is 24-bit but this dissector doesn't expect
-        # any messages that long
-        sp, _, length = struct.unpack('>sBH', header)
-        if length > 0:
-            payload = fn.read(length)
-        if sp == b'Q': # SP_QUIT
-            stop_event.set()
-            sys.exit() # Exit this thread
-        elif sp == b'T': # SP_TOOLBAR_CTRL
-            # Will throw struct.error (inherits from exception) if length < 2,
-            # and will correctly return an empty string if length == 2
-            arg, typ, payload = struct.unpack(f'>BB{length-2}s', payload)
-            payload = payload.decode('utf-8', 'replace')
-            return arg, typ, payload
+        header = fn.read(6)
+        sp, _, length, arg, typ = struct.unpack('>sBHBB', header)
+        if length > 2:
+            payload = fn.read(length - 2).decode('utf-8', 'replace')
+        else:
+            payload = ''
+        return arg, typ, payload
     except Exception:
         return None, None, None
 
@@ -362,6 +348,8 @@ def control_write(fn, arg, typ, payload):
     fn.write(packet)
 
 def control_write_defaults(fn_out):
+    global initialized, message, delay, verify
+
     while not initialized:
         time.sleep(.1)  # Wait for initial control values
 
@@ -406,10 +394,10 @@ def extcap_capture(interface, fifo, control_in, control_out, in_delay, in_verify
         if fn_out is not None:
             control_write_defaults(fn_out)
 
-        dataPackage = 0
+        dataPackage = int(0)
         dataTotal = int(len(data) / 20) + 1
 
-        while not stop_event.is_set():
+        while True:
             if fn_out is not None:
                 log = "Received packet #" + str(counter) + "\n"
                 control_write(fn_out, CTRL_ARG_LOGGER, CTRL_CMD_ADD, log)
@@ -427,7 +415,7 @@ def extcap_capture(interface, fifo, control_in, control_out, in_delay, in_verify
 
             out = ("%c%s%c%c%c%s%c%s%c" % (len(remote), remote.strip(), dataPackage, dataTotal, len(dataSub), dataSub.strip(), len(message), message.strip(), verify)).encode("utf8")
             fh.write(pcap_fake_package(out, fake_ip))
-            stop_event.wait(delay)
+            time.sleep(delay)
 
     thread.join()
     if fn_out is not None:
@@ -442,7 +430,7 @@ def extcap_close_fifo(fifo):
 ####
 
 def usage():
-    print(f"Usage: {sys.argv[0]} <--extcap-interfaces | --extcap-dlts | --extcap-interface | --extcap-config | --capture | --extcap-capture-filter | --fifo>")
+    print("Usage: %s <--extcap-interfaces | --extcap-dlts | --extcap-interface | --extcap-config | --capture | --extcap-capture-filter | --fifo>" % sys.argv[0] )
 
 if __name__ == '__main__':
     interface = ""
@@ -465,8 +453,6 @@ if __name__ == '__main__':
     parser.add_argument("--extcap-interface", help="Provide the interface to capture from")
     parser.add_argument("--extcap-dlts", help="Provide a list of dlts for the given interface", action="store_true")
     parser.add_argument("--extcap-config", help="Provide a list of configurations for the given interface", action="store_true")
-    parser.add_argument("--extcap-config-option-name", help="Provide a list of sub-configuration for a configuration")
-    parser.add_argument("--extcap-config-option-value", help="Provide a list of sub-configuration for a configuration")
     parser.add_argument("--extcap-capture-filter", help="Used together with capture to provide a capture filter")
     parser.add_argument("--fifo", help="Use together with capture to provide the fifo to dump data to")
     parser.add_argument("--extcap-control-in", help="Used to get control messages from toolbar")
@@ -485,7 +471,7 @@ if __name__ == '__main__':
     try:
         args, unknown = parser.parse_known_args()
     except argparse.ArgumentError as exc:
-        print(f"{exc.argument.dest}: {exc.message}", file=sys.stderr)
+        print("%s: %s" % (exc.argument.dest, exc.message), file=sys.stderr)
         fifo_found = 0
         fifo = ""
         for arg in sys.argv:
@@ -515,7 +501,7 @@ if __name__ == '__main__':
         sys.exit(0)
 
     if len(unknown) > 1:
-        print(f"Extcap Example {len(unknown)} unknown arguments given")
+        print("Extcap Example %d unknown arguments given" % len(unknown))
 
     m = re.match(r'example(\d+)', args.extcap_interface)
     if not m:
@@ -535,9 +521,7 @@ if __name__ == '__main__':
     if args.extcap_reload_option and len(args.extcap_reload_option) > 0:
         option = args.extcap_reload_option
 
-    if args.extcap_config_option_name:
-        extcap_config_option(interface, args.extcap_config_option_name, args.extcap_config_option_value)
-    elif args.extcap_config:
+    if args.extcap_config:
         extcap_config(interface, option)
     elif args.extcap_dlts:
         extcap_dlts(interface)
@@ -546,7 +530,7 @@ if __name__ == '__main__':
             sys.exit(ERROR_FIFO)
         # The following code demonstrates error management with extcap
         if args.delay > 5:
-            print(f"Value for delay {args.delay} too high", file=sys.stderr)
+            print("Value for delay [%d] too high" % args.delay, file=sys.stderr)
             extcap_close_fifo(args.fifo)
             sys.exit(ERROR_DELAY)
 

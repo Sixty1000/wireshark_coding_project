@@ -99,11 +99,6 @@ decode_user_exception(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *ptr
 static void
 decode_CosEventComm_PullConsumer_disconnect_pull_consumer(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, proto_item *item _U_, int *offset _U_, MessageHeader *header, const char *operation _U_, bool stream_is_big_endian _U_)
 {
-    /* Operation specific Variable declarations Begin */
-    _U_ wmem_stack_t *tree_stack = wmem_stack_new(pinfo->pool);
-    _U_ int old_offset;
-    /* Operation specific Variable declarations End */
-
     switch(header->message_type) {
     case Request:
         break;
@@ -135,11 +130,6 @@ decode_CosEventComm_PullConsumer_disconnect_pull_consumer(tvbuff_t *tvb _U_, pac
 static void
 decode_CosEventComm_PullSupplier_disconnect_pull_supplier(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, proto_item *item _U_, int *offset _U_, MessageHeader *header, const char *operation _U_, bool stream_is_big_endian _U_)
 {
-    /* Operation specific Variable declarations Begin */
-    _U_ wmem_stack_t *tree_stack = wmem_stack_new(pinfo->pool);
-    _U_ int old_offset;
-    /* Operation specific Variable declarations End */
-
     switch(header->message_type) {
     case Request:
         break;
@@ -171,11 +161,6 @@ decode_CosEventComm_PullSupplier_disconnect_pull_supplier(tvbuff_t *tvb _U_, pac
 static void
 decode_CosEventComm_PullSupplier_try_pull(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, proto_item *item _U_, int *offset _U_, MessageHeader *header, const char *operation _U_, bool stream_is_big_endian _U_)
 {
-    /* Operation specific Variable declarations Begin */
-    _U_ wmem_stack_t *tree_stack = wmem_stack_new(pinfo->pool);
-    _U_ int old_offset;
-    /* Operation specific Variable declarations End */
-
     switch(header->message_type) {
     case Request:
         break;
@@ -184,8 +169,7 @@ decode_CosEventComm_PullSupplier_try_pull(tvbuff_t *tvb _U_, packet_info *pinfo 
         case NO_EXCEPTION:
             get_CDR_any(tvb, pinfo, tree, item, offset, stream_is_big_endian, boundary, header);
 
-            old_offset = *offset;
-            proto_tree_add_boolean(tree, hf_CosEventComm_PullSupplier_try_pull_has_event, tvb, old_offset, 1, get_CDR_boolean(tvb,offset));
+            proto_tree_add_boolean(tree, hf_CosEventComm_PullSupplier_try_pull_has_event, tvb, *offset-1, 1, get_CDR_boolean(tvb,offset));
 
             break;
         case USER_EXCEPTION:
@@ -210,11 +194,6 @@ decode_CosEventComm_PullSupplier_try_pull(tvbuff_t *tvb _U_, packet_info *pinfo 
 static void
 decode_CosEventComm_PullSupplier_pull(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, proto_item *item _U_, int *offset _U_, MessageHeader *header, const char *operation _U_, bool stream_is_big_endian _U_)
 {
-    /* Operation specific Variable declarations Begin */
-    _U_ wmem_stack_t *tree_stack = wmem_stack_new(pinfo->pool);
-    _U_ int old_offset;
-    /* Operation specific Variable declarations End */
-
     switch(header->message_type) {
     case Request:
         break;
@@ -246,11 +225,6 @@ decode_CosEventComm_PullSupplier_pull(tvbuff_t *tvb _U_, packet_info *pinfo _U_,
 static void
 decode_CosEventComm_PushSupplier_disconnect_push_supplier(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, proto_item *item _U_, int *offset _U_, MessageHeader *header, const char *operation _U_, bool stream_is_big_endian _U_)
 {
-    /* Operation specific Variable declarations Begin */
-    _U_ wmem_stack_t *tree_stack = wmem_stack_new(pinfo->pool);
-    _U_ int old_offset;
-    /* Operation specific Variable declarations End */
-
     switch(header->message_type) {
     case Request:
         break;
@@ -282,11 +256,6 @@ decode_CosEventComm_PushSupplier_disconnect_push_supplier(tvbuff_t *tvb _U_, pac
 static void
 decode_CosEventComm_PushConsumer_disconnect_push_consumer(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, proto_item *item _U_, int *offset _U_, MessageHeader *header, const char *operation _U_, bool stream_is_big_endian _U_)
 {
-    /* Operation specific Variable declarations Begin */
-    _U_ wmem_stack_t *tree_stack = wmem_stack_new(pinfo->pool);
-    _U_ int old_offset;
-    /* Operation specific Variable declarations End */
-
     switch(header->message_type) {
     case Request:
         break;
@@ -318,11 +287,6 @@ decode_CosEventComm_PushConsumer_disconnect_push_consumer(tvbuff_t *tvb _U_, pac
 static void
 decode_CosEventComm_PushConsumer_push(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, proto_item *item _U_, int *offset _U_, MessageHeader *header, const char *operation _U_, bool stream_is_big_endian _U_)
 {
-    /* Operation specific Variable declarations Begin */
-    _U_ wmem_stack_t *tree_stack = wmem_stack_new(pinfo->pool);
-    _U_ int old_offset;
-    /* Operation specific Variable declarations End */
-
     switch(header->message_type) {
     case Request:
         get_CDR_any(tvb, pinfo, tree, item, offset, stream_is_big_endian, boundary, header);
@@ -397,7 +361,7 @@ dissect_coseventcomm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ptree, int *
 {
     proto_item *item _U_;
     proto_tree *tree _U_;
-    bool stream_is_big_endian = is_big_endian(header); /* get endianness */
+    bool stream_is_big_endian = is_big_endian(header); /* get endianess */
 
     /* If we have a USER Exception, then decode it and return */
     if ((header->message_type == Reply) && (header->rep_status == USER_EXCEPTION)) {

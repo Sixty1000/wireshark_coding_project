@@ -17,11 +17,13 @@
 
 #include <wiretap/tnef.h>
 
-#include <wsutil/ws_padding_to.h>
-
 #include "packet-dcerpc.h"
 #include "packet-dcerpc-nspi.h"
 #include "packet-ber.h"
+
+#define PNAME  "Transport-Neutral Encapsulation Format"
+#define PSNAME "TNEF"
+#define PFNAME "tnef"
 
 #define ATP_TRIPLES   (0x0000)
 #define ATP_STRING    (0x0001)
@@ -233,7 +235,8 @@ static int dissect_counted_values(tvbuff_t *tvb, int offset, int hf_id,  packet_
   proto_item *item;
   uint32_t    length, count, i;
 
-  proto_tree_add_item_ret_uint(tree, hf_tnef_values_count, tvb, offset, 4, ENC_LITTLE_ENDIAN, &count);
+  count = tvb_get_letohl(tvb, offset);
+  proto_tree_add_item(tree, hf_tnef_values_count, tvb, offset, 4, ENC_LITTLE_ENDIAN);
 
   if(count > 1) {
     if(single) {
@@ -247,7 +250,8 @@ static int dissect_counted_values(tvbuff_t *tvb, int offset, int hf_id,  packet_
 
   for(i = 0; i < count; i++) {
 
-    proto_tree_add_item_ret_uint(tree, hf_tnef_value_length, tvb, offset, 4, ENC_LITTLE_ENDIAN, &length);
+    length = tvb_get_letohl(tvb, offset);
+    proto_tree_add_item(tree, hf_tnef_value_length, tvb, offset, 4, ENC_LITTLE_ENDIAN);
     offset += 4;
 
     proto_tree_add_item(tree, hf_id, tvb, offset, length, encoding);
@@ -262,15 +266,17 @@ static int dissect_counted_values(tvbuff_t *tvb, int offset, int hf_id,  packet_
 
 static int dissect_counted_address(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree)
 {
-  uint32_t length;
+  uint16_t length;
 
-  proto_tree_add_item_ret_uint(tree, hf_tnef_value_length, tvb, offset, 2, ENC_LITTLE_ENDIAN, &length);
+  length = tvb_get_letohs(tvb, offset);
+  proto_tree_add_item(tree, hf_tnef_value_length, tvb, offset, 2, ENC_LITTLE_ENDIAN);
   offset += 2;
 
   proto_tree_add_item(tree, hf_tnef_attribute_display_name, tvb, offset, length, ENC_ASCII);
   offset += length;
 
-  proto_tree_add_item_ret_uint(tree, hf_tnef_value_length, tvb, offset, 2, ENC_LITTLE_ENDIAN, &length);
+  length = tvb_get_letohs(tvb, offset);
+  proto_tree_add_item(tree, hf_tnef_value_length, tvb, offset, 2, ENC_LITTLE_ENDIAN);
   offset += 2;
 
   proto_tree_add_item(tree, hf_tnef_attribute_email_address, tvb, offset, length, ENC_ASCII);
@@ -348,7 +354,7 @@ static void dissect_mapiprops(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
 
     /* add a nice name to the property */
     tag = tvb_get_letohl(tvb, offset);
-    proto_item_append_text(prop_item, " %s", val_to_str(pinfo->pool, tag, nspi_MAPITAGS_vals, "Unknown tag (0x%08lx)"));
+    proto_item_append_text(prop_item, " %s", val_to_str(tag, nspi_MAPITAGS_vals, "Unknown tag (0x%08lx)"));
 
     proto_tree_add_item(tag_tree, hf_tnef_property_tag_type, tvb, offset, 2, ENC_LITTLE_ENDIAN);
     offset += 2;
@@ -363,21 +369,23 @@ static void dissect_mapiprops(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
       proto_tree_add_item(tag_tree, hf_tnef_property_tag_set, tvb, offset, 16, ENC_LITTLE_ENDIAN);
       offset += 16;
 
-      proto_tree_add_item_ret_uint(tag_tree, hf_tnef_property_tag_kind, tvb, offset, 4, ENC_LITTLE_ENDIAN, &tag_kind);
+      tag_kind = tvb_get_letohl(tvb, offset);
+      proto_tree_add_item(tag_tree, hf_tnef_property_tag_kind, tvb, offset, 4, ENC_LITTLE_ENDIAN);
       offset += 4;
 
       if(tag_kind == 0) {
         proto_tree_add_item(tag_tree, hf_tnef_property_tag_name_id, tvb, offset, 4, ENC_LITTLE_ENDIAN);
         offset += 4;
       } else {
-        proto_tree_add_item_ret_uint(tag_tree, hf_tnef_property_tag_name_length, tvb, offset, 4, ENC_LITTLE_ENDIAN, &tag_length);
+        tag_length = tvb_get_letohl(tvb, offset);
+        proto_tree_add_item(tag_tree, hf_tnef_property_tag_name_length, tvb, offset, 4, ENC_LITTLE_ENDIAN);
         offset += 4;
 
         proto_tree_add_item_ret_string(tag_tree, hf_tnef_property_tag_name_string, tvb, offset, tag_length,
           ENC_UTF_16|ENC_LITTLE_ENDIAN, pinfo->pool, &name_string);
         offset += tag_length;
 
-        if((padding = WS_PADDING_TO_4(tag_length)) != 0) {
+        if((padding = (4 - tag_length % 4)) != 4) {
           proto_tree_add_item(tag_tree, hf_tnef_property_padding, tvb, offset, padding, ENC_NA);
           offset += padding;
         }
@@ -451,7 +459,7 @@ static void dissect_mapiprops(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
     }
 
     /* we may need to pad to a 4-byte boundary */
-    if((padding = WS_PADDING_TO_4(offset - start_offset)) != 0) {
+    if((padding = (4 - (offset - start_offset) % 4)) != 4) {
 
       /* we need to pad */
       proto_tree_add_item(prop_tree, hf_tnef_property_padding, tvb, offset, padding, ENC_NA);
@@ -482,7 +490,8 @@ static int dissect_tnef(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
   offset = 0;
 
   /* first the signature */
-  item = proto_tree_add_item_ret_uint(tree, hf_tnef_signature, tvb, offset, 4, ENC_LITTLE_ENDIAN, &signature);
+  signature = tvb_get_letohl(tvb, offset);
+  item = proto_tree_add_item(tree, hf_tnef_signature, tvb, offset, 4, ENC_LITTLE_ENDIAN);
   offset += 4;
 
   /* check the signature */
@@ -516,7 +525,7 @@ static int dissect_tnef(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 
     /* add a nice name to the property */
     tag = tvb_get_letohl(tvb, offset);
-    proto_item_append_text(attr_item, " %s", val_to_str(pinfo->pool, tag, tnef_Attribute_vals, "Unknown tag (0x%08lx)"));
+    proto_item_append_text(attr_item, " %s", val_to_str(tag, tnef_Attribute_vals, "Unknown tag (0x%08lx)"));
 
     proto_tree_add_item(tag_tree, hf_tnef_attribute_tag_id, tvb, offset, 2, ENC_LITTLE_ENDIAN);
     offset += 2;
@@ -525,7 +534,8 @@ static int dissect_tnef(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
     /* remember the type for the value dissection */
     offset += 2;
 
-    proto_tree_add_item_ret_uint(attr_tree, hf_tnef_attribute_length, tvb, offset, 4, ENC_LITTLE_ENDIAN, &length);
+    length = tvb_get_letohl(tvb, offset);
+    proto_tree_add_item(attr_tree, hf_tnef_attribute_length, tvb, offset, 4, ENC_LITTLE_ENDIAN);
     offset += 4;
 
     switch(tag) {
@@ -623,11 +633,11 @@ static int dissect_tnef(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 
 static int dissect_tnef_file(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-  col_set_str(pinfo->cinfo, COL_PROTOCOL, "TNEF");
+  col_set_str(pinfo->cinfo, COL_PROTOCOL, PSNAME);
 
-  col_set_str(pinfo->cinfo, COL_DEF_SRC, "TNEF encoded file");
+  col_set_str(pinfo->cinfo, COL_DEF_SRC, PSNAME " encoded file");
 
-  col_append_str(pinfo->cinfo, COL_INFO, "Transport-Neutral Encapsulation Format");
+  col_append_str(pinfo->cinfo, COL_INFO, PNAME);
 
   dissect_tnef(tvb, pinfo, tree, NULL);
   return tvb_captured_length(tvb);
@@ -811,7 +821,7 @@ proto_register_tnef(void)
 
   expert_module_t* expert_tnef;
 
-  proto_tnef = proto_register_protocol("Transport-Neutral Encapsulation Format", "TNEF", "tnef");
+  proto_tnef = proto_register_protocol(PNAME, PSNAME, PFNAME);
 
   proto_register_field_array(proto_tnef, hf, array_length(hf));
   proto_register_subtree_array(ett, array_length(ett));
@@ -819,7 +829,7 @@ proto_register_tnef(void)
   expert_register_field_array(expert_tnef, ei, array_length(ei));
 
   /* Allow dissector to find be found by name. */
-  tnef_handle = register_dissector("tnef", dissect_tnef, proto_tnef);
+  tnef_handle = register_dissector(PFNAME, dissect_tnef, proto_tnef);
 
 }
 

@@ -14,8 +14,6 @@
 #include <epan/packet.h>
 #include <epan/conversation.h>
 #include <epan/expert.h>
-#include <epan/tfs.h>
-#include <wsutil/array.h>
 
 void proto_register_sbus(void);
 void proto_reg_handoff_sbus(void);
@@ -1056,7 +1054,7 @@ dissect_sbus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
                                                         }
                                                         sbus_quint8_helper0 += 1;
                                                 }
-                                                tmp_string = (char*)tvb_get_string_enc(pinfo->pool, tvb , 19,
+                                                tmp_string = tvb_get_string_enc(pinfo->pool, tvb , 19,
                                                                                         sbus_quint8_helper0, ENC_ASCII);
                                                 col_append_fstr(pinfo->cinfo, COL_INFO,
                                                                 ": (File: %s)", tmp_string);
@@ -1073,7 +1071,7 @@ dissect_sbus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
                                                         }
                                                         sbus_quint8_helper0 += 1;
                                                 }
-                                                tmp_string = (char*)tvb_get_string_enc(pinfo->pool, tvb , 15,
+                                                tmp_string = tvb_get_string_enc(pinfo->pool, tvb , 15,
                                                                                         sbus_quint8_helper0, ENC_ASCII);
                                                 col_append_fstr(pinfo->cinfo, COL_INFO,
                                                                 ": (File: %s)", tmp_string);
@@ -1189,8 +1187,9 @@ dissect_sbus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
               offset += 2;
 
 /* Continue adding stuff to the main tree*/
-              proto_tree_add_item_ret_uint8(sbus_tree,
-                                            hf_sbus_attribut, tvb, offset, 1, ENC_BIG_ENDIAN, &sbus_attribut);
+              sbus_attribut = tvb_get_uint8(tvb,offset);
+              proto_tree_add_item(sbus_tree,
+                                  hf_sbus_attribut, tvb, offset, 1, ENC_BIG_ENDIAN);
               offset += 1;
 
               if (sbus_attribut == SBUS_REQUEST) {
@@ -1474,7 +1473,7 @@ dissect_sbus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
                                                                }
                                                                sbus_quint8_helper0 += 1;
                                                         }
-                                                        tmp_string = (char*)tvb_get_string_enc(pinfo->pool, tvb , 19, sbus_quint8_helper0, ENC_ASCII);
+                                                        tmp_string = tvb_get_string_enc(pinfo->pool, tvb , 19, sbus_quint8_helper0, ENC_ASCII);
                                                         proto_tree_add_string(sbus_tree,
                                                                               hf_sbus_rdwr_file_name, tvb, offset,
                                                                               sbus_quint8_helper0, tmp_string);
@@ -1539,7 +1538,7 @@ dissect_sbus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
                                                                }
                                                                sbus_quint8_helper0 += 1;
                                                         }
-                                                        tmp_string = (char*)tvb_get_string_enc(pinfo->pool, tvb, 19, sbus_quint8_helper0, ENC_ASCII);
+                                                        tmp_string = tvb_get_string_enc(pinfo->pool, tvb, 19, sbus_quint8_helper0, ENC_ASCII);
                                                         proto_tree_add_string(sbus_tree,
                                                                               hf_sbus_rdwr_file_name, tvb, offset,
                                                                               sbus_quint8_helper0, tmp_string);
@@ -1581,7 +1580,7 @@ dissect_sbus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
                                                                }
                                                                sbus_quint8_helper0 += 1;
                                                         }
-                                                        tmp_string = (char*)tvb_get_string_enc(pinfo->pool, tvb, 14, sbus_quint8_helper0, ENC_ASCII);
+                                                        tmp_string = tvb_get_string_enc(pinfo->pool, tvb, 14, sbus_quint8_helper0, ENC_ASCII);
                                                         proto_tree_add_string(sbus_tree,
                                                                               hf_sbus_rdwr_file_name, tvb, offset,
                                                                               sbus_quint8_helper0, tmp_string);
@@ -1625,7 +1624,7 @@ dissect_sbus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
                                                                }
                                                                sbus_quint8_helper0 += 1;
                                                         }
-                                                        tmp_string = (char*)tvb_get_string_enc(pinfo->pool, tvb, 22, sbus_quint8_helper0, ENC_ASCII);
+                                                        tmp_string = tvb_get_string_enc(pinfo->pool, tvb, 22, sbus_quint8_helper0, ENC_ASCII);
                                                         proto_tree_add_string(sbus_tree,
                                                                               hf_sbus_rdwr_file_name, tvb, offset,
                                                                               sbus_quint8_helper0, tmp_string);
@@ -1664,7 +1663,7 @@ dissect_sbus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
                                                                }
                                                                sbus_quint8_helper0 += 1;
                                                         }
-                                                        tmp_string = (char*)tvb_get_string_enc(pinfo->pool, tvb, 14, sbus_quint8_helper0, ENC_ASCII);
+                                                        tmp_string = tvb_get_string_enc(pinfo->pool, tvb, 14, sbus_quint8_helper0, ENC_ASCII);
                                                         proto_tree_add_string(sbus_tree,
                                                                               hf_sbus_rdwr_file_name, tvb, offset,
                                                                               sbus_quint8_helper0, tmp_string);
@@ -2533,13 +2532,13 @@ proto_register_sbus(void)
 
               { &hf_sbus_response_in,
                      { "Response in frame nr.", "sbus.response_in",
-                     FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_RESPONSE), 0x0,
+                     FT_FRAMENUM, BASE_NONE, NULL, 0x0,
                      "The response to this Ether-S-Bus request is in this frame", HFILL }
               },
 
               { &hf_sbus_response_to,
                      { "Request in frame nr.", "sbus.response_to",
-                     FT_FRAMENUM, BASE_NONE, FRAMENUM_TYPE(FT_FRAMENUM_REQUEST), 0x0,
+                     FT_FRAMENUM, BASE_NONE, NULL, 0x0,
                      "This is a response to the Ether-S-Bus request in this frame", HFILL }
               },
 

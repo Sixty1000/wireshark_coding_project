@@ -24,6 +24,10 @@
 #include "packet-pkix1explicit.h"
 #include "packet-pkix1implicit.h"
 
+#define PNAME  "NIST_CSOR"
+#define PSNAME "NIST_CSOR"
+#define PFNAME "nist_csor"
+
 void proto_register_nist_csor(void);
 void proto_reg_handoff_nist_csor(void);
 
@@ -39,20 +43,20 @@ static int hf_nist_csor_numberOfBits;             /* NumberOfBits */
 static int ett_nist_csor_CFBParameters;
 
 
-unsigned
-dissect_nist_csor_AES_IV(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  offset = dissect_ber_constrained_octet_string(implicit_tag, actx, tree, tvb, offset,
-                                                   16, 16, hf_index, NULL);
+int
+dissect_nist_csor_AES_IV(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  offset = dissect_ber_octet_string(implicit_tag, actx, tree, tvb, offset, hf_index,
+                                       NULL);
 
   return offset;
 }
 
 
 
-unsigned
-dissect_nist_csor_NumberOfBits(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  offset = dissect_ber_constrained_integer(implicit_tag, actx, tree, tvb, offset,
-                                                            1U, 128U, hf_index, NULL);
+int
+dissect_nist_csor_NumberOfBits(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
+                                                NULL);
 
   return offset;
 }
@@ -64,8 +68,8 @@ static const ber_sequence_t CFBParameters_sequence[] = {
   { NULL, 0, 0, 0, NULL }
 };
 
-unsigned
-dissect_nist_csor_CFBParameters(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+int
+dissect_nist_csor_CFBParameters(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    CFBParameters_sequence, hf_index, ett_nist_csor_CFBParameters);
 
@@ -74,8 +78,8 @@ dissect_nist_csor_CFBParameters(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsign
 
 
 
-unsigned
-dissect_nist_csor_ShakeOutputLen(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+int
+dissect_nist_csor_ShakeOutputLen(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 NULL);
 
@@ -85,21 +89,21 @@ dissect_nist_csor_ShakeOutputLen(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsig
 /*--- PDUs ---*/
 
 static int dissect_CFBParameters_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_nist_csor_CFBParameters(false, tvb, offset, &asn1_ctx, tree, hf_nist_csor_CFBParameters_PDU);
   return offset;
 }
 static int dissect_AES_IV_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_nist_csor_AES_IV(false, tvb, offset, &asn1_ctx, tree, hf_nist_csor_AES_IV_PDU);
   return offset;
 }
 static int dissect_ShakeOutputLen_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
+  int offset = 0;
   asn1_ctx_t asn1_ctx;
   asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
   offset = dissect_nist_csor_ShakeOutputLen(false, tvb, offset, &asn1_ctx, tree, hf_nist_csor_ShakeOutputLen_PDU);
@@ -141,7 +145,7 @@ void proto_register_nist_csor(void) {
   };
 
   /* Register protocol */
-  proto_nist_csor = proto_register_protocol("NIST_CSOR", "NIST_CSOR", "nist_csor");
+  proto_nist_csor = proto_register_protocol(PNAME, PSNAME, PFNAME);
 
   /* Register fields and subtrees */
   proto_register_field_array(proto_nist_csor, hf, array_length(hf));

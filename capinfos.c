@@ -51,7 +51,6 @@
 #include <locale.h>
 
 #include <ws_exit_codes.h>
-#include <wsutil/clopts_common.h>
 #include <wsutil/ws_getopt.h>
 
 #include <glib.h>
@@ -60,17 +59,16 @@
 
 #include <wsutil/cmdarg_err.h>
 #include <wsutil/filesystem.h>
-#include <app/application_flavor.h>
-#include <wsutil/file_compressed.h>
 #include <wsutil/privileges.h>
+#include <cli_main.h>
 #include <wsutil/version_info.h>
-#include <wsutil/report_message.h>
 #include <wiretap/wtap_opttypes.h>
 
 #ifdef HAVE_PLUGINS
 #include <wsutil/plugins.h>
 #endif
 
+#include <wsutil/report_message.h>
 #include <wsutil/str_util.h>
 #include <wsutil/to_str.h>
 #include <wsutil/file_util.h>
@@ -177,15 +175,15 @@ typedef enum {
 } order_t;
 
 typedef struct _pkt_cmt {
-    uint32_t recno;
-    char *cmt;
-    struct _pkt_cmt *next;
+  int recno;
+  char *cmt;
+  struct _pkt_cmt *next;
 } pkt_cmt;
 
 typedef struct _capture_info {
     const char           *filename;
     uint16_t              file_type;
-    ws_compression_type   compression_type;
+    wtap_compression_type compression_type;
     int                   file_encap;
     int                   file_tsprec;
     wtap                 *wth;
@@ -361,7 +359,7 @@ relative_time_string(nstime_t *timer, int tsprecision, capture_info *cf_info, bo
      * unsigned, 2^64-1 is 18446744073709551615, so the buffer has
      * to be big enough for "18446744073709551615.999999999 seconds".
      * That's 20+1+9+1+7+1, including the terminating '\0', or 39.
-     * If it's signed, 2^63 is 9223372036854775808, so the buffer has to
+     * If it'ssigned, 2^63 is 9223372036854775808, so the buffer has to
      * be big enough for "-9223372036854775808.999999999 seconds",
      * which is again 20+1+9+1+7+1, or 39.
      */
@@ -470,7 +468,7 @@ print_stats(const char *filename, capture_info *cf_info)
 {
     const char           *file_type_string, *file_encap_string;
     char                 *size_string;
-    pkt_cmt              *p, *prev;
+    pkt_cmt               *p, *prev;
 
     /* Build printable strings for various stats */
     if (machine_readable) {
@@ -485,7 +483,7 @@ print_stats(const char *filename, capture_info *cf_info)
     if (filename)           printf     ("File name:           %s\n", filename);
     if (cap_file_type) {
         const char *compression_type_description;
-        compression_type_description = ws_compression_type_description(cf_info->compression_type);
+        compression_type_description = wtap_compression_type_description(cf_info->compression_type);
         if (compression_type_description == NULL)
             printf     ("File type:           %s\n",
                     file_type_string);
@@ -629,47 +627,44 @@ print_stats(const char *filename, capture_info *cf_info)
                     show_option_string("Capture comment:     ", str);
                 }
             }
-        }
-    }
 
-    if (pkt_comments && cf_info->pkt_cmts != NULL) {
-        for (p = cf_info->pkt_cmts; p != NULL; prev = p, p = p->next, g_free(prev)) {
-            if (machine_readable){
-                char *escaped_cmt = g_strescape(p->cmt, NULL);
-                printf("Packet %u Comment:    %s\n", p->recno, escaped_cmt);
-                g_free(escaped_cmt);
-            } else {
-                printf("Packet %u Comment:    %s\n", p->recno, p->cmt);
+            if (pkt_comments && cf_info->pkt_cmts != NULL) {
+              for (p = cf_info->pkt_cmts; p != NULL; prev = p, p = p->next, g_free(prev)) {
+                if (machine_readable){
+                  printf("Packet %d Comment:    %s\n", p->recno, g_strescape(p->cmt, NULL));
+                } else {
+                  printf("Packet %d Comment:    %s\n", p->recno, p->cmt);
+                }
+                g_free(p->cmt);
+              }
             }
-            g_free(p->cmt);
-        }
-        cf_info->pkt_cmts = NULL;
-    }
 
-    if (cap_file_idb && cf_info->num_interfaces != 0) {
-        unsigned int i;
-        ws_assert(cf_info->num_interfaces == cf_info->idb_info_strings->len);
-        printf     ("Number of interfaces in file: %u\n", cf_info->num_interfaces);
-        for (i = 0; i < cf_info->idb_info_strings->len; i++) {
-            char *s = g_array_index(cf_info->idb_info_strings, char*, i);
-            uint32_t packet_count = 0;
-            if (i < cf_info->interface_packet_counts->len)
-                packet_count = g_array_index(cf_info->interface_packet_counts, uint32_t, i);
-            printf   ("Interface #%u info:\n", i);
-            printf   ("%s", s);
-            printf   ("                     Number of packets = %u\n", packet_count);
+            if (cap_file_idb && cf_info->num_interfaces != 0) {
+                unsigned int i;
+                ws_assert(cf_info->num_interfaces == cf_info->idb_info_strings->len);
+                printf     ("Number of interfaces in file: %u\n", cf_info->num_interfaces);
+                for (i = 0; i < cf_info->idb_info_strings->len; i++) {
+                    char *s = g_array_index(cf_info->idb_info_strings, char*, i);
+                    uint32_t packet_count = 0;
+                    if (i < cf_info->interface_packet_counts->len)
+                        packet_count = g_array_index(cf_info->interface_packet_counts, uint32_t, i);
+                    printf   ("Interface #%u info:\n", i);
+                    printf   ("%s", s);
+                    printf   ("                     Number of packets = %u\n", packet_count);
+                }
+            }
         }
-    }
 
-    if (cap_file_nrb) {
-        if (num_ipv4_addresses != 0)
-            printf   ("Number of resolved IPv4 addresses in file: %u\n", num_ipv4_addresses);
-        if (num_ipv6_addresses != 0)
-            printf   ("Number of resolved IPv6 addresses in file: %u\n", num_ipv6_addresses);
-    }
-    if (cap_file_dsb) {
-        if (num_decryption_secrets != 0)
-            printf   ("Number of decryption secrets in file: %u\n", num_decryption_secrets);
+        if (cap_file_nrb) {
+            if (num_ipv4_addresses != 0)
+                printf   ("Number of resolved IPv4 addresses in file: %u\n", num_ipv4_addresses);
+            if (num_ipv6_addresses != 0)
+                printf   ("Number of resolved IPv6 addresses in file: %u\n", num_ipv6_addresses);
+        }
+        if (cap_file_dsb) {
+            if (num_decryption_secrets != 0)
+                printf   ("Number of decryption secrets in file: %u\n", num_decryption_secrets);
+        }
     }
 }
 
@@ -685,16 +680,12 @@ putquote(void)
     if (quote_char) putchar(quote_char);
 }
 
-static void G_GNUC_PRINTF(1, 2)
-print_stats_table_header_label(const char *fmt, ...)
+static void
+print_stats_table_header_label(const char *label)
 {
-    va_list ap;
-
     putsep();
     putquote();
-    va_start(ap, fmt);
-    vprintf(fmt, ap);
-    va_end(ap);
+    printf("%s", label);
     putquote();
 }
 
@@ -738,9 +729,17 @@ print_stats_table_header(capture_info *cf_info)
     if (cap_comment)        print_stats_table_header_label("Capture comment");
 
     if (pkt_comments && cf_info->pkt_cmts != NULL) {
+        char    *buf;
+        size_t   buf_len;
+        /* Packet 2^64 Comment" + NULL */
+        buf_len = strlen("Packet 18446744073709551616 Comment") + 1;
+        buf = (char *)g_malloc0(buf_len);
+
         for (p = cf_info->pkt_cmts; p != NULL; p = p->next) {
-            print_stats_table_header_label("Packet %u Comment", p->recno);
+            snprintf(buf, buf_len, "Packet %d Comment", p->recno);
+            print_stats_table_header_label(buf);
         }
+        g_free(buf);
     }
 
     printf("\n");
@@ -970,11 +969,9 @@ print_stats_table(const char *filename, capture_info *cf_info)
                 putsep();
                 putquote();
                 if (machine_readable){
-                    opt_comment = g_strescape(opt_comment, NULL);
-                    printf("%s", opt_comment);
-                    g_free(opt_comment);
+                  printf("%s", g_strescape(opt_comment, NULL));
                 } else {
-                    printf("%s", opt_comment);
+                  printf("%s", opt_comment);
                 }
                 putquote();
             }
@@ -989,20 +986,17 @@ print_stats_table(const char *filename, capture_info *cf_info)
     }
 
     if (pkt_comments && cf_info->pkt_cmts != NULL) {
-        for(p = cf_info->pkt_cmts; p != NULL; prev = p, p = p->next, g_free(prev)) {
-            putsep();
-            putquote();
-            if (machine_readable) {
-                char *escaped_cmt = g_strescape(p->cmt, NULL);
-                printf("%s", escaped_cmt);
-                g_free(escaped_cmt);
-            } else {
-                printf("%s", p->cmt);
-            }
-            g_free(p->cmt);
-            putquote();
+      for(p = cf_info->pkt_cmts; p != NULL; prev = p, p = p->next, g_free(prev)) {
+        putsep();
+        putquote();
+        if (machine_readable) {
+          printf("%s", g_strescape(p->cmt, NULL));
+        } else {
+          printf("%s", p->cmt);
         }
-        cf_info->pkt_cmts = NULL;
+        g_free(p->cmt);
+        putquote();
+      }
     }
 
     printf("\n");
@@ -1011,7 +1005,6 @@ print_stats_table(const char *filename, capture_info *cf_info)
 static void
 cleanup_capture_info(capture_info *cf_info)
 {
-    pkt_cmt *p, *prev;
     unsigned int i;
     ws_assert(cf_info != NULL);
 
@@ -1029,11 +1022,6 @@ cleanup_capture_info(capture_info *cf_info)
         g_array_free(cf_info->idb_info_strings, true);
     }
     cf_info->idb_info_strings = NULL;
-
-    for(p = cf_info->pkt_cmts; p != NULL; prev = p, p = p->next, g_free(prev)) {
-        g_free(p->cmt);
-    }
-    cf_info->pkt_cmts = NULL;
 }
 
 static void
@@ -1043,7 +1031,7 @@ count_ipv4_address(const unsigned int addr _U_, const char *name _U_, const bool
 }
 
 static void
-count_ipv6_address(const ws_in6_addr *addrp _U_, const char *name _U_, const bool static_entry _U_)
+count_ipv6_address(const void *addrp _U_, const char *name _U_, const bool static_entry _U_)
 {
     num_ipv6_addresses++;
 }
@@ -1104,6 +1092,7 @@ process_cap_file(const char *filename, bool need_separator)
     uint32_t              snaplen_min_inferred = 0xffffffff;
     uint32_t              snaplen_max_inferred =          0;
     wtap_rec              rec;
+    Buffer                buf;
     capture_info          cf_info;
     bool                  have_times = true;
     nstime_t              earliest_packet_time;
@@ -1119,9 +1108,9 @@ process_cap_file(const char *filename, bool need_separator)
 
     pkt_cmt *pc = NULL, *prev = NULL;
 
-    cf_info.wth = wtap_open_offline(filename, WTAP_TYPE_AUTO, &err, &err_info, false, application_configuration_environment_prefix());
+    cf_info.wth = wtap_open_offline(filename, WTAP_TYPE_AUTO, &err, &err_info, false);
     if (!cf_info.wth) {
-        report_cfile_open_failure(filename, err, err_info);
+        cfile_open_failure_message(filename, err, err_info);
         return 2;
     }
 
@@ -1170,8 +1159,9 @@ process_cap_file(const char *filename, bool need_separator)
     wtap_set_cb_new_secrets(cf_info.wth, count_decryption_secret);
 
     /* Tally up data that we need to parse through the file to find */
-    wtap_rec_init(&rec, DEFAULT_INIT_BUFFER_SIZE_2048);
-    while (wtap_read(cf_info.wth, &rec, &err, &err_info, &data_offset))  {
+    wtap_rec_init(&rec);
+    ws_buffer_init(&buf, 1514);
+    while (wtap_read(cf_info.wth, &rec, &buf, &err, &err_info, &data_offset))  {
         if (rec.presence_flags & WTAP_HAS_TS) {
             prev_time = cur_time;
             cur_time = rec.ts;
@@ -1204,21 +1194,21 @@ process_cap_file(const char *filename, bool need_separator)
             packet++;
             /* packet comments */
             if (pkt_comments && wtap_block_count_option(rec.block, OPT_COMMENT) > 0) {
-                char *cmt_buff;
-                for (i = 0; wtap_block_get_nth_string_option_value(rec.block, OPT_COMMENT, i, &cmt_buff) == WTAP_OPTTYPE_SUCCESS; i++) {
-                    pc = g_new0(pkt_cmt, 1);
+              char *cmt_buff;
+              for (i = 0; wtap_block_get_nth_string_option_value(rec.block, OPT_COMMENT, i, &cmt_buff) == WTAP_OPTTYPE_SUCCESS; i++) {
+                pc = g_new0(pkt_cmt, 1);
 
-                    pc->recno = packet;
-                    pc->cmt = g_strdup(cmt_buff);
-                    pc->next = NULL;
+                pc->recno = packet;
+                pc->cmt = g_strdup(cmt_buff);
+                pc->next = NULL;
 
-                    if (prev == NULL)
-                        cf_info.pkt_cmts = pc;
-                    else
-                        prev->next = pc;
+                if (prev == NULL)
+                  cf_info.pkt_cmts = pc;
+                else
+                  prev->next = pc;
 
-                    prev = pc;
-                }
+                prev = pc;
+              }
             }
 
             /* If caplen < len for a rcd, then presumably           */
@@ -1277,8 +1267,10 @@ process_cap_file(const char *filename, bool need_separator)
             }
         }
 
+        wtap_rec_reset(&rec);
     } /* while */
     wtap_rec_cleanup(&rec);
+    ws_buffer_free(&buf);
 
     /*
      * Get IDB info strings.
@@ -1304,7 +1296,7 @@ process_cap_file(const char *filename, bool need_separator)
         fprintf(stderr,
                 "capinfos: An error occurred after reading %u packets from \"%s\".\n",
                 packet, filename);
-        report_cfile_read_failure(filename, err, err_info);
+        cfile_read_failure_message(filename, err, err_info);
         if (err == WTAP_ERR_SHORT_READ) {
             /* Don't give up completely with this one. */
             status = 1;
@@ -1469,29 +1461,53 @@ print_usage(FILE *output)
     fprintf(output, "output format.\n");
 }
 
+/*
+ * Report an error in command-line arguments.
+ */
+static void
+capinfos_cmdarg_err(const char *msg_format, va_list ap)
+{
+    fprintf(stderr, "capinfos: ");
+    vfprintf(stderr, msg_format, ap);
+    fprintf(stderr, "\n");
+}
+
+/*
+ * Report additional information for an error in command-line arguments.
+ */
+static void
+capinfos_cmdarg_err_cont(const char *msg_format, va_list ap)
+{
+    vfprintf(stderr, msg_format, ap);
+    fprintf(stderr, "\n");
+}
+
 int
 main(int argc, char *argv[])
 {
     char  *configuration_init_error;
+    static const struct report_message_routines capinfos_report_routines = {
+        failure_message,
+        failure_message,
+        open_failure_message,
+        read_failure_message,
+        write_failure_message,
+        cfile_open_failure_message,
+        cfile_dump_open_failure_message,
+        cfile_read_failure_message,
+        cfile_write_failure_message,
+        cfile_close_failure_message
+    };
     bool need_separator = false;
     int    opt;
     int    overall_error_status = EXIT_SUCCESS;
     static const struct ws_option long_options[] = {
         {"help", ws_no_argument, NULL, 'h'},
         {"version", ws_no_argument, NULL, 'v'},
-        LONGOPT_WSLOG
         {0, 0, 0, 0 }
     };
-    const struct file_extension_info* file_extensions;
-    unsigned num_extensions;
-
-#define OPTSTRING "abcdehiklmnopqrstuvxyzABCDEFHIKLMNPQRST"
-    static const char optstring[] = OPTSTRING;
 
     int status = 0;
-
-    /* Set the program name. */
-    g_set_prgname("capinfos");
 
     /*
      * Set the C-language locale to the native environment and set the
@@ -1503,18 +1519,21 @@ main(int argc, char *argv[])
     setlocale(LC_ALL, "");
 #endif
 
-    cmdarg_err_init(stderr_cmdarg_err, stderr_cmdarg_err_cont);
+    cmdarg_err_init(capinfos_cmdarg_err, capinfos_cmdarg_err_cont);
 
     /* Initialize log handler early so we can have proper logging during startup. */
-    ws_log_init(vcmdarg_err, "Capinfos Debug Console");
+    ws_log_init("capinfos", vcmdarg_err);
 
     /* Early logging command-line initialization. */
-    ws_log_parse_args(&argc, argv, optstring, long_options, vcmdarg_err, WS_EXIT_INVALID_OPTION);
+    ws_log_parse_args(&argc, argv, vcmdarg_err, WS_EXIT_INVALID_OPTION);
 
     ws_noisy("Finished log init and parsing command line log arguments");
 
     /* Get the decimal point. */
     decimal_point = g_strdup(localeconv()->decimal_point);
+
+    /* Initialize the version information. */
+    ws_init_version_info("Capinfos", NULL, NULL);
 
 #ifdef _WIN32
     create_app_running_mutex();
@@ -1529,7 +1548,7 @@ main(int argc, char *argv[])
      * Attempt to get the pathname of the directory containing the
      * executable file.
      */
-    configuration_init_error = configuration_init(argv[0], "wireshark");
+    configuration_init_error = configuration_init(argv[0], NULL);
     if (configuration_init_error != NULL) {
         fprintf(stderr,
                 "capinfos: Can't get pathname of directory containing the capinfos program: %s.\n",
@@ -1537,16 +1556,12 @@ main(int argc, char *argv[])
         g_free(configuration_init_error);
     }
 
-    /* Initialize the version information. */
-    ws_init_version_info("Capinfos", NULL, application_get_vcs_version_info, NULL, NULL);
+    init_report_message("capinfos", &capinfos_report_routines);
 
-    init_report_failure_message("capinfos");
-
-    application_file_extensions(&file_extensions, &num_extensions);
-    wtap_init(true, application_configuration_environment_prefix(), file_extensions, num_extensions);
+    wtap_init(true);
 
     /* Process the options */
-    while ((opt = ws_getopt_long(argc, argv, optstring, long_options, NULL)) !=-1) {
+    while ((opt = ws_getopt_long(argc, argv, "abcdehiklmnopqrstuvxyzABCDEFHIKLMNPQRST", long_options, NULL)) !=-1) {
 
         switch (opt) {
 

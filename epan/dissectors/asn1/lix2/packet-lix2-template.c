@@ -18,10 +18,10 @@
 #include <wsutil/array.h>
 
 #include "packet-ber.h"
-#include "packet-e164.h"
-#include "packet-e212.h"
-#include "packet-gsm_a_common.h"
-#include "packet-gtpv2.h"
+
+#define PNAME  "X2 xIRI payload"
+#define PSNAME "xIRI"
+#define PFNAME "xiri"
 
 void proto_reg_handoff_lix2(void);
 void proto_register_lix2(void);
@@ -33,7 +33,6 @@ static dissector_handle_t lix2_handle;
 
 #include "packet-lix2-hf.c"
 
-static int ett_lix2_eps_indicationflags;
 #include "packet-lix2-ett.c"
 
 #include "packet-lix2-fn.c"
@@ -48,12 +47,11 @@ void proto_register_lix2(void) {
 
   /* List of subtrees */
   static int *ett[] = {
-    &ett_lix2_eps_indicationflags,
 #include "packet-lix2-ettarr.c"
   };
 
   /* Register protocol */
-  proto_lix2 = proto_register_protocol("X2 xIRI payload", "xIRI", "xiri");
+  proto_lix2 = proto_register_protocol(PNAME, PSNAME, PFNAME);
 
   /* Register fields and subtrees */
   proto_register_field_array(proto_lix2, hf, array_length(hf));

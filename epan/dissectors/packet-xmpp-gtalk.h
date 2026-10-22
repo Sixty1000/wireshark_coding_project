@@ -1,4 +1,4 @@
-/* packet-xmpp-gtalk.h
+/* xmpp-gtalk.h
  *
  * Copyright 2011, Mariusz Okroj <okrojmariusz[]gmail.com>
  *

@@ -12,6 +12,7 @@
 
 #include <epan/packet.h>
 #include <epan/addr_resolv.h>
+#include <epan/ipproto.h>
 #include <epan/unit_strings.h>
 
 #include <wsutil/array.h>
@@ -20,7 +21,6 @@
 #include "packet-netmon.h"
 #include "packet-windows-common.h"
 #include "packet-ipv6.h"
-#include "packet-ip.h"
 
 void proto_register_message_analyzer(void);
 void proto_reg_handoff_message_analyzer(void);
@@ -310,7 +310,7 @@ dissect_ma_wfp_capture_v4_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 {
 	proto_item *ti;
 	proto_tree *wfp_tree;
-	unsigned offset = 0;
+	int offset = 0;
 	uint32_t ip_proto, payload_length;
 	tvbuff_t *next_tvb;
 
@@ -340,7 +340,7 @@ dissect_ma_wfp_capture_v4_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 
 	next_tvb = tvb_new_subset_remaining(tvb, offset);
 
-	if (!dissector_try_uint_with_data(ip_dissector_table, ip_proto, next_tvb, pinfo, tree, true, NULL)) {
+	if (!dissector_try_uint_new(ip_dissector_table, ip_proto, next_tvb, pinfo, tree, true, NULL)) {
 		call_data_dissector(next_tvb, pinfo, tree);
 	}
 
@@ -370,7 +370,7 @@ dissect_ma_wfp_capture_v6_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 {
 	proto_item *ti;
 	proto_tree *wfp_tree;
-	unsigned offset = 0;
+	int offset = 0;
 	uint32_t ip_proto, payload_length;
 	tvbuff_t *next_tvb;
 
@@ -400,7 +400,7 @@ dissect_ma_wfp_capture_v6_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 
 	proto_item_set_len(ti, offset);
 
-	if (!dissector_try_uint_with_data(ip_dissector_table, ip_proto, next_tvb, pinfo, tree, true, NULL)) {
+	if (!dissector_try_uint_new(ip_dissector_table, ip_proto, next_tvb, pinfo, tree, true, NULL)) {
 		call_data_dissector(next_tvb, pinfo, tree);
 	}
 
@@ -430,8 +430,8 @@ dissect_ma_wfp_capture_auth_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 {
 	proto_item *ti;
 	proto_tree *wfp_tree;
-	unsigned offset = 0, length;
-	uint32_t ip_proto;
+	int offset = 0;
+	uint32_t length, ip_proto;
 
 	ti = proto_tree_add_item(tree, proto, tvb, 0, -1, ENC_NA);
 	wfp_tree = proto_item_add_subtree(ti, ett_ma_wfp_capture_auth);
@@ -566,7 +566,7 @@ dissect_etw_wfp_capture(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 {
 	proto_item *ti, *generated;
 	proto_tree *etw_tree;
-	unsigned offset = 0;
+	int offset = 0;
 	struct netmon_provider_id_data *provider_id_data = (struct netmon_provider_id_data*)data;
 	unsigned length;
 
@@ -1013,7 +1013,7 @@ dissect_etw_ndis(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
 		proto_tree_add_item_ret_uint(etw_tree, hf_etw_ndis_oob_data_size, tvb, offset, 4, ENC_LITTLE_ENDIAN, &length);
 		offset += 4;
 
-		if (length == tvb_reported_length_remaining(tvb, offset))
+		if ((int)length == tvb_reported_length_remaining(tvb, offset))
 		{
 			oob_tree = proto_tree_add_subtree(etw_tree, tvb, offset, length, ett_etw_ndis_oob_data, NULL, "OOB Data");
 

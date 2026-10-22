@@ -80,20 +80,18 @@
 
 #define AMSPORT_NAMESIZE 31
 
-/**
- * @brief AMS (Automation Message Specification) port type identifiers.
- */
+/* Port types */
 typedef enum
 {
-    PORTTYPE_INVALID    = -1,   /**< Invalid or uninitialized port type */
-    PORTTYPE_ROUTER     = 0x00, /**< AMS router port */
-    PORTTYPE_R3PORT     = 0x01, /**< R3 port */
-    PORTTYPE_R0CTRLPORT = 0x02, /**< R0 control port */
-    PORTTYPE_R0TASKPORT = 0x03, /**< R0 task port */
-    PORTTYPE_R0IOPORT   = 0x04, /**< R0 I/O port */
-    PORTTYPE_TPPORT     = 0x05, /**< Transport protocol (TP) port */
-    PORTTYPE_MAXVAL     = 0xFF  /**< Maximum valid port type value; sentinel for range checks */
-} AMSPORT_TYPE;
+   PORTTYPE_INVALID    = -1,
+   PORTTYPE_ROUTER     = 0x00,
+   PORTTYPE_R3PORT     = 0x01,
+   PORTTYPE_R0CTRLPORT = 0x02,
+   PORTTYPE_R0TASKPORT = 0x03,
+   PORTTYPE_R0IOPORT   = 0x04,
+   PORTTYPE_TPPORT     = 0x05,
+   PORTTYPE_MAXVAL     = 0xFF
+}AMSPORT_TYPE;
 
 /* Command IDs */
 
@@ -659,67 +657,45 @@ typedef enum
 #define MACHINEIDENTRYDONTCARE 0xFF
 #define AMS_NETIDLEN           23
 
-/**
- * @brief AMS (Automation Message Specification) network identifier (6-byte address).
- */
 typedef struct AmsNetId_
 {
-    uint8_t b[6]; /**< Six octets of the AMS Net ID (e.g. 192.168.1.1.1.1). */
+   uint8_t b[6];
 } AmsNetId;
-
-/** @brief Wire-size of #AmsNetId in bytes. */
 #define AmsNetId_Len (int)sizeof(AmsNetId)
 
-
-/**
- * @brief Full AMS address consisting of a Net ID and a port number.
- */
 typedef struct AmsAddr_
 {
-    AmsNetId netId;  /**< AMS Net ID identifying the target device. */
-    uint16_t port;   /**< AMS port number identifying the service on the device. */
+   AmsNetId   netId;
+   uint16_t   port;
 } AmsAddr;
 
-
-/**
- * @brief Union providing dual interpretation of an AMS error or receive code.
- */
 typedef union ErrCodeUnion
 {
-    int32_t errCode; /**< AMS error code returned in a response. */
-    int32_t hRcv;    /**< Receive handle used to correlate responses to requests. */
+   int32_t errCode;
+   int32_t hRcv;
 } ErrCodeUnion;
 
-
-/**
- * @brief Union providing dual interpretation of the AMS user/invoke ID field.
- */
 typedef union tUserUnion
 {
-    int32_t hUser; /**< Opaque user handle for request/response correlation. */
-    struct
-    {
-        uint16_t fragmentNo; /**< Fragment sequence number within a multi-fragment transfer. */
-        uint16_t packetNo;   /**< Packet sequence number within the current session. */
-    } a;                     /**< Structured access to fragment and packet counters. */
+   int32_t hUser;
+   struct
+   {
+      uint16_t fragmentNo;
+      uint16_t packetNo;
+   } a;
 } UserUnion;
 
-
-/**
- * @brief AMS protocol header, common to all AMS commands.
- */
 typedef struct
 {
-    AmsAddr      target;          /**< AMS address of the target (destination) device. */
-    AmsAddr      sender;          /**< AMS address of the sender (source) device. */
-    uint16_t     cmdId;           /**< AMS command identifier (e.g. Read, Write, ReadWrite). */
-    uint16_t     stateFlags;      /**< AMS state flags (request/response, ADS state bits). */
-    uint32_t     cbData;          /**< Length in bytes of the data payload following this header. */
-    ErrCodeUnion anErrCodeUnion;  /**< Error code or receive handle for this message. */
-    UserUnion    aUserUnion;      /**< User/invoke ID or fragment/packet counters. */
-} AmsHead;
+   AmsAddr target;
+   AmsAddr sender;
+   uint16_t cmdId;
+   uint16_t stateFlags;
+   uint32_t cbData;
 
-/** @brief Wire-size of #AmsHead in bytes. */
+   ErrCodeUnion anErrCodeUnion;
+   UserUnion aUserUnion;
+} AmsHead;
 #define AmsHead_Len (int)sizeof(AmsHead)
 
 
@@ -738,12 +714,9 @@ typedef struct
 
 /*   AmsCmd */
 
-/**
- * @brief Represents a minimal AMS command message consisting solely of a standard AMS header.
- */
 typedef struct
 {
-    AmsHead head; /**< The AMS header containing routing, command, and length information for this command message. */
+   AmsHead head;
 } AmsCmd, *PAmsCmd;
 
 
@@ -852,44 +825,38 @@ typedef struct
 #define ADSIGRP_ECAT_VOE 0xF430
 
 
-/**
- * @brief Operational states of an ADS (Automation Device Specification) device.
- */
 typedef enum nAdsState
 {
-    ADSSTATE_INVALID      =  0,  /**< Invalid or uninitialized state */
-    ADSSTATE_IDLE         =  1,  /**< Device is idle; no task is being executed */
-    ADSSTATE_RESET        =  2,  /**< Device is performing a reset */
-    ADSSTATE_INIT         =  3,  /**< Device is initializing */
-    ADSSTATE_START        =  4,  /**< Device is starting up */
-    ADSSTATE_RUN          =  5,  /**< Device is running normally */
-    ADSSTATE_STOP         =  6,  /**< Device has been stopped */
-    ADSSTATE_SAVECFG      =  7,  /**< Device is saving its configuration */
-    ADSSTATE_LOADCFG      =  8,  /**< Device is loading a configuration */
-    ADSSTATE_POWERFAILURE =  9,  /**< Device has detected a power failure */
-    ADSSTATE_POWERGOOD    = 10,  /**< Device has detected power restored to a good state */
-    ADSSTATE_ERROR        = 11,  /**< Device is in an error state */
-    ADSSTATE_SHUTDOWN     = 12,  /**< Device is shutting down */
-    ADSSTATE_SUSPEND      = 13,  /**< Device has been suspended */
-    ADSSTATE_RESUME       = 14,  /**< Device is resuming from a suspended state */
-    ADSSTATE_CONFIG       = 15,  /**< Device is in configuration mode */
-    ADSSTATE_RECONFIG     = 16,  /**< Device is performing a reconfiguration */
-    ADSSTATE_MAXSTATES          /**< Sentinel: total number of defined ADS states */
+   ADSSTATE_INVALID      =0,
+   ADSSTATE_IDLE         =1,
+   ADSSTATE_RESET        =2,
+   ADSSTATE_INIT         =3,
+   ADSSTATE_START        =4,
+   ADSSTATE_RUN          =5,
+   ADSSTATE_STOP         =6,
+   ADSSTATE_SAVECFG      =7,
+   ADSSTATE_LOADCFG      =8,
+   ADSSTATE_POWERFAILURE =9,
+   ADSSTATE_POWERGOOD    =10,
+   ADSSTATE_ERROR        =11,
+   ADSSTATE_SHUTDOWN     =12,
+   ADSSTATE_SUSPEND      =13,
+   ADSSTATE_RESUME       =14,
+   ADSSTATE_CONFIG       =15,
+   ADSSTATE_RECONFIG     =16,
+   ADSSTATE_MAXSTATES
 } ADSSTATE;
 
-/**
- * @brief Transmission modes controlling how ADS notifications are triggered and delivered.
- */
 typedef enum nAdsTransMode
 {
-    ADSTRANS_NOTRANS     =  0,  /**< No transmission; notifications are disabled */
-    ADSTRANS_CLIENTCYCLE =  1,  /**< Client-driven cyclic transmission at a fixed interval */
-    ADSTRANS_CLIENTONCHA =  2,  /**< Client-driven transmission on value change */
-    ADSTRANS_SERVERCYCLE =  3,  /**< Server-driven cyclic transmission at a fixed interval */
-    ADSTRANS_SERVERONCHA =  4,  /**< Server-driven transmission on value change */
-    ADSTRANS_CLIENT1REQ  = 10,  /**< Client single-request transmission (one-shot) */
-    ADSTRANS_MAXMODES           /**< Sentinel: total number of defined transmission modes */
-} ADSTRANSMODE;
+   ADSTRANS_NOTRANS     =0,
+   ADSTRANS_CLIENTCYCLE =1,
+   ADSTRANS_CLIENTONCHA =2,
+   ADSTRANS_SERVERCYCLE =3,
+   ADSTRANS_SERVERONCHA =4,
+   ADSTRANS_CLIENT1REQ  =10,
+   ADSTRANS_MAXMODES
+}ADSTRANSMODE;
 
 
 /* ADS error codes */
@@ -1007,209 +974,156 @@ typedef enum nAdsTransMode
 } AdsNotificationSample, *PAdsNotificationSample;*/
 #define AdsNotificationSample_Min_Len 4
 
-/**
- * @brief Request structure for the ADS ReadDeviceInfo command.
- */
 typedef struct
 {
-    uint32_t invokeId; /**< Caller-supplied invocation ID used to match this request to its response. */
+   uint32_t invokeId;
 } TAdsReadDeviceInfoReq;
 
-#define TAdsReadDeviceInfoReq_Len (int)sizeof(TAdsReadDeviceInfoReq) /**< Wire size in bytes of TAdsReadDeviceInfoReq. */
+#define TAdsReadDeviceInfoReq_Len (int)sizeof(TAdsReadDeviceInfoReq)
 
+/*typedef struct
+{
+   uint16_t adsState;
+   uint16_t deviceState;
+   uint32_t cbLength;
+   uint16_t firstDataWord;
+} TAdsWriteControlReq, TAdsWriteControlInd;*/
+#define TAdsWriteControlReq_Len 10
 
-/* TAdsWriteControlReq/TAdsWriteControlInd — struct definition omitted; use wire length macro instead.
-   Fields: adsState (uint16), deviceState (uint16), cbLength (uint32), firstDataWord (uint16). */
-#define TAdsWriteControlReq_Len 10 /**< Wire size in bytes of the ADS WriteControl request payload. */
-
-
-/**
- * @brief Request structure for the ADS ReadState command.
- */
 typedef struct
 {
-    uint32_t invokeId; /**< Caller-supplied invocation ID used to match this request to its response. */
+   uint32_t invokeId;
 } TAdsReadStateReq;
+#define TAdsReadStateReq_Len (int)sizeof(TAdsReadStateReq)
 
-#define TAdsReadStateReq_Len (int)sizeof(TAdsReadStateReq) /**< Wire size in bytes of TAdsReadStateReq. */
-
-
-/**
- * @brief Request structure for the ADS Read command.
- */
 typedef struct
 {
-    uint32_t indexGroup;  /**< Index group identifying the data area on the target device to read from. */
-    uint32_t indexOffset; /**< Index offset within the index group identifying the specific data item to read. */
-    uint32_t cbLength;    /**< Maximum number of bytes to read from the target. */
+   uint32_t indexGroup;
+   uint32_t indexOffset;
+   uint32_t cbLength;
 } TAdsReadReq;
+#define TAdsReadReq_Len (int)sizeof(TAdsReadReq)
 
-#define TAdsReadReq_Len (int)sizeof(TAdsReadReq) /**< Wire size in bytes of TAdsReadReq. */
+/*typedef struct
+{
+   uint32_t indexGroup;
+   uint32_t indexOffset;
+   uint32_t cbLength;
+   uint16_t firstDataWord;
+} TAdsWriteReq;*/
+#define TAdsWriteReq_Len 14
 
-
-/* TAdsWriteReq — struct definition omitted; use wire length macro instead.
-   Fields: indexGroup (uint32), indexOffset (uint32), cbLength (uint32), firstDataWord (uint16). */
-#define TAdsWriteReq_Len 14 /**< Wire size in bytes of the ADS Write request payload. */
-
-
-/* TAdsReadWriteReq — struct definition omitted; use wire length macro instead.
-   Fields: indexGroup (uint32), indexOffset (uint32), cbReadLength (uint32), cbWriteLength (uint32), firstDataWord (uint16). */
-#define TAdsReadWriteReq_Len 18 /**< Wire size in bytes of the ADS ReadWrite request payload. */
-
-
-/**
- * @brief Describes the notification attributes controlling how and when an ADS device notification fires.
- */
+/*
 typedef struct
 {
-    uint32_t cbLength;                  /**< Length in bytes of the data to be transmitted with each notification. */
-    uint32_t nTransMode;                /**< Transmission mode (e.g. on change, cyclic) determining when notifications are sent. */
-    uint32_t nMaxDelay;                 /**< Maximum delay in 100ns units between a value change and the notification being sent. */
-    uint32_t nCycleTime;                /**< Cycle time in 100ns units at which the ADS server checks for value changes. */
-    uint8_t  nCmpMax[sizeof(double)];   /**< Upper comparison value; notifications are suppressed when the value exceeds this limit. */
-    uint8_t  nCmpMin[sizeof(double)];   /**< Lower comparison value; notifications are suppressed when the value falls below this limit. */
+   uint32_t indexGroup;
+   uint32_t indexOffset;
+   uint32_t cbReadLength;
+   uint32_t cbWriteLength;
+   uint16_t firstDataWord;
+} TAdsReadWriteReq;*/
+#define TAdsReadWriteReq_Len 18
+
+typedef struct
+{
+   uint32_t cbLength;
+   uint32_t nTransMode;
+   uint32_t nMaxDelay;
+   uint32_t nCycleTime;
+   uint8_t nCmpMax[sizeof(double)];
+   uint8_t nCmpMin[sizeof(double)];
 } AdsNotificationAttrib;
 
-
-/**
- * @brief Request structure for the ADS AddDeviceNotification command.
- */
 typedef struct
 {
-    uint32_t              indexGroup;  /**< Index group of the data item on the target device to monitor. */
-    uint32_t              indexOffset; /**< Index offset within the index group of the data item to monitor. */
-    AdsNotificationAttrib noteAttrib;  /**< Notification attributes controlling delivery mode, timing, and comparison limits. */
+   uint32_t              indexGroup;
+   uint32_t              indexOffset;
+   AdsNotificationAttrib noteAttrib;
 } TAdsAddDeviceNotificationReq;
+#define TAdsAddDeviceNotificationReq_Len (int)sizeof(TAdsAddDeviceNotificationReq)
 
-#define TAdsAddDeviceNotificationReq_Len (int)sizeof(TAdsAddDeviceNotificationReq) /**< Wire size in bytes of TAdsAddDeviceNotificationReq. */
-
-
-/**
- * @brief Request structure for the ADS DeleteDeviceNotification command.
- */
 typedef struct
 {
-    uint32_t hNotification; /**< Handle of the notification to delete, as returned by a prior AddDeviceNotification response. */
-} TAdsDelDeviceNotificationReq;
+   uint32_t  hNotification;
+}  TAdsDelDeviceNotificationReq;
+#define TAdsDelDeviceNotificationReq_Len (int)sizeof(TAdsDelDeviceNotificationReq)
 
-#define TAdsDelDeviceNotificationReq_Len (int)sizeof(TAdsDelDeviceNotificationReq) /**< Wire size in bytes of TAdsDelDeviceNotificationReq. */
-
-
-/**
- * @brief Header structure for an ADS DeviceNotification request, preceding one or more AdsStampHeader entries.
- */
 typedef struct
 {
-    uint32_t cbLength; /**< Total length in bytes of the notification data payload that follows this header. */
-    uint32_t nStamps;  /**< Number of AdsStampHeader entries contained within the notification data payload. */
-} TAdsDeviceNotificationReq;
+   uint32_t cbLength;
+   uint32_t nStamps;
+}  TAdsDeviceNotificationReq;
+#define TAdsDeviceNotificationReq_Len (int)sizeof(TAdsDeviceNotificationReq)
 
-#define TAdsDeviceNotificationReq_Len (int)sizeof(TAdsDeviceNotificationReq) /**< Wire size in bytes of TAdsDeviceNotificationReq. */
-
-
-/**
- * @brief Generic ADS response structure carrying only a result code; used as the base for simple command responses.
- */
 typedef struct
 {
-    uint32_t result; /**< ADS result code; 0 indicates success, non-zero values indicate an ADS error. */
+   uint32_t result;
 } TAdsRes;
+#define TAdsRes_Len (int)sizeof(TAdsRes)
 
-#define TAdsRes_Len (int)sizeof(TAdsRes) /**< Wire size in bytes of TAdsRes. */
-
-
-/**
- * @brief Represents an ADS device version number.
- */
 typedef struct
 {
-    uint8_t  version;  /**< Major version number of the ADS device firmware or software. */
-    uint8_t  revision; /**< Minor revision number of the ADS device firmware or software. */
-    uint16_t build;    /**< Build number of the ADS device firmware or software. */
+   uint8_t version;
+   uint8_t revision;
+   uint16_t build;
 } AdsVersion, *PAdsVersion;
 
-
-/**
- * @brief Response structure for the ADS ReadDeviceInfo command.
- */
 typedef struct
 {
-    uint32_t   result;                  /**< ADS result code; 0 indicates success. */
-    AdsVersion version;                 /**< Version of the ADS device's firmware or software. */
-    char       sName[ADS_FIXEDNAMESIZE]; /**< Fixed-length null-terminated string containing the device name. */
+   uint32_t   result;
+   AdsVersion version;
+   char       sName[ADS_FIXEDNAMESIZE];
 } TAdsReadDeviceInfoRes;
-#define TAdsReadDeviceInfoRes_Len (int)sizeof(TAdsReadDeviceInfoRes) /**< Wire size in bytes of TAdsReadDeviceInfoRes. */
+#define TAdsReadDeviceInfoRes_Len (int)sizeof(TAdsReadDeviceInfoRes)
 
-/**
- * @brief Response structure for the ADS WriteControl command.
- */
 typedef struct
 {
-    uint32_t result; /**< ADS result code; 0 indicates success. */
+   uint32_t result;
 } TAdsWriteControlRes;
-#define TAdsWriteControlRes_Len (int)sizeof(TAdsWriteControlRes) /**< Wire size in bytes of TAdsWriteControlRes. */
+#define TAdsWriteControlRes_Len (int)sizeof(TAdsWriteControlRes)
 
-/**
- * @brief Response structure for the ADS ReadState command.
- */
 typedef struct
 {
-    uint32_t result;      /**< ADS result code; 0 indicates success. */
-    uint16_t adsState;    /**< Current ADS state of the target device (e.g. run, stop, config). */
-    uint16_t deviceState; /**< Current device-specific state reported by the target. */
+   uint32_t result;
+   uint16_t adsState;
+   uint16_t deviceState;
 } TAdsReadStateRes;
-#define TAdsReadStateRes_Len (int)sizeof(TAdsReadStateRes) /**< Wire size in bytes of TAdsReadStateRes. */
+#define TAdsReadStateRes_Len (int)sizeof(TAdsReadStateRes)
 
-/**
- * @brief Response structure for the ADS Read command.
- */
 typedef struct
 {
-    uint32_t result;        /**< ADS result code; 0 indicates success. */
-    uint32_t cbLength;      /**< Number of bytes of data returned in the response payload. */
-    uint16_t firstDataWord; /**< First two bytes of the returned data payload, for quick inspection without parsing the full payload. */
+   uint32_t result;
+   uint32_t cbLength;
+   uint16_t firstDataWord;
 } TAdsReadRes;
+#define TAdsReadRes_Len (int)sizeof(TAdsReadRes)
 
-#define TAdsReadRes_Len (int)sizeof(TAdsReadRes) /**< Wire size in bytes of TAdsReadRes. */
-
-/**
- * @brief Response structure for the ADS ReadWrite command.
- */
 typedef struct
 {
-    uint32_t result;        /**< ADS result code; 0 indicates success. */
-    uint32_t cbLength;      /**< Number of bytes of data returned in the response payload. */
-    uint16_t firstDataWord; /**< First two bytes of the returned data payload, for quick inspection without parsing the full payload. */
+   uint32_t result;
+   uint32_t cbLength;
+   uint16_t firstDataWord;
 } TAdsReadWriteRes;
-#define TAdsReadWriteRes_Len (int)sizeof(TAdsReadWriteRes) /**< Wire size in bytes of TAdsReadWriteRes. */
+#define TAdsReadWriteRes_Len (int)sizeof(TAdsReadWriteRes)
 
-/**
- * @brief Response structure for the ADS Write command.
- */
 typedef struct
 {
-    uint32_t result; /**< ADS result code; 0 indicates success. */
+   uint32_t result;
 } TAdsWriteRes;
-#define TAdsWriteRes_Len (int)sizeof(TAdsWriteRes) /**< Wire size in bytes of TAdsWriteRes. */
+#define TAdsWriteRes_Len (int)sizeof(TAdsWriteRes)
 
-/**
- * @brief Response structure for the ADS AddDeviceNotification command.
- */
 typedef struct
 {
-    uint32_t result; /**< ADS result code; 0 indicates success. */
-    uint32_t handle; /**< Notification handle assigned by the target device; used to identify or delete this notification later. */
-} TAdsAddDeviceNotificationRes;
-#define TAdsAddDeviceNotificationRes_Len (int)sizeof(TAdsAddDeviceNotificationRes) /**< Wire size in bytes of TAdsAddDeviceNotificationRes. */
+   uint32_t result;
+   uint32_t handle;
+}  TAdsAddDeviceNotificationRes;
+#define TAdsAddDeviceNotificationRes_Len (int)sizeof(TAdsAddDeviceNotificationRes)
 
-/**
- * @brief Response structure for the ADS DeleteDeviceNotification command.
- */
 typedef struct
 {
-    uint32_t result; /**< ADS result code; 0 indicates success. */
-} TAdsDelDeviceNotificationRes;
-#define TAdsDelDeviceNotificationRes_Len (int)sizeof(TAdsDelDeviceNotificationRes) /**< Wire size in bytes of TAdsDelDeviceNotificationRes. */
+   uint32_t result;
+}  TAdsDelDeviceNotificationRes;
+#define TAdsDelDeviceNotificationRes_Len (int)sizeof(TAdsDelDeviceNotificationRes)
 
 
 /* structure for decoding the header -----------------------------------------*/

@@ -1,4 +1,4 @@
--- 3GPP TS 36.443 V19.1.0 (2025-12)
+-- 3GPP TS 36.443 V17.0.1 (2022-04)
 -- **************************************************************
 --
 -- PDU definitions for M2AP.
@@ -47,8 +47,7 @@ IMPORTS
 	TNL-Information,
 	SFN,
 	MBMSsessionsToBeSuspendedListPerPMCH-Item,
-	SC-PTM-Information,
-	CASMutingParameters
+	SC-PTM-Information
 
 FROM M2AP-Ies
 
@@ -108,7 +107,6 @@ FROM M2AP-Containers
 	id-Overload-Status-Per-PMCH-List,
 	id-Active-MBMS-Session-List,
 	id-SC-PTM-Information,
-	id-CASMutingParameters,
 	maxnoofMBSFN-Allocations,
 	maxnoofMBSFNareas,
 	maxnoofPMCHsperMBSFNarea,
@@ -298,8 +296,7 @@ MBSFN-Area-Configuration-Item M2AP-PROTOCOL-IES ::= {
 	{ ID id-MBSFN-Subframe-Configuration-List	CRITICALITY reject	TYPE MBSFN-Subframe-ConfigurationList		PRESENCE mandatory }|
 	{ ID id-Common-Subframe-Allocation-Period	CRITICALITY reject	TYPE Common-Subframe-Allocation-Period		PRESENCE mandatory }|
 	{ ID id-MBSFN-Area-ID						CRITICALITY reject	TYPE MBSFN-Area-ID							PRESENCE mandatory }|
-	{ ID id-MBMS-Suspension-Notification-List	CRITICALITY ignore	TYPE MBMS-Suspension-Notification-List		PRESENCE optional }|
-	{ ID id-CASMutingParameters					CRITICALITY reject	TYPE CASMutingParameters						PRESENCE optional },
+	{ ID id-MBMS-Suspension-Notification-List	CRITICALITY ignore	TYPE MBMS-Suspension-Notification-List		PRESENCE optional },
 	...
 }
 

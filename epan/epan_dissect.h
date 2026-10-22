@@ -6,7 +6,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-#pragma once
+
+#ifndef EPAN_DISSECT_H
+#define EPAN_DISSECT_H
+
 #include "epan.h"
 #include "tvbuff.h"
 #include "proto.h"
@@ -16,24 +19,24 @@
 extern "C" {
 #endif /* __cplusplus */
 
-/**
- * @brief Holds all state for the dissection of a single byte array, including session, buffer, and protocol tree.
- *
- * Dissection of a single byte array. Holds tvbuff info as
+/* Dissection of a single byte array. Holds tvbuff info as
  * well as proto_tree info. As long as the epan_dissect_t for a byte
  * array is in existence, you must not free or move that byte array,
  * as the structures that the epan_dissect_t contains might have pointers
  * to addresses in your byte array.
  */
 struct epan_dissect {
-    struct epan_session* session; /**< The epan session context under which this dissection is taking place. */
-    tvbuff_t*            tvb;     /**< Tvbuff representing the byte array being dissected. */
-    proto_tree*          tree;    /**< Protocol tree built up during dissection of the byte array. */
-    packet_info          pi;      /**< Packet metadata and state populated during dissection. */
+	struct epan_session *session;
+	tvbuff_t	*tvb;
+	proto_tree	*tree;
+	packet_info	pi;
 };
+
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
+
+#endif /* EPAN_DISSECT_H */
 
 /*
  * Editor modelines  -  https://www.wireshark.org/tools/modelines.html

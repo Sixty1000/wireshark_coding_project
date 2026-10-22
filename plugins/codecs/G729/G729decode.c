@@ -52,7 +52,7 @@ codec_g729_decode(codec_context_t *ctx,
     int16_t *dataOut = (int16_t *) outputSamples;
     size_t i;
 
-    if (!state) {
+    if (!ctx) {
         return 0;
     }
 

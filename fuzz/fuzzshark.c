@@ -24,10 +24,8 @@
 #include <wsutil/cmdarg_err.h>
 #include <ui/failure_message.h>
 #include <wsutil/filesystem.h>
-#include <app/application_flavor.h>
 #include <wsutil/privileges.h>
-#include <wsutil/clopts_common.h>
-#include <wsutil/ws_getopt.h>
+#include <wsutil/report_message.h>
 #include <wsutil/wslog.h>
 #include <wsutil/version_info.h>
 
@@ -53,6 +51,27 @@
 static column_info fuzz_cinfo;
 static epan_t *fuzz_epan;
 static epan_dissect_t *fuzz_edt;
+
+/*
+ * Report an error in command-line arguments.
+ */
+static void
+fuzzshark_cmdarg_err(const char *msg_format, va_list ap)
+{
+	fprintf(stderr, "oss-fuzzshark: ");
+	vfprintf(stderr, msg_format, ap);
+	fprintf(stderr, "\n");
+}
+
+/*
+ * Report additional information for an error in command-line arguments.
+ */
+static void
+fuzzshark_cmdarg_err_cont(const char *msg_format, va_list ap)
+{
+	vfprintf(stderr, msg_format, ap);
+	fprintf(stderr, "\n");
+}
 
 static int
 fuzzshark_pref_set(const char *name, const char *value)
@@ -85,19 +104,7 @@ fuzzshark_epan_new(void)
 		fuzzshark_get_frame_ts,
 		NULL,
 		NULL,
-		NULL,
-		NULL,
-		NULL,
-		NULL,
-		NULL,
-		NULL,
-		NULL,
-		NULL,
-		NULL,
-		NULL,
-		NULL,
-		NULL,
-		NULL,
+		NULL
 	};
 
 	return epan_new(NULL, &funcs);
@@ -144,25 +151,27 @@ fuzz_prefs_apply(void)
 }
 
 static int
-fuzz_init(int argc, char **argv)
+fuzz_init(int argc _U_, char **argv)
 {
 	char                *configuration_init_error;
 
+	static const struct report_message_routines fuzzshark_report_routines = {
+		failure_message,
+		failure_message,
+		open_failure_message,
+		read_failure_message,
+		write_failure_message,
+		cfile_open_failure_message,
+		cfile_dump_open_failure_message,
+		cfile_read_failure_message,
+		cfile_write_failure_message,
+		cfile_close_failure_message
+	};
 
 	char                *err_msg = NULL;
 	e_prefs             *prefs_p;
 	int                  ret = EXIT_SUCCESS;
 	size_t               i;
-	static const struct ws_option long_options[] = {
-		LONGOPT_WSLOG
-		{0, 0, 0, 0 }
-	};
-	const struct file_extension_info* file_extensions;
-	unsigned num_extensions;
-	epan_app_data_t app_data;
-
-	/* Future proof by zeroing out all data */
-	memset(&app_data, 0, sizeof(app_data));
 
 	const char *fuzz_target =
 #if defined(FUZZ_DISSECTOR_TARGET)
@@ -181,15 +190,6 @@ fuzz_init(int argc, char **argv)
 
 #if !defined(FUZZ_DISSECTOR_TABLE) && !defined(FUZZ_DISSECTOR_TARGET)
 	const char *fuzz_table = getenv("FUZZSHARK_TABLE");
-
-	/*
-	 * Set the program name.
-	 *
-	 * XXX - yes, this isn't main(), but it still needs to be
-	 * set, as many Wireshark library routines depend on it
-	 * being set.
-	 */
-	g_set_prgname("oss-fuzzshark");
 
 	if (!fuzz_table && !fuzz_target) {
 		fprintf(stderr,
@@ -237,13 +237,13 @@ fuzz_init(int argc, char **argv)
 	g_setenv("WIRESHARK_DEBUG_WMEM_OVERRIDE", "simple", 0);
 	g_setenv("G_SLICE", "always-malloc", 0);
 
-	cmdarg_err_init(stderr_cmdarg_err, stderr_cmdarg_err_cont);
+	cmdarg_err_init(fuzzshark_cmdarg_err, fuzzshark_cmdarg_err_cont);
 
 	/* Initialize log handler early so we can have proper logging during startup. */
-	ws_log_init(vcmdarg_err, "Fuzzshark Debug Console");
+	ws_log_init("fuzzshark", vcmdarg_err);
 
 	/* Early logging command-line initialization. */
-	ws_log_parse_args(&argc, argv, "v", long_options, vcmdarg_err, LOG_ARGS_NOEXIT);
+	ws_log_parse_args(&argc, argv, vcmdarg_err, LOG_ARGS_NOEXIT);
 
 	ws_noisy("Finished log init and parsing command line log arguments");
 
@@ -260,17 +260,17 @@ fuzz_init(int argc, char **argv)
 	/*
 	 * Attempt to get the pathname of the executable file.
 	 */
-	configuration_init_error = configuration_init(argv[0], "wireshark");
+	configuration_init_error = configuration_init(argv[0], NULL);
 	if (configuration_init_error != NULL) {
 		fprintf(stderr, "fuzzshark: Can't get pathname of oss-fuzzshark program: %s.\n", configuration_init_error);
 		g_free(configuration_init_error);
 	}
 
 	/* Initialize the version information. */
-	ws_init_version_info("OSS Fuzzshark", NULL, application_get_vcs_version_info,
+	ws_init_version_info("OSS Fuzzshark",
 	    epan_gather_compile_info, epan_gather_runtime_info);
 
-	init_report_failure_message("fuzzshark");
+	init_report_message("fuzzshark", &fuzzshark_report_routines);
 
 	timestamp_set_type(TS_RELATIVE);
 	timestamp_set_precision(TS_PREC_AUTO);
@@ -281,19 +281,13 @@ fuzz_init(int argc, char **argv)
 	 * dissection-time handlers for file-type-dependent blocks can
 	 * register using the file type/subtype value for the file type.
 	 */
-	application_file_extensions(&file_extensions, &num_extensions);
-	wtap_init(true, application_configuration_environment_prefix(), file_extensions, num_extensions);
+	wtap_init(true);
 
 	/* Register all dissectors; we must do this before checking for the
 	   "-G" flag, as the "-G" flag dumps information registered by the
 	   dissectors, and we must do it before we read the preferences, in
 	   case any dissectors register preferences. */
-	app_data.env_var_prefix = application_configuration_environment_prefix();
-	app_data.col_fmt = application_columns();
-	app_data.num_cols = application_num_columns();
-	app_data.register_func = register_all_protocols;
-	app_data.handoff_func = register_all_protocol_handoffs;
-	if (!epan_init(NULL, NULL, false, &app_data))
+	if (!epan_init(NULL, NULL, false))
 	{
 		ret = EPAN_INIT_FAIL;
 		goto clean_exit;
@@ -302,7 +296,7 @@ fuzz_init(int argc, char **argv)
 	/* Load libwireshark settings from the current profile. */
 	prefs_p = epan_load_settings();
 
-	if (!color_filters_init(&err_msg, NULL, application_configuration_environment_prefix()))
+	if (!color_filters_init(&err_msg, NULL))
 	{
 		fprintf(stderr, "%s\n", err_msg);
 		g_free(err_msg);
@@ -347,7 +341,7 @@ fuzz_init(int argc, char **argv)
 #endif
 
 #ifdef FUZZ_EPAN
-	g_assert(fuzz_handle != NULL && "Requested dissector is not found.");
+	g_assert(fuzz_handle != NULL && "Requested dissector is not found!");
 	register_postdissector(fuzz_handle);
 #endif
 
@@ -373,25 +367,22 @@ LLVMFuzzerTestOneInput(const uint8_t *buf, size_t real_len)
 	wtap_rec rec;
 	frame_data fdlocal;
 
-	wtap_rec_init(&rec, len);
+	memset(&rec, 0, sizeof(rec));
 
-	/* wtap_setup_packet_rec(&rec, WTAP_ENCAP_ETHERNET); */
-	wtap_setup_packet_rec(&rec, INT16_MAX);
+	rec.rec_type = REC_TYPE_PACKET;
 	rec.rec_header.packet_header.caplen = len;
 	rec.rec_header.packet_header.len = len;
 
+	/* whdr.pkt_encap = WTAP_ENCAP_ETHERNET; */
+	rec.rec_header.packet_header.pkt_encap = INT16_MAX;
 	rec.presence_flags = WTAP_HAS_TS | WTAP_HAS_CAP_LEN; /* most common flags... */
-
-	ws_buffer_append(&rec.data, buf, real_len);
 
 	frame_data_init(&fdlocal, ++framenum, &rec, /* offset */ 0, /* cum_bytes */ 0);
 	/* frame_data_set_before_dissect() not needed */
-	epan_dissect_run(edt, WTAP_FILE_TYPE_SUBTYPE_UNKNOWN, &rec, &fdlocal, NULL /* &fuzz_cinfo */);
+	epan_dissect_run(edt, WTAP_FILE_TYPE_SUBTYPE_UNKNOWN, &rec, tvb_new_real_data(buf, len, len), &fdlocal, NULL /* &fuzz_cinfo */);
 	frame_data_destroy(&fdlocal);
 
 	epan_dissect_reset(edt);
-
-	wtap_rec_cleanup(&rec);
 	return 0;
 }
 
@@ -402,7 +393,13 @@ LLVMFuzzerTestOneInput(const uint8_t *buf, size_t real_len)
 int
 LLVMFuzzerInitialize(int *argc, char ***argv)
 {
-	return fuzz_init(*argc, *argv);
+	int ret;
+
+	ret = fuzz_init(*argc, *argv);
+	if (ret != 0)
+		exit(ret);
+
+	return 0;
 }
 
 /*

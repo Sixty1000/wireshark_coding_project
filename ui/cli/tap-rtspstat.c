@@ -20,7 +20,7 @@
 #include <glib.h>
 
 #include <epan/packet_info.h>
-#include <wsutil/value_string.h>
+#include <epan/value_string.h>
 #include <epan/tap.h>
 #include <epan/stat_tap_ui.h>
 #include <epan/dissectors/packet-rtsp.h>
@@ -31,7 +31,7 @@
 
 void register_tap_listener_rtspstat(void);
 
-/* used to keep track of the statistics for an entire program interface */
+/* used to keep track of the statictics for an entire program interface */
 typedef struct _rtsp_stats_t {
 	char 		*filter;
 	GHashTable	*hash_responses;
@@ -61,25 +61,24 @@ static void
 rtsp_init_hash( rtspstat_t *sp)
 {
 	int i;
-	value_string* status_codes = get_external_value_string("rtsp_status_code_vals");
 
-	sp->hash_responses = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, g_free);
+	sp->hash_responses = g_hash_table_new(g_direct_hash, g_direct_equal);
 
-	for (i=0 ; status_codes[i].strptr ; i++ )
+	for (i=0 ; rtsp_status_code_vals[i].strptr ; i++ )
 	{
 		rtsp_response_code_t *sc = g_new (rtsp_response_code_t, 1);
 		sc->packets = 0;
-		sc->response_code = status_codes[i].value;
-		sc->name = status_codes[i].strptr;
+		sc->response_code = rtsp_status_code_vals[i].value;
+		sc->name = rtsp_status_code_vals[i].strptr;
 		sc->sp = sp;
-		g_hash_table_insert( sc->sp->hash_responses, GINT_TO_POINTER(status_codes[i].value), sc);
+		g_hash_table_insert( sc->sp->hash_responses, GINT_TO_POINTER(rtsp_status_code_vals[i].value), sc);
 	}
-	sp->hash_requests = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+	sp->hash_requests = g_hash_table_new( g_str_hash, g_str_equal);
 }
 static void
 rtsp_draw_hash_requests( char *key _U_ , rtsp_request_methode_t *data, char * format)
 {
-	if ((data == NULL) || (data->packets == 0))
+	if (data->packets == 0)
 		return;
 	printf( format, data->response, data->packets);
 }
@@ -87,7 +86,11 @@ rtsp_draw_hash_requests( char *key _U_ , rtsp_request_methode_t *data, char * fo
 static void
 rtsp_draw_hash_responses( void ** key _U_ , rtsp_response_code_t *data, char * format)
 {
-	if ((data == NULL) || (data->packets == 0))
+	if (data == NULL) {
+		ws_warning("No data available, key=%d\n", GPOINTER_TO_INT(key));
+		exit(EXIT_FAILURE);
+	}
+	if (data->packets == 0)
 		return;
 	/* "     RTSP %3d %-35s %9d packets", */
 	printf(format,  data->response_code, data->name, data->packets );
@@ -116,25 +119,13 @@ rtsp_reset_hash_requests(char *key _U_ , rtsp_request_methode_t *data, void *ptr
 }
 
 static void
-rtspstat_reset(void *psp)
+rtspstat_reset(void *psp  )
 {
 	rtspstat_t *sp = (rtspstat_t *)psp;
 
 	g_hash_table_foreach( sp->hash_responses, (GHFunc)rtsp_reset_hash_responses, NULL);
 	g_hash_table_foreach( sp->hash_requests, (GHFunc)rtsp_reset_hash_requests, NULL);
 
-}
-
-static void
-rtspstat_finish(void *psp)
-{
-	rtspstat_t *sp = (rtspstat_t *)psp;
-
-	g_hash_table_destroy( sp->hash_responses);
-	g_hash_table_destroy( sp->hash_requests);
-
-	g_free(sp->filter);
-	g_free(sp);
 }
 
 static tap_packet_status
@@ -229,7 +220,7 @@ rtspstat_draw(void *psp  )
 
 /* When called, this function will create a new instance of rtspstat.
  */
-static bool
+static void
 rtspstat_init(const char *opt_arg, void *userdata _U_)
 {
 	rtspstat_t *sp;
@@ -251,11 +242,11 @@ rtspstat_init(const char *opt_arg, void *userdata _U_)
 			"rtsp",
 			sp,
 			filter,
-			TL_REQUIRES_NOTHING,
+			0,
 			rtspstat_reset,
 			rtspstat_packet,
 			rtspstat_draw,
-			rtspstat_finish);
+			NULL);
 	if (error_string) {
 		/* error, we failed to attach to the tap. clean up */
 		g_free(sp->filter);
@@ -263,11 +254,10 @@ rtspstat_init(const char *opt_arg, void *userdata _U_)
 		cmdarg_err("Couldn't register rtsp,stat tap: %s",
 				error_string->str);
 		g_string_free(error_string, TRUE);
-		return false;
+		exit(1);
 	}
 
 	rtsp_init_hash(sp);
-	return true;
 }
 
 static stat_tap_ui rtspstat_ui = {

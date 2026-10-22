@@ -28,9 +28,6 @@
 #include <wsutil/wmem/wmem.h>
 #include <epan/wmem_scopes.h>
 
-#include <wsutil/ws_roundup.h>
-#include <wsutil/ws_padding_to.h>
-
 #include "packet-tcp.h"
 #include "packet-tls.h"
 
@@ -555,8 +552,7 @@ static expert_field ei_saphdb_segments_number_incorrect;
 static expert_field ei_saphdb_segment_length;
 static expert_field ei_saphdb_buffer_length;
 static expert_field ei_saphdb_parts_number_incorrect;
-static expert_field ei_saphdb_varpartlength_incorrect;
-static expert_field ei_saphdb_authentication_field_length;
+static expert_field ei_saphdb_varpartlenght_incorrect;
 
 
 /* Global highlight preference */
@@ -664,7 +660,7 @@ dissect_saphdb_part_options_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 				proto_tree_add_item(tree, hf_saphdb_part_option_length, tvb, offset + parsed_length, 2, ENC_LITTLE_ENDIAN);
 				parsed_length += 2;
 
-				if ((option_length > 0) && tvb_reported_length_remaining(tvb, offset + parsed_length) >= (unsigned)option_length) {
+				if (tvb_reported_length_remaining(tvb, offset + parsed_length) >= option_length) {
 					if (option_type == 29) {
 						/* TODO: This need to be CESU-8 decoded */
 						proto_tree_add_item(tree, hf_saphdb_part_option_value_string, tvb, offset + parsed_length, option_length, ENC_UTF_8);
@@ -717,51 +713,30 @@ dissect_saphdb_part_multi_line_options_data(tvbuff_t *tvb, packet_info *pinfo, p
 
 }
 
-static uint32_t
-dissect_saphdb_gss_authentication_fields(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint32_t offset, uint32_t length)
+static void
+dissect_saphdb_gss_authentication_fields(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint32_t offset)
 {
 	uint8_t field_short_length, commtype = 0;
 	uint16_t field_count = 0, field_length;
-	uint32_t parsed_length = 0;
-
-	if (length < 2) {
-		expert_add_info_format(pinfo, tree, &ei_saphdb_authentication_field_length, "GSS authentication field count is truncated (actual=%u)", length);
-		return 0;
-	}
 
 	/* Parse the field count */
-	proto_tree_add_item_ret_uint16(tree, hf_saphdb_part_authentication_field_count, tvb, offset, 2, ENC_LITTLE_ENDIAN, &field_count);
+	field_count = tvb_get_uint16(tvb, offset, ENC_LITTLE_ENDIAN);
+	proto_tree_add_item(tree, hf_saphdb_part_authentication_field_count, tvb, offset, 2, ENC_LITTLE_ENDIAN);
 	offset += 2;
-	parsed_length += 2;
 
-	for (uint16_t field = 0; field < field_count && parsed_length < length; field++) {
+	for (uint16_t field = 0; field < field_count; field++) {
 
 		/* Parse the field length. If the first byte is 0xFF, the length is contained in the next 2 bytes */
-		if (length - parsed_length < 1) {
-			expert_add_info_format(pinfo, tree, &ei_saphdb_authentication_field_length, "GSS authentication field length is truncated (actual=%u)", length - parsed_length);
-			break;
-		}
 		field_short_length = tvb_get_uint8(tvb, offset);
 		if (field_short_length == 0xff) {
-			if (length - parsed_length < 3) {
-				expert_add_info_format(pinfo, tree, &ei_saphdb_authentication_field_length, "GSS authentication extended field length is truncated (actual=%u)", length - parsed_length);
-				break;
-			}
 			offset += 1;
-			parsed_length += 1;
-			proto_tree_add_item_ret_uint16(tree, hf_saphdb_part_authentication_field_length, tvb, offset, 2, ENC_BIG_ENDIAN, &field_length);
+			field_length = tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN);
+			proto_tree_add_item(tree, hf_saphdb_part_authentication_field_length, tvb, offset, 2, ENC_BIG_ENDIAN);
 			offset += 2;
-			parsed_length += 2;
 		} else {
 			proto_tree_add_item(tree, hf_saphdb_part_authentication_field_length, tvb, offset, 1, ENC_LITTLE_ENDIAN);
 			offset += 1;
-			parsed_length += 1;
 			field_length = field_short_length;
-		}
-
-		if (field_length > length - parsed_length) {
-			expert_add_info_format(pinfo, tree, &ei_saphdb_authentication_field_length, "Invalid GSS authentication field length (expected=%u, actual=%u)", field_length, length - parsed_length);
-			field_length = (uint16_t)(length - parsed_length);
 		}
 
 		/* We try then to see if we're dealing with the commtype field (second field and with length 1)
@@ -788,15 +763,13 @@ dissect_saphdb_gss_authentication_fields(tvbuff_t *tvb, packet_info *pinfo, prot
 		}
 
 		offset += field_length;
-		parsed_length += field_length;
 	}
 
-	return parsed_length;
 }
 
 
 static int
-dissect_saphdb_part_authentication_fields(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint32_t offset, uint32_t length)
+dissect_saphdb_part_authentication_fields(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint32_t offset)
 {
 	uint8_t field_short_length;
 	uint16_t field_count = 0, field_length;
@@ -807,32 +780,21 @@ dissect_saphdb_part_authentication_fields(tvbuff_t *tvb, packet_info *pinfo, pro
 
 	bool is_gss = false;
 
-	if (length < 2) {
-		expert_add_info_format(pinfo, tree, &ei_saphdb_authentication_field_length, "Authentication field count is truncated (actual=%u)", length);
-		return 0;
-	}
-
 	/* Parse the field count */ /* TODO: Should this match with argcount? */
-	proto_tree_add_item_ret_uint16(tree, hf_saphdb_part_authentication_field_count, tvb, offset, 2, ENC_LITTLE_ENDIAN, &field_count);
+	field_count = tvb_get_uint16(tvb, offset, ENC_LITTLE_ENDIAN);
+	proto_tree_add_item(tree, hf_saphdb_part_authentication_field_count, tvb, offset, 2, ENC_LITTLE_ENDIAN);
 	offset += 2;
 	parsed_length += 2;
 
-	for (uint16_t field = 0; field < field_count && parsed_length < length; field++) {
+	for (uint16_t field = 0; field < field_count; field++) {
 
 		/* Parse the field length. If the first byte is 0xFF, the length is contained in the next 2 bytes */
-		if (length - parsed_length < 1) {
-			expert_add_info_format(pinfo, tree, &ei_saphdb_authentication_field_length, "Authentication field length is truncated (actual=%u)", length - parsed_length);
-			break;
-		}
 		field_short_length = tvb_get_uint8(tvb, offset);
 		if (field_short_length == 0xff) {
-			if (length - parsed_length < 3) {
-				expert_add_info_format(pinfo, tree, &ei_saphdb_authentication_field_length, "Authentication extended field length is truncated (actual=%u)", length - parsed_length);
-				break;
-			}
 			offset += 1;
 			parsed_length += 1;
-			proto_tree_add_item_ret_uint16(tree, hf_saphdb_part_authentication_field_length, tvb, offset, 2, ENC_BIG_ENDIAN, &field_length);
+			field_length = tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN);
+			proto_tree_add_item(tree, hf_saphdb_part_authentication_field_length, tvb, offset, 2, ENC_BIG_ENDIAN);
 			offset += 2;
 			parsed_length += 2;
 		} else {
@@ -840,11 +802,6 @@ dissect_saphdb_part_authentication_fields(tvbuff_t *tvb, packet_info *pinfo, pro
 			offset += 1;
 			parsed_length += 1;
 			field_length = field_short_length;
-		}
-
-		if (field_length > length - parsed_length) {
-			expert_add_info_format(pinfo, tree, &ei_saphdb_authentication_field_length, "Invalid authentication field length (expected=%u, actual=%u)", field_length, length - parsed_length);
-			field_length = (uint16_t)(length - parsed_length);
 		}
 
 		/* Add the field value */
@@ -860,7 +817,7 @@ dissect_saphdb_part_authentication_fields(tvbuff_t *tvb, packet_info *pinfo, pro
 		if (is_gss && field == field_count - 1) {
 			proto_item_append_text(gss_item, ": GSS Token");
 			gss_tree = proto_item_add_subtree(gss_item, ett_saphdb);
-			dissect_saphdb_gss_authentication_fields(tvb, pinfo, gss_tree, offset, field_length);
+			dissect_saphdb_gss_authentication_fields(tvb, pinfo, gss_tree, offset);
 		}
 
 		offset += field_length; parsed_length += field_length;
@@ -900,20 +857,19 @@ dissect_saphdb_part_buffer(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
 			offset += 5;
 			length -= 5;
 
-			if ((error_text_length > 0) && (tvb_reported_length_remaining(tvb, offset) >= (unsigned)error_text_length)) {
-				unsigned error_text_padding_length;
-
+			if ((error_text_length > 0) && (tvb_reported_length_remaining(tvb, offset) >= error_text_length)) {
 				proto_tree_add_item(tree, hf_saphdb_part_error_text, tvb, offset, error_text_length, ENC_ASCII);
 				length -= error_text_length;
 
 				/* Align the error text length to 8 */
-				error_text_padding_length = WS_PADDING_TO_8(error_text_length);
-				length += error_text_padding_length;
+				if ((error_text_length % 8) != 0) {
+					length += 8 - (error_text_length % 8);
+				}
 			}
 			break;
 
 		case 33:  // AUTHENTICATION
-			dissect_saphdb_part_authentication_fields(tvb, pinfo, tree, offset, length);
+			dissect_saphdb_part_authentication_fields(tvb, pinfo, tree, offset);
 			break;
 
 		case 35:   // CLIENTID
@@ -1015,10 +971,12 @@ dissect_saphdb_part(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *d
 	}
 
 	/* Align the buffer length to 8 */
-	bufferlength = WS_ROUNDUP_8(bufferlength);
+	if (bufferlength % 8 != 0) {
+		bufferlength += 8 - bufferlength % 8;
+	}
 
 	/* Adjust the length */
-	if (bufferlength < 0 || tvb_reported_length_remaining(tvb, offset) < (unsigned)bufferlength) {
+	if (bufferlength < 0 || tvb_reported_length_remaining(tvb, offset) < bufferlength) {
 		bufferlength = tvb_reported_length_remaining(tvb, offset);
 	}
 
@@ -1141,21 +1099,14 @@ dissect_saphdb_segment(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 
 	/* Add the Segment Buffer subtree */
 	if (((uint32_t)segmentlength > length) && (number_of_parts > 0)) {
-		uint32_t segment_buffer_length = segmentlength - length;
-		uint32_t segment_buffer_consumed = 0;
-		if ((uint32_t)tvb_reported_length_remaining(tvb, offset) < segment_buffer_length) {
-			segment_buffer_length = tvb_reported_length_remaining(tvb, offset);
-			expert_add_info_format(pinfo, segmentlength_item, &ei_saphdb_segment_length, "Segment length %d exceeds remaining packet data", segmentlength);
-		}
-		segment_buffer_item = proto_tree_add_item(segment_tree, hf_saphdb_segment_buffer, tvb, offset, segment_buffer_length, ENC_NA);
+		segment_buffer_item = proto_tree_add_item(segment_tree, hf_saphdb_segment_buffer, tvb, offset, segmentlength - length, ENC_NA);
 		segment_buffer_tree = proto_item_add_subtree(segment_buffer_item, ett_saphdb);
 
 		/* Iterate over the parts and dissect them */
-		for (uint16_t part_number = 1; part_number <= number_of_parts && segment_buffer_consumed + 16 <= segment_buffer_length && tvb_reported_length_remaining(tvb, offset) >= 16; part_number++) {
+		for (uint16_t part_number = 1; part_number <= number_of_parts && tvb_reported_length_remaining(tvb, offset) >= 16; part_number++) {
 			part_length = dissect_saphdb_part(tvb, pinfo, segment_buffer_tree, NULL, offset, number_of_parts, part_number);
 			offset += part_length;
 			length += part_length;
-			segment_buffer_consumed += part_length;
 		}
 
 	}
@@ -1251,7 +1202,7 @@ dissect_saphdb_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 
 			/* Check the length of the variable part against the remaining packet */
 			if ((uint32_t)tvb_reported_length_remaining(tvb, offset) != varpartlength) {
-				expert_add_info_format(pinfo, varpartlength_item, &ei_saphdb_varpartlength_incorrect, "Length of variable part %d is invalid", varpartlength);
+				expert_add_info_format(pinfo, varpartlength_item, &ei_saphdb_varpartlenght_incorrect, "Length of variable part %d is invalid", varpartlength);
 				varpartlength = tvb_reported_length_remaining(tvb, offset);
 			}
 
@@ -1266,14 +1217,12 @@ dissect_saphdb_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 					offset += dissect_saphdb_segment(tvb, pinfo, message_buffer_tree, NULL, offset, number_of_segments, 1, compressed);
 					compressed_buffer_item = proto_tree_add_item(message_buffer_tree, hf_saphdb_compressed_buffer, tvb, offset, varpartlength, ENC_NA);
 					if (global_saphdb_highlight_items){
-						expert_add_info(pinfo, compressed_buffer_item, &ei_saphdb_compressed_unknown);
+						expert_add_info_format(pinfo, compressed_buffer_item, &ei_saphdb_compressed_unknown, "Packet is compressed and decompression is not supported");
 					}
 
 				} else {
-					uint32_t message_buffer_end = offset + varpartlength;
-
 					/* Iterate over the segments and dissect them */
-					for (uint16_t segment_number = 1; segment_number <= number_of_segments && offset < message_buffer_end && message_buffer_end - offset >= 13 && tvb_reported_length_remaining(tvb, offset) >= 13; segment_number++) {
+					for (uint16_t segment_number = 1; segment_number <= number_of_segments && tvb_reported_length_remaining(tvb, offset) >= 13; segment_number++) {
 						offset += dissect_saphdb_segment(tvb, pinfo, message_buffer_tree, NULL, offset, number_of_segments, segment_number, compressed);
 					}
 				}
@@ -1300,7 +1249,7 @@ get_saphdb_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data
 static int
 dissect_saphdb_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-	return dissect_saphdb_message(tvb, pinfo, tree, NULL);
+	return dissect_saphdb_message(tvb, pinfo, tree, false);
 }
 
 static int
@@ -1481,15 +1430,14 @@ proto_register_saphdb(void)
 
 	/* Register the expert info */
 	static ei_register_info ei[] = {
-		{ &ei_saphdb_compressed_unknown, { "saphdb.compressed", PI_UNDECODED, PI_WARN, "Packet is compressed and decompression is not supported", EXPFILL }},
+		{ &ei_saphdb_compressed_unknown, { "saphdb.compressed", PI_UNDECODED, PI_WARN, "The packet is compressed, and decompression is not supported", EXPFILL }},
 		{ &ei_saphdb_option_part_unknown, { "saphdb.segment.part.option.unknown", PI_UNDECODED, PI_WARN, "The Option Part has a unknown type that is not dissected", EXPFILL }},
 		{ &ei_saphdb_segments_incorrect_order, { "saphdb.segment.segmentno.invalid", PI_MALFORMED, PI_ERROR, "The segments are in incorrect order or are invalid", EXPFILL }},
 		{ &ei_saphdb_segments_number_incorrect, { "saphdb.noofsegm.invalid", PI_MALFORMED, PI_ERROR, "The number of segments is incorrect", EXPFILL }},
 		{ &ei_saphdb_segment_length, { "saphdb.segment.segmentlength.invalid", PI_MALFORMED, PI_ERROR, "The segment length is incorrect", EXPFILL }},
 		{ &ei_saphdb_buffer_length, { "saphdb.segment.part.bufferlength.invalid", PI_MALFORMED, PI_ERROR, "The part buffer length is incorrect", EXPFILL }},
 		{ &ei_saphdb_parts_number_incorrect, { "saphdb.segment.noofparts.invalid", PI_MALFORMED, PI_ERROR, "The number of parts is incorrect", EXPFILL }},
-		{ &ei_saphdb_varpartlength_incorrect, { "saphdb.varpartlength.invalid", PI_MALFORMED, PI_ERROR, "The length is incorrect", EXPFILL }},
-		{ &ei_saphdb_authentication_field_length, { "saphdb.segment.part.authentication.field.length.invalid", PI_MALFORMED, PI_WARN, "The authentication field length is incorrect", EXPFILL }},
+		{ &ei_saphdb_varpartlenght_incorrect, { "saphdb.varpartlength.invalid", PI_MALFORMED, PI_ERROR, "The length is incorrect", EXPFILL }},
 	};
 
 	module_t *saphdb_module;

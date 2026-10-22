@@ -10,13 +10,11 @@
 #include "snoop.h"
 
 #include <string.h>
-#include "wtap_module.h"
+#include "wtap-int.h"
 #include "file_wrappers.h"
 #include "atm.h"
 #include <wsutil/802_11-utils.h>
-#include <wsutil/array.h>
 #include <wsutil/ws_roundup.h>
-#include <wsutil/pint.h>
 
 /* See RFC 1761 for a description of the "snoop" file format. */
 
@@ -80,19 +78,19 @@ struct shomiti_trailer {
 #define RX_STATUS_FIFO_ERROR		0x0080	/* receive FIFO error */
 #define RX_STATUS_TRIGGERED		0x0001	/* frame did trigger */
 
-static bool snoop_read(wtap *wth, wtap_rec *rec,
+static bool snoop_read(wtap *wth, wtap_rec *rec, Buffer *buf,
     int *err, char **err_info, int64_t *data_offset);
-static bool snoop_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
-    int *err, char **err_info);
+static bool snoop_seek_read(wtap *wth, int64_t seek_off,
+    wtap_rec *rec, Buffer *buf, int *err, char **err_info);
 static int snoop_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
-    int *err, char **err_info);
+    Buffer *buf, int *err, char **err_info);
 static bool snoop_read_atm_pseudoheader(FILE_T fh,
     union wtap_pseudo_header *pseudo_header, int *err, char **err_info);
 static bool snoop_read_shomiti_wireless_pseudoheader(FILE_T fh,
     union wtap_pseudo_header *pseudo_header, int *err, char **err_info,
-    uint32_t *header_size);
+    int *header_size);
 static bool snoop_dump(wtap_dumper *wdh, const wtap_rec *rec,
-    int *err, char **err_info);
+    const uint8_t *pd, int *err, char **err_info);
 
 static int snoop_file_type_subtype = -1;
 static int shomiti_file_type_subtype = -1;
@@ -458,14 +456,14 @@ typedef struct {
 
 
 /* Read the next packet */
-static bool snoop_read(wtap *wth, wtap_rec *rec,
+static bool snoop_read(wtap *wth, wtap_rec *rec, Buffer *buf,
     int *err, char **err_info, int64_t *data_offset)
 {
 	int	padbytes;
 
 	*data_offset = file_tell(wth->fh);
 
-	padbytes = snoop_read_packet(wth, wth->fh, rec, err, err_info);
+	padbytes = snoop_read_packet(wth, wth->fh, rec, buf, err, err_info);
 	if (padbytes == -1)
 		return false;
 
@@ -481,13 +479,13 @@ static bool snoop_read(wtap *wth, wtap_rec *rec,
 }
 
 static bool
-snoop_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
-    int *err, char **err_info)
+snoop_seek_read(wtap *wth, int64_t seek_off,
+    wtap_rec *rec, Buffer *buf, int *err, char **err_info)
 {
 	if (file_seek(wth->random_fh, seek_off, SEEK_SET, err) == -1)
 		return false;
 
-	if (snoop_read_packet(wth, wth->random_fh, rec, err, err_info) == -1) {
+	if (snoop_read_packet(wth, wth->random_fh, rec, buf, err, err_info) == -1) {
 		if (*err == 0)
 			*err = WTAP_ERR_SHORT_READ;
 		return false;
@@ -497,14 +495,14 @@ snoop_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
 
 static int
 snoop_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
-    int *err, char **err_info)
+    Buffer *buf, int *err, char **err_info)
 {
 	snoop_t *snoop = (snoop_t *)wth->priv;
 	struct snooprec_hdr hdr;
 	uint32_t rec_size;
-	uint32_t packet_size;
+	uint32_t	packet_size;
 	uint32_t orig_size;
-	uint32_t header_size;
+	int header_size;
 
 	/* Read record header. */
 	if (!wtap_read_bytes_or_eof(fh, &hdr, sizeof hdr, err, err_info))
@@ -604,18 +602,13 @@ snoop_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
 		/*
 		 * Don't count the pseudo-header as part of the packet.
 		 */
-		if (ckd_sub(&packet_size, packet_size, header_size)) {
-			*err = WTAP_ERR_BAD_FILE;
-			*err_info = ws_strdup_printf("snoop: Shomiti wireless file has a packet with a %u-byte wireless pseudo-header, larger than the total packet size", header_size);
-			return -1;
-		}
-		/* This one *can't* overflow, since packet_size <= rec_size */
 		rec_size -= header_size;
 		orig_size -= header_size;
+		packet_size -= header_size;
 		break;
 	}
 
-	wtap_setup_packet_rec(rec, wth->file_encap);
+	rec->rec_type = REC_TYPE_PACKET;
 	rec->block = wtap_block_create(WTAP_BLOCK_PACKET);
 	rec->presence_flags = WTAP_HAS_TS|WTAP_HAS_CAP_LEN;
 	rec->ts.secs = g_ntohl(hdr.ts_sec);
@@ -636,7 +629,7 @@ snoop_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
 	/*
 	 * Read the packet data.
 	 */
-	if (!wtap_read_bytes_buffer(fh, &rec->data, packet_size, err, err_info))
+	if (!wtap_read_packet_bytes(fh, buf, packet_size, err, err_info))
 		return -1;	/* failed */
 
 	/*
@@ -645,7 +638,7 @@ snoop_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
 	 */
 	if (wth->file_encap == WTAP_ENCAP_ATM_PDUS &&
 	    rec->rec_header.packet_header.pseudo_header.atm.type == TRAF_LANE) {
-		atm_guess_lane_type(rec);
+		atm_guess_lane_type(rec, ws_buffer_start_ptr(buf));
 	}
 
 	return rec_size - ((unsigned)sizeof hdr + packet_size);
@@ -663,7 +656,7 @@ snoop_read_atm_pseudoheader(FILE_T fh, union wtap_pseudo_header *pseudo_header,
 		return false;
 
 	vpi = atm_phdr.vpi;
-	vci = pntohu16(&atm_phdr.vci);
+	vci = pntoh16(&atm_phdr.vci);
 
 	/*
 	 * The lower 4 bits of the first byte of the header indicate
@@ -740,10 +733,10 @@ snoop_read_atm_pseudoheader(FILE_T fh, union wtap_pseudo_header *pseudo_header,
 static bool
 snoop_read_shomiti_wireless_pseudoheader(FILE_T fh,
     union wtap_pseudo_header *pseudo_header, int *err, char **err_info,
-    uint32_t *header_size)
+    int *header_size)
 {
 	shomiti_wireless_header whdr;
-	uint32_t rsize;
+	int	rsize;
 
 	if (!wtap_read_bytes(fh, &whdr, sizeof whdr, err, err_info))
 		return false;
@@ -756,13 +749,14 @@ snoop_read_shomiti_wireless_pseudoheader(FILE_T fh,
 	 * doesn't include the length field, as we've read
 	 * 12 bytes total.
 	 */
-	if (ckd_sub(&rsize, whdr.pad[3], 8)) {
+	if (whdr.pad[3] < 8) {
 		*err = WTAP_ERR_BAD_FILE;
 		*err_info = ws_strdup_printf("snoop: Header length in Surveyor record is %u, less than minimum of 8",
 		    whdr.pad[3]);
 		return false;
 	}
 	/* Skip the header. */
+	rsize = ((int) whdr.pad[3]) - 8;
 	if (!wtap_read_bytes(fh, NULL, rsize, err, err_info))
 		return false;
 
@@ -862,8 +856,9 @@ static bool snoop_dump_open(wtap_dumper *wdh, int *err, char **err_info _U_)
 
 /* Write a record for a packet to a dump file.
    Returns true on success, false on failure. */
-static bool snoop_dump(wtap_dumper *wdh, const wtap_rec *rec,
-	int *err, char **err_info _U_)
+static bool snoop_dump(wtap_dumper *wdh,
+	const wtap_rec *rec,
+	const uint8_t *pd, int *err, char **err_info _U_)
 {
 	const union wtap_pseudo_header *pseudo_header = &rec->rec_header.packet_header.pseudo_header;
 	struct snooprec_hdr rec_hdr;
@@ -876,7 +871,6 @@ static bool snoop_dump(wtap_dumper *wdh, const wtap_rec *rec,
 	/* We can only write packet records. */
 	if (rec->rec_type != REC_TYPE_PACKET) {
 		*err = WTAP_ERR_UNWRITABLE_REC_TYPE;
-		*err_info = wtap_unwritable_rec_type_err_string(rec);
 		return false;
 	}
 
@@ -956,8 +950,7 @@ static bool snoop_dump(wtap_dumper *wdh, const wtap_rec *rec,
 			return false;
 	}
 
-	if (!wtap_dump_file_write(wdh, ws_buffer_start_ptr(&rec->data),
-	    rec->rec_header.packet_header.caplen, err))
+	if (!wtap_dump_file_write(wdh, pd, rec->rec_header.packet_header.caplen, err))
 		return false;
 
 	/* Now write the padding. */

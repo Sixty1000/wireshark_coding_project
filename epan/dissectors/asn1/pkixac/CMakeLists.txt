@@ -21,6 +21,7 @@ set( ASN_FILE_LIST
 set( EXTRA_DIST
 	${ASN_FILE_LIST}
 	packet-${PROTOCOL_NAME}-template.c
+	packet-${PROTOCOL_NAME}-template.h
 	${PROTOCOL_NAME}.cnf
 )
 
@@ -33,7 +34,7 @@ set( A2W_FLAGS -b )
 
 set( EXTRA_CNF
 	../pkix1explicit/pkix1explicit_exp.cnf
-	"${CMAKE_CURRENT_BINARY_DIR}/../pkix1implicit/pkix1implicit-exp.cnf"
+	../pkix1implicit/pkix1implicit_exp.cnf
 	"${CMAKE_CURRENT_BINARY_DIR}/../x509af/x509af-exp.cnf"
 	"${CMAKE_CURRENT_BINARY_DIR}/../x509ce/x509ce-exp.cnf"
 )

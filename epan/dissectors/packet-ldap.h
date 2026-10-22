@@ -98,7 +98,7 @@ int dissect_mscldap_string(wmem_allocator_t *scope, tvbuff_t *tvb, int offset, i
 
 WS_DLL_PUBLIC const value_string ldap_procedure_names[];
 
-#define maxInt                         2147483647
+/*#include "packet-ldap-exp.h" */
 
 #endif  /* PACKET_LDAP_H */
 

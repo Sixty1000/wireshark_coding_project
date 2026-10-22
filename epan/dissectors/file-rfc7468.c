@@ -12,7 +12,6 @@
 
 #include <epan/packet.h>
 #include <wiretap/wtap.h>
-#include <wsutil/array.h>
 
 void proto_register_rfc7468(void);
 void proto_reg_handoff_rfc7468(void);
@@ -34,16 +33,16 @@ static dissector_handle_t ber_handle;
 static dissector_table_t rfc7468_label_table;
 
 static bool
-line_is_eb(const unsigned char *line, unsigned linelen, const char *prefix,
-           size_t prefixlen, const unsigned char **labelpp, unsigned *labellenp)
+line_is_eb(const unsigned char *line, int linelen, const char *prefix,
+           size_t prefixlen, const unsigned char **labelpp, int *labellenp)
 {
     static const char suffix[] = "-----";
 #define suffixlen (sizeof suffix - 1)
     const unsigned char *labelp;
-    unsigned labellen;
+    int labellen;
 
     /*
-     * Is this line an encapsulation boundary of the type specified by the
+     * Is this line an encapulation boundary of the type specified by the
      * prefix?
      *
      * First, it must be big enough to include the prefix at the beginning
@@ -101,7 +100,7 @@ line_is_eb(const unsigned char *line, unsigned linelen, const char *prefix,
     /*
      * The rest of the characters must be printable ASCII.
      */
-    for (unsigned i = 0; i < labellen; i++, labelp++) {
+    for (int i = 0; i < labellen; i++, labelp++) {
         if (*labelp < 0x20 || *labelp > 0x7E) {
             /* Not printable ASCII. */
             return false;
@@ -111,12 +110,12 @@ line_is_eb(const unsigned char *line, unsigned linelen, const char *prefix,
 }
 
 static bool
-line_is_blank(const unsigned char *line, unsigned linelen)
+line_is_blank(const unsigned char *line, int linelen)
 {
     const unsigned char *p;
 
     p = line;
-    for (unsigned i = 0; i < linelen; i++, p++) {
+    for (int i = 0; i < linelen; i++, p++) {
         if (*p != ' ' && *p != '\t') {
             /* Not space or tab */
             return false;
@@ -133,12 +132,12 @@ static const char posteb_prefix[] = "-----END ";
 static int
 dissect_rfc7468(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-    unsigned offset;
-    unsigned linelen;
-    unsigned next_offset = 0;
+    int offset;
+    int linelen;
+    int next_offset = 0;
     const unsigned char *line;
     const unsigned char *labelp = NULL;
-    unsigned labellen = 0;
+    int labellen = 0;
     char *label;
     proto_tree *rfc7468_tree, *preeb_tree, *posteb_tree;
     proto_item *rfc7468_item, *ti;
@@ -154,7 +153,8 @@ dissect_rfc7468(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
      * boundary; they're explanatory text lines.
      */
     while (tvb_offset_exists(tvb, offset)) {
-        if (!tvb_find_line_end_remaining(tvb, offset, &linelen, &next_offset)) {
+        linelen = tvb_find_line_end(tvb, offset, -1, &next_offset, false);
+        if (linelen == -1) {
             /* No complete line was found.  Nothing more to do. */
             return tvb_captured_length(tvb);
         }
@@ -162,14 +162,14 @@ dissect_rfc7468(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
         /*
          * Get a buffer that refers to the line.
          *
-         * Note that "tvb_find_line_end_remaining()" will return a value that
+         * Note that "tvb_find_line_end()" will return a value that
          * is not longer than what's in the buffer, so the
          * "tvb_get_ptr()" call won't throw an exception.
          */
         line = tvb_get_ptr(tvb, offset, linelen);
 
         /*
-         * Is this line a pre-encapsulation boundary?
+         * Is this line a pre-encapulation boundary?
          */
         if (line_is_eb(line, linelen, preeb_prefix, sizeof preeb_prefix - 1,
                        &labelp, &labellen)) {
@@ -200,7 +200,7 @@ dissect_rfc7468(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
     /*
      * Extract the label, and put it in that subtree.
      */
-    label = wmem_strndup(pinfo->pool, (const char*)labelp, labellen);
+    label = wmem_strndup(pinfo->pool, labelp, labellen);
     proto_tree_add_item(preeb_tree, hf_rfc7468_preeb_label, tvb,
                         offset + (int)preeb_prefix_len, labellen,  ENC_ASCII);
 
@@ -215,7 +215,8 @@ dissect_rfc7468(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
      * Skip over any blank lines before the base64 information.
      */
     while (tvb_offset_exists(tvb, offset)) {
-        if (!tvb_find_line_end_remaining(tvb, offset, &linelen, &next_offset)) {
+        linelen = tvb_find_line_end(tvb, offset, -1, &next_offset, false);
+        if (linelen == -1) {
             /* No complete line was found.  We're done. */
             return tvb_captured_length(tvb);
         }
@@ -223,7 +224,7 @@ dissect_rfc7468(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
         /*
          * Get a buffer that refers to the line.
          *
-         * Note that "tvb_find_line_end_remaining()" will return a value that
+         * Note that "tvb_find_line_end()" will return a value that
          * is not longer than what's in the buffer, so the
          * "tvb_get_ptr()" call won't throw an exception.
          */
@@ -259,7 +260,8 @@ dissect_rfc7468(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
     unsigned base64_save = 0;
     unsigned datasize = 0;
     while (tvb_offset_exists(tvb, offset)) {
-        if (!tvb_find_line_end_remaining(tvb, offset, &linelen, &next_offset)) {
+        linelen = tvb_find_line_end(tvb, offset, -1, &next_offset, false);
+        if (linelen == -1) {
             /*
              * No complete line was found.  Nothing more to do.
              */
@@ -269,14 +271,14 @@ dissect_rfc7468(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
         /*
          * Get a buffer that refers to the line.
          *
-         * Note that "tvb_find_line_end_remaining()" will return a value that
+         * Note that "tvb_find_line_end()" will return a value that
          * is not longer than what's in the buffer, so the
          * "tvb_get_ptr()" call won't throw an exception.
          */
         line = tvb_get_ptr(tvb, offset, linelen);
 
         /*
-         * Is this line a post-encapsulation boundary?
+         * Is this line a post-encapulation boundary?
          */
         if (line_is_eb(line, linelen, posteb_prefix, sizeof posteb_prefix - 1,
                        &labelp, &labellen)) {
@@ -301,8 +303,7 @@ dissect_rfc7468(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
         /*
          * Now decode into it.
          */
-        unsigned decodesize = (unsigned)g_base64_decode_step((const char*)line,
-                                                       linelen,
+        unsigned decodesize = (unsigned)g_base64_decode_step(line, linelen,
                                                        &databuf[datasize],
                                                        &base64_state,
                                                        &base64_save);
@@ -327,8 +328,8 @@ dissect_rfc7468(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
         /*
          * Try to decode it based on the label.
          */
-        if (dissector_try_string_with_data(rfc7468_label_table, label, data_tvb, pinfo,
-                                 tree, true, NULL) == 0) {
+        if (dissector_try_string(rfc7468_label_table, label, data_tvb, pinfo,
+                                 tree, NULL) == 0) {
             proto_tree *data_tree;
 
             /*
@@ -365,12 +366,12 @@ dissect_rfc7468(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
 static bool
 dissect_rfc7468_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
-    unsigned offset;
-    unsigned linelen;
-    unsigned next_offset;
+    int offset;
+    int linelen;
+    int next_offset;
     const unsigned char *line;
     const unsigned char *labelp;
-    unsigned labellen;
+    int labellen;
     bool found = false;
 
     /*
@@ -380,7 +381,8 @@ dissect_rfc7468_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
      */
     offset = 0;
     for (unsigned int i = 0; i < MAX_EXPLANATORY_TEXT_LINES; i++) {
-        if (!tvb_find_line_end_remaining(tvb, offset, &linelen, &next_offset)) {
+        linelen = tvb_find_line_end(tvb, offset, -1, &next_offset, false);
+        if (linelen == -1) {
             /*
              * No complete line was found; we ran out of file data
              * and didn't find a pre-encapsulation boundary, so this
@@ -392,7 +394,7 @@ dissect_rfc7468_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
         /*
          * Get a buffer that refers to the line.
          *
-         * Note that "tvb_find_line_end_remaining)" will return a value that
+         * Note that "tvb_find_line_end()" will return a value that
          * is not longer than what's in the buffer, so the
          * "tvb_get_ptr()" call won't throw an exception.
          */
@@ -468,7 +470,6 @@ proto_reg_handoff_rfc7468(void)
 {
     heur_dissector_add("wtap_file", dissect_rfc7468_heur, "RFC 7468 file", "rfc7468_wtap", proto_rfc7468, HEURISTIC_ENABLE);
     dissector_add_uint("wtap_encap", WTAP_ENCAP_RFC7468, rfc7468_handle);
-    dissector_add_string("media_type", "application/pem-certificate-chain", rfc7468_handle);
 
     ber_handle = find_dissector("ber");
 }

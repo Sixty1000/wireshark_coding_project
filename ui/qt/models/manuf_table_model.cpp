@@ -29,7 +29,11 @@ ManufTableItem::ManufTableItem(struct ws_manuf *ptr) :
             ws_assert_not_reached();
     }
     // Note: since 'ptr' is not stable, a deep copy is needed.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     block_bytes_ = QByteArray(reinterpret_cast<const char *>(ptr->block), size);
+#else
+    block_bytes_ = QByteArray(reinterpret_cast<const char *>(ptr->block), static_cast<int>(size));
+#endif
 
     char buf[64];
     block_name_ = QString::fromUtf8(ws_manuf_block_str(buf, sizeof(buf), ptr));
@@ -132,11 +136,11 @@ QVariant ManufTableModel::headerData(int section, Qt::Orientation orientation, i
     if (orientation == Qt::Horizontal) {
         switch (section) {
             case COL_MAC_PREFIX:
-                return tr("Address Block");
+                return QString(tr("Address Block"));
             case COL_SHORT_NAME:
-                return tr("Short Name");
+                return QString(tr("Short Name"));
             case COL_VENDOR_NAME:
-                return tr("Vendor Name");
+                return QString(tr("Vendor Name"));
         }
     }
 
@@ -154,43 +158,22 @@ void ManufSortFilterProxyModel::clearFilter()
 {
     if (filter_type_ == FilterEmpty)
         return;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
-    beginFilterChange();
-#endif
     filter_type_ = FilterEmpty;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-    endFilterChange(QSortFilterProxyModel::Direction::Rows);
-#else
     invalidateFilter();
-#endif
 }
 
 void ManufSortFilterProxyModel::setFilterAddress(const QByteArray &bytes)
 {
-#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
-    beginFilterChange();
-#endif
     filter_type_ = FilterByAddress;
     filter_bytes_ = bytes;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-    endFilterChange(QSortFilterProxyModel::Direction::Rows);
-#else
     invalidateFilter();
-#endif
 }
 
 void ManufSortFilterProxyModel::setFilterName(QRegularExpression &name)
 {
-#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
-    beginFilterChange();
-#endif
     filter_type_ = FilterByName;
     filter_name_ = name;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-    endFilterChange(QSortFilterProxyModel::Direction::Rows);
-#else
     invalidateFilter();
-#endif
 }
 
 static bool match_filter(const QByteArray &bytes, const QByteArray &mac_block)
@@ -198,7 +181,11 @@ static bool match_filter(const QByteArray &bytes, const QByteArray &mac_block)
     if (bytes.size() < mac_block.size())
         return mac_block.startsWith(bytes);
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QByteArray prefix = bytes.first(mac_block.size());
+#else
+    QByteArray prefix = bytes.left(mac_block.size());
+#endif
     // Blocks are 3, 4 or 5 bytes wide
     if (mac_block.size() > 3) {
         // Mask out the last nibble of the bytes for 28 and 36 bit block lengths

@@ -15,11 +15,11 @@
 #include <epan/tfs.h>
 #include <epan/unit_strings.h>
 #include <epan/oui.h>
+#include <epan/nlpid.h>
 #include <epan/etypes.h>
 #include <epan/expert.h>
 #include "packet-q931.h"
 #include "packet-arp.h"
-#include "packet-osi.h"
 
 /*
  * See
@@ -347,10 +347,11 @@ static const value_string q2931_codeset_vals[] = {
 	{ 0x00, NULL },
 };
 
-static const true_false_string tfs_q2931_handling_instructions = { "Follow explicit error handling instructions", "Regular error handling procedures apply" };
+static const true_false_string tfs_q2931_handling_instructions = { "Follow explicit error handling instructions",
+																   "Regular error handling procedures apply" };
 
 static void
-dissect_q2931_shift_ie(tvbuff_t *tvb, packet_info* pinfo, int offset, int len,
+dissect_q2931_shift_ie(tvbuff_t *tvb, int offset, int len,
 		       proto_tree *tree, uint8_t info_element)
 {
 	bool non_locking_shift;
@@ -363,7 +364,7 @@ dissect_q2931_shift_ie(tvbuff_t *tvb, packet_info* pinfo, int offset, int len,
 	proto_tree_add_uint_format(tree, hf_q2931_locking_codeset, tvb, offset, 1, codeset,
 		"%s shift to codeset %u: %s",
 		(non_locking_shift ? "Non-locking" : "Locking"),
-		codeset, val_to_str(pinfo->pool, codeset, q2931_codeset_vals, "Unknown (0x%02X)"));
+		codeset, val_to_str(codeset, q2931_codeset_vals, "Unknown (0x%02X)"));
 }
 
 /*
@@ -455,7 +456,8 @@ dissect_q2931_aal_parameters_ie(tvbuff_t *tvb, packet_info* pinfo, int offset, i
 
 	if (len == 0)
 		return;
-	proto_tree_add_item_ret_uint8(tree, hf_q2931_aal_type, tvb, offset, 1, ENC_BIG_ENDIAN, &aal_type);
+	aal_type = tvb_get_uint8(tvb, offset);
+	proto_tree_add_item(tree, hf_q2931_aal_type, tvb, offset, 1, ENC_BIG_ENDIAN);
 	offset += 1;
 	len -= 1;
 
@@ -473,7 +475,8 @@ dissect_q2931_aal_parameters_ie(tvbuff_t *tvb, packet_info* pinfo, int offset, i
 	}
 
 	while (len >= 0) {
-		ti = proto_tree_add_item_ret_uint8(tree, hf_q2931_aal_parameter_identifier, tvb, offset, 1, ENC_NA, &identifier);
+		identifier = tvb_get_uint8(tvb, offset);
+		ti = proto_tree_add_item(tree, hf_q2931_aal_parameter_identifier, tvb, offset, 1, ENC_NA);
 		offset++;
 		len--;
 		switch (identifier) {
@@ -633,7 +636,8 @@ dissect_q2931_atm_cell_rate_ie(tvbuff_t *tvb, packet_info* pinfo, int offset, in
 	proto_item* ti;
 
 	while (len >= 0) {
-		ti = proto_tree_add_item_ret_uint8(tree, hf_q2931_atm_identifier, tvb, offset, 1, ENC_NA, &identifier);
+		identifier = tvb_get_uint8(tvb, offset);
+		ti = proto_tree_add_item(tree, hf_q2931_atm_identifier, tvb, offset, 1, ENC_NA);
 
 		switch (identifier) {
 
@@ -1459,7 +1463,8 @@ dissect_q2931_e2e_transit_delay_ie(tvbuff_t *tvb, packet_info* pinfo, int offset
 	proto_item* ti;
 
 	while (len >= 3) {
-		ti = proto_tree_add_item_ret_uint8(tree, hf_q2931_e2e_transit_delay_identifier, tvb, offset, 1, ENC_BIG_ENDIAN, &identifier);
+		ti = proto_tree_add_item(tree, hf_q2931_e2e_transit_delay_identifier, tvb, offset, 1, ENC_BIG_ENDIAN);
+		identifier = tvb_get_uint8(tvb, offset);
 		offset++;
 		value = tvb_get_ntohs(tvb, offset);
 		len -=3;
@@ -1607,7 +1612,7 @@ dissect_q2931_transit_network_sel_ie(tvbuff_t *tvb, int offset, int len,
 
 	if (len == 0)
 		return;
-	proto_tree_add_item(tree, hf_q2931_transit_network_sel_network_id, tvb, offset, len, ENC_ASCII);
+	proto_tree_add_item(tree, hf_q2931_transit_network_sel_network_id, tvb, offset, len, ENC_NA|ENC_ASCII);
 }
 
 /*
@@ -1722,7 +1727,7 @@ dissect_q2931_ie_contents(tvbuff_t *tvb, packet_info* pinfo, int offset, int len
 
 	case Q2931_IE_BBAND_LOCKING_SHIFT:
 	case Q2931_IE_BBAND_NLOCKING_SHIFT:
-		dissect_q2931_shift_ie(tvb, pinfo, offset, len, tree, info_element);
+		dissect_q2931_shift_ie(tvb, offset, len, tree, info_element);
 		break;
 
 	case Q2931_IE_NBAND_BEARER_CAP:
@@ -1829,7 +1834,7 @@ dissect_q2931_ie(tvbuff_t *tvb, packet_info* pinfo, int offset, int len, proto_t
 	proto_tree	*ie_ext_tree;
 
 	ie_tree = proto_tree_add_subtree(tree, tvb, offset, 1+1+2+len, ett_q2931_ie, NULL,
-	    val_to_str_ext(pinfo->pool, info_element, &q2931_info_element_vals_ext,
+	    val_to_str_ext(info_element, &q2931_info_element_vals_ext,
 	      "Unknown information element (0x%02X)"));
 	proto_tree_add_uint(ie_tree, hf_q2931_information_element, tvb, offset, 1, info_element);
 	ti = proto_tree_add_uint(ie_tree, hf_q2931_information_element_extension, tvb, offset + 1, 1, info_element_ext);
@@ -1903,7 +1908,7 @@ dissect_q2931(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
 	}
 	message_type = tvb_get_uint8(tvb, offset);
 	col_add_str(pinfo->cinfo, COL_INFO,
-		    val_to_str_ext(pinfo->pool, message_type, &q2931_message_type_vals_ext,
+		    val_to_str_ext(message_type, &q2931_message_type_vals_ext,
 		      "Unknown message type (0x%02X)"));
 
 	proto_tree_add_uint(q2931_tree, hf_q2931_message_type, tvb, offset, 1, message_type);

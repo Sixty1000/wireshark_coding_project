@@ -6,8 +6,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 
-import re
 import sys
+import re
 
 preamble = """\
 /*
@@ -21,13 +21,13 @@ preamble = """\
 def gen_prototypes(funcs):
     output = ""
     for f in funcs:
-        output += f"void {f}(void);\n"
+        output += "void {}(void);\n".format(f)
     return output
 
 def gen_array(funcs, name):
-    output = f"{name}[] = {{\n"
+    output = "{}[] = {{\n".format(name)
     for f in funcs:
-        output += f"    {{ \"{f}\", {f} }},\n"
+        output += "    {{ \"{0}\", {0} }},\n".format(f)
     output += "    { NULL, NULL }\n};\n"
     return output
 
@@ -54,13 +54,13 @@ def make_dissectors(outfile, infiles):
     handoffs.sort()
 
     output = preamble
-    output += f"""\
+    output += """\
 #include "dissectors.h"
 
-const unsigned long dissector_reg_proto_count = {len(protos)};
-const unsigned long dissector_reg_handoff_count = {len(handoffs)};
+const unsigned long dissector_reg_proto_count = {0};
+const unsigned long dissector_reg_handoff_count = {1};
 
-"""
+""".format(len(protos), len(handoffs))
 
     output += gen_prototypes(protos)
     output += "\n"
@@ -73,43 +73,7 @@ const unsigned long dissector_reg_handoff_count = {len(handoffs)};
     with open(outfile, "w") as f:
         f.write(output)
 
-    print(f"Found {len(protos)} registrations and {len(handoffs)} handoffs.")
-
-def make_event_dissectors(outfile, infiles):
-    protos = []
-    protos_regex = r"void\s+(event_register_[\w]+)\s*\(\s*void\s*\)\s*{"
-    handoffs = []
-    handoffs_regex = r"void\s+(event_reg_handoff_[\w]+)\s*\(\s*void\s*\)\s*{"
-
-    scan_files(infiles, [(protos, protos_regex), (handoffs, handoffs_regex)])
-
-    if len(protos) < 1:
-        sys.exit("No protocol registrations found.")
-
-    protos.sort()
-    handoffs.sort()
-
-    output = preamble
-    output += f"""\
-#include "event-dissectors.h"
-
-const unsigned long event_dissector_reg_proto_count = {len(protos)};
-const unsigned long event_dissector_reg_handoff_count = {len(handoffs)};
-
-"""
-
-    output += gen_prototypes(protos)
-    output += "\n"
-    output += gen_array(protos, "dissector_reg_t const event_dissector_reg_proto")
-    output += "\n"
-    output += gen_prototypes(handoffs)
-    output += "\n"
-    output += gen_array(handoffs, "dissector_reg_t const event_dissector_reg_handoff")
-
-    with open(outfile, "w") as f:
-        f.write(output)
-
-    print(f"Found {len(protos)} registrations and {len(handoffs)} handoffs.")
+    print("Found {0} registrations and {1} handoffs.".format(len(protos), len(handoffs)))
 
 def make_wtap_modules(outfile, infiles):
     wtap_modules = []
@@ -123,13 +87,12 @@ def make_wtap_modules(outfile, infiles):
     wtap_modules.sort()
 
     output = preamble
-    output += f"""\
-#include <glib.h>
+    output += """\
 #include "wtap_modules.h"
 
-const unsigned wtap_module_count = {len(wtap_modules)};
+const unsigned wtap_module_count = {0};
 
-"""
+""".format(len(wtap_modules))
 
     output += gen_prototypes(wtap_modules)
     output += "\n"
@@ -138,7 +101,7 @@ const unsigned wtap_module_count = {len(wtap_modules)};
     with open(outfile, "w") as f:
         f.write(output)
 
-    print(f"Found {len(wtap_modules)} registrations.")
+    print("Found {0} registrations.".format(len(wtap_modules)))
 
 def make_taps(outfile, infiles):
     taps = []
@@ -152,12 +115,12 @@ def make_taps(outfile, infiles):
     taps.sort()
 
     output = preamble
-    output += f"""\
+    output += """\
 #include "ui/taps.h"
 
-const unsigned long tap_reg_listener_count = {len(taps)};
+const unsigned long tap_reg_listener_count = {0};
 
-"""
+""".format(len(taps))
 
     output += gen_prototypes(taps)
     output += "\n"
@@ -166,11 +129,11 @@ const unsigned long tap_reg_listener_count = {len(taps)};
     with open(outfile, "w") as f:
         f.write(output)
 
-    print(f"Found {len(taps)} registrations.")
+    print("Found {0} registrations.".format(len(taps)))
 
 
 def print_usage():
-    sys.exit(f"Usage: {sys.argv[0]} <dissectors|taps> <outfile> <infiles...|@filelist>\n")
+    sys.exit("Usage: {0} <dissectors|taps> <outfile> <infiles...|@filelist>\n".format(sys.argv[0]))
 
 if __name__ == "__main__":
     if len(sys.argv) < 4:
@@ -180,14 +143,12 @@ if __name__ == "__main__":
     outfile = sys.argv[2]
     if sys.argv[3].startswith("@"):
         with open(sys.argv[3][1:]) as f:
-            infiles = [line.strip() for line in f]
+            infiles = [line.strip() for line in f.readlines()]
     else:
         infiles = sys.argv[3:]
 
     if mode == "dissectors":
         make_dissectors(outfile, infiles)
-    elif mode == "event_dissectors":
-        make_event_dissectors(outfile, infiles)
     elif mode == "wtap_modules":
         make_wtap_modules(outfile, infiles)
     elif mode == "taps":

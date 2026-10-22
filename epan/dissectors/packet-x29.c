@@ -11,7 +11,7 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include "packet-osi.h"
+#include <epan/nlpid.h>
 
 void proto_register_x29(void);
 void proto_reg_handoff_x29(void);
@@ -82,14 +82,14 @@ static const value_string reference_type_vals[] = {
 static int
 dissect_x29(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 {
-	unsigned    offset = 0;
+	int         offset = 0;
 	proto_tree *x29_tree;
 	proto_item *ti;
 	bool       *q_bit_set;
 	uint8_t     msg_code;
 	uint8_t     error_type;
 	uint8_t     type_ref;
-	unsigned    next_offset;
+	int         next_offset;
 	int         linelen;
 
 	/* Reject the packet if data is NULL */
@@ -109,7 +109,7 @@ dissect_x29(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 		 */
 		msg_code = tvb_get_uint8(tvb, offset);
 		col_add_fstr(pinfo->cinfo, COL_INFO, "%s PAD message",
-			    val_to_str(pinfo->pool, msg_code, message_code_vals,
+			    val_to_str(msg_code, message_code_vals,
 			        "Unknown (0x%02x)"));
 
 		proto_tree_add_uint(x29_tree, hf_msg_code, tvb,
@@ -140,8 +140,9 @@ dissect_x29(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 			break;
 
 		case ERROR_MSG:
-			proto_tree_add_item_ret_uint8(x29_tree, hf_error_type, tvb,
-				offset, 1, ENC_BIG_ENDIAN, &error_type);
+			error_type = tvb_get_uint8(tvb, offset);
+			proto_tree_add_uint(x29_tree, hf_error_type, tvb,
+			    offset, 1, error_type);
 			offset++;
 			if (error_type != 0) {
 				proto_tree_add_item(x29_tree, hf_inv_msg_code,
@@ -151,7 +152,8 @@ dissect_x29(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 
 		case BREAK_IND_MSG:
 			if (tvb_reported_length_remaining(tvb, offset) > 0) {
-				proto_tree_add_item_ret_uint8(x29_tree, hf_x29_type_reference, tvb, offset, 1, ENC_BIG_ENDIAN, &type_ref);
+				type_ref = tvb_get_uint8(tvb, offset);
+				proto_tree_add_item(x29_tree, hf_x29_type_reference, tvb, offset, 1, ENC_BIG_ENDIAN);
 				offset++;
 				switch (type_ref) {
 
@@ -205,7 +207,8 @@ dissect_x29(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 				/*
 				 * Find the end of the line.
 				 */
-				tvb_find_line_end_remaining(tvb, offset, NULL, &next_offset);
+				tvb_find_line_end(tvb, offset, -1,
+				    &next_offset, false);
 
 				/*
 				 * Now compute the length of the line
@@ -214,7 +217,7 @@ dissect_x29(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 				 */
 				linelen = next_offset - offset;
 
-				proto_tree_add_item(x29_tree, hf_x29_data, tvb, offset, linelen, ENC_ASCII);
+				proto_tree_add_item(x29_tree, hf_x29_data, tvb, offset, linelen, ENC_NA|ENC_ASCII);
 				offset = next_offset;
 			}
 		}

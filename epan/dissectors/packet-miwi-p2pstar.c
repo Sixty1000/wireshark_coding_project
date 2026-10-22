@@ -1,4 +1,4 @@
-/* packet-miwi-p2pstar.c
+/* packet-miwi_p2pstar.c
  * Dissector  routines for the Microchip MiWi_P2P_Star
  * Copyright 2013 Martin Leixner <info@sewio.net>
  *
@@ -352,11 +352,11 @@ static void *miwi_da_value(packet_info *pinfo _U_)
 }/* miwi_da_value */
 static int miwi_short_address_to_str(const address* addr, char *buf, int buf_len)
 {
-    uint16_t miwi_short_addr = pletohu16(addr->data);
+    uint16_t miwi_short_addr = pletoh16(addr->data);
 
     if (miwi_short_addr == 0xffff)
     {
-        (void) g_strlcpy(buf, "Broadcast", buf_len);
+        g_strlcpy(buf, "Broadcast", buf_len);
         return 10;
     }
 
@@ -371,7 +371,7 @@ static int miwi_short_to_str(uint16_t miwi_short_addr, char *buf, int buf_len)
 {
     if(miwi_short_addr == 0xffff)
     {
-        (void) g_strlcpy(buf, "Broadcast", buf_len);
+        g_strlcpy(buf, "Broadcast", buf_len);
         return 10;
     }
 
@@ -860,7 +860,7 @@ miwi_dissect_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_t
     unsigned                offset = 0;
     bool                    dstPanPresent = false;
     bool                    srcPanPresent = false;
-    miwi_packet      *packet = wmem_new0(pinfo->pool, miwi_packet);
+    miwi_packet      *packet = wmem_new0(wmem_packet_scope(), miwi_packet);
     ieee802154_short_addr   addr16;
     ieee802154_hints_t     *ieee_hints;
 
@@ -877,8 +877,10 @@ miwi_dissect_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_t
     ieee_hints->packet = packet;
 
     /* Create the protocol tree. */
-    proto_root = proto_tree_add_protocol_format(tree, proto_miwi_p2pstar, tvb, 0, tvb_captured_length(tvb), "IEEE 802.15.4-MiWi");
-    miwi_tree = proto_item_add_subtree(proto_root, ett_miwi_p2pstar);
+    if(tree){
+        proto_root = proto_tree_add_protocol_format(tree, proto_miwi_p2pstar, tvb, 0, tvb_captured_length(tvb), "IEEE 802.15.4-MiWi");
+        miwi_tree = proto_item_add_subtree(proto_root, ett_miwi_p2pstar);
+    }
     /* Add the protocol name. */
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "MiWi P2P Star");
 
@@ -1167,7 +1169,7 @@ miwi_dissect_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_t
         packet->dst64 = tvb_get_letoh64(tvb, offset);
 
         /* Copy and convert the address to network byte order. */
-        *p_addr = pntohu64(&(packet->dst64));
+        *p_addr = pntoh64(&(packet->dst64));
 
         /* Display the destination address. */
         /* XXX - OUI resolution doesn't happen when displaying resolved
@@ -1176,12 +1178,14 @@ miwi_dissect_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_t
          */
         set_address(&pinfo->dl_dst, AT_EUI64, 8, p_addr);
         copy_address_shallow(&pinfo->dst, &pinfo->dl_dst);
-        proto_tree_add_item(miwi_tree, hf_miwi_ext_dst_addr, tvb, offset, 8, ENC_LITTLE_ENDIAN);
-        proto_item_append_text(proto_root, ", Dst: %s", eui64_to_display(pinfo->pool, packet->dst64));
-        ti = proto_tree_add_item(miwi_tree, hf_miwi_addr64, tvb, offset, 8, ENC_LITTLE_ENDIAN);
-        proto_item_set_generated(ti);
-        proto_item_set_hidden(ti);
-        col_append_fstr(pinfo->cinfo, COL_INFO, ", Dst: %s", eui64_to_display(pinfo->pool, packet->dst64));
+        if(tree){
+            proto_tree_add_item(miwi_tree, hf_miwi_ext_dst_addr, tvb, offset, 8, ENC_LITTLE_ENDIAN);
+            proto_item_append_text(proto_root, ", Dst: %s", eui64_to_display(wmem_packet_scope(), packet->dst64));
+            ti = proto_tree_add_item(miwi_tree, hf_miwi_addr64, tvb, offset, 8, ENC_LITTLE_ENDIAN);
+            proto_item_set_generated(ti);
+            proto_item_set_hidden(ti);
+        }
+        col_append_fstr(pinfo->cinfo, COL_INFO, ", Dst: %s", eui64_to_display(wmem_packet_scope(), packet->dst64));
         offset += 8;
     }
 
@@ -1231,30 +1235,32 @@ miwi_dissect_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_t
         miwi_short_to_str(packet->src16,src_addr,10);
 
         /* Add the addressing info to the tree. */
-        proto_tree_add_uint(miwi_tree, hf_miwi_short_src_addr, tvb, offset, 2, packet->src16);
-        proto_item_append_text(proto_root, ", Src: %s", src_addr);
-        ti = proto_tree_add_uint(miwi_tree, hf_miwi_addr16, tvb, offset, 2, packet->src16);
-        proto_item_set_generated(ti);
-        proto_item_set_hidden(ti);
-
-        if(ieee_hints && ieee_hints->map_rec){
-            /* Display inferred source address info */
-            ti = proto_tree_add_eui64(miwi_tree, hf_miwi_short_src_addr, tvb, offset, 0,
-                    ieee_hints->map_rec->addr64);
-            proto_item_set_generated(ti);
-            ti = proto_tree_add_eui64(miwi_tree, hf_miwi_addr64, tvb, offset, 0, ieee_hints->map_rec->addr64);
+        if(tree){
+            proto_tree_add_uint(miwi_tree, hf_miwi_short_src_addr, tvb, offset, 2, packet->src16);
+            proto_item_append_text(proto_root, ", Src: %s", src_addr);
+            ti = proto_tree_add_uint(miwi_tree, hf_miwi_addr16, tvb, offset, 2, packet->src16);
             proto_item_set_generated(ti);
             proto_item_set_hidden(ti);
 
-            if( ieee_hints->map_rec->start_fnum ){
-                ti = proto_tree_add_uint(miwi_tree, hf_miwi_src64_origin, tvb, 0, 0,
-                    ieee_hints->map_rec->start_fnum);
+            if(ieee_hints && ieee_hints->map_rec){
+                /* Display inferred source address info */
+                ti = proto_tree_add_eui64(miwi_tree, hf_miwi_short_src_addr, tvb, offset, 0,
+                        ieee_hints->map_rec->addr64);
+                proto_item_set_generated(ti);
+                ti = proto_tree_add_eui64(miwi_tree, hf_miwi_addr64, tvb, offset, 0, ieee_hints->map_rec->addr64);
+                proto_item_set_generated(ti);
+                proto_item_set_hidden(ti);
+
+                if( ieee_hints->map_rec->start_fnum ){
+                    ti = proto_tree_add_uint(miwi_tree, hf_miwi_src64_origin, tvb, 0, 0,
+                        ieee_hints->map_rec->start_fnum);
+                }
+                else{
+                    ti = proto_tree_add_uint_format_value(miwi_tree, hf_miwi_src64_origin, tvb, 0, 0,
+                        ieee_hints->map_rec->start_fnum, "Pre-configured");
+                }
+                proto_item_set_generated(ti);
             }
-            else{
-                ti = proto_tree_add_uint_format_value(miwi_tree, hf_miwi_src64_origin, tvb, 0, 0,
-                    ieee_hints->map_rec->start_fnum, "Pre-configured");
-            }
-            proto_item_set_generated(ti);
         }
 
         col_append_fstr(pinfo->cinfo, COL_INFO, ", Src: %s", src_addr);
@@ -1268,7 +1274,7 @@ miwi_dissect_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_t
         packet->src64 = tvb_get_letoh64(tvb, offset);
 
         /* Copy and convert the address to network byte order. */
-        *p_addr = pntohu64(&(packet->src64));
+        *p_addr = pntoh64(&(packet->src64));
 
         /* Display the source address. */
         /* XXX - OUI resolution doesn't happen when displaying resolved
@@ -1277,13 +1283,15 @@ miwi_dissect_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_t
          */
         set_address(&pinfo->dl_src, AT_EUI64, 8, p_addr);
         copy_address_shallow(&pinfo->src, &pinfo->dl_src);
-        proto_tree_add_item(miwi_tree, hf_miwi_ext_src_addr, tvb, offset, 8, ENC_LITTLE_ENDIAN);
-        proto_item_append_text(proto_root, ", Src: %s", eui64_to_display(pinfo->pool, packet->src64));
-        ti = proto_tree_add_item(miwi_tree, hf_miwi_addr64, tvb, offset, 8, ENC_LITTLE_ENDIAN);
-        proto_item_set_generated(ti);
-        proto_item_set_hidden(ti);
+        if(tree){
+            proto_tree_add_item(miwi_tree, hf_miwi_ext_src_addr, tvb, offset, 8, ENC_LITTLE_ENDIAN);
+            proto_item_append_text(proto_root, ", Src: %s", eui64_to_display(wmem_packet_scope(), packet->src64));
+            ti = proto_tree_add_item(miwi_tree, hf_miwi_addr64, tvb, offset, 8, ENC_LITTLE_ENDIAN);
+            proto_item_set_generated(ti);
+            proto_item_set_hidden(ti);
+        }
 
-        col_append_fstr(pinfo->cinfo, COL_INFO, ", Src: %s", eui64_to_display(pinfo->pool, packet->src64));
+        col_append_fstr(pinfo->cinfo, COL_INFO, ", Src: %s", eui64_to_display(wmem_packet_scope(), packet->src64));
         offset += 8;
     }
 
@@ -1297,7 +1305,9 @@ miwi_dissect_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_t
              * part of the payload, is encrypted, and follows the payload IEs. Thus we only parse the command id
              * here for 2006 and earlier frames. */
             packet->command_id = tvb_get_uint8(tvb, offset);
-            proto_tree_add_uint(miwi_tree, hf_miwi_cmd_id, tvb, offset, 1, packet->command_id);
+            if(tree){
+                proto_tree_add_uint(miwi_tree, hf_miwi_cmd_id, tvb, offset, 1, packet->command_id);
+            }
             offset++;
         }
     }
@@ -1513,7 +1523,7 @@ dissect_miwi_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigne
 
     unsigned mhr_len = miwi_dissect_header(no_fcs_tvb, pinfo, tree, &miwi_tree, &packet);
     offset = mhr_len;
-    if(!mhr_len){
+    if(!mhr_len || tvb_reported_length_remaining(no_fcs_tvb, mhr_len) < 0 ){
         return;
     }
 
@@ -1544,7 +1554,7 @@ dissect_miwi_p2pstar(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
    // unsigned offset = 0;
     proto_tree              *miwi_tree = NULL;
     proto_item              *proto_root = NULL;
-   // miwi_packet      *packet = wmem_new0(pinfo->pool, miwi_packet);
+   // miwi_packet      *packet = wmem_new0(wmem_packet_scope(), miwi_packet);
 
     /* Set the default FCS length based on the FCS type in the configuration */
     fcs_len = miwi_fcs_type_len(miwi_fcs_type);
@@ -1783,8 +1793,8 @@ void proto_register_miwi_p2pstar(void)
     static ei_register_info ei[] = {
         //{ &ei_miwi_empty_payload,     { "miwi_p2pstar.empty_payload",   PI_MALFORMED,      PI_ERROR, "Empty MiWi Payload!", EXPFILL }},
         { &ei_miwi_frame_ver,   { "miwi_p2pstar.frame_version_error", PI_COMMENTS_GROUP, PI_NOTE,  "Source address can not be broadcast address !", EXPFILL }},
-        { &ei_miwi_dst, { "miwi_p2pstar.dst_addr_error",     PI_COMMENTS_GROUP, PI_WARN,  "destination address Error", EXPFILL }},
-        { &ei_miwi_src, { "miwi_p2pstar.src_addr_error",     PI_COMMENTS_GROUP, PI_WARN,  "Source address Error", EXPFILL }},
+        { &ei_miwi_dst, { "miwi_p2pstar.dst_addr_error",     PI_COMMENTS_GROUP, PI_WARN,  "destination address Error ", EXPFILL }},
+        { &ei_miwi_src, { "miwi_p2pstar.src_addr_error",     PI_COMMENTS_GROUP, PI_WARN,  "Source address Error ", EXPFILL }},
         { &ei_miwi_invalid_addressing, { "miwi_p2pstar.invalid_addr_error", PI_PROTOCOL,   PI_NOTE,  "Invalid Address Error", EXPFILL }},
         { &ei_miwi_invalid_panid_compression, { "miwi_p2pstar.invalid_panid_comp_error", PI_PROTOCOL,   PI_WARN,  "Panid compression error", EXPFILL }},
         { &ei_miwi_invalid_panid_compression2, { "miwi_p2pstar.invalid_panid_comp2_error", PI_PROTOCOL,   PI_WARN,  "Panid2 compression error", EXPFILL }},
@@ -1801,7 +1811,7 @@ void proto_register_miwi_p2pstar(void)
     static decode_as_t         miwi_da = {
         IEEE802154_PROTOABBREV_WPAN, IEEE802154_PROTOABBREV_WPAN_PANID,
         1, 0, &miwi_da_values, NULL, NULL,
-        decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change,NULL,NULL,NULL
+        decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change,NULL
     };
 
     module_t *miwi_p2pstar_module;
