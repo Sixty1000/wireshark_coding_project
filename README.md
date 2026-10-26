@@ -1,3 +1,5 @@
+> **Mineshark fork:** See [MINESHARK.md](MINESHARK.md) for macOS, Windows, and Linux build and launch instructions for the local packet-viewing challenge.
+
 General Information
 -------------------
 

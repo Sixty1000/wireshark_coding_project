@@ -32,3 +32,36 @@ The full build used a Release configuration and disabled optional Lua, GnuTLS,
 Kerberos, SMI and netlink libraries; these are unrelated to Mineshark's helper,
 which invokes the external nftables binary. The normal build script uses the
 optional libraries found on the user's VM.
+
+## Native macOS and Windows backends (2026-10-26)
+
+- Full macOS Wireshark target: built successfully with the native helper dispatch.
+- Standalone Qt test suite: passed with offscreen rendering.
+- `python3 -m unittest discover -s mineshark/tests -p test_macos_helper.py`: 3 passed.
+  These mock PF; they exercise validation, installation of paired rules,
+  state-removal requests, status, reversed-pair recovery, expiry, and rejection
+  of an unattached anchor.
+- macOS installer shell syntax and `git diff --check`: passed.
+- No administrator helper installation or live firewall mutation was performed.
+- Windows build/PowerShell/UAC/task execution and real network enforcement on
+  both platforms are not verified. Follow the traffic acceptance procedure in
+  MINESHARK.md before relying on these backends.
+
+## Local packet-viewing design (supersedes firewall UI)
+
+- Application no longer creates a FirewallClient or exposes firewall actions.
+- Capture workspace is hidden initially; capture-count polling presents the
+  request independently of display filters. New/opened/closed captures reset it.
+- Win-only signal reveals the original packet workspace; loss does not unlock.
+- Added a local-mode regression test covering loss, retry, win and single emission.
+- Full macOS Wireshark build and standalone Qt suite passed.
+- Windows compilation and interactive live-capture walkthrough remain unverified.
+
+## Live capture packaging fix
+
+- Added dumpcap as a dependency of the Wireshark GUI target when both exist.
+- Built the missing macOS bundle capture executable.
+- `dumpcap -D` enumerated Wi-Fi en0 and other local interfaces.
+- A bounded live check on en0 captured one packet successfully outside the
+  execution sandbox (three-second limit, 64-byte snapshot). No permission
+  changes or firewall operations were needed.

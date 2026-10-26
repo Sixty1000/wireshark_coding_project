@@ -37,6 +37,8 @@ class ChallengeDialog : public QDialog {
     friend class ::MinesharkTests;
 public:
     ChallengeDialog(const QString &source, const QString &destination, FirewallClient *client, QWidget *parent = nullptr);
+signals:
+    void packetsUnlocked();
 protected:
     void reject() override;
 private:

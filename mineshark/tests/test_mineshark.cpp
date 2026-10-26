@@ -13,6 +13,24 @@
 class MinesharkTests : public QObject {
     Q_OBJECT
 private slots:
+    void localChallengeUnlocksOnlyOnWin() {
+        mineshark::ChallengeDialog dialog({}, {}, nullptr);
+        QSignalSpy unlocked(&dialog, &mineshark::ChallengeDialog::packetsUnlocked);
+        dialog.board_ = mineshark::Board(42);
+        dialog.reveal(0);
+        for (int i = 0; i < mineshark::Board::size; ++i)
+            if (dialog.board_.cell(i).mine) { dialog.reveal(i); break; }
+        QCOMPARE(unlocked.count(), 0);
+        QVERIFY(dialog.stateLabel_->text().contains("STILL HIDDEN"));
+        dialog.reset();
+        dialog.reveal(0);
+        for (int i = 0; i < mineshark::Board::size; ++i)
+            if (!dialog.board_.cell(i).mine) dialog.reveal(i);
+        QCOMPARE(unlocked.count(), 1);
+        QVERIFY(dialog.stateLabel_->text().contains("UNLOCKED"));
+        dialog.contain();
+        QCOMPARE(unlocked.count(), 1);
+    }
     void firstClickSafe() {
         for (uint32_t seed = 0; seed < 100; ++seed)
             for (int first = 0; first < mineshark::Board::size; ++first) {

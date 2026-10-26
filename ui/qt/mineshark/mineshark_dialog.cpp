@@ -3,6 +3,7 @@
 #include "mineshark/firewall_plan.h"
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QDir>
 #include <QFileInfo>
 #include <QGridLayout>
 #include <QHeaderView>
@@ -52,7 +53,7 @@ FirewallClient::FirewallClient(bool simulation, QObject *parent) : QObject(paren
         finish(true, {}, object.value("blocks").toArray());
     });
     connect(&process_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
-        if (pending_ && error == QProcess::FailedToStart) finish(false, "Could not start pkexec. Install polkit and the Mineshark helper.");
+        if (pending_ && error == QProcess::FailedToStart) finish(false, "Could not start firewall authorization. Install the helper for your operating system; see MINESHARK.md.");
     });
 }
 void FirewallClient::finish(bool success, const QString &error, const QJsonArray &blocks) {
@@ -89,14 +90,43 @@ void FirewallClient::request(const QString &command, const QString &a, const QSt
     QStringList args{helper, command};
     if (command == "block" || command == "unblock") args << a << b;
     process_.start("/usr/bin/pkexec", args);
+#elif defined(Q_OS_MACOS)
+    const QString helper = "/Library/PrivilegedHelperTools/org.wireshark.mineshark";
+    const QFileInfo installed(helper);
+    if (!installed.isFile() || installed.isSymLink() || installed.ownerId() != 0 ||
+        (installed.permissions() & (QFileDevice::WriteGroup | QFileDevice::WriteOther))) {
+        QTimer::singleShot(0, this, [this] { finish(false, "Install the macOS helper: sudo bash mineshark/scripts/install-helper-macos.sh. See MINESHARK.md."); });
+        return;
+    }
+    QString shell = "/usr/bin/python3 -I " + helper + " " + command;
+    try {
+        if (command == "block" || command == "unblock") {
+            const auto pair = Pair::parse(a, b);
+            shell += " " + pair.a + " " + pair.b;
+        } else if (command != "status" && command != "unblock-all") throw std::runtime_error("Invalid command.");
+    } catch (const std::exception &error) {
+        const QString message = QString::fromUtf8(error.what());
+        QTimer::singleShot(0, this, [this, message] { finish(false, message); });
+        return;
+    }
+    process_.start("/usr/bin/osascript", {"-e", "do shell script \"" + shell + "\" with administrator privileges"});
+#elif defined(Q_OS_WIN)
+    const QString helper = qEnvironmentVariable("ProgramFiles") + "/Mineshark/helper.ps1";
+    if (!QFileInfo::exists(helper)) {
+        QTimer::singleShot(0, this, [this] { finish(false, "Install the Windows helper from an Administrator PowerShell: mineshark/scripts/install-helper-windows.ps1. See MINESHARK.md."); });
+        return;
+    }
+    QStringList args{"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", QDir::toNativeSeparators(helper), "-Command", command};
+    if (command == "block" || command == "unblock") args << "-A" << a << "-B" << b;
+    process_.start(qEnvironmentVariable("SystemRoot") + "/System32/WindowsPowerShell/v1.0/powershell.exe", args);
 #else
-    QTimer::singleShot(0, this, [this] { finish(false, "Live containment requires Linux and nftables. Use the standalone simulation to preview the game."); });
+    QTimer::singleShot(0, this, [this] { finish(false, "This operating system has no native Mineshark firewall helper."); });
 #endif
 }
 
 ChallengeDialog::ChallengeDialog(const QString &source, const QString &destination, FirewallClient *client, QWidget *parent) :
     QDialog(parent), source_(source), destination_(destination), client_(client), board_(QRandomGenerator::global()->generate()) {
-    setWindowTitle("Mineshark · Network Control");
+    setWindowTitle(client_ ? "Mineshark · Network Control" : "Mineshark · Unlock packets");
     setObjectName("minesharkChallenge");
     setStyleSheet(mineshark::styleSheet());
     setMinimumWidth(580);
@@ -112,12 +142,12 @@ ChallengeDialog::ChallengeDialog(const QString &source, const QString &destinati
     layout->setContentsMargins(12, 12, 12, 12);
     layout->setSpacing(15);
     auto *top = new QHBoxLayout;
-    top->addWidget(label("MINESHARK  /  NETWORK CONTROL", "eyebrow"));
+    top->addWidget(label(client_ ? "MINESHARK  /  NETWORK CONTROL" : "MINESHARK  /  PACKET CHALLENGE", "eyebrow"));
     top->addStretch();
-    top->addWidget(label(client_->simulation() ? "SIMULATION" : "LIVE FIREWALL", "subtle"));
+    top->addWidget(label(!client_ ? "LOCAL CHALLENGE" : client_->simulation() ? "SIMULATION" : "FIREWALL · AUTHORIZATION REQUIRED", "subtle"));
     layout->addLayout(top);
     layout->addWidget(label("Minesweeper", "title"));
-    layout->addWidget(label(client_->simulation() ? "Preview mode · no network traffic will be changed." : "Victory blocks all traffic between these IPs on this VM.", "subtle"));
+    layout->addWidget(label(!client_ ? "Win Minesweeper to view the packets in this capture." : client_->simulation() ? "Preview mode · no network traffic will be changed." : "Victory requests a firewall block between these IPs on this computer.", "subtle"));
     auto *pair = new QFrame;
     pair->setObjectName("panel");
     auto *pairLayout = new QGridLayout(pair);
@@ -133,6 +163,7 @@ ChallengeDialog::ChallengeDialog(const QString &source, const QString &destinati
     pairLayout->addWidget(label("VS", "subtle"), 1, 1);
     pairLayout->addWidget(destinationLabel, 1, 2);
     layout->addWidget(pair);
+    pair->setVisible(client_ != nullptr);
     auto *metrics = new QHBoxLayout;
     metrics->addWidget(label("BEGINNER  ·  8 × 8", "counter"));
     metrics->addStretch();
@@ -157,7 +188,7 @@ ChallengeDialog::ChallengeDialog(const QString &source, const QString &destinati
     layout->addLayout(grid);
     layout->setAlignment(grid, Qt::AlignHCenter);
     layout->addWidget(label("Left click to reveal  ·  Right click to flag  ·  First click is safe", "subtle"));
-    stateLabel_ = label("WIN TO TERMINATE THIS CONNECTION", "state");
+    stateLabel_ = label(client_ ? "WIN TO TERMINATE THIS CONNECTION" : "WIN TO VIEW PACKETS", "state");
     stateLabel_->setObjectName("state");
     stateLabel_->setWordWrap(true);
     layout->addWidget(stateLabel_);
@@ -184,7 +215,7 @@ ChallengeDialog::ChallengeDialog(const QString &source, const QString &destinati
         const qint64 seconds = elapsed_.elapsed() / 1000;
         timeLabel_->setText(QString("%1:%2").arg(seconds / 60, 2, 10, QChar('0')).arg(seconds % 60, 2, 10, QChar('0')));
     });
-    connect(client_, &FirewallClient::completed, this, [this](const QString &command, bool success, const QString &error, const QJsonArray &) {
+    if (client_) connect(client_, &FirewallClient::completed, this, [this](const QString &command, bool success, const QString &error, const QJsonArray &) {
         if (!pending_ || (command != "block" && command != "unblock")) return;
         pending_ = false;
         primary_->setEnabled(true);
@@ -198,7 +229,7 @@ ChallengeDialog::ChallengeDialog(const QString &source, const QString &destinati
         blocked_ = command == "block";
         if (blocked_) {
             stateLabel_->setText(client_->simulation() ? "CONNECTION VANQUISHED · SIMULATED" : "CONNECTION VANQUISHED");
-            detailLabel_->setText("Reason: Minesweeper Victory  ·  Status: " + QString(client_->simulation() ? "SIMULATED BLOCK" : "BLOCKED") + "\nBidirectional IP block · auto-expires in one hour.");
+            detailLabel_->setText("Reason: Minesweeper Victory  ·  Status: " + QString(client_->simulation() ? "SIMULATED BLOCK" : "BLOCKED") + "\nBidirectional IP block · expires after one hour (cleanup may take one minute).");
             primary_->setText("Restore Connection");
             restart_->setEnabled(false);
         } else {
@@ -215,7 +246,7 @@ ChallengeDialog::ChallengeDialog(const QString &source, const QString &destinati
 void ChallengeDialog::reset() {
     if (pending_ || blocked_) return;
     clock_.stop(); board_ = Board(QRandomGenerator::global()->generate());
-    timeLabel_->setText("00:00"); stateLabel_->setText("WIN TO TERMINATE THIS CONNECTION");
+    timeLabel_->setText("00:00"); stateLabel_->setText(client_ ? "WIN TO TERMINATE THIS CONNECTION" : "WIN TO VIEW PACKETS");
     detailLabel_->setText("Reveal all 54 safe cells. Ten mines stand between you and victory.");
     primary_->setText("Challenge active"); primary_->setEnabled(false);
     render();
@@ -227,13 +258,23 @@ void ChallengeDialog::reveal(int index) {
     if (ready) { elapsed_.start(); clock_.start(); }
     render();
     if (board_.state() == Board::State::Lost) {
-        clock_.stop(); stateLabel_->setText("MINE HIT · CONNECTION SURVIVES");
-        detailLabel_->setText("No firewall changes were made. Start a new board to try again.");
+        clock_.stop(); stateLabel_->setText(client_ ? "MINE HIT · CONNECTION SURVIVES" : "MINE HIT · PACKETS STILL HIDDEN");
+        detailLabel_->setText("Start a new board to try again.");
         primary_->setText("Challenge lost");
     } else if (board_.state() == Board::State::Won) { clock_.stop(); contain(); }
 }
 void ChallengeDialog::contain() {
     if (board_.state() != Board::State::Won || pending_ || blocked_) return;
+    if (!client_) {
+        blocked_ = true;
+        restart_->setEnabled(false);
+        primary_->setText("Packets unlocked");
+        primary_->setEnabled(false);
+        stateLabel_->setText("VICTORY · PACKETS UNLOCKED");
+        detailLabel_->setText("You can now view this capture. New captures start a new challenge.");
+        emit packetsUnlocked();
+        return;
+    }
     if (client_->busy()) { detailLabel_->setText("Another firewall action is in progress. Retry when it finishes."); primary_->setText("Retry containment"); primary_->setEnabled(true); return; }
     pending_ = true; restart_->setEnabled(false); primary_->setEnabled(false);
     primary_->setText("Applying block…"); stateLabel_->setText("BOARD CLEARED · AUTHORIZING CONTAINMENT");
@@ -285,7 +326,7 @@ BlocksDialog::BlocksDialog(FirewallClient *client, QWidget *parent) : QDialog(pa
     connect(unblock_, &QPushButton::clicked, this, [this] { request("unblock"); });
     connect(all_, &QPushButton::clicked, this, [this] { request("unblock-all"); });
     connect(table_, &QTableWidget::itemSelectionChanged, this, &BlocksDialog::updateButtons);
-    connect(client_, &FirewallClient::completed, this, [this](const QString &command, bool success, const QString &error, const QJsonArray &blocks) {
+    if (client_) connect(client_, &FirewallClient::completed, this, [this](const QString &command, bool success, const QString &error, const QJsonArray &blocks) {
         if (!success) status_->setText(error);
         else if (command == "status") { populate(blocks); status_->setText(QString("%1 active IP pair(s) · last refreshed %2").arg(blocks.size()).arg(QTime::currentTime().toString("HH:mm:ss"))); }
         else { request("status"); return; }

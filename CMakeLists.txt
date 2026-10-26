@@ -3474,6 +3474,12 @@ elseif(BUILD_dumpcap AND ENABLE_PCAP)
 		"Wireshark will be built without packet capture capability.")
 endif()
 
+# The Mineshark GUI needs dumpcap for interface discovery and live capture.
+# Include it even when developers build only the wireshark target.
+if(TARGET wireshark AND TARGET dumpcap)
+    add_dependencies(wireshark dumpcap)
+endif()
+
 # We have two idl2wrs utilities: this and the CORBA version in tools.
 # We probably shouldn't do that.
 if(BUILD_dcerpcidl2wrs)

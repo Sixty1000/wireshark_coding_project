@@ -93,6 +93,9 @@ DIAG_ON(frame-larger-than=)
 #include <QMetaObject>
 #include <QMimeData>
 #include <QTabWidget>
+#include <QPointer>
+#include <QPushButton>
+#include <memory>
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QTextCodec>
@@ -571,66 +574,99 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
 
     byte_view_tab_ = new ByteViewTab(&master_split_);
 
-    // Mineshark keeps packet dissection unprivileged. Only the fixed helper
-    // can mutate the Linux firewall, through polkit authorization.
-    auto *minesharkClient = new mineshark::FirewallClient(false, this);
+    // A local viewing challenge: acquisition continues while the packet workspace
+    // is hidden. No firewall client or privileged helper is used here.
     auto *workspaceTabs = new QTabWidget(this);
     workspaceTabs->setObjectName("workspaceTabs");
     QWidget *packetWorkspace = takeCentralWidget();
     setCentralWidget(workspaceTabs);
-    workspaceTabs->addTab(packetWorkspace, tr("Wireshark"));
+    auto *packetGate = new QStackedWidget(workspaceTabs);
+    auto *waitingPage = new QWidget(packetGate);
+    auto *waitingLayout = new QVBoxLayout(waitingPage);
+    auto *request = new QPushButton(tr("Packets received — play Mineshark to view them"), waitingPage);
+    request->setObjectName("packetChallengeRequest");
+    waitingLayout->addStretch();
+    auto *waitingStatus = new QLabel(tr("Waiting for packets on the selected interface…"), waitingPage);
+    waitingStatus->setAlignment(Qt::AlignCenter);
+    waitingLayout->addWidget(waitingStatus);
+    waitingLayout->addWidget(request, 0, Qt::AlignCenter);
+    waitingLayout->addStretch();
+    request->hide();
+    packetGate->addWidget(waitingPage);
+    packetGate->addWidget(packetWorkspace);
+    packetGate->setCurrentWidget(packetWorkspace);
+    workspaceTabs->addTab(packetGate, tr("Wireshark"));
     auto *gamePage = new QWidget(workspaceTabs);
     auto *gameLayout = new QVBoxLayout(gamePage);
-    gameLayout->addWidget(new QLabel(tr("Select an IP packet in Wireshark, then choose Security → Challenge Connection to Minesweeper."), gamePage));
+    auto *hint = new QLabel(tr("Start a capture or open a capture file. A challenge appears when packets arrive."), gamePage);
+    hint->setWordWrap(true);
+    gameLayout->addWidget(hint);
     workspaceTabs->addTab(gamePage, tr("Minesweeper"));
-    auto *challenge = new QAction(tr("Challenge Connection to Minesweeper…"), this);
-    challenge->setObjectName("actionMinesharkChallenge");
-    challenge->setEnabled(false);
-    auto *security = menuBar()->addMenu(tr("Security"));
-    security->addAction(challenge);
-    auto *blocks = security->addAction(tr("Minesweeper Blocks…"));
-    blocks->setObjectName("actionMinesharkBlocks");
-    connect(this, &WiresharkMainWindow::packetInfoChanged, challenge, [this, challenge](packet_info *info) {
-        const bool valid = selectedRows().size() == 1 && info &&
-            (info->net_src.type == AT_IPv4 || info->net_src.type == AT_IPv6) &&
-            info->net_src.type == info->net_dst.type;
-        challenge->setEnabled(valid);
+    struct ViewingChallenge {
+        bool unlocked = false;
+        QPointer<mineshark::ChallengeDialog> game;
+    };
+    auto state = std::make_shared<ViewingChallenge>();
+    // Keep the native welcome page, interface sparklines and capture selection
+    // visible. Gate only when Wireshark switches to its packet-dissection page.
+    auto updatePacketGate = [=] {
+        const bool viewingPackets = main_ui_->mainStack->currentWidget() == &master_split_;
+        packetGate->setCurrentWidget(viewingPackets && !state->unlocked ? waitingPage : packetWorkspace);
+    };
+    connect(main_ui_->mainStack, &QStackedWidget::currentChanged, this, [=](int) {
+        updatePacketGate();
     });
-    connect(challenge, &QAction::triggered, this, [this, minesharkClient, workspaceTabs, gamePage, gameLayout] {
-        packet_info *info = capture_file_.packetInfo();
-        if (selectedRows().size() != 1 || !info ||
-            !(info->net_src.type == AT_IPv4 || info->net_src.type == AT_IPv6) ||
-            info->net_src.type != info->net_dst.type) return;
-        char source[128], destination[128];
-        address_to_str_buf(&info->net_src, source, sizeof(source));
-        address_to_str_buf(&info->net_dst, destination, sizeof(destination));
-        // Snapshot numeric network endpoints; never retain packet_info pointers
-        // across the game or use resolved hostnames in firewall commands.
-        const QString a = QString::fromLatin1(source), b = QString::fromLatin1(destination);
-        try { (void)mineshark::Pair::parse(a, b); }
-        catch (const std::exception &error) {
-            QMessageBox::information(this, tr("Mineshark"), QString::fromUtf8(error.what())); return;
+    updatePacketGate();
+    connect(request, &QPushButton::clicked, this, [=] {
+        if (!state->game) {
+            hint->hide();
+            auto *game = new mineshark::ChallengeDialog({}, {}, nullptr, gamePage);
+            game->setWindowFlags(Qt::Widget);
+            gameLayout->addWidget(game);
+            state->game = game;
+            connect(game, &mineshark::ChallengeDialog::packetsUnlocked, this, [=] {
+                state->unlocked = true;
+                packetGate->setCurrentWidget(packetWorkspace);
+                workspaceTabs->setCurrentWidget(packetGate);
+            });
         }
-        if (minesharkClient->busy()) return;
-        if (gamePage->findChild<mineshark::ChallengeDialog *>()) {
-            if (QMessageBox::question(this, tr("New challenge"),
-                    tr("Replace the current game? Existing firewall blocks remain available under Security → Minesweeper Blocks.")) != QMessageBox::Yes) {
-                workspaceTabs->setCurrentWidget(gamePage);
-                return;
-            }
-        }
-        while (auto *item = gameLayout->takeAt(0)) {
-            delete item->widget();
-            delete item;
-        }
-        auto *game = new mineshark::ChallengeDialog(a, b, minesharkClient, gamePage);
-        game->setWindowFlags(Qt::Widget);
-        gameLayout->addWidget(game);
         workspaceTabs->setCurrentWidget(gamePage);
     });
-    connect(blocks, &QAction::triggered, this, [this, minesharkClient] {
-        mineshark::BlocksDialog dialog(minesharkClient, this); dialog.exec();
+    connect(&capture_file_, &CaptureFile::captureEvent, this, [=](CaptureEvent event) {
+        bool resetChallenge = event.captureContext() == CaptureEvent::File &&
+            (event.eventType() == CaptureEvent::Opened || event.eventType() == CaptureEvent::Closing);
+#ifdef HAVE_LIBPCAP
+        resetChallenge = resetChallenge || (event.captureContext() == CaptureEvent::Capture &&
+            event.eventType() == CaptureEvent::Prepared);
+#endif
+        if (resetChallenge) {
+            state->unlocked = false;
+            updatePacketGate();
+            request->hide();
+            waitingStatus->setText(tr("Waiting for packets on the selected interface…"));
+            if (state->game) {
+                gameLayout->removeWidget(state->game);
+                state->game->hide();
+                state->game->deleteLater();
+                state->game = nullptr;
+            }
+            hint->show();
+            workspaceTabs->setCurrentWidget(packetGate);
+        }
     });
+    // Check the capture count, rather than displayed rows: display filters must
+    // not suppress the challenge. The timer also covers live capture batches.
+    auto *arrivalTimer = new QTimer(this);
+    arrivalTimer->setInterval(100);
+    connect(arrivalTimer, &QTimer::timeout, this, [=] {
+        const auto *file = capture_file_.capFile();
+        const bool received = file && file->count > 0;
+        request->setVisible(!state->unlocked && received);
+        waitingStatus->setText(received
+            ? tr("Packets are being collected. Win Mineshark to view this capture.")
+            : tr("Waiting for packets on the selected interface…"));
+    });
+    arrivalTimer->start();
 
     // Packet list and proto tree must exist before these are called.
     setMenusForSelectedPacket();
