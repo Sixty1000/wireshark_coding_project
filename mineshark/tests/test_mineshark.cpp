@@ -23,6 +23,27 @@ private slots:
                 QCOMPARE(mines, 10);
             }
     }
+    void lossDisplaysExactlyTenMines() {
+        mineshark::FirewallClient client(true);
+        mineshark::ChallengeDialog dialog("10.0.2.15", "10.0.2.4", &client);
+        dialog.board_ = mineshark::Board(42);
+        dialog.board_.reveal(0);
+        int trigger = -1;
+        for (int i = 0; i < mineshark::Board::size; ++i) {
+            const auto &cell = dialog.board_.cell(i);
+            if (cell.mine) trigger = i;
+            else if (!cell.open) dialog.board_.toggleFlag(i);
+        }
+        QVERIFY(trigger >= 0);
+        dialog.board_.reveal(trigger);
+        dialog.render();
+        int visibleMines = 0;
+        for (auto *button : dialog.cells_) visibleMines += button->text() == "✹";
+        QCOMPARE(visibleMines, mineshark::Board::mines);
+        for (int i = 0; i < mineshark::Board::size; ++i)
+            if (dialog.board_.cell(i).flag && !dialog.board_.cell(i).mine)
+                QCOMPARE(dialog.cells_[i]->text(), QString("×"));
+    }
     void flagsAndBounds() {
         mineshark::Board b(42);
         QVERIFY(!b.reveal(-1)); QVERIFY(!b.reveal(64)); QVERIFY(!b.toggleFlag(64));

@@ -22,30 +22,10 @@
 namespace mineshark {
 QString styleSheet() {
     return R"(
-        QDialog { background: #10171f; color: #e7eef3; font-family: 'DejaVu Sans'; font-size: 13px; }
-        QWidget#challengeBody, QScrollArea { background: #10171f; border: none; }
-        QLabel { color: #e7eef3; background: transparent; }
-        QLabel#eyebrow { color: #62e6bd; font-size: 11px; font-weight: 700; letter-spacing: 2px; }
-        QLabel#title { font-size: 31px; font-weight: 700; }
-        QLabel#subtle { color: #8e9eac; }
-        QLabel#endpoint { font-family: 'DejaVu Sans Mono'; font-size: 24px; font-weight: 700; }
-        QLabel#state { color: #62e6bd; font-size: 19px; font-weight: 700; }
-        QLabel#counter { color: #b9c9d5; font-family: 'DejaVu Sans Mono'; font-size: 15px; }
-        QFrame#panel { background: #17222d; border: 1px solid #2a3b49; border-radius: 12px; }
-        QPushButton { color: #c6d3dc; background: #1d2b37; border: 1px solid #344958; border-radius: 6px; padding: 11px 16px; }
-        QPushButton:hover { background: #293f50; border-color: #62e6bd; }
-        QPushButton:focus { border: 2px solid #62e6bd; }
-        QPushButton:disabled { color: #61717e; background: #18212a; border-color: #28343d; }
-        QPushButton#primary { color: #0c241d; background: #62e6bd; border-color: #62e6bd; font-weight: 700; }
-        QPushButton#primary:hover { background: #8ff3d3; }
-        QPushButton#primary:disabled { color: #7e9c91; background: #213a31; border-color: #2b4a3e; }
-        QPushButton#cell { padding: 0; border-radius: 5px; background: #253746; border: 1px solid #354d60; font-family: 'DejaVu Sans Mono'; font-size: 19px; font-weight: 700; }
-        QPushButton#cell:hover { background: #36556b; }
-        QPushButton#cell[open="true"] { background: #131f29; border: 1px solid #1e303f; }
-        QPushButton#cell[flag="true"] { color: #f7cb70; }
-        QPushButton#cell[mine="true"] { background: #5d2834; color: #ff9aa7; }
-        QTableWidget { background: #17222d; alternate-background-color: #1d2b37; color: #e7eef3; border: 1px solid #344958; gridline-color: #2a3b49; selection-background-color: #315548; }
-        QHeaderView::section { background: #21313f; color: #b9c9d5; border: none; padding: 12px; }
+        QLabel#title, QLabel#endpoint, QLabel#state { font-weight: bold; }
+        QPushButton#cell { padding: 0; font-weight: bold; }
+        QPushButton#cell[open="true"] { border: 1px solid palette(mid); background: palette(base); }
+        QPushButton#cell[mine="true"] { background: #ffb0b0; color: black; }
     )";
 }
 static QLabel *label(const QString &text, const char *name = nullptr) {
@@ -129,14 +109,14 @@ ChallengeDialog::ChallengeDialog(const QString &source, const QString &destinati
     scroll_->setWidget(body);
     outer->addWidget(scroll_);
     auto *layout = new QVBoxLayout(body);
-    layout->setContentsMargins(30, 26, 30, 24);
+    layout->setContentsMargins(12, 12, 12, 12);
     layout->setSpacing(15);
     auto *top = new QHBoxLayout;
     top->addWidget(label("MINESHARK  /  NETWORK CONTROL", "eyebrow"));
     top->addStretch();
     top->addWidget(label(client_->simulation() ? "SIMULATION" : "LIVE FIREWALL", "subtle"));
     layout->addLayout(top);
-    layout->addWidget(label("Win the board.\nBanish the connection.", "title"));
+    layout->addWidget(label("Minesweeper", "title"));
     layout->addWidget(label(client_->simulation() ? "Preview mode · no network traffic will be changed." : "Victory blocks all traffic between these IPs on this VM.", "subtle"));
     auto *pair = new QFrame;
     pair->setObjectName("panel");
@@ -161,11 +141,11 @@ ChallengeDialog::ChallengeDialog(const QString &source, const QString &destinati
     timeLabel_ = label("00:00", "counter"); metrics->addWidget(timeLabel_);
     layout->addLayout(metrics);
     auto *grid = new QGridLayout;
-    grid->setSpacing(5);
+    grid->setSpacing(1);
     for (int i = 0; i < Board::size; ++i) {
         auto *cell = new QPushButton;
         cell->setObjectName("cell");
-        cell->setFixedSize(49, 43);
+        cell->setFixedSize(32, 32);
         cell->setContextMenuPolicy(Qt::CustomContextMenu);
         cell->setAccessibleName(QString("Row %1 column %2, hidden").arg(i / Board::side + 1).arg(i % Board::side + 1));
         cell->setProperty("index", i);
@@ -262,7 +242,6 @@ void ChallengeDialog::contain() {
 }
 void ChallengeDialog::render() {
     const bool lost = board_.state() == Board::State::Lost;
-    const QStringList colors{"#9aacba", "#77c8ff", "#62e6bd", "#ffc979", "#bcadff", "#ff9ca6", "#86dce0", "#e7eef3", "#d8e5ec"};
     for (int i = 0; i < Board::size; ++i) {
         const auto &c = board_.cell(i);
         auto *button = cells_[i];
@@ -270,13 +249,13 @@ void ChallengeDialog::render() {
         button->setProperty("open", c.open);
         button->setProperty("flag", c.flag);
         button->setProperty("mine", mine);
-        button->setText(mine ? "✹" : c.flag ? "⚑" : c.open && c.adjacent ? QString::number(c.adjacent) : "");
-        button->setStyleSheet(c.open && !mine ? QString("color: %1;").arg(colors[c.adjacent]) : "");
+        button->setText(mine ? "✹" : lost && c.flag ? "×" : c.flag ? "⚑" : c.open && c.adjacent ? QString::number(c.adjacent) : "");
+        button->setStyleSheet("");
         button->setAccessibleName(QString("Row %1 column %2, %3").arg(i / Board::side + 1).arg(i % Board::side + 1)
             .arg(mine ? "mine" : c.flag ? "flagged" : c.open ? QString::number(c.adjacent) + " adjacent mines" : "hidden"));
         button->style()->unpolish(button); button->style()->polish(button);
     }
-    mineLabel_->setText(QString("⚑ %1 / 10").arg(board_.flags(), 2, 10, QChar('0')));
+    mineLabel_->setText(QString("Flags: %1 / %2").arg(board_.flags()).arg(Board::mines));
 }
 void ChallengeDialog::reject() {
     if (pending_) return;

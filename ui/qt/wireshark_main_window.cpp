@@ -93,6 +93,8 @@ DIAG_ON(frame-larger-than=)
 #include <QMetaObject>
 #include <QMimeData>
 #include <QTabWidget>
+#include <QVBoxLayout>
+#include <QLabel>
 #include <QTextCodec>
 #include <QToolButton>
 #include <QTreeWidget>
@@ -572,6 +574,15 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
     // Mineshark keeps packet dissection unprivileged. Only the fixed helper
     // can mutate the Linux firewall, through polkit authorization.
     auto *minesharkClient = new mineshark::FirewallClient(false, this);
+    auto *workspaceTabs = new QTabWidget(this);
+    workspaceTabs->setObjectName("workspaceTabs");
+    QWidget *packetWorkspace = takeCentralWidget();
+    setCentralWidget(workspaceTabs);
+    workspaceTabs->addTab(packetWorkspace, tr("Wireshark"));
+    auto *gamePage = new QWidget(workspaceTabs);
+    auto *gameLayout = new QVBoxLayout(gamePage);
+    gameLayout->addWidget(new QLabel(tr("Select an IP packet in Wireshark, then choose Security → Challenge Connection to Minesweeper."), gamePage));
+    workspaceTabs->addTab(gamePage, tr("Minesweeper"));
     auto *challenge = new QAction(tr("Challenge Connection to Minesweeper…"), this);
     challenge->setObjectName("actionMinesharkChallenge");
     challenge->setEnabled(false);
@@ -585,7 +596,7 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
             info->net_src.type == info->net_dst.type;
         challenge->setEnabled(valid);
     });
-    connect(challenge, &QAction::triggered, this, [this, minesharkClient] {
+    connect(challenge, &QAction::triggered, this, [this, minesharkClient, workspaceTabs, gamePage, gameLayout] {
         packet_info *info = capture_file_.packetInfo();
         if (selectedRows().size() != 1 || !info ||
             !(info->net_src.type == AT_IPv4 || info->net_src.type == AT_IPv6) ||
@@ -600,8 +611,22 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
         catch (const std::exception &error) {
             QMessageBox::information(this, tr("Mineshark"), QString::fromUtf8(error.what())); return;
         }
-        mineshark::ChallengeDialog dialog(a, b, minesharkClient, this);
-        dialog.exec();
+        if (minesharkClient->busy()) return;
+        if (gamePage->findChild<mineshark::ChallengeDialog *>()) {
+            if (QMessageBox::question(this, tr("New challenge"),
+                    tr("Replace the current game? Existing firewall blocks remain available under Security → Minesweeper Blocks.")) != QMessageBox::Yes) {
+                workspaceTabs->setCurrentWidget(gamePage);
+                return;
+            }
+        }
+        while (auto *item = gameLayout->takeAt(0)) {
+            delete item->widget();
+            delete item;
+        }
+        auto *game = new mineshark::ChallengeDialog(a, b, minesharkClient, gamePage);
+        game->setWindowFlags(Qt::Widget);
+        gameLayout->addWidget(game);
+        workspaceTabs->setCurrentWidget(gamePage);
     });
     connect(blocks, &QAction::triggered, this, [this, minesharkClient] {
         mineshark::BlocksDialog dialog(minesharkClient, this); dialog.exec();
