@@ -146,8 +146,14 @@ ChallengeDialog::ChallengeDialog(const QString &source, const QString &destinati
     top->addStretch();
     top->addWidget(label(!client_ ? "LOCAL CHALLENGE" : client_->simulation() ? "SIMULATION" : "FIREWALL · AUTHORIZATION REQUIRED", "subtle"));
     layout->addLayout(top);
-    layout->addWidget(label("Minesweeper", "title"));
-    layout->addWidget(label(!client_ ? "Win Minesweeper to view the packets in this capture." : client_->simulation() ? "Preview mode · no network traffic will be changed." : "Victory requests a firewall block between these IPs on this computer.", "subtle"));
+    auto *heading = new QHBoxLayout;
+    heading->addWidget(label("Minesweeper", "title"));
+    heading->addStretch();
+    timeLabel_ = label("Time: 00:00", "elapsedTime");
+    timeLabel_->setAccessibleName("Elapsed playing time");
+    heading->addWidget(timeLabel_);
+    layout->addLayout(heading);
+    layout->addWidget(label(!client_ ? "Win Minesweeper to start recording live packets or view a saved capture." : client_->simulation() ? "Preview mode · no network traffic will be changed." : "Victory requests a firewall block between these IPs on this computer.", "subtle"));
     auto *pair = new QFrame;
     pair->setObjectName("panel");
     auto *pairLayout = new QGridLayout(pair);
@@ -168,8 +174,6 @@ ChallengeDialog::ChallengeDialog(const QString &source, const QString &destinati
     metrics->addWidget(label("BEGINNER  ·  8 × 8", "counter"));
     metrics->addStretch();
     mineLabel_ = label("", "counter"); metrics->addWidget(mineLabel_);
-    metrics->addSpacing(22);
-    timeLabel_ = label("00:00", "counter"); metrics->addWidget(timeLabel_);
     layout->addLayout(metrics);
     auto *grid = new QGridLayout;
     grid->setSpacing(1);
@@ -188,7 +192,7 @@ ChallengeDialog::ChallengeDialog(const QString &source, const QString &destinati
     layout->addLayout(grid);
     layout->setAlignment(grid, Qt::AlignHCenter);
     layout->addWidget(label("Left click to reveal  ·  Right click to flag  ·  First click is safe", "subtle"));
-    stateLabel_ = label(client_ ? "WIN TO TERMINATE THIS CONNECTION" : "WIN TO VIEW PACKETS", "state");
+    stateLabel_ = label(client_ ? "WIN TO TERMINATE THIS CONNECTION" : "WIN TO UNLOCK CAPTURE", "state");
     stateLabel_->setObjectName("state");
     stateLabel_->setWordWrap(true);
     layout->addWidget(stateLabel_);
@@ -213,7 +217,7 @@ ChallengeDialog::ChallengeDialog(const QString &source, const QString &destinati
     clock_.setInterval(1000);
     connect(&clock_, &QTimer::timeout, this, [this] {
         const qint64 seconds = elapsed_.elapsed() / 1000;
-        timeLabel_->setText(QString("%1:%2").arg(seconds / 60, 2, 10, QChar('0')).arg(seconds % 60, 2, 10, QChar('0')));
+        timeLabel_->setText(QString("Time: %1:%2").arg(seconds / 60, 2, 10, QChar('0')).arg(seconds % 60, 2, 10, QChar('0')));
     });
     if (client_) connect(client_, &FirewallClient::completed, this, [this](const QString &command, bool success, const QString &error, const QJsonArray &) {
         if (!pending_ || (command != "block" && command != "unblock")) return;
@@ -246,7 +250,7 @@ ChallengeDialog::ChallengeDialog(const QString &source, const QString &destinati
 void ChallengeDialog::reset() {
     if (pending_ || blocked_) return;
     clock_.stop(); board_ = Board(QRandomGenerator::global()->generate());
-    timeLabel_->setText("00:00"); stateLabel_->setText(client_ ? "WIN TO TERMINATE THIS CONNECTION" : "WIN TO VIEW PACKETS");
+    timeLabel_->setText("Time: 00:00"); stateLabel_->setText(client_ ? "WIN TO TERMINATE THIS CONNECTION" : "WIN TO UNLOCK CAPTURE");
     detailLabel_->setText("Reveal all 54 safe cells. Ten mines stand between you and victory.");
     primary_->setText("Challenge active"); primary_->setEnabled(false);
     render();
@@ -258,7 +262,7 @@ void ChallengeDialog::reveal(int index) {
     if (ready) { elapsed_.start(); clock_.start(); }
     render();
     if (board_.state() == Board::State::Lost) {
-        clock_.stop(); stateLabel_->setText(client_ ? "MINE HIT · CONNECTION SURVIVES" : "MINE HIT · PACKETS STILL HIDDEN");
+        clock_.stop(); stateLabel_->setText(client_ ? "MINE HIT · CONNECTION SURVIVES" : "MINE HIT · CAPTURE STILL LOCKED");
         detailLabel_->setText("Start a new board to try again.");
         primary_->setText("Challenge lost");
     } else if (board_.state() == Board::State::Won) { clock_.stop(); contain(); }
@@ -271,7 +275,7 @@ void ChallengeDialog::contain() {
         primary_->setText("Packets unlocked");
         primary_->setEnabled(false);
         stateLabel_->setText("VICTORY · PACKETS UNLOCKED");
-        detailLabel_->setText("You can now view this capture. New captures start a new challenge.");
+        detailLabel_->setText("Live recording can now begin. New captures start a new challenge.");
         emit packetsUnlocked();
         return;
     }

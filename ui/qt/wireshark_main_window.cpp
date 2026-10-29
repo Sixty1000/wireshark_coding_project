@@ -574,8 +574,7 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
 
     byte_view_tab_ = new ByteViewTab(&master_split_);
 
-    // A local viewing challenge: acquisition continues while the packet workspace
-    // is hidden. No firewall client or privileged helper is used here.
+    // Live capture starts only after victory. Saved files retain a viewing challenge.
     auto *workspaceTabs = new QTabWidget(this);
     workspaceTabs->setObjectName("workspaceTabs");
     QWidget *packetWorkspace = takeCentralWidget();
@@ -598,12 +597,13 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
     workspaceTabs->addTab(packetGate, tr("Wireshark"));
     auto *gamePage = new QWidget(workspaceTabs);
     auto *gameLayout = new QVBoxLayout(gamePage);
-    auto *hint = new QLabel(tr("Start a capture or open a capture file. A challenge appears when packets arrive."), gamePage);
+    auto *hint = new QLabel(tr("Start a capture to play Minesweeper before recording, or open a saved capture."), gamePage);
     hint->setWordWrap(true);
     gameLayout->addWidget(hint);
     workspaceTabs->addTab(gamePage, tr("Minesweeper"));
     struct ViewingChallenge {
         bool unlocked = false;
+        bool pendingCapture = false;
         QPointer<mineshark::ChallengeDialog> game;
     };
     auto state = std::make_shared<ViewingChallenge>();
@@ -611,7 +611,7 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
     // visible. Gate only when Wireshark switches to its packet-dissection page.
     auto updatePacketGate = [=] {
         const bool viewingPackets = main_ui_->mainStack->currentWidget() == &master_split_;
-        packetGate->setCurrentWidget(viewingPackets && !state->unlocked ? waitingPage : packetWorkspace);
+        packetGate->setCurrentWidget((viewingPackets || state->pendingCapture) && !state->unlocked ? waitingPage : packetWorkspace);
     };
     connect(main_ui_->mainStack, &QStackedWidget::currentChanged, this, [=](int) {
         updatePacketGate();
@@ -628,31 +628,49 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
                 state->unlocked = true;
                 packetGate->setCurrentWidget(packetWorkspace);
                 workspaceTabs->setCurrentWidget(packetGate);
+                if (state->pendingCapture) {
+                    state->pendingCapture = false;
+                    // File-close and capture-prepared events belong to the game
+                    // just won, so they must not reset it during startup.
+                    capture_challenge_authorized_ = true;
+                    startCapture();
+                    capture_challenge_authorized_ = false;
+                }
             });
         }
         workspaceTabs->setCurrentWidget(gamePage);
     });
-    connect(&capture_file_, &CaptureFile::captureEvent, this, [=](CaptureEvent event) {
-        bool resetChallenge = event.captureContext() == CaptureEvent::File &&
-            (event.eventType() == CaptureEvent::Opened || event.eventType() == CaptureEvent::Closing);
-#ifdef HAVE_LIBPCAP
-        resetChallenge = resetChallenge || (event.captureContext() == CaptureEvent::Capture &&
-            event.eventType() == CaptureEvent::Prepared);
-#endif
-        if (resetChallenge) {
-            state->unlocked = false;
-            updatePacketGate();
-            request->hide();
-            waitingStatus->setText(tr("Waiting for packets on the selected interface…"));
-            if (state->game) {
-                gameLayout->removeWidget(state->game);
-                state->game->hide();
-                state->game->deleteLater();
-                state->game = nullptr;
-            }
-            hint->show();
-            workspaceTabs->setCurrentWidget(packetGate);
+    auto resetChallenge = [=] {
+        state->unlocked = false;
+        state->pendingCapture = false;
+        request->hide();
+        if (state->game) {
+            gameLayout->removeWidget(state->game);
+            state->game->hide();
+            state->game->deleteLater();
+            state->game = nullptr;
         }
+        hint->show();
+        updatePacketGate();
+        workspaceTabs->setCurrentWidget(packetGate);
+    };
+    connect(this, &WiresharkMainWindow::captureChallengeRequested, this, [=] {
+        if (!state->pendingCapture) {
+            resetChallenge();
+            state->pendingCapture = true;
+        }
+        updatePacketGate();
+        request->click();
+    });
+    connect(&capture_file_, &CaptureFile::captureEvent, this, [=](CaptureEvent event) {
+        if (capture_challenge_authorized_) return;
+#ifdef HAVE_LIBPCAP
+        // Opening or rotating the live capture file is asynchronous.
+        if (cap_session_.state != CAPTURE_STOPPED) return;
+#endif
+        if (event.captureContext() == CaptureEvent::File &&
+            (event.eventType() == CaptureEvent::Opened || event.eventType() == CaptureEvent::Closing))
+            resetChallenge();
     });
     // Check the capture count, rather than displayed rows: display filters must
     // not suppress the challenge. The timer also covers live capture batches.
@@ -661,9 +679,12 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
     connect(arrivalTimer, &QTimer::timeout, this, [=] {
         const auto *file = capture_file_.capFile();
         const bool received = file && file->count > 0;
-        request->setVisible(!state->unlocked && received);
-        waitingStatus->setText(received
-            ? tr("Packets are being collected. Win Mineshark to view this capture.")
+        request->setVisible(!state->unlocked && (state->pendingCapture || received));
+        request->setText(state->pendingCapture ? tr("Play Mineshark to start recording packets")
+                                               : tr("Play Mineshark to view this saved capture"));
+        waitingStatus->setText(state->pendingCapture
+            ? tr("Capture has not started. Win Mineshark to begin recording packets.")
+            : received ? tr("Win Mineshark to view this saved capture.")
             : tr("Waiting for packets on the selected interface…"));
     });
     arrivalTimer->start();

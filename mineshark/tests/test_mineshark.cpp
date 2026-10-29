@@ -21,7 +21,7 @@ private slots:
         for (int i = 0; i < mineshark::Board::size; ++i)
             if (dialog.board_.cell(i).mine) { dialog.reveal(i); break; }
         QCOMPARE(unlocked.count(), 0);
-        QVERIFY(dialog.stateLabel_->text().contains("STILL HIDDEN"));
+        QVERIFY(dialog.stateLabel_->text().contains("STILL LOCKED"));
         dialog.reset();
         dialog.reveal(0);
         for (int i = 0; i < mineshark::Board::size; ++i)
@@ -30,6 +30,25 @@ private slots:
         QVERIFY(dialog.stateLabel_->text().contains("UNLOCKED"));
         dialog.contain();
         QCOMPARE(unlocked.count(), 1);
+    }
+    void playingTimer() {
+        mineshark::ChallengeDialog dialog({}, {}, nullptr);
+        QCOMPARE(dialog.timeLabel_->text(), QString("Time: 00:00"));
+        QVERIFY(!dialog.clock_.isActive());
+        dialog.board_ = mineshark::Board(42);
+        dialog.reveal(0);
+        QVERIFY(dialog.clock_.isActive());
+        QTRY_VERIFY_WITH_TIMEOUT(dialog.timeLabel_->text() != "Time: 00:00", 2500);
+        for (int i = 0; i < mineshark::Board::size; ++i)
+            if (dialog.board_.cell(i).mine) { dialog.reveal(i); break; }
+        QVERIFY(!dialog.clock_.isActive());
+        dialog.reset();
+        QCOMPARE(dialog.timeLabel_->text(), QString("Time: 00:00"));
+        QVERIFY(!dialog.clock_.isActive());
+        dialog.reveal(0);
+        for (int i = 0; i < mineshark::Board::size; ++i)
+            if (!dialog.board_.cell(i).mine) dialog.reveal(i);
+        QVERIFY(!dialog.clock_.isActive());
     }
     void firstClickSafe() {
         for (uint32_t seed = 0; seed < 100; ++seed)

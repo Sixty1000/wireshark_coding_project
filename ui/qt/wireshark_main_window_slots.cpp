@@ -36,6 +36,7 @@ DIAG_ON(frame-larger-than=)
 #endif
 
 #include "ui/commandline.h"
+#include <epan/stat_tap_ui.h>
 
 #include "ui/urls.h"
 
@@ -923,6 +924,15 @@ void WiresharkMainWindow::startCapture(QStringList interfaces) {
         return;
     }
 
+    // Do not launch dumpcap (or an extcap) until this capture's game is won.
+    if (cap_session_.state != CAPTURE_STOPPED)
+        return;
+    if (!capture_challenge_authorized_) {
+        main_ui_->actionCaptureStart->setChecked(false);
+        emit captureChallengeRequested();
+        return;
+    }
+
     showCapture();
 
     /* XXX - we might need to init other pref data as well... */
@@ -941,8 +951,13 @@ void WiresharkMainWindow::startCapture(QStringList interfaces) {
 
     CaptureFile::globalCapFile()->window = this;
     info_data_.ui.ui = this;
-    if (capture_start(&global_capture_opts, NULL, &cap_session_, &info_data_,
+    if (capture_start(&global_capture_opts, global_commandline_info.start_capture
+                      ? global_commandline_info.capture_comments : nullptr, &cap_session_, &info_data_,
                       main_window_update)) {
+        if (global_commandline_info.start_capture) {
+            global_commandline_info.start_capture = false;
+            start_requested_stats();
+        }
         /* The capture succeeded, which means the capture filter syntax is
          valid; add this capture filter to the recent capture filter list. */
         QByteArray filter_ba;

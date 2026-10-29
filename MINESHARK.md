@@ -1,27 +1,64 @@
-# Mineshark: win to view packets
+# Mineshark: win to capture packets
 
 Mineshark is a Wireshark fork with a local Minesweeper challenge. It does not
 block network traffic or call firewall helpers.
 
-## How it works
+## Feature title and description
 
-1. Launch Wireshark. The normal welcome screen shows capture interfaces and
-   their activity graphs. Double-click an interface to start capturing, use
-   Capture → Options, or File → Open to load a capture.
-2. Only the packet-detail workspace is gated after selecting a capture. When
-   its first packet arrives, a challenge request appears in the Wireshark tab. Click it to open Minesweeper in the second tab.
+**Win to Capture: Minesweeper Challenge with a Playing Timer** delays live
+packet recording until the player wins Minesweeper. Previously, capture ran
+behind the challenge and winning revealed both earlier and current packets.
+Now, the capture process starts only after victory, so packets sent while
+playing are not recorded by that capture. A timer above the board displays
+elapsed playing time in minutes and seconds.
+
+### How to trigger and use it
+
+1. Launch Wireshark and double-click a capture interface, select an interface
+   and click Start, or start through Capture → Options. Command-line startup
+   with `-k` also opens the challenge before recording.
+2. Starting a live capture opens Minesweeper before packet recording starts.
+   No packets from the game are buffered for later viewing.
 3. Reveal all 54 safe cells on the 8×8 board (10 mines). Left-click reveals;
-   right-click flags. The first click is safe.
-4. Losing keeps packets hidden. Click New board to retry. Switching tabs does
-   not unlock anything.
-5. Winning automatically returns to Wireshark and reveals the packet list,
-   protocol details, and bytes. Later packets in this capture remain visible.
-6. Closing/opening a capture resets the challenge. Display-filter changes do
-   not require another game. Saved captures also trigger the challenge.
+   right-click flags. The first click is safe. The timer at the top starts on
+   the first reveal, stops on a win or loss, and resets with New board.
+4. Losing leaves capture stopped. Click New board to retry. Switching tabs
+   does not start recording.
+5. Winning automatically returns to Wireshark and starts recording new packets.
+   Each new live capture requires a new win.
+6. Saved capture files retain a viewing challenge: winning shows their existing
+   packets. Display-filter changes do not require another game.
 
-Capture continues during the game. This is a playful viewing gate, not encryption
-or an access-control boundary: saved files, exports, and other Wireshark tools
-are not protected. No administrator authorization is needed for the game.
+This is a playful challenge, not encryption or an access-control boundary.
+Saved files, exports, and other Wireshark tools are not protected. No
+administrator authorization is needed for the game.
+
+## Justification
+
+This feature is useful for interactive demonstrations, classroom exercises,
+or anyone who wants a short puzzle before a packet-analysis session. Winning
+marks a clear start to recording: the resulting live capture contains traffic
+from after the challenge rather than a backlog accumulated during play. This
+keeps the packet list focused on the activity the player performs next.
+
+The timer gives immediate feedback on how long a board takes to solve and
+supports comparing attempts. Stopping it on victory or defeat preserves the
+attempt's elapsed time; resetting it with New board makes each attempt start
+fresh. Network traffic itself continues normally throughout the game.
+
+## Modified C/C++ files
+
+The following files implement the delayed live capture and timer update.
+No C source files were changed for this update.
+
+| File | Change and reason |
+| --- | --- |
+| `ui/qt/main.cpp` | Routes command-line capture startup (`-k`) through the main window's capture-start slot so it follows the same challenge as the graphical controls. |
+| `ui/qt/wireshark_main_window.h` | Declares the capture authorization flag and `captureChallengeRequested` signal used to coordinate the game with capture startup. |
+| `ui/qt/wireshark_main_window.cpp` | Opens the embedded game when a live capture is requested, tracks the pending capture, and starts it after victory. Preserves the win through live-file opening and rotation, resets the challenge for subsequent requests, and updates status messages while retaining the saved-file viewing challenge. |
+| `ui/qt/wireshark_main_window_slots.cpp` | Checks challenge authorization before launching capture. Keeps capture stopped until victory and handles command-line capture comments and requested statistics when recording starts. |
+| `ui/qt/mineshark/mineshark_dialog.cpp` | Moves the existing timer into the heading above the board, labels it explicitly, and adds an accessible name. Updates challenge messages to describe unlocking capture rather than merely revealing hidden packets. |
+| `mineshark/tests/test_mineshark.cpp` | Adds timer coverage for its initial state, first reveal, elapsed-time updates, loss, reset, and victory. Updates the expected loss message to match the capture-lock wording. |
 
 ## macOS
 
