@@ -1,7 +1,0 @@
-set(__QT_DEPLOY_TARGETS "mineshark_ui;mineshark-demo;mineshark-tests")
-set(__QT_DEPLOY_TARGET_mineshark_ui_FILE /Users/neilprashant/Downloads/Mineshark/build-mac/libmineshark_ui.a)
-set(__QT_DEPLOY_TARGET_mineshark_ui_TYPE STATIC_LIBRARY)
-set(__QT_DEPLOY_TARGET_mineshark-demo_FILE /Users/neilprashant/Downloads/Mineshark/build-mac/mineshark-demo)
-set(__QT_DEPLOY_TARGET_mineshark-demo_TYPE EXECUTABLE)
-set(__QT_DEPLOY_TARGET_mineshark-tests_FILE /Users/neilprashant/Downloads/Mineshark/build-mac/mineshark-tests)
-set(__QT_DEPLOY_TARGET_mineshark-tests_TYPE EXECUTABLE)

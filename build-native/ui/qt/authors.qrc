@@ -1,5 +1,0 @@
-<RCC>
-    <qresource prefix="/about">
-        <file compress-algo="zstd">authors.csv</file>
-    </qresource>
-</RCC>

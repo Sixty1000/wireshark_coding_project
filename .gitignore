@@ -173,3 +173,7 @@ vgcore.*
 Wireshark.*
 .pytest_cache/
 test/*.log
+
+/build-mac/
+/build-native/
+/patch.diff
