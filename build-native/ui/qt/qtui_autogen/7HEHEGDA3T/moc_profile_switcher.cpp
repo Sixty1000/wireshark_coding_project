@@ -1,0 +1,128 @@
+/****************************************************************************
+** Meta object code from reading C++ file 'profile_switcher.h'
+**
+** Created by: The Qt Meta Object Compiler version 69 (Qt 6.12.0)
+**
+** WARNING! All changes made in this file will be lost!
+*****************************************************************************/
+
+#include "../../../../../ui/qt/utils/profile_switcher.h"
+#include <QtCore/qmetatype.h>
+
+#include <QtCore/qtmochelpers.h>
+
+#include <memory>
+
+
+#include <QtCore/qxptype_traits.h>
+#if !defined(Q_MOC_OUTPUT_REVISION)
+#error "The header file 'profile_switcher.h' doesn't include <QObject>."
+#elif Q_MOC_OUTPUT_REVISION != 69
+#error "This file was generated using the moc from 6.12.0. It"
+#error "cannot be used with the include files from this version of Qt."
+#error "(The moc has changed too much.)"
+#endif
+
+#ifndef Q_CONSTINIT
+#define Q_CONSTINIT
+#endif
+
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
+QT_WARNING_DISABLE_GCC("-Wuseless-cast")
+namespace {
+struct qt_meta_tag_ZN15ProfileSwitcherE_t {};
+} // unnamed namespace
+
+template <> constexpr inline auto ProfileSwitcher::qt_create_metaobjectdata<qt_meta_tag_ZN15ProfileSwitcherE_t>()
+{
+    namespace QMC = QtMocConstants;
+    QtMocHelpers::StringRefStorage qt_stringData {
+        "ProfileSwitcher",
+        "captureEventHandler",
+        "",
+        "CaptureEvent",
+        "ev",
+        "checkPacket",
+        "capture_file*",
+        "cap_file",
+        "frame_data*",
+        "fdata",
+        "qsizetype",
+        "row",
+        "disableSwitching"
+    };
+
+    QtMocHelpers::UintData qt_methods {
+        // Slot 'captureEventHandler'
+        QtMocHelpers::SlotData<void(CaptureEvent)>(1, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { 0x80000000 | 3, 4 },
+        }}),
+        // Slot 'checkPacket'
+        QtMocHelpers::SlotData<void(capture_file *, frame_data *, qsizetype)>(5, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { 0x80000000 | 6, 7 }, { 0x80000000 | 8, 9 }, { 0x80000000 | 10, 11 },
+        }}),
+        // Slot 'disableSwitching'
+        QtMocHelpers::SlotData<void()>(12, 2, QMC::AccessPrivate, QMetaType::Void),
+    };
+    QtMocHelpers::UintData qt_properties {
+    };
+    QtMocHelpers::UintData qt_enums {
+    };
+    return QtMocHelpers::metaObjectData<ProfileSwitcher, qt_meta_tag_ZN15ProfileSwitcherE_t>(QMC::MetaObjectFlag{}, qt_stringData,
+            qt_methods, qt_properties, qt_enums);
+}
+Q_CONSTINIT const QMetaObject ProfileSwitcher::staticMetaObject = { {
+    QMetaObject::SuperData::link<QObject::staticMetaObject>(),
+    qt_staticMetaObjectStaticContent<qt_meta_tag_ZN15ProfileSwitcherE_t>.stringdata,
+    qt_staticMetaObjectStaticContent<qt_meta_tag_ZN15ProfileSwitcherE_t>.data,
+    qt_static_metacall,
+    nullptr,
+    qt_staticMetaObjectRelocatingContent<qt_meta_tag_ZN15ProfileSwitcherE_t>.metaTypes,
+    nullptr
+} };
+
+void ProfileSwitcher::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, void **_a)
+{
+    auto *_t = static_cast<ProfileSwitcher *>(_o);
+    if (_c == QMetaObject::InvokeMetaMethod) {
+        switch (_id) {
+        case 0: _t->captureEventHandler((*reinterpret_cast<std::add_pointer_t<CaptureEvent>>(_a[1]))); break;
+        case 1: _t->checkPacket((*reinterpret_cast<std::add_pointer_t<capture_file*>>(_a[1])),(*reinterpret_cast<std::add_pointer_t<frame_data*>>(_a[2])),(*reinterpret_cast<std::add_pointer_t<qsizetype>>(_a[3]))); break;
+        case 2: _t->disableSwitching(); break;
+        default: ;
+        }
+    }
+}
+
+const QMetaObject *ProfileSwitcher::metaObject() const
+{
+    return QObject::d_ptr->metaObject ? QObject::d_ptr->dynamicMetaObject() : &staticMetaObject;
+}
+
+void *ProfileSwitcher::qt_metacast(const char *_clname)
+{
+    if (!_clname) return nullptr;
+    if (!strcmp(_clname, qt_staticMetaObjectStaticContent<qt_meta_tag_ZN15ProfileSwitcherE_t>.strings))
+        return static_cast<void*>(this);
+    return QObject::qt_metacast(_clname);
+}
+
+int ProfileSwitcher::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
+{
+    _id = QObject::qt_metacall(_c, _id, _a);
+    if (_id < 0)
+        return _id;
+    if (_c == QMetaObject::InvokeMetaMethod) {
+        if (_id < 3)
+            qt_static_metacall(this, _c, _id, _a);
+        _id -= 3;
+    }
+    if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
+        if (_id < 3)
+            *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
+        _id -= 3;
+    }
+    return _id;
+}
+QT_WARNING_POP
