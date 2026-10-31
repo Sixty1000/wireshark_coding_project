@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+cmake_minimum_required(VERSION 3.16)
+project(MinesharkTests LANGUAGES CXX)
+enable_testing()
+set(CMAKE_AUTOMOC ON)
+find_package(QT NAMES Qt5 Qt6 REQUIRED COMPONENTS Widgets Test)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Test)
+set(CMAKE_CXX_STANDARD 11)
+if(QT_VERSION_MAJOR EQUAL 6)
+    set(CMAKE_CXX_STANDARD 17)
+endif()
+set(UI "${CMAKE_CURRENT_SOURCE_DIR}/../ui/qt/mineshark")
+add_executable(mineshark-tests test_mineshark.cpp
+    "${UI}/board.cpp" "${UI}/mineshark_dialog.cpp" "${UI}/mineshark_dialog.h")
+target_include_directories(mineshark-tests PRIVATE "${UI}")
+target_link_libraries(mineshark-tests PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Test)
+add_test(NAME mineshark COMMAND mineshark-tests)
+set_tests_properties(mineshark PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

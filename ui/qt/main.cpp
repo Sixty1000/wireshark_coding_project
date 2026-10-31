@@ -936,16 +936,8 @@ int main(int argc, char *qt_argv[])
                to use for this capture. */
             if (global_capture_opts.ifaces->len == 0)
                 collect_ifaces(&global_capture_opts);
-            CaptureFile::globalCapFile()->window = main_w;
-            if (capture_start(&global_capture_opts, main_w->captureSession(), main_w->captureInfoData(), main_window_update)) {
-                /* The capture started.  Open stat windows; we do so after creating
-                   the main window, to avoid GTK warnings, and after successfully
-                   opening the capture file, so we know we have something to compute
-                   stats on, and after registering all dissectors, so that MATE will
-                   have registered its field array and we can have a tap filter with
-                   one of MATE's late-registered fields as part of the filter. */
-                start_requested_stats();
-            }
+            // Command-line capture uses the same challenge as the Start button.
+            QMetaObject::invokeMethod(main_w, "startCapture", Qt::QueuedConnection);
         }
         /* if the user didn't supply a capture filter, use the one to filter out remote connections like SSH */
         if (!global_commandline_info.start_capture && !global_capture_opts.default_options.cfilter) {

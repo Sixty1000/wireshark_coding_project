@@ -36,6 +36,7 @@ DIAG_ON(frame-larger-than=)
 #endif
 
 #include "ui/commandline.h"
+#include "epan/stat_tap_ui.h"
 
 #include "epan/color_filters.h"
 #include "epan/export_object.h"
@@ -850,6 +851,14 @@ void MainWindow::startCapture() {
         return;
     }
 
+    // Do not launch capture until this session's board is won.
+    if (cap_session_.state != CAPTURE_STOPPED) return;
+    if (!capture_challenge_authorized_) {
+        main_ui_->actionCaptureStart->setChecked(false);
+        emit captureChallengeRequested();
+        return;
+    }
+
     showCapture();
 
     /* XXX - we might need to init other pref data as well... */
@@ -868,6 +877,10 @@ void MainWindow::startCapture() {
     CaptureFile::globalCapFile()->window = this;
     info_data_.ui.ui = this;
     if (capture_start(&global_capture_opts, &cap_session_, &info_data_, main_window_update)) {
+        if (global_commandline_info.start_capture) {
+            global_commandline_info.start_capture = false;
+            start_requested_stats();
+        }
         capture_options *capture_opts = cap_session_.capture_opts;
         GString *interface_names;
 

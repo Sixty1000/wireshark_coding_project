@@ -110,6 +110,7 @@ set(WIRESHARK_MODEL_HEADERS
 # All .h files which inherit from QObject aka which use the Q_OBJECT macro
 # need to go here.
 set(WIRESHARK_QT_HEADERS
+	mineshark/mineshark_dialog.h
 	about_dialog.h
 	accordion_frame.h
 	address_editor_frame.h
@@ -336,6 +337,8 @@ set(WIRESHARK_MODEL_SRCS
 )
 
 set(WIRESHARK_QT_SRC
+	mineshark/board.cpp
+	mineshark/mineshark_dialog.cpp
 	about_dialog.cpp
 	accordion_frame.cpp
 	address_editor_frame.cpp

@@ -147,6 +147,7 @@ protected:
     virtual void changeEvent(QEvent* event);
 
 private:
+    bool capture_challenge_authorized_ = false;
     // XXX Move to FilterUtils
     enum MatchSelected {
         MatchSelectedReplace,
@@ -286,6 +287,7 @@ private:
     void colorizeWithFilter(QByteArray filter, int color_number = -1);
 
 signals:
+    void captureChallengeRequested();
     void setCaptureFile(capture_file *cf);
     void setDissectedCaptureFile(capture_file *cf);
     void displayFilterSuccess(bool success);
