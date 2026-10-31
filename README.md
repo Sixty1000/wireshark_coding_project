@@ -35,6 +35,3 @@ These existing Wireshark 3.2.3 `.cpp` and `.h` files required changes to integra
 | `ui/qt/main_window.h` | Declares the challenge request signal and temporary capture authorization flag so the game and capture-start handler can coordinate and permit recording only after victory. |
 | `ui/qt/main_window_slots.cpp` | Defers launching the capture process until the challenge is won, preventing packets from being recorded during play. Defers requested command-line statistics until capture actually starts. |
 | `ui/qt/main.cpp` | Routes command-line capture startup (`-k`) through the same challenge so it cannot bypass the win requirement. |
-
-The upstream packet dissectors, capture engine, and firewall configuration are
-unchanged. Build products should remain untracked.
